@@ -532,10 +532,6 @@ Build Queue:
 
 ### 6. Multi-Tenancy Support
 ```
-Per-Player Customization:
-  Plan Overrider (content access)
-  Subscription Transaction (purchase history)
-  Product Grant (what they own)
   
 Per-Plan Variants:
   Plan Subject (renamed subjects)
