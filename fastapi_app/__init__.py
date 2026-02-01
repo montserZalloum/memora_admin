@@ -1,0 +1,1 @@
+# FastAPI Game API Sidecar
