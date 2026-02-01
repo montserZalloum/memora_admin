@@ -32,13 +32,13 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. Nginx routes /api/v1/* requests to FastAPI (port 8001) and /api/method/* to Frappe (port 8000)
   4. Configuration loads from .env file (Redis URL, JWT secret, paths) without hardcoded values
   5. Server migration documentation exists with steps to relocate Redis/FastAPI to separate server
-**Plans**: TBD
+**Plans**: 4 plans in 3 waves
 
 Plans:
-- [ ] 01-01: FastAPI project scaffold with lifespan events and dependency injection
-- [ ] 01-02: Redis async connection pooling and key schema
-- [ ] 01-03: Nginx reverse proxy configuration and .env-based settings
-- [ ] 01-04: Migration documentation
+- [ ] 01-01-PLAN.md — FastAPI project scaffold with configuration and health endpoint (Wave 1)
+- [ ] 01-02-PLAN.md — Redis async connection pooling and readiness check (Wave 2)
+- [ ] 01-03-PLAN.md — Nginx reverse proxy configuration (Wave 2)
+- [ ] 01-04-PLAN.md — Server migration documentation (Wave 3)
 
 ### Phase 2: Authentication
 **Goal**: Players can authenticate via JWT tokens verified statelessly
