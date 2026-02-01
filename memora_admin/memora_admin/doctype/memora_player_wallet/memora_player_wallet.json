@@ -1,0 +1,84 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:WALT-{#####}",
+ "creation": "2026-02-01 11:11:56.052494",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "player",
+  "total_xp",
+  "current_streak",
+  "dirty_flag",
+  "status"
+ ],
+ "fields": [
+  {
+   "fieldname": "player",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Player",
+   "options": "Memora Player Profile",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_xp",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Total XP"
+  },
+  {
+   "default": "0",
+   "fieldname": "current_streak",
+   "fieldtype": "Int",
+   "label": "Current Streak"
+  },
+  {
+   "default": "0",
+   "description": "\u064a\u0634\u064a\u0631 \u0644\u0648\u062c\u0648\u062f \u0628\u064a\u0627\u0646\u0627\u062a \u0641\u064a Redis \u0644\u0645 \u062a\u064f\u0632\u0627\u0645\u0646 \u0628\u0639\u062f \u0645\u0639 \u0627\u0644\u062f\u0627\u062a\u0627\u0628\u064a\u0632",
+   "fieldname": "dirty_flag",
+   "fieldtype": "Check",
+   "label": "Dirty Flag"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "label": "Status",
+   "options": "Active\nSuspended\nBanned"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-01 11:11:56.052494",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Player Wallet",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "player"
+}

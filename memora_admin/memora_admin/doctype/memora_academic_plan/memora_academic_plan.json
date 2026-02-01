@@ -1,0 +1,94 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:PLAN-{#####}",
+ "creation": "2026-02-01 10:38:40.524226",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "plan_name",
+  "grade",
+  "major",
+  "season",
+  "is_published",
+  "plan_subjects"
+ ],
+ "fields": [
+  {
+   "fieldname": "plan_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Plan Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "grade",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Grade",
+   "options": "Memora Grade",
+   "reqd": 1
+  },
+  {
+   "fieldname": "major",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Major",
+   "options": "Memora Major"
+  },
+  {
+   "fieldname": "season",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Season",
+   "options": "Memora Season",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_published",
+   "fieldtype": "Check",
+   "label": "Is Published"
+  },
+  {
+   "description": "\u0642\u0627\u0626\u0645\u0629 \u0627\u0644\u0645\u0648\u0627\u062f \u0641\u064a \u0647\u0630\u0647 \u0627\u0644\u062e\u0637\u0629",
+   "fieldname": "plan_subjects",
+   "fieldtype": "Table",
+   "label": "Plan Subjects",
+   "options": "Memora Plan Subject"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-01 10:38:40.524226",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Academic Plan",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "search_fields": "plan_name",
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "plan_name"
+}

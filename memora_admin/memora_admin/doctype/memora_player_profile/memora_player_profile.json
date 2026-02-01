@@ -1,0 +1,126 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "field:user",
+ "creation": "2026-02-01 11:08:51.024486",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "user",
+  "display_name",
+  "plan",
+  "avatar",
+  "grade",
+  "major",
+  "season",
+  "preferred_lang",
+  "notifications",
+  "authorized_devices"
+ ],
+ "fields": [
+  {
+   "fieldname": "user",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "User",
+   "options": "User",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "display_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Display Name",
+   "reqd": 1
+  },
+  {
+   "fieldname": "plan",
+   "fieldtype": "Link",
+   "label": "Current Plan",
+   "options": "Memora Academic Plan",
+   "reqd": 1
+  },
+  {
+   "fieldname": "avatar",
+   "fieldtype": "Select",
+   "label": "Avatar",
+   "options": "avatar 1\navatar 2",
+   "reqd": 1
+  },
+  {
+   "fieldname": "grade",
+   "fieldtype": "Link",
+   "label": "Grade",
+   "options": "Memora Grade",
+   "reqd": 1
+  },
+  {
+   "fieldname": "major",
+   "fieldtype": "Link",
+   "label": "Major",
+   "options": "Memora Major",
+   "reqd": 1
+  },
+  {
+   "fieldname": "season",
+   "fieldtype": "Link",
+   "label": "Season",
+   "options": "Memora Season",
+   "reqd": 1
+  },
+  {
+   "default": "ar",
+   "fieldname": "preferred_lang",
+   "fieldtype": "Select",
+   "label": "Preferred Language",
+   "options": "ar\nen"
+  },
+  {
+   "default": "1",
+   "description": "\u062a\u0641\u0639\u064a\u0644 \u0627\u0644\u0625\u0634\u0639\u0627\u0631\u0627\u062a",
+   "fieldname": "notifications",
+   "fieldtype": "Check",
+   "label": "Notifications"
+  },
+  {
+   "description": "\u0627\u0644\u0623\u062c\u0647\u0632\u0629 \u0627\u0644\u0645\u0633\u0645\u0648\u062d \u0644\u0647\u0627 \u0628\u0627\u0644\u062f\u062e\u0648\u0644",
+   "fieldname": "authorized_devices",
+   "fieldtype": "Table",
+   "label": "Authorized Devices",
+   "options": "Memora Player Device"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-01 11:08:51.024486",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Player Profile",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "search_fields": "display_name, user",
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "display_name"
+}
