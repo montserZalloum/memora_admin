@@ -14,24 +14,24 @@ Plan: 3 of 4 in current phase
 Status: In progress
 Last activity: 2026-02-01 - Completed 01-03-PLAN.md (Nginx reverse proxy configuration)
 
-Progress: [##........] 10%
+Progress: [##........] 11%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 2
-- Average duration: 2.5min
-- Total execution time: 0.08 hours
+- Total plans completed: 3
+- Average duration: 2.3min
+- Total execution time: 0.12 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-infrastructure-foundation | 2 | 5min | 2.5min |
+| 01-infrastructure-foundation | 3 | 7min | 2.3min |
 
 **Recent Trend:**
-- Last 5 plans: 3min, 2min
-- Trend: improving
+- Last 5 plans: 3min, 2min, 2min
+- Trend: stable
 
 *Updated after each plan completion*
 
@@ -47,6 +47,9 @@ Recent decisions affecting current work:
 - [01-01]: Use pydantic-settings with SettingsConfigDict for env file loading
 - [01-01]: Environment-based logging (JSON prod, colored dev console)
 - [01-01]: Request ID middleware using structlog contextvars
+- [01-02]: Redis pool stored in app.state for dependency access across requests
+- [01-02]: Fail-fast: verify_redis_connection raises RuntimeError if Redis unreachable
+- [01-02]: Kubernetes-style health: /live (fast), /ready (checks dependencies)
 - [01-03]: Upstream includes keepalive 32 for connection pooling
 - [01-03]: Location block as commented example (requires manual server block insertion)
 
@@ -60,6 +63,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-01T19:38:00Z
-Stopped at: Completed 01-03-PLAN.md
+Last session: 2026-02-01T19:37:48Z
+Stopped at: Completed 01-02-PLAN.md (Redis integration)
 Resume file: None
