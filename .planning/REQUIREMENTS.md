@@ -9,11 +9,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: FastAPI project structure with lifespan events and dependency injection
-- [ ] **INFRA-02**: Redis async connection pooling with shared Frappe instance
-- [ ] **INFRA-03**: Nginx reverse proxy routing (/api/v1/* -> FastAPI, /api/method/* -> Frappe)
-- [ ] **INFRA-04**: Portable configuration via .env file (Redis URL, JWT secret, paths)
-- [ ] **INFRA-05**: Server migration documentation for Redis/FastAPI portability
+- [x] **INFRA-01**: FastAPI project structure with lifespan events and dependency injection
+- [x] **INFRA-02**: Redis async connection pooling with shared Frappe instance
+- [x] **INFRA-03**: Nginx reverse proxy routing (/api/v1/* -> FastAPI, /api/method/* -> Frappe)
+- [x] **INFRA-04**: Portable configuration via .env file (Redis URL, JWT secret, paths)
+- [x] **INFRA-05**: Server migration documentation for Redis/FastAPI portability
 
 ### Authentication
 
@@ -108,11 +108,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
-| INFRA-02 | Phase 1 | Pending |
-| INFRA-03 | Phase 1 | Pending |
-| INFRA-04 | Phase 1 | Pending |
-| INFRA-05 | Phase 1 | Pending |
+| INFRA-01 | Phase 1 | Complete |
+| INFRA-02 | Phase 1 | Complete |
+| INFRA-03 | Phase 1 | Complete |
+| INFRA-04 | Phase 1 | Complete |
+| INFRA-05 | Phase 1 | Complete |
 | AUTH-01 | Phase 2 | Pending |
 | AUTH-02 | Phase 2 | Pending |
 | AUTH-03 | Phase 2 | Pending |

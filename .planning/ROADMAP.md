@@ -12,7 +12,7 @@ This roadmap delivers a gamified educational platform backend with sub-20ms game
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Infrastructure Foundation** - FastAPI sidecar with Redis connection and Nginx routing
+- [x] **Phase 1: Infrastructure Foundation** - FastAPI sidecar with Redis connection and Nginx routing
 - [ ] **Phase 2: Authentication** - JWT-based authentication with stateless verification
 - [ ] **Phase 3: Access Control** - Double-Gate pattern (season + player grants) for content access
 - [ ] **Phase 4: Progress Tracking** - Bitmap-based lesson completion with unlock states
@@ -35,10 +35,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 4 plans in 3 waves
 
 Plans:
-- [ ] 01-01-PLAN.md — FastAPI project scaffold with configuration and health endpoint (Wave 1)
-- [ ] 01-02-PLAN.md — Redis async connection pooling and readiness check (Wave 2)
-- [ ] 01-03-PLAN.md — Nginx reverse proxy configuration (Wave 2)
-- [ ] 01-04-PLAN.md — Server migration documentation (Wave 3)
+- [x] 01-01-PLAN.md — FastAPI project scaffold with configuration and health endpoint (Wave 1)
+- [x] 01-02-PLAN.md — Redis async connection pooling and readiness check (Wave 2)
+- [x] 01-03-PLAN.md — Nginx reverse proxy configuration (Wave 2)
+- [x] 01-04-PLAN.md — Server migration documentation (Wave 3)
 
 ### Phase 2: Authentication
 **Goal**: Players can authenticate via JWT tokens verified statelessly
@@ -150,7 +150,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Infrastructure Foundation | 0/4 | Not started | - |
+| 1. Infrastructure Foundation | 4/4 | ✓ Complete | 2026-02-01 |
 | 2. Authentication | 0/3 | Not started | - |
 | 3. Access Control | 0/4 | Not started | - |
 | 4. Progress Tracking | 0/3 | Not started | - |
