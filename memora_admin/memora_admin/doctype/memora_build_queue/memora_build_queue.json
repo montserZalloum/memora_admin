@@ -1,0 +1,137 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:BLD-{#####}",
+ "creation": "2026-02-01 13:37:59.544049",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "target_type",
+  "target_name",
+  "trigger_reason",
+  "triggered_by",
+  "triggered_at",
+  "status_section",
+  "status",
+  "started_at",
+  "completed_at",
+  "duration_sec",
+  "results_section",
+  "files_generated",
+  "error_message"
+ ],
+ "fields": [
+  {
+   "fieldname": "target_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Target Type",
+   "options": "Memora Academic Plan\nMemora Subject\nMemora Unit\nMemora Lesson",
+   "reqd": 1
+  },
+  {
+   "fieldname": "target_name",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Target Name",
+   "options": "target_type",
+   "reqd": 1
+  },
+  {
+   "fieldname": "trigger_reason",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Trigger Reason",
+   "options": "content_update\noverride_change\nmanual"
+  },
+  {
+   "fieldname": "triggered_by",
+   "fieldtype": "Link",
+   "label": "Triggered By",
+   "options": "User",
+   "read_only": 1
+  },
+  {
+   "default": "Now",
+   "fieldname": "triggered_at",
+   "fieldtype": "Datetime",
+   "label": "Triggered At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "status_section",
+   "fieldtype": "Section Break",
+   "label": "Build Status"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nProcessing\nCompleted\nFailed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At"
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At"
+  },
+  {
+   "fieldname": "duration_sec",
+   "fieldtype": "Float",
+   "label": "Duration (Sec)",
+   "read_only": 1
+  },
+  {
+   "fieldname": "results_section",
+   "fieldtype": "Section Break",
+   "label": "Results"
+  },
+  {
+   "default": "0",
+   "fieldname": "files_generated",
+   "fieldtype": "Int",
+   "label": "Files Generated"
+  },
+  {
+   "fieldname": "error_message",
+   "fieldtype": "Text",
+   "label": "Error Message"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-01 13:37:59.544049",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Build Queue",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

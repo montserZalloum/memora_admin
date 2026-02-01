@@ -12,7 +12,13 @@
   "base_xp",
   "max_hearts",
   "content_hash",
-  "stages"
+  "stages",
+  "bit_index",
+  "sb_hierarchy",
+  "unit",
+  "track",
+  "subject",
+  "is_reviewable"
  ],
  "fields": [
   {
@@ -58,15 +64,54 @@
    "fieldtype": "Table",
    "label": "Stages",
    "options": "Memora Lesson Stage"
+  },
+  {
+   "fieldname": "bit_index",
+   "fieldtype": "Int",
+   "label": "Bit Index",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_hierarchy",
+   "fieldtype": "Section Break",
+   "label": "Hierarchy & Settings"
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Link",
+   "label": "Unit",
+   "options": "Memora Unit",
+   "read_only": 1
+  },
+  {
+   "fieldname": "track",
+   "fieldtype": "Link",
+   "label": "Track",
+   "options": "Memora Track",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "label": "Subject",
+   "options": "Memora Subject",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_reviewable",
+   "fieldtype": "Check",
+   "label": "Is Reviewable (FSRS)"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 10:28:14.454466",
+ "modified": "2026-02-01 17:34:23.075371",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Lesson",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {

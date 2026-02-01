@@ -1,0 +1,29 @@
+DocType Name,Field Count,Field Names,Is Table,Purpose
+Memora Academic Plan,13,plan_name | grade | major | season | is_published | plan_subjects | sb_stats | total_subjects...,No,See documentation
+Memora Achievement,11,achievement_title | description | badge_image | sb_unlock | achievement_type | threshold | subject | sb_rewards...,No,See documentation
+Memora Analytics Aggregate,5,lesson | date | total_attempts | avg_time_spent | success_rate,No,See documentation
+Memora Build Queue,13,target_type | target_name | trigger_reason | triggered_by | triggered_at | status_section | status | started_at...,No,See documentation
+Memora Content Report,7,player | subject | lesson | screen_shot | report_type | description | status,No,See documentation
+Memora Grade,2,grade_title | sort_order,No,See documentation
+Memora Grant Component,2,target_doctype | target_name,Yes,See documentation
+Memora Interaction Log,8,player | lesson | stage_id | event_type | time_spent | errors_count | timestamp | client_metadata,No,See documentation
+Memora Lesson,12,lesson_title | topic | base_xp | max_hearts | content_hash | stages | bit_index | sb_hierarchy...,No,See documentation
+Memora Lesson Stage,4,stage_id | stage_type | is_skippable | config_json,Yes,See documentation
+Memora Lesson Stage Settings,4,stage_title | is_skippable | default_stage_time | payload,No,See documentation
+Memora Major,1,major_title,No,See documentation
+Memora Memory State,8,season | subject | player | stage_id | stability | difficulty | next_review | lesson,No,See documentation
+Memora Plan Overrider,4,plan | ref_doctype | ref_name | action,No,See documentation
+Memora Plan Subject,4,subject | alias_title | notes | is_premium,Yes,See documentation
+Memora Player Device,6,device_id | device_name | last_login | user_agent | platform | push_token,Yes,See documentation
+Memora Player Profile,10,user | display_name | plan | avatar | grade | major | season | preferred_lang...,No,See documentation
+Memora Player Wallet,9,player | total_xp | current_streak | dirty_flag | status | sb_stats | total_lessons | total_time_min...,No,See documentation
+Memora Product Grant,4,plan | item_code | is_published | grant_components,No,See documentation
+Memora Season,4,season_title | start_date | end_date | is_published,No,See documentation
+Memora Settings,24,cdn_section | cdn_enabled | cdn_base_url | local_fallback_mode | storage_provider | column_break_cdn | json_version | access_key...,No,See documentation
+Memora Structure Progress,4,player | subject | passed_lessons_bitset | completion_percentage,No,See documentation
+Memora Subject,16,subject_title | image | description | in_linear | is_published | redis_key_prefix | last_bit_index | sort_order...,No,See documentation
+Memora Subscription Transaction,7,player | payment_method | status | transaction_id | amount_paid | erpnext_invoice | related_grant,No,See documentation
+Memora Sync Log,4,job_id | sync_type | records_processed | status,No,See documentation
+Memora Topic,10,topic_title | unit | sort_order | is_free | is_linear | is_published | sb_hierarchy | track...,No,See documentation
+Memora Track,11,track_title | subject | sort_order | image | description | is_sold_separately | is_published | is_linear...,No,See documentation
+Memora Unit,9,unit_title | track | sort_order | is_free | is_published | is_linear | sb_stats | total_topics...,No,See documentation

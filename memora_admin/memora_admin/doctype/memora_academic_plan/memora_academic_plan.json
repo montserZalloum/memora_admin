@@ -12,7 +12,14 @@
   "major",
   "season",
   "is_published",
-  "plan_subjects"
+  "plan_subjects",
+  "sb_stats",
+  "total_subjects",
+  "total_lessons",
+  "sb_json",
+  "json_version",
+  "json_hash",
+  "json_generated_at"
  ],
  "fields": [
   {
@@ -59,12 +66,55 @@
    "fieldtype": "Table",
    "label": "Plan Subjects",
    "options": "Memora Plan Subject"
+  },
+  {
+   "fieldname": "sb_stats",
+   "fieldtype": "Section Break",
+   "label": "Statistics"
+  },
+  {
+   "default": "0",
+   "fieldname": "total_subjects",
+   "fieldtype": "Int",
+   "label": "Total Subjects",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_lessons",
+   "fieldtype": "Int",
+   "label": "Total Lessons",
+   "read_only": 1
+  },
+  {
+   "fieldname": "sb_json",
+   "fieldtype": "Section Break",
+   "label": "JSON Generation"
+  },
+  {
+   "default": "0",
+   "fieldname": "json_version",
+   "fieldtype": "Int",
+   "label": "JSON Version",
+   "read_only": 1
+  },
+  {
+   "fieldname": "json_hash",
+   "fieldtype": "Data",
+   "label": "JSON Hash",
+   "read_only": 1
+  },
+  {
+   "fieldname": "json_generated_at",
+   "fieldtype": "Datetime",
+   "label": "JSON Generated At",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 10:38:40.524226",
+ "modified": "2026-02-01 17:34:21.609616",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Academic Plan",

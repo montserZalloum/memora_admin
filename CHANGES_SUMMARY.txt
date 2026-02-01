@@ -1,0 +1,300 @@
+================================================================================
+MEMORA ADMIN - DOCTYPE CHANGES SUMMARY
+================================================================================
+Date: 2026-02-01
+Repository: /home/corex/aurevia-bench/apps/memora_admin
+
+QUICK FACTS:
+- 28 new doctypes created
+- Across 6 logical layers: Content, Players, Learning, Gamification, Admin, Monetization
+- ~210 total fields
+- Multi-language support (Arabic/English)
+- FSRS spaced repetition algorithm integrated
+- Multi-device support for players
+- CDN and offline-first architecture
+
+================================================================================
+DOCTYPE BREAKDOWN BY CATEGORY
+================================================================================
+
+1. ACADEMIC CONTENT STRUCTURE (6 doctypes, 61 fields)
+   - Memora Academic Plan (13 fields)
+   - Memora Subject (16 fields)
+   - Memora Track (11 fields)
+   - Memora Unit (9 fields)
+   - Memora Topic (10 fields)
+   - Memora Lesson (12 fields)
+
+2. PLAYER & PROFILE (3 doctypes, 25 fields)
+   - Memora Player Profile (10 fields)
+   - Memora Player Wallet (9 fields)
+   - Memora Player Device (6 fields) - Child table
+
+3. CONTENT & LESSONS (3 doctypes, 16 fields)
+   - Memora Lesson Stage (4 fields) - Child table
+   - Memora Lesson Stage Settings (4 fields)
+   - Memora Interaction Log (8 fields)
+
+4. LEARNING & PROGRESS (4 doctypes, 24 fields)
+   - Memora Memory State (8 fields) - FSRS engine
+   - Memora Structure Progress (4 fields) - Bitset tracking
+   - Memora Analytics Aggregate (5 fields)
+   - Memora Content Report (7 fields)
+
+5. GAMIFICATION (4 doctypes, 18 fields)
+   - Memora Achievement (11 fields)
+   - Memora Grade (2 fields)
+   - Memora Major (1 field)
+   - Memora Season (4 fields)
+
+6. PLATFORM & ADMIN (8 doctypes, 66 fields)
+   - Memora Settings (24 fields) - Global configuration
+   - Memora Product Grant (4 fields)
+   - Memora Grant Component (2 fields) - Child table
+   - Memora Plan Overrider (4 fields)
+   - Memora Plan Subject (4 fields) - Child table
+   - Memora Subscription Transaction (7 fields)
+   - Memora Build Queue (13 fields) - Content generation
+   - Memora Sync Log (4 fields)
+
+================================================================================
+KEY ARCHITECTURAL FEATURES
+================================================================================
+
+1. CONTENT DELIVERY
+   - CDN integration (AWS S3 / Cloudflare R2)
+   - Local fallback mode for offline support
+   - JSON versioning and hashing for cache control
+   - Redis caching with dirty flags for sync
+
+2. GAMIFICATION SYSTEM
+   - Base XP + bonus XP for remaining hearts
+   - Streak tracking (daily activity)
+   - Achievement badges with thresholds
+   - Configurable XP rewards
+   - Replay mode with reduced XP
+
+3. LEARNING ANALYTICS
+   - FSRS (Free Spaced Repetition Scheduler) integration
+   - Memory stability and difficulty tracking
+   - Lesson completion bitsets for efficient tracking
+   - Time spent analytics per stage
+   - Success rate calculation
+
+4. MULTI-DEVICE SUPPORT
+   - Device ID and push token tracking
+   - Device-level last login
+   - User agent and platform detection
+   - Configurable max devices per player
+
+5. ACCESS CONTROL
+   - Plan Overrider for custom curriculum access
+   - Product Grants for purchased content
+   - Grant Components for dynamic permissions
+   - Premium vs free lesson distinction
+
+6. MONETIZATION
+   - Subscription transactions with payment methods
+   - ERPNext invoice integration
+   - Product-to-curriculum mapping
+   - Voucher support
+
+================================================================================
+CRITICAL FIELDS & THEIR PURPOSES
+================================================================================
+
+PLAYER PROGRESSION:
+  total_xp → Cumulative experience points
+  current_streak → Days of consecutive activity
+  completion_percentage → Subject progress (0-100%)
+  passed_lessons_bitset → Efficient lesson completion tracking
+
+LEARNING ALGORITHMS:
+  stability → FSRS memory stability (higher = stronger)
+  difficulty → FSRS question difficulty (0-1)
+  next_review → When to show content for review
+  is_reviewable → Lesson eligibility for spaced repetition
+
+CONTENT MANAGEMENT:
+  json_version → Cache bust trigger
+  json_hash → Integrity verification
+  redis_key_prefix → Storage location identifier
+  content_hash → Lesson version control
+
+GAMIFICATION:
+  base_xp → First completion reward
+  max_hearts → Allowed attempts
+  xp_per_heart → Bonus per remaining heart
+  replay_xp → Recompletion reward
+
+SYSTEM CONFIG:
+  dirty_flag → Redis ↔ DB sync indicator
+  signed_url_expiry_hours → CDN link validity
+  batch_interval_minutes → Sync frequency
+  fsrs_weights → Algorithm parameters (JSON)
+
+================================================================================
+FIELD NAMING CONVENTIONS
+================================================================================
+
+Prefixes:
+  sb_* → Section Breaks (UI organization)
+  total_* → Aggregated counts
+  is_* → Boolean flags
+  ref_* → Reference/foreign key
+  bit_* → Related to bitset operations
+
+Common Patterns:
+  {entity}_title → Display name
+  {entity}_id → Unique identifier
+  {entity}_at → Timestamp
+  column_break_* → UI layout helpers
+
+Sections Used:
+  sb_stats → Statistics section (count aggregates)
+  sb_json → JSON generation fields
+  sb_hierarchy → Content hierarchy relations
+  sb_unlock → Achievement unlock conditions
+  sb_rewards → Gamification rewards
+
+================================================================================
+LANGUAGE SUPPORT
+================================================================================
+
+Built-in bilingual support:
+  Arabic (ar) - Default for RTL display
+  English (en)
+
+Fields with Arabic descriptions:
+  - plan_subjects: "قائمة المواد في هذه الخطة"
+  - base_xp: "نقاط الخبرة المكتسبة"
+  - max_hearts: "عدد المحاولات المسموحة"
+  - And many more...
+
+================================================================================
+NEXT IMPLEMENTATION STEPS
+================================================================================
+
+1. DATABASE MIGRATION
+   ☐ Create all 28 tables
+   ☐ Set primary and foreign keys
+   ☐ Add indexes on frequently-filtered fields:
+     - player_id (in Interaction Log, Memory State, etc.)
+     - season_id (content filtering)
+     - status (build queue, transactions)
+   ☐ Configure FSRS algorithm weights in Settings
+
+2. BACKEND APIS
+   ☐ REST endpoints for all doctypes
+   ☐ GraphQL schema for complex queries
+   ☐ Batch sync endpoints for mobile apps
+   ☐ FSRS algorithm implementation
+   ☐ Build queue job processor
+
+3. FRONTEND FORMS
+   ☐ Auto-generate forms from field definitions
+   ☐ Implement RTL support for Arabic
+   ☐ Form validation rules
+   ☐ Custom UI for JSON fields (config_json, payload)
+
+4. JOBS & BACKGROUND TASKS
+   ☐ Build Queue processor (async content generation)
+   ☐ Sync Job scheduler (Wallet, Progress, Memory sync)
+   ☐ Analytics aggregation job
+   ☐ Request retention cleanup job
+
+5. PERMISSIONS & ROLES
+   ☐ Admin role - full access
+   ☐ Content Manager - manage subjects/lessons
+   ☐ Player - limited read access to own data
+   ☐ System Manager - configure Settings
+
+6. INTEGRATION POINTS
+   ☐ ERPNext User integration (via Frappe)
+   ☐ ERPNext Item and Invoice integration
+   ☐ CDN provider API (S3 or R2)
+   ☐ FCM/APNS for push notifications
+
+================================================================================
+DOCUMENTS GENERATED
+================================================================================
+
+1. DOCTYPE_FIELD_REFERENCE.md (18 KB)
+   - Comprehensive field breakdown for all 28 doctypes
+   - Includes field types, requirements, options
+   - Architectural patterns and relationships
+   - Field type reference table
+   - Summary statistics
+
+2. doctype_fields_quick_reference.csv
+   - Quick lookup table with field counts
+   - Table/Master distinction
+   - Field names preview
+
+3. CHANGES_SUMMARY.txt (this file)
+   - High-level overview
+   - Implementation roadmap
+   - Key features and architecture
+
+================================================================================
+TESTING CHECKLIST
+================================================================================
+
+Content Hierarchy:
+  ☐ Subject → Track → Unit → Topic → Lesson → Stage mapping
+  ☐ Bitset calculations for lesson completion
+  ☐ JSON versioning and caching
+
+Player Features:
+  ☐ Multi-device login with device limits
+  ☐ Dirty flag sync mechanics
+  ☐ Player wallet recalculation
+  ☐ Avatar selection and persistence
+
+Gamification:
+  ☐ XP calculation (base + hearts bonus)
+  ☐ Streak tracking logic
+  ☐ Achievement unlock triggers
+  ☐ Replay XP vs first attempt XP
+
+Learning Analytics:
+  ☐ Interaction log event tracking
+  ☐ Time spent aggregation
+  ☐ Success rate calculation
+  ☐ FSRS stability/difficulty updates
+
+Spaced Repetition:
+  ☐ FSRS algorithm weight application
+  ☐ next_review date calculation
+  ☐ is_reviewable eligibility
+  ☐ Schedule generation for review
+
+Admin Functions:
+  ☐ Build Queue processing
+  ☐ Content synchronization
+  ☐ Settings application
+  ☐ CDN fallback behavior
+
+================================================================================
+KNOWN DEPENDENCIES & INTEGRATIONS
+================================================================================
+
+External Systems:
+  - Frappe Framework (parent)
+  - ERPNext (Item, User, Invoice integration)
+  - Redis (caching and sync)
+  - CDN Provider (AWS S3 or Cloudflare R2)
+  - Push Notification Service (FCM/APNS)
+
+Internal Modules:
+  - memora app (parent domain models)
+  - corex_fotara (potentially front-end)
+  - customer_sales_flow (monetization)
+
+Database:
+  - MariaDB/MySQL (configured via Frappe)
+  - Indexes recommended on: player_id, season_id, status
+
+================================================================================
+END OF SUMMARY
+================================================================================

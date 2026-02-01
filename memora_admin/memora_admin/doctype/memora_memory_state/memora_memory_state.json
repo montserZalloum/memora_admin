@@ -13,7 +13,8 @@
   "stage_id",
   "stability",
   "difficulty",
-  "next_review"
+  "next_review",
+  "lesson"
  ],
  "fields": [
   {
@@ -63,12 +64,20 @@
    "fieldname": "next_review",
    "fieldtype": "Datetime",
    "label": "Next Review"
+  },
+  {
+   "fieldname": "lesson",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Lesson",
+   "options": "Memora Lesson",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 11:11:56.352614",
+ "modified": "2026-02-01 17:34:23.719151",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Memory State",

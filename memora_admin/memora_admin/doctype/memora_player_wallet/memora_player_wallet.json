@@ -11,7 +11,11 @@
   "total_xp",
   "current_streak",
   "dirty_flag",
-  "status"
+  "status",
+  "sb_stats",
+  "total_lessons",
+  "total_time_min",
+  "last_sync_at"
  ],
  "fields": [
   {
@@ -50,12 +54,34 @@
    "fieldtype": "Select",
    "label": "Status",
    "options": "Active\nSuspended\nBanned"
+  },
+  {
+   "fieldname": "sb_stats",
+   "fieldtype": "Section Break",
+   "label": "Statistics"
+  },
+  {
+   "default": "0",
+   "fieldname": "total_lessons",
+   "fieldtype": "Int",
+   "label": "Total Lessons Completed"
+  },
+  {
+   "default": "0",
+   "fieldname": "total_time_min",
+   "fieldtype": "Int",
+   "label": "Total Time (Minutes)"
+  },
+  {
+   "fieldname": "last_sync_at",
+   "fieldtype": "Datetime",
+   "label": "Last Sync At"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 11:11:56.052494",
+ "modified": "2026-02-01 17:34:23.319072",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Player Wallet",

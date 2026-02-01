@@ -12,7 +12,11 @@
   "sort_order",
   "is_free",
   "is_linear",
-  "is_published"
+  "is_published",
+  "sb_hierarchy",
+  "track",
+  "subject",
+  "total_lessons"
  ],
  "fields": [
   {
@@ -55,12 +59,38 @@
    "fieldname": "is_published",
    "fieldtype": "Check",
    "label": "Is Published"
+  },
+  {
+   "fieldname": "sb_hierarchy",
+   "fieldtype": "Section Break",
+   "label": "Hierarchy"
+  },
+  {
+   "fieldname": "track",
+   "fieldtype": "Link",
+   "label": "Track",
+   "options": "Memora Track",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "label": "Subject",
+   "options": "Memora Subject",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "total_lessons",
+   "fieldtype": "Int",
+   "label": "Total Lessons",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 10:26:29.038513",
+ "modified": "2026-02-01 17:34:22.866644",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Topic",

@@ -1,0 +1,120 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:ACHV-{#####}",
+ "creation": "2026-02-01 17:34:23.936673",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "achievement_title",
+  "description",
+  "badge_image",
+  "sb_unlock",
+  "achievement_type",
+  "threshold",
+  "subject",
+  "sb_rewards",
+  "xp_reward",
+  "is_active",
+  "sort_order"
+ ],
+ "fields": [
+  {
+   "fieldname": "achievement_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Achievement Title",
+   "reqd": 1
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Small Text",
+   "label": "Description"
+  },
+  {
+   "fieldname": "badge_image",
+   "fieldtype": "Attach Image",
+   "label": "Badge Image"
+  },
+  {
+   "fieldname": "sb_unlock",
+   "fieldtype": "Section Break",
+   "label": "Unlock Condition"
+  },
+  {
+   "fieldname": "achievement_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Achievement Type",
+   "options": "lessons_completed\nstreak_days\ntotal_xp\nsubject_complete\nperfect_lesson\nspeed_demon\nearly_bird",
+   "reqd": 1
+  },
+  {
+   "description": "\u0627\u0644\u062d\u062f \u0627\u0644\u0645\u0637\u0644\u0648\u0628 (\u0645\u062b\u0644 100 \u062f\u0631\u0633)",
+   "fieldname": "threshold",
+   "fieldtype": "Int",
+   "label": "Threshold"
+  },
+  {
+   "description": "\u0645\u0627\u062f\u0629 \u0645\u0639\u064a\u0646\u0629 (\u0627\u062e\u062a\u064a\u0627\u0631\u064a)",
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "label": "Subject",
+   "options": "Memora Subject"
+  },
+  {
+   "fieldname": "sb_rewards",
+   "fieldtype": "Section Break",
+   "label": "Rewards"
+  },
+  {
+   "default": "0",
+   "fieldname": "xp_reward",
+   "fieldtype": "Int",
+   "label": "XP Reward"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active"
+  },
+  {
+   "default": "0",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-01 17:34:23.936673",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Achievement",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "search_fields": "achievement_title",
+ "show_name_in_global_search": 1,
+ "sort_field": "sort_order",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "achievement_title"
+}
