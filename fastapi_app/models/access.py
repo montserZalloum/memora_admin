@@ -1,4 +1,4 @@
-"""Access control models for Gate 1 season validation."""
+"""Access control models for Gate 1 and Gate 2 validation."""
 
 from datetime import date
 
@@ -36,3 +36,50 @@ class SeasonMeta(BaseModel):
         - It has not expired (today <= end_date)
         """
         return self.is_published and self.is_started and not self.is_expired
+
+    @classmethod
+    def from_redis_hash(cls, season_id: str, data: dict) -> "SeasonMeta | None":
+        """Create SeasonMeta from Redis HGETALL response.
+
+        Args:
+            season_id: The season identifier
+            data: Dict from Redis HGETALL (keys and values as str or bytes)
+
+        Returns:
+            SeasonMeta instance or None if data is empty/invalid
+        """
+        if not data:
+            return None
+
+        # Handle bytes keys/values from Redis
+        def decode(v):
+            return v.decode() if isinstance(v, bytes) else v
+
+        try:
+            return cls(
+                season_id=season_id,
+                is_published=decode(data.get(b"is_published", data.get("is_published", "0"))) == "1",
+                start_date=date.fromisoformat(decode(data.get(b"start_date", data.get("start_date", "")))),
+                end_date=date.fromisoformat(decode(data.get(b"end_date", data.get("end_date", "")))),
+            )
+        except (ValueError, KeyError):
+            return None
+
+
+class ContentAccessRequest(BaseModel):
+    """Request parameters for content access validation.
+
+    Used to bundle content metadata needed for Double-Gate checks.
+    Typically populated from content JSON or database lookup.
+    """
+
+    season_id: str  # Season the content belongs to
+    content_key: str  # Access key (e.g., "SUB-MATH", "TRK-MATH-01")
+    is_free: bool = False  # If true, bypasses Gate 2
+
+
+class AccessDeniedDetail(BaseModel):
+    """Structured error detail for access denial."""
+
+    code: str  # Error code (SEASON_NOT_FOUND, SEASON_INACTIVE, etc.)
+    message: str  # Human-readable message
