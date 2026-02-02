@@ -16,6 +16,8 @@ from fastapi_app.services.frappe_client import FrappeClient
 from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.progress import ProgressService
 from fastapi_app.services.season import SeasonService
+from fastapi_app.services.settings import SettingsService
+from fastapi_app.services.wallet import WalletService
 
 # Common dependencies
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -101,6 +103,25 @@ async def get_progress_service(request: Request) -> ProgressService:
 
 
 ProgressServiceDep = Annotated[ProgressService, Depends(get_progress_service)]
+
+
+async def get_wallet_service(request: Request) -> WalletService:
+    """Get WalletService with Redis from app state."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    return WalletService(redis_client)
+
+
+WalletServiceDep = Annotated[WalletService, Depends(get_wallet_service)]
+
+
+async def get_settings_service(request: Request) -> SettingsService:
+    """Get SettingsService with Redis and FrappeClient."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    frappe_client = await get_frappe_client()
+    return SettingsService(redis_client, frappe_client)
+
+
+SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
 
 
 # Singleton for FrappeClient
