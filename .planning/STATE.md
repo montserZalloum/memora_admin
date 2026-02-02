@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 7 - Sync Mechanisms (in progress)
+**Current focus:** Phase 7 - Sync Mechanisms (COMPLETE)
 
 ## Current Position
 
 Phase: 7 of 7 (Sync Mechanisms)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-02-02 - Completed 07-03-PLAN.md
+Plan: 4 of 4 in current phase
+Status: Phase complete
+Last activity: 2026-02-02 - Completed 07-04-PLAN.md
 
-Progress: [#########-] 91% (29 plans / 32 total)
+Progress: [##########] 100% (30 plans / 30 total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 29
-- Average duration: 2.0min
-- Total execution time: 0.93 hours
+- Total plans completed: 30
+- Average duration: 1.9min
+- Total execution time: 0.95 hours
 
 **By Phase:**
 
@@ -33,10 +33,10 @@ Progress: [#########-] 91% (29 plans / 32 total)
 | 04-progress-tracking | 4 | 10min | 2.5min |
 | 05-wallet-gamification | 4 | 7min | 1.75min |
 | 06-build-pipeline | 4 | 7min | 1.75min |
-| 07-sync-mechanisms | 3 | 4min | 1.3min |
+| 07-sync-mechanisms | 4 | 5min | 1.25min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 1min, 2min, 2min, 1min
+- Last 5 plans: 1min, 2min, 2min, 1min, 1min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -129,19 +129,21 @@ Recent decisions affecting current work:
 - [07-03]: Wallet dirty members are player_id directly (no versioning like progress)
 - [07-03]: Interaction buffer uses LRANGE + LTRIM for atomic batch processing
 - [07-03]: Fixed batch size of 1000 for memory-safe buffer flush
+- [07-04]: All three sync tasks on 1-minute cron for minimal data loss window
+- [07-04]: Full dotted paths in scheduler_events for explicit task resolution
 
 ### Pending Todos
 
-None yet.
+None - all v1 requirements implemented.
 
 ### Blockers/Concerns
 
-None yet.
+None.
 
 ## Session Continuity
 
-Last session: 2026-02-02T18:44:56Z
-Stopped at: Completed 07-03-PLAN.md
+Last session: 2026-02-02T18:47:54Z
+Stopped at: Completed 07-04-PLAN.md (FINAL PLAN)
 Resume file: None
 
 Previous plan summaries:
@@ -175,3 +177,4 @@ Previous plan summaries:
 07-01: Redis dirty set tracking for progress and wallet services enabling background sync to MariaDB
 07-02: Progress sync Frappe task persisting Redis bitmaps to Structure Progress with hex conversion and audit logging
 07-03: Wallet sync and interaction buffer flush tasks completing Redis-to-MariaDB persistence layer
+07-04: Wire sync tasks into Frappe scheduler enabling 1-minute background sync cycle
