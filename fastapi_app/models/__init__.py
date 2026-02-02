@@ -8,6 +8,20 @@ from fastapi_app.models.auth import (
     TokenPayload,
     TokenResponse,
 )
+from fastapi_app.models.progress import (
+    CompleteRequest,
+    CompleteResponse,
+    LessonInfo,
+    SubjectHierarchy,
+    SubjectProgress,
+    SubjectSummary,
+    TopicInfo,
+    TopicProgress,
+    TrackInfo,
+    TrackProgress,
+    UnitInfo,
+    UnitProgress,
+)
 
 __all__ = [
     # Access control models
@@ -18,4 +32,17 @@ __all__ = [
     "RefreshRequest",
     "TokenPayload",
     "TokenResponse",
+    # Progress models
+    "CompleteRequest",
+    "CompleteResponse",
+    "LessonInfo",
+    "SubjectHierarchy",
+    "SubjectProgress",
+    "SubjectSummary",
+    "TopicInfo",
+    "TopicProgress",
+    "TrackInfo",
+    "TrackProgress",
+    "UnitInfo",
+    "UnitProgress",
 ]
