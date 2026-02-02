@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 5 of 7 (Wallet & Gamification)
-Plan: 1 of 4 in current phase
+Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-02 - Completed 05-01-PLAN.md
+Last activity: 2026-02-02 - Completed 05-02-PLAN.md
 
-Progress: [######----] 59% (19 plans / ~32 estimated total)
+Progress: [######----] 63% (20 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 19
+- Total plans completed: 20
 - Average duration: 2.0min
-- Total execution time: 0.65 hours
+- Total execution time: 0.68 hours
 
 **By Phase:**
 
@@ -31,10 +31,10 @@ Progress: [######----] 59% (19 plans / ~32 estimated total)
 | 02-authentication | 3 | 9min | 3.0min |
 | 03-access-control | 7 | 13min | 1.9min |
 | 04-progress-tracking | 4 | 10min | 2.5min |
-| 05-wallet-gamification | 1 | 1min | 1.0min |
+| 05-wallet-gamification | 2 | 3min | 1.5min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 2min, 2min, 4min, 1min
+- Last 5 plans: 2min, 2min, 4min, 1min, 2min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -97,6 +97,9 @@ Recent decisions affecting current work:
 - [05-01]: Lua script for atomic streak update with date comparison
 - [05-01]: Asia/Amman timezone for streak boundaries (single timezone per CONTEXT.md)
 - [05-01]: No streak_date in WalletResponse (client doesn't need it)
+- [05-02]: 5-minute cache TTL for settings (shorter than hierarchy due to admin mutability)
+- [05-02]: Fallback to defaults if Frappe unavailable (graceful degradation)
+- [05-02]: Default max_streak_multiplier_percent = 50 (50% max bonus)
 
 ### Pending Todos
 
@@ -108,8 +111,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T13:41:00Z
-Stopped at: Completed 05-01-PLAN.md
+Last session: 2026-02-02T13:42:00Z
+Stopped at: Completed 05-02-PLAN.md
 Resume file: None
 
 Previous plan summaries:
@@ -133,3 +136,4 @@ Previous plan summaries:
 04-03: POST /progress/complete endpoint with unlock state enforcement and Double-Gate access validation
 04-04: GET /progress and GET /progress/{subject} endpoints with completion percentages and unlock states wired into API
 05-01: Redis-backed WalletService with atomic HINCRBY for XP and Lua script for streak date comparison
+05-02: SettingsService with 5-minute Redis cache for admin-configurable XP values and streak multiplier cap
