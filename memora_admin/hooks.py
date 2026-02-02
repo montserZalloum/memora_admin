@@ -150,6 +150,22 @@ doc_events = {
         "on_update": "memora_admin.events.access_sync.on_subscription_change",
         "on_trash": "memora_admin.events.access_sync.on_subscription_deleted",
     },
+    # Build trigger events for content DocTypes (debounced)
+    "Memora Subject": {
+        "on_update": "memora_admin.events.build_trigger.on_content_updated",
+    },
+    "Memora Track": {
+        "on_update": "memora_admin.events.build_trigger.on_content_updated",
+    },
+    "Memora Unit": {
+        "on_update": "memora_admin.events.build_trigger.on_content_updated",
+    },
+    "Memora Topic": {
+        "on_update": "memora_admin.events.build_trigger.on_content_updated",
+    },
+    "Memora Lesson": {
+        "on_update": "memora_admin.events.build_trigger.on_content_updated",
+    },
 }
 
 # Scheduled Tasks
