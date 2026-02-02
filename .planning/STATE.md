@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 4 of 7 (Progress Tracking)
-Plan: 2 of 5 in current phase
+Plan: 3 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-02 - Completed 04-02-PLAN.md (Subject Hierarchy & Caching)
+Last activity: 2026-02-02 - Completed 04-03-PLAN.md (Lesson Completion Endpoint)
 
-Progress: [#####-----] 50% (16 plans / ~32 estimated total)
+Progress: [#####-----] 53% (17 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 16
+- Total plans completed: 17
 - Average duration: 2.0min
-- Total execution time: 0.53 hours
+- Total execution time: 0.57 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [#####-----] 50% (16 plans / ~32 estimated total)
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
 | 03-access-control | 7 | 13min | 1.9min |
-| 04-progress-tracking | 2 | 4min | 2.0min |
+| 04-progress-tracking | 3 | 6min | 2.0min |
 
 **Recent Trend:**
-- Last 5 plans: 1min, 2min, 1min, 2min, 2min
+- Last 5 plans: 2min, 1min, 2min, 2min, 2min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -87,6 +87,9 @@ Recent decisions affecting current work:
 - [04-02]: Sequential bit_index allocation starting from 0 for dense bitmap storage
 - [04-02]: 1 hour cache TTL for hierarchy (balances freshness vs. performance)
 - [04-02]: Public call() method added to FrappeClient for generic API calls
+- [04-03]: Compute unlock state on-demand (avoids stale cached unlock states)
+- [04-03]: Use SUB-{subject} access key for Gate 2 check (consistent pattern)
+- [04-03]: Log replay status but don't return (wallet integration in Phase 5)
 
 ### Pending Todos
 
@@ -98,8 +101,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T11:48:09Z
-Stopped at: Completed 04-02-PLAN.md (Subject Hierarchy & Caching)
+Last session: 2026-02-02T11:54:42Z
+Stopped at: Completed 04-03-PLAN.md (Lesson Completion Endpoint)
 Resume file: None
 
 Previous plan summaries:
@@ -120,3 +123,4 @@ Previous plan summaries:
 03-07: Frappe Desk Grant Access button on Player Profile creating subscriptions that auto-sync to Redis
 04-01: Redis bitmap-based progress tracking with O(1) SETBIT/GETBIT operations and nested Pydantic hierarchy models for unlock calculation
 04-02: Frappe API for subject hierarchy with nested is_linear flags, HierarchyService with Redis caching for <20ms unlock calculations
+04-03: POST /progress/complete endpoint with unlock state enforcement and Double-Gate access validation
