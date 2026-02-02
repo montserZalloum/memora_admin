@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 2 - Authentication (Phase 2 complete)
+**Current focus:** Phase 3 - Access Control (Phase 2 complete)
 
 ## Current Position
 

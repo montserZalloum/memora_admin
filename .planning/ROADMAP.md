@@ -13,7 +13,7 @@ This roadmap delivers a gamified educational platform backend with sub-20ms game
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Infrastructure Foundation** - FastAPI sidecar with Redis connection and Nginx routing
-- [ ] **Phase 2: Authentication** - JWT-based authentication with stateless verification
+- [x] **Phase 2: Authentication** - JWT-based authentication with stateless verification
 - [ ] **Phase 3: Access Control** - Double-Gate pattern (season + player grants) for content access
 - [ ] **Phase 4: Progress Tracking** - Bitmap-based lesson completion with unlock states
 - [ ] **Phase 5: Wallet & Gamification** - XP accumulation and streak tracking
@@ -53,9 +53,9 @@ Plans:
 **Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 02-01-PLAN.md — Security foundation: JWT utilities, auth models, Frappe service (Wave 1)
-- [ ] 02-02-PLAN.md — Session management and rate limiting services (Wave 1)
-- [ ] 02-03-PLAN.md — Auth endpoints (login, refresh) and JWT middleware (Wave 2)
+- [x] 02-01-PLAN.md — Security foundation: JWT utilities, auth models, Frappe service (Wave 1)
+- [x] 02-02-PLAN.md — Session management and rate limiting services (Wave 1)
+- [x] 02-03-PLAN.md — Auth endpoints (login, refresh) and JWT middleware (Wave 2)
 
 ### Phase 3: Access Control
 **Goal**: Content access validated through Double-Gate pattern (season status + player grants)
@@ -152,7 +152,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Foundation | 4/4 | ✓ Complete | 2026-02-01 |
-| 2. Authentication | 0/3 | Not started | - |
+| 2. Authentication | 3/3 | ✓ Complete | 2026-02-02 |
 | 3. Access Control | 0/4 | Not started | - |
 | 4. Progress Tracking | 0/3 | Not started | - |
 | 5. Wallet & Gamification | 0/3 | Not started | - |

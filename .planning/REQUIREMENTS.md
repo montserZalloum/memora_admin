@@ -17,9 +17,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Authentication
 
-- [ ] **AUTH-01**: Login endpoint verifies Frappe credentials and issues JWT access + refresh tokens
-- [ ] **AUTH-02**: Refresh endpoint exchanges refresh token for new access token
-- [ ] **AUTH-03**: FastAPI middleware verifies JWT tokens statelessly (no database lookup)
+- [x] **AUTH-01**: Login endpoint verifies Frappe credentials and issues JWT access + refresh tokens
+- [x] **AUTH-02**: Refresh endpoint exchanges refresh token for new access token
+- [x] **AUTH-03**: FastAPI middleware verifies JWT tokens statelessly (no database lookup)
 
 ### Access Control
 
@@ -113,9 +113,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFRA-03 | Phase 1 | Complete |
 | INFRA-04 | Phase 1 | Complete |
 | INFRA-05 | Phase 1 | Complete |
-| AUTH-01 | Phase 2 | Pending |
-| AUTH-02 | Phase 2 | Pending |
-| AUTH-03 | Phase 2 | Pending |
+| AUTH-01 | Phase 2 | Complete |
+| AUTH-02 | Phase 2 | Complete |
+| AUTH-03 | Phase 2 | Complete |
 | ACCESS-01 | Phase 3 | Pending |
 | ACCESS-02 | Phase 3 | Pending |
 | ACCESS-03 | Phase 3 | Pending |
