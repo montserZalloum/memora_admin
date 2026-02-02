@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 4 of 7 (Progress Tracking)
-Plan: 3 of 5 in current phase
+Plan: 4 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-02 - Completed 04-03-PLAN.md (Lesson Completion Endpoint)
+Last activity: 2026-02-02 - Completed 04-04-PLAN.md (Progress Fetch Endpoints)
 
-Progress: [#####-----] 53% (17 plans / ~32 estimated total)
+Progress: [######----] 56% (18 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 17
-- Average duration: 2.0min
-- Total execution time: 0.57 hours
+- Total plans completed: 18
+- Average duration: 2.1min
+- Total execution time: 0.63 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [#####-----] 53% (17 plans / ~32 estimated total)
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
 | 03-access-control | 7 | 13min | 1.9min |
-| 04-progress-tracking | 3 | 6min | 2.0min |
+| 04-progress-tracking | 4 | 10min | 2.5min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 1min, 2min, 2min, 2min
+- Last 5 plans: 1min, 2min, 2min, 2min, 4min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -90,6 +90,8 @@ Recent decisions affecting current work:
 - [04-03]: Compute unlock state on-demand (avoids stale cached unlock states)
 - [04-03]: Use SUB-{subject} access key for Gate 2 check (consistent pattern)
 - [04-03]: Log replay status but don't return (wallet integration in Phase 5)
+- [04-04]: subject_name uses subject_id as placeholder (Frappe name fetch deferred)
+- [04-04]: Unlock state computed inline using existing helper functions
 
 ### Pending Todos
 
@@ -101,8 +103,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T11:54:42Z
-Stopped at: Completed 04-03-PLAN.md (Lesson Completion Endpoint)
+Last session: 2026-02-02T11:55:57Z
+Stopped at: Completed 04-04-PLAN.md (Progress Fetch Endpoints)
 Resume file: None
 
 Previous plan summaries:
@@ -124,3 +126,4 @@ Previous plan summaries:
 04-01: Redis bitmap-based progress tracking with O(1) SETBIT/GETBIT operations and nested Pydantic hierarchy models for unlock calculation
 04-02: Frappe API for subject hierarchy with nested is_linear flags, HierarchyService with Redis caching for <20ms unlock calculations
 04-03: POST /progress/complete endpoint with unlock state enforcement and Double-Gate access validation
+04-04: GET /progress and GET /progress/{subject} endpoints with completion percentages and unlock states wired into API
