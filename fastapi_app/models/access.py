@@ -83,3 +83,59 @@ class AccessDeniedDetail(BaseModel):
 
     code: str  # Error code (SEASON_NOT_FOUND, SEASON_INACTIVE, etc.)
     message: str  # Human-readable message
+
+
+# Webhook and Grant Models
+
+
+class WebhookPayload(BaseModel):
+    """Provider-agnostic payment webhook payload.
+
+    Per CONTEXT.md:
+    - Provider-agnostic interface (specific provider TBD)
+    - Idempotency via event_id tracking
+    """
+
+    event_id: str  # Unique event ID for idempotency
+    event_type: str  # e.g., "payment.completed"
+    transaction_id: str  # Payment provider's transaction ID
+    player_id: str  # Memora player ID (user_id)
+    product_grant_id: str  # Memora Product Grant DocType name
+    amount: float
+    currency: str
+    timestamp: str  # ISO format timestamp
+
+
+class WebhookResponse(BaseModel):
+    """Response for webhook acknowledgment."""
+
+    status: str  # "accepted", "already_processed", "error"
+    message: str | None = None
+
+
+class GrantRequest(BaseModel):
+    """Request body for admin grant endpoint."""
+
+    player_id: str  # Player's user ID
+    content_keys: list[str]  # e.g., ["SUB-MATH", "TRK-MATH-01"]
+
+
+class GrantResponse(BaseModel):
+    """Response for grant operation."""
+
+    granted: int  # Number of new grants added
+    message: str
+
+
+class RevokeRequest(BaseModel):
+    """Request body for admin revoke endpoint."""
+
+    player_id: str
+    content_keys: list[str]
+
+
+class RevokeResponse(BaseModel):
+    """Response for revoke operation."""
+
+    revoked: int  # Number of grants removed
+    message: str
