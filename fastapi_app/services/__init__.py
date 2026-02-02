@@ -6,6 +6,7 @@ from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.progress import ProgressService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.session import SessionService
+from fastapi_app.services.unlock import calculate_unlock_state, is_lesson_unlocked
 
 __all__ = [
     "AccessService",
@@ -15,4 +16,6 @@ __all__ = [
     "ProgressService",
     "SeasonService",
     "SessionService",
+    "calculate_unlock_state",
+    "is_lesson_unlocked",
 ]
