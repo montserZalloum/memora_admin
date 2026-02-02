@@ -102,14 +102,15 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. Completing a lesson awards XP to player wallet (stored in Redis hash)
   2. Streak increments when player completes first lesson of a new calendar day (user timezone)
-  3. Replaying already-completed lessons awards 50% XP (replay detection works)
+  3. Replaying already-completed lessons awards reduced XP (replay detection works)
   4. Wallet endpoint returns current XP and streak with <10ms response time
-**Plans**: TBD
+**Plans**: 4 plans in 2 waves
 
 Plans:
-- [ ] 05-01: Wallet data structure and XP award logic
-- [ ] 05-02: Streak calculation with timezone handling
-- [ ] 05-03: Replay detection and reduced XP awards
+- [ ] 05-01-PLAN.md — WalletService and wallet models with Redis hash and Lua streak script (Wave 1)
+- [ ] 05-02-PLAN.md — SettingsService with Redis caching and Frappe gamification API (Wave 1)
+- [ ] 05-03-PLAN.md — Wallet endpoints (GET /wallet, GET /wallet/{player_id}) (Wave 2)
+- [ ] 05-04-PLAN.md — Complete endpoint integration with XP and streak awards (Wave 2)
 
 ### Phase 6: Build Pipeline
 **Goal**: Content changes trigger JSON generation and CDN upload with cache invalidation
@@ -159,7 +160,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 2. Authentication | 3/3 | ✓ Complete | 2026-02-02 |
 | 3. Access Control | 7/7 | ✓ Complete | 2026-02-02 |
 | 4. Progress Tracking | 4/4 | ✓ Complete | 2026-02-02 |
-| 5. Wallet & Gamification | 0/3 | Not started | - |
+| 5. Wallet & Gamification | 0/4 | Not started | - |
 | 6. Build Pipeline | 0/4 | Not started | - |
 | 7. Sync Mechanisms | 0/4 | Not started | - |
 
