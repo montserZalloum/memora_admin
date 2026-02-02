@@ -19,10 +19,14 @@ class CompleteRequest(BaseModel):
 class CompleteResponse(BaseModel):
     """Response for lesson completion.
 
-    Per CONTEXT.md: Returns minimal response: { success: true }
+    Per CONTEXT.md: Returns completion status plus reward info.
+    Per Phase 5: Include XP awarded and replay status.
     """
 
     success: bool = True
+    xp_awarded: int = 0  # XP awarded this completion
+    is_replay: bool = False  # Whether this was a replay
+    streak: int = 0  # Current streak after update
 
 
 # Hierarchy models for unlock calculation
