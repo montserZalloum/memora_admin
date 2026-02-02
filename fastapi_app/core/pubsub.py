@@ -1,0 +1,119 @@
+"""Redis pub/sub listener for cache invalidation.
+
+Listens on memora:cache:invalidate channel for hierarchy cache invalidation
+messages from the Frappe build worker. When a message is received, invalidates
+the corresponding subject's hierarchy cache in HierarchyService.
+"""
+
+import asyncio
+import json
+from typing import Any
+
+import structlog
+
+INVALIDATION_CHANNEL = "memora:cache:invalidate"
+
+logger = structlog.get_logger()
+
+
+async def start_pubsub_listener(redis_pool: Any, app_state: Any) -> None:
+	"""
+	Start Redis pub/sub listener for cache invalidation.
+
+	Subscribes to INVALIDATION_CHANNEL and listens for invalidation messages.
+	On message receipt, calls hierarchy_service.invalidate(subject_id).
+
+	Args:
+	    redis_pool: Redis connection pool from app.state.redis_pool
+	    app_state: FastAPI app.state for accessing hierarchy_service
+
+	Note:
+	    This runs as an asyncio background task started in main.py lifespan.
+	    Handles CancelledError for clean shutdown.
+	"""
+	import redis.asyncio as redis
+
+	# Create dedicated client for pub/sub (separate from pool)
+	client = redis.Redis(connection_pool=redis_pool)
+
+	try:
+		pubsub = client.pubsub()
+		await pubsub.subscribe(INVALIDATION_CHANNEL)
+
+		logger.info(
+			"pubsub_listener_started",
+			channel=INVALIDATION_CHANNEL,
+		)
+
+		async for message in pubsub.listen():
+			if message["type"] == "message":
+				await _handle_invalidation(message["data"], app_state)
+
+	except asyncio.CancelledError:
+		logger.info("pubsub_listener_cancelled")
+		raise
+
+	except Exception as e:
+		logger.error("pubsub_listener_error", error=str(e))
+		raise
+
+	finally:
+		# Clean shutdown
+		try:
+			await pubsub.unsubscribe(INVALIDATION_CHANNEL)
+			await client.aclose()
+		except Exception as e:
+			logger.debug("pubsub_cleanup_error", error=str(e))
+
+
+async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
+	"""
+	Handle cache invalidation message.
+
+	Parses the JSON payload and invalidates hierarchy cache for the subject.
+
+	Args:
+	    data: Raw message data (bytes or str)
+	    app_state: FastAPI app.state containing hierarchy_service
+	"""
+	try:
+		# Decode bytes if needed
+		if isinstance(data, bytes):
+			data = data.decode("utf-8")
+
+		# Parse JSON payload
+		payload = json.loads(data)
+
+		msg_type = payload.get("type")
+		subject_id = payload.get("subject_id")
+		timestamp = payload.get("timestamp")
+
+		if msg_type == "hierarchy" and subject_id:
+			# Get hierarchy service from app state
+			hierarchy_service = getattr(app_state, "hierarchy_service", None)
+
+			if hierarchy_service:
+				await hierarchy_service.invalidate(subject_id)
+				logger.info(
+					"hierarchy_cache_invalidated",
+					subject_id=subject_id,
+					timestamp=timestamp,
+				)
+			else:
+				logger.warning(
+					"hierarchy_service_not_available",
+					subject_id=subject_id,
+				)
+		else:
+			logger.debug(
+				"unknown_invalidation_message",
+				msg_type=msg_type,
+				payload=payload,
+			)
+
+	except json.JSONDecodeError as e:
+		logger.error("invalidation_message_parse_error", error=str(e), data=data)
+
+	except Exception as e:
+		# Log error but don't crash the listener
+		logger.error("invalidation_handler_error", error=str(e))

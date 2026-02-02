@@ -1,16 +1,21 @@
 """FastAPI Game API Sidecar - Main Application."""
 
+import asyncio
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+import redis.asyncio as redis
 import structlog
 from fastapi import FastAPI
 
 from fastapi_app.api.v1.router import router as v1_router
 from fastapi_app.core.config import get_settings
 from fastapi_app.core.logging import configure_logging
+from fastapi_app.core.pubsub import start_pubsub_listener
 from fastapi_app.core.redis import create_redis_pool, verify_redis_connection
 from fastapi_app.middleware.request_id import RequestIDMiddleware
+from fastapi_app.services.frappe_client import FrappeClient, FrappeClientSettings
+from fastapi_app.services.hierarchy import HierarchyService
 
 logger = structlog.get_logger()
 
@@ -28,9 +33,42 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await verify_redis_connection(pool)
     app.state.redis_pool = pool
 
+    # Create Redis client for services
+    redis_client = redis.Redis(connection_pool=pool)
+
+    # Create FrappeClient instance
+    frappe_settings = FrappeClientSettings()
+    frappe_client = FrappeClient(settings=frappe_settings)
+    app.state.frappe_client = frappe_client
+
+    # Create HierarchyService instance
+    hierarchy_service = HierarchyService(
+        redis_client=redis_client,
+        frappe_client=frappe_client,
+    )
+    app.state.hierarchy_service = hierarchy_service
+
+    # Start pub/sub listener background task
+    pubsub_task = asyncio.create_task(
+        start_pubsub_listener(pool, app.state)
+    )
+    app.state.pubsub_task = pubsub_task
+
     yield
 
-    # Cleanup
+    # Cancel pub/sub listener
+    if hasattr(app.state, "pubsub_task"):
+        app.state.pubsub_task.cancel()
+        try:
+            await app.state.pubsub_task
+        except asyncio.CancelledError:
+            pass
+
+    # Close FrappeClient
+    if hasattr(app.state, "frappe_client"):
+        await app.state.frappe_client.close()
+
+    # Cleanup Redis pool
     await pool.disconnect()
     logger.info("fastapi_shutdown")
 
