@@ -31,9 +31,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Progress Tracking
 
-- [ ] **PROG-01**: Redis bitmap stores lesson completion per player-subject (SETBIT/GETBIT)
-- [ ] **PROG-02**: Unlock state calculation respects is_linear flags at Track/Unit/Topic levels
-- [ ] **PROG-03**: API endpoint marks lesson complete and updates bitmap
+- [x] **PROG-01**: Redis bitmap stores lesson completion per player-subject (SETBIT/GETBIT)
+- [x] **PROG-02**: Unlock state calculation respects is_linear flags at Track/Unit/Topic levels
+- [x] **PROG-03**: API endpoint marks lesson complete and updates bitmap
 
 ### Wallet & Gamification
 
@@ -121,9 +121,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ACCESS-03 | Phase 3 | Complete |
 | ACCESS-04 | Phase 3 | Complete |
 | ACCESS-05 | Phase 3 | Complete |
-| PROG-01 | Phase 4 | Pending |
-| PROG-02 | Phase 4 | Pending |
-| PROG-03 | Phase 4 | Pending |
+| PROG-01 | Phase 4 | Complete |
+| PROG-02 | Phase 4 | Complete |
+| PROG-03 | Phase 4 | Complete |
 | WALLET-01 | Phase 5 | Pending |
 | WALLET-02 | Phase 5 | Pending |
 | WALLET-03 | Phase 5 | Pending |
@@ -146,4 +146,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-02 after Phase 3 completion*
+*Last updated: 2026-02-02 after Phase 4 completion*
