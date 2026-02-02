@@ -18,7 +18,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 4: Progress Tracking** - Bitmap-based lesson completion with unlock states
 - [x] **Phase 5: Wallet & Gamification** - XP accumulation and streak tracking
 - [x] **Phase 6: Build Pipeline** - Content JSON generation and CDN upload
-- [ ] **Phase 7: Sync Mechanisms** - Redis to MariaDB persistence with scheduled tasks
+- [x] **Phase 7: Sync Mechanisms** - Redis to MariaDB persistence with scheduled tasks
 
 ## Phase Details
 
@@ -144,10 +144,10 @@ Plans:
 **Plans**: 4 plans in 3 waves
 
 Plans:
-- [ ] 07-01-PLAN.md — Add dirty set tracking to FastAPI progress and wallet services (Wave 1)
-- [ ] 07-02-PLAN.md — Progress sync Frappe task: bitmap to hex for Structure Progress (Wave 2)
-- [ ] 07-03-PLAN.md — Wallet sync and interaction buffer flush Frappe tasks (Wave 2)
-- [ ] 07-04-PLAN.md — Wire scheduler events and update module exports (Wave 3)
+- [x] 07-01-PLAN.md — Add dirty set tracking to FastAPI progress and wallet services (Wave 1)
+- [x] 07-02-PLAN.md — Progress sync Frappe task: bitmap to hex for Structure Progress (Wave 2)
+- [x] 07-03-PLAN.md — Wallet sync and interaction buffer flush Frappe tasks (Wave 2)
+- [x] 07-04-PLAN.md — Wire scheduler events and update module exports (Wave 3)
 
 ## Progress
 
@@ -162,7 +162,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 4. Progress Tracking | 4/4 | ✓ Complete | 2026-02-02 |
 | 5. Wallet & Gamification | 4/4 | ✓ Complete | 2026-02-02 |
 | 6. Build Pipeline | 4/4 | ✓ Complete | 2026-02-02 |
-| 7. Sync Mechanisms | 0/4 | Not started | - |
+| 7. Sync Mechanisms | 4/4 | ✓ Complete | 2026-02-02 |
 
 ---
 *Roadmap created: 2026-02-01*

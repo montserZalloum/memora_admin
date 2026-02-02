@@ -53,13 +53,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Sync Mechanisms
 
-- [ ] **SYNC-01**: Progress sync writes Redis bitmap to MariaDB Structure Progress as hex string
-- [ ] **SYNC-02**: Wallet sync writes Redis hash to MariaDB Player Wallet record
-- [ ] **SYNC-03**: Interaction buffer flushes Redis list to MariaDB Interaction Log batch insert
+- [x] **SYNC-01**: Progress sync writes Redis bitmap to MariaDB Structure Progress as hex string
+- [x] **SYNC-02**: Wallet sync writes Redis hash to MariaDB Player Wallet record
+- [x] **SYNC-03**: Interaction buffer flushes Redis list to MariaDB Interaction Log batch insert
 
 ### Scheduled Tasks
 
-- [ ] **TASK-01**: Build worker processes pending builds every 2 minutes via Frappe scheduler
+- [x] **TASK-01**: Build worker processes pending builds every 2 minutes via Frappe scheduler
 
 ## v2 Requirements
 
@@ -134,10 +134,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BUILD-05 | Phase 6 | Complete |
 | BUILD-06 | Phase 6 | Complete |
 | BUILD-07 | Phase 6 | Complete |
-| SYNC-01 | Phase 7 | Pending |
-| SYNC-02 | Phase 7 | Pending |
-| SYNC-03 | Phase 7 | Pending |
-| TASK-01 | Phase 7 | Pending |
+| SYNC-01 | Phase 7 | Complete |
+| SYNC-02 | Phase 7 | Complete |
+| SYNC-03 | Phase 7 | Complete |
+| TASK-01 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 30 total
