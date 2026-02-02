@@ -114,16 +114,6 @@ async def get_wallet_service(request: Request) -> WalletService:
 WalletServiceDep = Annotated[WalletService, Depends(get_wallet_service)]
 
 
-async def get_settings_service(request: Request) -> SettingsService:
-    """Get SettingsService with Redis and FrappeClient."""
-    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
-    frappe_client = await get_frappe_client()
-    return SettingsService(redis_client, frappe_client)
-
-
-SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
-
-
 # Singleton for FrappeClient
 _frappe_client: FrappeClient | None = None
 
@@ -134,6 +124,16 @@ async def get_frappe_client() -> FrappeClient:
     if _frappe_client is None:
         _frappe_client = FrappeClient()
     return _frappe_client
+
+
+async def get_settings_service(request: Request) -> SettingsService:
+    """Get SettingsService with Redis and FrappeClient."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    frappe_client = await get_frappe_client()
+    return SettingsService(redis_client, frappe_client)
+
+
+SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
 
 
 async def get_hierarchy_service(request: Request) -> HierarchyService:
