@@ -139,8 +139,8 @@ app_license = "mit"
 
 doc_events = {
     "Memora Season": {
-        "after_insert": "memora_admin.events.access_sync.on_season_change",
-        "on_update": "memora_admin.events.access_sync.on_season_change",
+        "after_insert": "memora_admin.events.access_sync.on_season_updated",
+        "on_update": "memora_admin.events.access_sync.on_season_updated",
         "on_trash": "memora_admin.events.access_sync.on_season_deleted",
     },
     "Memora Player Subscription": {

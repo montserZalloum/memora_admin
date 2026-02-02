@@ -12,7 +12,7 @@ import frappe
 # =============================================================================
 
 
-def on_season_change(doc, method):
+def on_season_updated(doc, method):
     """
     Sync season metadata to Redis on create/update.
 
@@ -23,9 +23,15 @@ def on_season_change(doc, method):
     cache = frappe.cache
     redis_key = f"memora:season:{doc.name}"
 
-    cache.hset(redis_key, "is_published", "1" if doc.is_published else "0")
-    cache.hset(redis_key, "start_date", str(doc.start_date))
-    cache.hset(redis_key, "end_date", str(doc.end_date))
+    # Use single hset with mapping for atomic update
+    cache.hset(
+        redis_key,
+        mapping={
+            "is_published": "1" if doc.is_published else "0",
+            "start_date": str(doc.start_date),
+            "end_date": str(doc.end_date),
+        },
+    )
 
     frappe.logger().info(f"Season {doc.name} synced to Redis")
 
