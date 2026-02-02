@@ -173,6 +173,13 @@ doc_events = {
 
 scheduler_events = {
 	"cron": {
+		# Every 1 minute: Sync dirty data from Redis to MariaDB
+		"* * * * *": [
+			"memora_admin.memora_admin.tasks.sync.sync_dirty_progress",
+			"memora_admin.memora_admin.tasks.sync.sync_dirty_wallets",
+			"memora_admin.memora_admin.tasks.sync.flush_interaction_buffer",
+		],
+		# Every 2 minutes: Process pending content builds
 		"*/2 * * * *": [
 			"memora_admin.memora_admin.tasks.build_worker.process_pending_builds"
 		]
