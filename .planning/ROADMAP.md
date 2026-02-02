@@ -67,13 +67,13 @@ Plans:
   3. Units/Topics with is_free=true are accessible without Gate 2 check (free preview)
   4. Payment webhook creates subscription record in MariaDB and adds grant to Redis access set
   5. Admin can grant player access from Frappe Desk and change is reflected in Redis within 1 second
-**Plans**: TBD
+**Plans**: 4 plans in 2 waves
 
 Plans:
-- [ ] 03-01: Season meta sync (Frappe hook to Redis hash)
-- [ ] 03-02: Player access set management (direct grants + plan membership)
-- [ ] 03-03: Double-Gate middleware and free preview logic
-- [ ] 03-04: Payment webhook and admin grant endpoints
+- [ ] 03-01-PLAN.md — Season metadata caching: SeasonMeta model, SeasonService, Frappe doc_events hooks (Wave 1)
+- [ ] 03-02-PLAN.md — Player access sets: AccessService for O(1) grants, subscription sync hooks (Wave 1)
+- [ ] 03-03-PLAN.md — Double-Gate dependencies: require_season_access, require_content_access with free bypass (Wave 2)
+- [ ] 03-04-PLAN.md — Payment webhook and admin grant endpoints (Wave 2)
 
 ### Phase 4: Progress Tracking
 **Goal**: Lesson completion tracked via Redis bitmaps with linear unlock enforcement
@@ -153,7 +153,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 |-------|----------------|--------|-----------|
 | 1. Infrastructure Foundation | 4/4 | ✓ Complete | 2026-02-01 |
 | 2. Authentication | 3/3 | ✓ Complete | 2026-02-02 |
-| 3. Access Control | 0/4 | Not started | - |
+| 3. Access Control | 0/4 | Ready for execution | - |
 | 4. Progress Tracking | 0/3 | Not started | - |
 | 5. Wallet & Gamification | 0/3 | Not started | - |
 | 6. Build Pipeline | 0/4 | Not started | - |
