@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 5 - Wallet & Gamification (next up)
+**Current focus:** Phase 5 - Wallet & Gamification (in progress)
 
 ## Current Position
 
-Phase: 4 of 7 (Progress Tracking) - COMPLETE ✓
-Plan: 4 of 4 in current phase (all plans complete)
-Status: Phase 4 verified and complete
-Last activity: 2026-02-02 - Phase 4 verified (4/4 success criteria)
+Phase: 5 of 7 (Wallet & Gamification)
+Plan: 1 of 4 in current phase
+Status: In progress
+Last activity: 2026-02-02 - Completed 05-01-PLAN.md
 
-Progress: [######----] 56% (18 plans / ~32 estimated total)
+Progress: [######----] 59% (19 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 18
-- Average duration: 2.1min
-- Total execution time: 0.63 hours
+- Total plans completed: 19
+- Average duration: 2.0min
+- Total execution time: 0.65 hours
 
 **By Phase:**
 
@@ -31,9 +31,10 @@ Progress: [######----] 56% (18 plans / ~32 estimated total)
 | 02-authentication | 3 | 9min | 3.0min |
 | 03-access-control | 7 | 13min | 1.9min |
 | 04-progress-tracking | 4 | 10min | 2.5min |
+| 05-wallet-gamification | 1 | 1min | 1.0min |
 
 **Recent Trend:**
-- Last 5 plans: 1min, 2min, 2min, 2min, 4min
+- Last 5 plans: 2min, 2min, 2min, 4min, 1min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -92,6 +93,10 @@ Recent decisions affecting current work:
 - [04-03]: Log replay status but don't return (wallet integration in Phase 5)
 - [04-04]: subject_name uses subject_id as placeholder (Frappe name fetch deferred)
 - [04-04]: Unlock state computed inline using existing helper functions
+- [05-01]: Use Redis hash for wallet storage (allows atomic HINCRBY for XP)
+- [05-01]: Lua script for atomic streak update with date comparison
+- [05-01]: Asia/Amman timezone for streak boundaries (single timezone per CONTEXT.md)
+- [05-01]: No streak_date in WalletResponse (client doesn't need it)
 
 ### Pending Todos
 
@@ -103,8 +108,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T12:05:00Z
-Stopped at: Completed Phase 4 Progress Tracking (verified)
+Last session: 2026-02-02T13:41:00Z
+Stopped at: Completed 05-01-PLAN.md
 Resume file: None
 
 Previous plan summaries:
@@ -127,3 +132,4 @@ Previous plan summaries:
 04-02: Frappe API for subject hierarchy with nested is_linear flags, HierarchyService with Redis caching for <20ms unlock calculations
 04-03: POST /progress/complete endpoint with unlock state enforcement and Double-Gate access validation
 04-04: GET /progress and GET /progress/{subject} endpoints with completion percentages and unlock states wired into API
+05-01: Redis-backed WalletService with atomic HINCRBY for XP and Lua script for streak date comparison
