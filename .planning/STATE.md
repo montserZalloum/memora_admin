@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 3 - Access Control (Phase 2 complete)
+**Current focus:** Phase 3 - Access Control (in progress)
 
 ## Current Position
 
-Phase: 2 of 7 (Authentication)
-Plan: 3 of 3 in current phase (02-01, 02-02, 02-03 complete)
-Status: Phase complete
-Last activity: 2026-02-02 - Completed 02-03-PLAN.md (Auth endpoints)
+Phase: 3 of 7 (Access Control)
+Plan: 2 of ? in current phase (03-01, 03-02 complete)
+Status: In progress
+Last activity: 2026-02-02 - Completed 03-02-PLAN.md (Player access sets)
 
-Progress: [#######...] 100% (of discovered plans: 7/7)
+Progress: [########..] ~80% (of discovered plans: 9/?)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 7
-- Average duration: 2.4min
-- Total execution time: 0.28 hours
+- Total plans completed: 9
+- Average duration: 2.3min
+- Total execution time: 0.35 hours
 
 **By Phase:**
 
@@ -29,9 +29,10 @@ Progress: [#######...] 100% (of discovered plans: 7/7)
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
+| 03-access-control | 2 | 4min | 2.0min |
 
 **Recent Trend:**
-- Last 5 plans: 1min, 2min, 3min, 3min, 4min
+- Last 5 plans: 3min, 3min, 4min, 2min, 2min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -64,6 +65,8 @@ Recent decisions affecting current work:
 - [02-03]: HTTPBearer for token extraction from Authorization header
 - [02-03]: Generic 'Invalid credentials' for all auth failures (no enumeration)
 - [02-03]: Refresh token not rotated (reusable per CONTEXT.md)
+- [03-02]: Redis key pattern memora:access:{user_id} for player grants
+- [03-02]: Direct cache.sadd/srem in doc_events for sub-second sync
 
 ### Pending Todos
 
@@ -75,8 +78,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T06:56:14Z
-Stopped at: Completed 02-03-PLAN.md (Auth endpoints)
+Last session: 2026-02-02T07:50:59Z
+Stopped at: Completed 03-02-PLAN.md (Player access sets)
 Resume file: None
 
 Previous plan summaries:
@@ -88,3 +91,5 @@ Previous plan summaries:
 02-01: JWT utilities with PyJWT, auth Pydantic models, and async Frappe credential verification service
 02-02: Session management with token family ID for single-session enforcement and dual-key rate limiting with atomic Lua script
 02-03: Login/refresh endpoints with dual rate limiting, session-based token family validation, and stateless JWT auth dependency
+03-01: SeasonMeta model and SeasonService for Gate 1 validation with Redis hash caching
+03-02: Redis set-based player access management with Frappe doc_events hooks for immediate subscription/season sync
