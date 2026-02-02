@@ -716,7 +716,7 @@ Operations:
 ## 5.1 File Organization
 
 ```
-/home/frappe/frappe-bench/sites/site1/
+/home/corex/aurevia-bench/sites/x.conanacademy.com/
 ├── public/
 │   └── memora_content/              # Public (CDN + Local Fallback)
 │       ├── manifest.json            # Global manifest

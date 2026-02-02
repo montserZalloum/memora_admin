@@ -212,7 +212,7 @@ server {
     # Local content fallback (when CDN is unreachable)
     location /local_content/ {
         internal;
-        alias /home/frappe/frappe-bench/sites/site1/public/memora_content/;
+        alias /home/corex/aurevia-bench/sites/x.conanacademy.com/public/memora_content/;
         
         expires 5m;
         add_header Cache-Control "public, max-age=300";
@@ -644,7 +644,7 @@ collation-server = utf8mb4_unicode_ci
 │   │
 │   ├── sites/
 │   │   ├── common_site_config.json           # JWT secrets, Redis URL
-│   │   └── site1/
+│   │   └── x.conanacademy.com/
 │   │       ├── public/
 │   │       │   └── memora_content/           # Public JSON (CDN source)
 │   │       │       ├── manifest.json

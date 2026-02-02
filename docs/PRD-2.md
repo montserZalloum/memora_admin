@@ -339,8 +339,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     
     # Paths
-    bitmaps_path: str = "/home/frappe/frappe-bench/sites/site1/private/memora_bitmaps"
-    frappe_config_path: str = "/home/frappe/frappe-bench/sites/common_site_config.json"
+    bitmaps_path: str = "/home/corex/aurevia-bench/sites/x.conanacademy.com/private/memora_bitmaps"
+    frappe_config_path: str = "/home/corex/aurevia-bench/sites/common_site_config.json"
     
     # CORS
     cors_origins: List[str] = ["https://app.memora.com", "http://localhost:3000"]
