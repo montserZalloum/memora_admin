@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.constants import DIRTY_WALLETS_KEY
+
 logger = structlog.get_logger()
 
 # Asia/Amman timezone for consistent streak boundary
@@ -134,6 +136,9 @@ class WalletService:
 		key = self._wallet_key(player_id)
 		new_total = await self.redis.hincrby(key, "xp", amount)
 
+		# Mark dirty for background sync to MariaDB
+		await self.redis.sadd(DIRTY_WALLETS_KEY, player_id)
+
 		logger.debug(
 			"xp_awarded",
 			player_id=player_id,
@@ -183,6 +188,10 @@ class WalletService:
 
 		streak = int(result[0])
 		was_updated = bool(result[1])
+
+		# Mark dirty if streak was updated (either incremented or reset)
+		if was_updated:
+			await self.redis.sadd(DIRTY_WALLETS_KEY, player_id)
 
 		logger.debug(
 			"streak_updated",
