@@ -8,6 +8,8 @@ from fastapi_app.api.deps import (
     CurrentUser,
     HierarchyServiceDep,
     ProgressServiceDep,
+    SettingsServiceDep,
+    WalletServiceDep,
 )
 from fastapi_app.models.progress import (
     CompleteRequest,
@@ -29,6 +31,38 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/progress", tags=["progress"])
 
 
+# --- XP Calculation ---
+
+
+def calculate_xp_award(
+    base_xp: int,
+    lesson_xp: int,
+    current_streak: int,
+    max_multiplier_percent: int,
+    is_replay: bool,
+    replay_xp: int,
+) -> int:
+    """Calculate XP to award for completion.
+
+    Per CONTEXT.md:
+    - Fresh completion: lesson_xp (if > 0) else base_xp
+    - Replay: fixed replay_xp amount
+    - Streak multiplier: +1% per day, capped at max_multiplier_percent
+    - Streak multiplier applies to BOTH fresh and replay per CONTEXT.md
+    """
+    if is_replay:
+        base = replay_xp
+    else:
+        base = lesson_xp if lesson_xp > 0 else base_xp
+
+    # Apply streak multiplier (linear +1% per day, capped)
+    capped_streak = min(current_streak, max_multiplier_percent)
+    multiplier = 1.0 + (capped_streak * 0.01)
+
+    # Floor the result per RESEARCH.md recommendation
+    return int(base * multiplier)
+
+
 # --- Completion Endpoint ---
 
 
@@ -39,6 +73,8 @@ async def complete_lesson(
     progress_service: ProgressServiceDep,
     hierarchy_service: HierarchyServiceDep,
     access_service: AccessServiceDep,
+    wallet_service: WalletServiceDep,
+    settings_service: SettingsServiceDep,
 ) -> CompleteResponse:
     """
     Mark a lesson as complete.
@@ -102,6 +138,30 @@ async def complete_lesson(
         version=hierarchy.version,
     )
 
+    # --- Wallet integration (Phase 5) ---
+
+    # Get gamification settings (cached)
+    settings = await settings_service.get_gamification_settings()
+
+    # Update streak atomically (replay doesn't count per CONTEXT.md)
+    streak, streak_updated = await wallet_service.update_streak(
+        player_id=user.sub,
+        is_replay=is_replay,
+    )
+
+    # Calculate XP with streak multiplier
+    xp_awarded = calculate_xp_award(
+        base_xp=settings.base_lesson_xp,
+        lesson_xp=lesson_info.xp,
+        current_streak=streak,
+        max_multiplier_percent=settings.max_streak_multiplier_percent,
+        is_replay=is_replay,
+        replay_xp=settings.replay_xp,
+    )
+
+    # Award XP atomically
+    new_total_xp = await wallet_service.award_xp(user.sub, xp_awarded)
+
     logger.info(
         "lesson_completed",
         user_id=user.sub,
@@ -109,12 +169,18 @@ async def complete_lesson(
         lesson=request.lesson,
         bit_index=lesson_info.bit_index,
         is_replay=is_replay,
+        xp_awarded=xp_awarded,
+        new_total_xp=new_total_xp,
+        streak=streak,
+        streak_updated=streak_updated,
     )
 
-    # Note: XP/wallet updates are Phase 5 responsibility
-    # Replay info passed via is_replay for future wallet integration
-
-    return CompleteResponse(success=True)
+    return CompleteResponse(
+        success=True,
+        xp_awarded=xp_awarded,
+        is_replay=is_replay,
+        streak=streak,
+    )
 
 
 # --- Helper functions for counting lessons ---
