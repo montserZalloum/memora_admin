@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 7 of 7 (Sync Mechanisms)
-Plan: 1 of ? in current phase
+Plan: 2 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-02 - Completed 07-01-PLAN.md
+Last activity: 2026-02-02 - Completed 07-02-PLAN.md
 
-Progress: [########=-] 84% (27 plans / ~32 estimated total)
+Progress: [########=-] 87% (28 plans / 32 total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 27
+- Total plans completed: 28
 - Average duration: 2.0min
-- Total execution time: 0.88 hours
+- Total execution time: 0.90 hours
 
 **By Phase:**
 
@@ -33,7 +33,7 @@ Progress: [########=-] 84% (27 plans / ~32 estimated total)
 | 04-progress-tracking | 4 | 10min | 2.5min |
 | 05-wallet-gamification | 4 | 7min | 1.75min |
 | 06-build-pipeline | 4 | 7min | 1.75min |
-| 07-sync-mechanisms | 1 | 1min | 1.0min |
+| 07-sync-mechanisms | 2 | 2min | 1.0min |
 
 **Recent Trend:**
 - Last 5 plans: 2min, 1min, 2min, 2min, 1min
@@ -123,6 +123,9 @@ Recent decisions affecting current work:
 - [07-01]: Dirty member format for progress: user_id:subject_id:v{version} (allows key reconstruction)
 - [07-01]: Dirty member format for wallets: player_id directly (simpler, no versioning)
 - [07-01]: Wallet dirty only on streak update if was_updated=True (skip no-op same-day completions)
+- [07-02]: SREM only after successful frappe.db write (prevents lost updates on crash)
+- [07-02]: Cache subject lesson count in Redis for percentage calculation (1-hour TTL)
+- [07-02]: Log all sync runs to Memora Sync Log for audit trail
 
 ### Pending Todos
 
@@ -134,8 +137,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T18:39:54Z
-Stopped at: Completed 07-01-PLAN.md
+Last session: 2026-02-02T18:43:46Z
+Stopped at: Completed 07-02-PLAN.md
 Resume file: None
 
 Previous plan summaries:
@@ -167,3 +170,4 @@ Previous plan summaries:
 06-03: Storage abstraction with local filesystem backend and atomic upload publisher using temp-then-rename pattern with 3-retry exponential backoff
 06-04: Scheduled build worker with Redis pub/sub cache invalidation wiring Frappe to FastAPI for end-to-end build pipeline
 07-01: Redis dirty set tracking for progress and wallet services enabling background sync to MariaDB
+07-02: Progress sync Frappe task persisting Redis bitmaps to Structure Progress with hex conversion and audit logging
