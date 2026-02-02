@@ -171,6 +171,15 @@ doc_events = {
 # Scheduled Tasks
 # ---------------
 
+scheduler_events = {
+	"cron": {
+		"*/2 * * * *": [
+			"memora_admin.memora_admin.tasks.build_worker.process_pending_builds"
+		]
+	}
+}
+
+# Commented defaults for reference:
 # scheduler_events = {
 # 	"all": [
 # 		"memora_admin.tasks.all"
