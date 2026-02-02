@@ -215,6 +215,73 @@ def sync_dirty_wallets():
 	logger.info(f"Wallet sync: {synced} synced, {len(errors)} errors")
 
 
+def flush_interaction_buffer():
+	"""
+	Batch insert interactions from Redis buffer to MariaDB.
+
+	Processes INTERACTION_BUFFER_KEY list:
+	1. LRANGE to get batch of items (limit 1000)
+	2. JSON parse and insert to Interaction Log
+	3. LTRIM to remove processed items atomically
+
+	Scheduled: every 1 minute via hooks.py
+
+	Per RESEARCH.md: Fixed batch size (1000) prevents memory spikes.
+	"""
+	r = get_redis()
+
+	# Batch size limit to prevent memory issues
+	BATCH_SIZE = 1000
+
+	# Get batch of items from head of list
+	items = r.lrange(INTERACTION_BUFFER_KEY, 0, BATCH_SIZE - 1)
+	if not items:
+		logger.debug("No interactions to flush")
+		return
+
+	count = len(items)
+	inserted = 0
+	errors = []
+
+	for item_bytes in items:
+		try:
+			# Parse JSON (handle bytes from Redis)
+			item_str = item_bytes.decode() if isinstance(item_bytes, bytes) else item_bytes
+			item = json.loads(item_str)
+
+			# Insert to Interaction Log DocType
+			frappe.get_doc({
+				"doctype": "Memora Interaction Log",
+				"player": item["player"],
+				"lesson": item["lesson"],
+				"stage_id": str(item.get("stage_id", "")),
+				"event_type": item.get("event_type", "Completed"),
+				"time_spent": item.get("time_spent", 0),
+				"errors_count": item.get("errors_count", 0),
+				"timestamp": item.get("timestamp", datetime.now().isoformat()),
+				"client_metadata": json.dumps(item.get("metadata", {})),
+			}).insert(ignore_permissions=True)
+			inserted += 1
+
+		except Exception as e:
+			errors.append(str(e))
+			frappe.log_error(f"Insert interaction failed: {e}")
+
+	# Trim processed items from list (atomic operation)
+	# LTRIM keeps elements from count to end, removing processed ones
+	r.ltrim(INTERACTION_BUFFER_KEY, count, -1)
+
+	# Commit all inserts
+	if inserted > 0:
+		frappe.db.commit()
+
+	# Log sync result - "Memory" is the sync_type for interactions per DocType schema
+	status = "Success" if not errors else "Failed"
+	_log_sync("Memory", inserted, status)
+
+	logger.info(f"Interaction flush: {inserted} inserted, {len(errors)} errors")
+
+
 def _get_subject_lesson_count(r, subject_id: str) -> int:
 	"""
 	Get total lesson count for subject (cached in Redis).
