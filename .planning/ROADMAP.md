@@ -139,15 +139,15 @@ Plans:
   1. Progress sync converts Redis bitmaps to hex strings and updates Structure Progress records
   2. Wallet sync copies Redis hash values (XP, streak, streak_date) to Player Wallet records
   3. Interaction buffer flushes Redis list to Interaction Log via batch INSERT
-  4. Build worker processes pending builds every 2 minutes via Frappe scheduler
+  4. Build worker processes pending builds every 2 minutes via Frappe scheduler (DONE in Phase 6)
   5. Sync Log DocType records each sync run with success/failure status and record counts
-**Plans**: TBD
+**Plans**: 4 plans in 3 waves
 
 Plans:
-- [ ] 07-01: Dirty set tracking for progress and wallets
-- [ ] 07-02: Progress sync task (bitmap to hex)
-- [ ] 07-03: Wallet sync task and interaction buffer flush
-- [ ] 07-04: Build worker scheduled task and Sync Log integration
+- [ ] 07-01-PLAN.md — Add dirty set tracking to FastAPI progress and wallet services (Wave 1)
+- [ ] 07-02-PLAN.md — Progress sync Frappe task: bitmap to hex for Structure Progress (Wave 2)
+- [ ] 07-03-PLAN.md — Wallet sync and interaction buffer flush Frappe tasks (Wave 2)
+- [ ] 07-04-PLAN.md — Wire scheduler events and update module exports (Wave 3)
 
 ## Progress
 
@@ -166,5 +166,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 ---
 *Roadmap created: 2026-02-01*
-*Total phases: 7 | Total plans: 26 (estimated)*
+*Total phases: 7 | Total plans: 30 total*
 *Coverage: 30/30 v1 requirements mapped*
