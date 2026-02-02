@@ -76,28 +76,34 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SESSION-01 | TBD | Pending |
-| SESSION-02 | TBD | Pending |
-| SESSION-03 | TBD | Pending |
-| SESSION-04 | TBD | Pending |
-| SESSION-05 | TBD | Pending |
-| SESSION-06 | TBD | Pending |
-| LEADER-01 | TBD | Pending |
-| LEADER-02 | TBD | Pending |
-| LEADER-03 | TBD | Pending |
-| LEADER-04 | TBD | Pending |
-| LEADER-05 | TBD | Pending |
-| DEVICE-01 | TBD | Pending |
-| DEVICE-02 | TBD | Pending |
-| SCHED-01 | TBD | Pending |
-| SCHED-02 | TBD | Pending |
-| SCHED-03 | TBD | Pending |
+| DEVICE-01 | Phase 8 | Pending |
+| DEVICE-02 | Phase 8 | Pending |
+| SESSION-01 | Phase 9 | Pending |
+| SESSION-02 | Phase 9 | Pending |
+| SESSION-03 | Phase 9 | Pending |
+| SESSION-04 | Phase 9 | Pending |
+| SESSION-05 | Phase 9 | Pending |
+| SESSION-06 | Phase 9 | Pending |
+| LEADER-01 | Phase 10 | Pending |
+| LEADER-02 | Phase 10 | Pending |
+| LEADER-03 | Phase 10 | Pending |
+| LEADER-04 | Phase 10 | Pending |
+| LEADER-05 | Phase 10 | Pending |
+| SCHED-01 | Phase 11 | Pending |
+| SCHED-02 | Phase 11 | Pending |
+| SCHED-03 | Phase 11 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 16 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 16
+- Mapped to phases: 16/16 (100%)
+- Unmapped: 0
+
+**Phase mapping:**
+- Phase 8 (Device Management): 2 requirements
+- Phase 9 (Game Sessions): 6 requirements
+- Phase 10 (Leaderboards): 5 requirements
+- Phase 11 (Scheduled Tasks): 3 requirements
 
 ---
 *Requirements defined: 2026-02-02*
-*Last updated: 2026-02-02 after initial definition*
+*Last updated: 2026-02-02 after roadmap creation*
