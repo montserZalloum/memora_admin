@@ -1,701 +1,644 @@
-# Architecture Research: FastAPI Sidecar Integration with Frappe
+# Architecture Research: v1.1 Integration
 
-**Domain:** Gamified Education Platform Backend
-**Researched:** 2026-02-01
-**Overall Confidence:** MEDIUM-HIGH
+**Domain:** Gamified Educational Platform (Memora)
+**Researched:** 2026-02-02
+**Confidence:** HIGH
 
 ## Executive Summary
 
-This research addresses how a FastAPI sidecar should integrate with the existing Frappe v15 application for Memora. The architecture follows a "sidecar" pattern where FastAPI handles high-performance game mechanics (sub-20ms responses) while Frappe manages admin, content management, and persistent storage. The two applications share a Redis instance for hot data and communicate via Redis pub/sub for cache invalidation.
+The v1.1 features integrate seamlessly with the existing dual-architecture pattern (FastAPI sidecar + Frappe backend). All four new capabilities follow established patterns:
 
----
+- **Game Sessions**: Redis hash with TTL, extending existing session pattern
+- **Leaderboards**: Redis sorted sets (ZADD/ZRANGE), new data structure but standard Redis pattern
+- **Device Management**: Redis set with limit checks, similar to access control pattern
+- **Scheduled Tasks**: Frappe scheduler hook additions, extending existing sync tasks
 
-## Component Boundaries
+No architectural changes required. All features are additive, building on proven v1.0 patterns.
 
-### Frappe Application (Port 8000)
-**Owns:**
-- Content management (Subject, Track, Unit, Topic, Lesson, Stage DocTypes)
-- Academic structure (Grade, Major, Season, Academic Plan)
-- Player master data (Profile creation, subscription management)
-- Business logic (Product Grant, Plan Overrider)
-- Build queue orchestration (triggers builds, tracks status)
-- Cold data persistence (MariaDB as source of truth)
-- Admin UI and content editing workflows
-
-**Does NOT own:**
-- Real-time game state (sessions, live progress)
-- High-frequency read operations (progress checks, access validation)
-- Leaderboard calculations
-- Real-time wallet queries
+## Component Changes
 
 ### FastAPI Sidecar (Port 8001)
-**Owns:**
-- Game API endpoints (progress, wallet, leaderboard)
-- Session management (start/end lesson, stage completion)
-- Hot data layer (Redis reads/writes)
-- Access control validation (double-gate checks)
-- Interaction buffering (pre-batch collection)
-- JWT verification (stateless, no Frappe dependency per request)
 
-**Does NOT own:**
-- Content creation/editing
-- User registration/profile creation
-- Subscription purchases
-- Build execution (only receives invalidation signals)
+**New Services:**
 
-### Redis (Shared Instance)
-**Partitioned by key prefix:**
+| Service | Purpose | Redis Operations | Dependencies |
+|---------|---------|-----------------|--------------|
+| **GameSessionService** | Track lesson flow state | HSET, HGET, EXPIRE, DEL | HierarchyService |
+| **LeaderboardService** | Manage rankings | ZADD, ZINCRBY, ZREVRANGE, ZRANK | WalletService |
+| **DeviceService** | Enforce device limits | SADD, SCARD, SMEMBERS, SREM | SessionService |
 
-| Prefix | Owner | Purpose |
-|--------|-------|---------|
-| `frappe:*` | Frappe | Framework cache, sessions, RQ queues |
-| `memora:cache:*` | Frappe | Content cache (lesson info) |
-| `memora:progress:*` | FastAPI (write) / Frappe (sync read) | Player progress bitmaps |
-| `memora:wallet:*` | FastAPI (write) / Frappe (sync read) | Player XP, streak data |
-| `memora:access:*` | FastAPI (read) / Frappe (write) | Access grant sets |
-| `memora:season:*` | FastAPI (read) / Frappe (write) | Season meta (status, end_ts) |
-| `memora:session:*` | FastAPI | Active game sessions |
-| `memora:leaderboard:*` | FastAPI | Sorted sets for rankings |
-| `memora:dirty:*` | FastAPI (write) / Frappe (read) | Sync queue markers |
-| `memora:buffer:*` | FastAPI (write) / Frappe (read) | Interaction buffer lists |
-| `memora:build:*` | Frappe | Build queue and status |
-| `memora:invalidate` | Frappe (pub) / FastAPI (sub) | Cache invalidation channel |
+**Modified Services:**
 
-**Confidence:** HIGH - Based on [Redis documentation](https://redis.io/docs/latest/develop/data-types/) and standard key namespacing practices.
+| Service | Changes | Reason |
+|---------|---------|--------|
+| **WalletService** | None required | Leaderboards read XP directly from Redis hash |
+| **SessionService** | Optional: Add device_id to session metadata | Track which device owns session |
+| **ProgressService** | None required | Game sessions layer on top, no progress changes |
 
-### MariaDB (Frappe-Owned)
-**Data stored:**
-- All DocType records (source of truth)
-- Synced progress (hex-encoded bitmaps from Redis)
-- Synced wallet state (periodic snapshots)
-- Interaction logs (batch-inserted from Redis buffer)
-- Sync logs, build queue history
+**New Endpoints:**
 
-**FastAPI access:** Read-only for initial hydration, no direct writes.
+```
+POST   /api/v1/sessions/start         - Create game session
+POST   /api/v1/sessions/{id}/stage    - Record stage interaction
+POST   /api/v1/sessions/{id}/end      - Finalize session
 
-### Mock CDN Layer
-**Purpose:** Abstract storage for generated JSON files.
-**Interface:**
-- `upload(key, content)` - Store JSON file
-- `get_url(key)` - Return accessible URL
-- `invalidate(key)` - Remove from cache
+GET    /api/v1/leaderboards/daily     - Daily XP rankings
+GET    /api/v1/leaderboards/all-time  - Total XP rankings
+GET    /api/v1/leaderboards/streak    - Streak rankings
 
-**Swap strategy:** Mock implementation stores locally; production swaps to Cloudflare R2 client.
+POST   /api/v1/devices/register       - Register device on login
+GET    /api/v1/devices                - List player's devices
+DELETE /api/v1/devices/{id}           - Revoke device
+```
 
----
+### Redis Key Schema
+
+**New Keys:**
+
+| Pattern | Type | TTL | Purpose |
+|---------|------|-----|---------|
+| `memora:session:{session_id}` | Hash | 2 hours | Session state (lesson, stage, start_ts, interactions) |
+| `memora:leaderboard:daily:{date}` | Sorted Set | 48 hours | Daily XP rankings (score: xp, member: player_id) |
+| `memora:leaderboard:alltime` | Sorted Set | None | Total XP rankings (synced from wallet hash) |
+| `memora:leaderboard:streak` | Sorted Set | None | Current streak rankings (synced from wallet hash) |
+| `memora:devices:{player_id}` | Set | None | Authorized device IDs (limit: 3) |
+| `memora:device:{device_id}` | Hash | 90 days | Device metadata (player_id, last_seen, device_info) |
+
+**Existing Keys (No Changes):**
+
+- `memora:progress:{user_id}:{subject_id}:v{version}` - Bitmap progress
+- `memora:wallet:{player_id}` - XP and streak hash
+- `memora:session:{user_id}` - Single-session enforcement (auth)
+- `memora:access:{user_id}` - Access grant set
+- `memora:season:{season_id}` - Season metadata hash
+- `memora:dirty:progress` - Dirty set for sync
+- `memora:dirty:wallets` - Dirty set for sync
+- `memora:buffer:interactions` - Interaction log buffer
+
+### Frappe Module (Port 8000)
+
+**New DocTypes:**
+
+| DocType | Purpose | Fields |
+|---------|---------|--------|
+| **Memora Game Session** | Session audit trail | session_id, player, lesson, start_ts, end_ts, stages_completed, status |
+| **Memora Leaderboard Entry** | Leaderboard snapshots | date, player, rank, xp, leaderboard_type |
+
+**Modified DocTypes:**
+
+| DocType | Changes | Reason |
+|---------|---------|--------|
+| **Memora Player Profile** | Add `last_device_sync` timestamp | Track device list freshness |
+| **Memora Player Device** | Already exists, no changes | Supports device management |
+| **Memora Interaction Log** | Add `session_id` field (optional) | Link interactions to sessions |
+
+**New Frappe Hooks:**
+
+```python
+# In memora_admin/hooks.py
+scheduler_events = {
+    "cron": {
+        # Existing (unchanged)
+        "* * * * *": [
+            "memora_admin.memora_admin.tasks.sync.sync_dirty_progress",
+            "memora_admin.memora_admin.tasks.sync.sync_dirty_wallets",
+            "memora_admin.memora_admin.tasks.sync.flush_interaction_buffer",
+        ],
+        "*/2 * * * *": [
+            "memora_admin.memora_admin.tasks.build_worker.process_pending_builds"
+        ],
+
+        # NEW: Session cleanup (hourly)
+        "0 * * * *": [
+            "memora_admin.memora_admin.tasks.cleanup.cleanup_expired_sessions"
+        ],
+
+        # NEW: Streak reset (daily at midnight Asia/Amman)
+        "0 0 * * *": [
+            "memora_admin.memora_admin.tasks.streak.reset_broken_streaks"
+        ],
+
+        # NEW: Leaderboard snapshot (daily at 11:59 PM)
+        "59 23 * * *": [
+            "memora_admin.memora_admin.tasks.leaderboard.snapshot_daily_leaderboard"
+        ]
+    }
+}
+```
+
+**New Scheduled Tasks:**
+
+| Task | Frequency | Purpose | Implementation |
+|------|-----------|---------|----------------|
+| `cleanup_expired_sessions` | Hourly (top of hour) | Remove Redis sessions older than 2 hours | Scan `memora:session:*` keys with TTL check |
+| `reset_broken_streaks` | Daily (00:00 Asia/Amman) | Reset streaks for players who missed yesterday | Check `streak_date` in wallet hashes, set streak=0 if broken |
+| `snapshot_daily_leaderboard` | Daily (23:59 local) | Save top 100 to Leaderboard Entry DocType | ZREVRANGE on daily leaderboard, batch insert |
 
 ## Data Flow
 
-### 1. Content Change to CDN Build
+### Game Sessions Flow
 
 ```
-[Admin edits Lesson in Frappe UI]
-         |
-         v
-[Frappe doc_events.on_update hook]
-         |
-         v
-[frappe.enqueue() to build queue]  ------> [Redis: memora:build:pending SET]
-         |
-         v
-[Scheduled task: process_pending_builds (every 2 min)]
-         |
-         v
-[Build worker generates JSON files]
-    |-- _h.json (hierarchy)
-    |-- _b.json (bitmap structure with bit_range, excluded_bits)
-    |-- *_c.json (unit content)
-    |-- lesson JSON (stages, XP, hearts)
-         |
-         v
-[Upload to CDN (mock/R2)]
-         |
-         v
-[Publish to Redis: memora:invalidate channel]
-         |
-         v
-[FastAPI subscriber clears local cache]
+1. Student taps "Start Lesson" in app
+   ↓
+2. POST /api/v1/sessions/start
+   - Creates Redis hash: memora:session:{uuid}
+   - HSET fields: lesson, subject, player_id, start_ts
+   - EXPIRE 7200 (2 hours TTL)
+   ↓
+3. Student completes stages
+   - POST /api/v1/sessions/{id}/stage for each stage
+   - HINCRBY stages_completed
+   - LPUSH interaction to buffer (existing pattern)
+   ↓
+4. Student completes lesson
+   - POST /api/v1/sessions/{id}/end
+   - Triggers existing /progress/complete endpoint
+   - Marks session as "completed" (HSET status=completed)
+   - Optional: Sync to Frappe (async job)
+   ↓
+5. Session expires after 2 hours (Redis TTL)
+   - Hourly cleanup task removes stale sessions
+   - Audit trail persisted to Memora Game Session DocType
 ```
 
-**Confidence:** MEDIUM - Pattern based on [Netlify build pipeline](https://www.netlify.com/guide-to-composable-architecture/ci-cd-building-deploying-hosting/build-pipeline/) and Redis pub/sub documentation. Frappe hooks pattern from [Frappe docs](https://docs.frappe.io/framework/user/en/api/background_jobs).
+**Key Decision:** Sessions are fire-and-forget. No session required to complete lesson (backward compatible). Sessions provide context for analytics, not enforcement.
 
-### 2. Game Session Flow (Hot Path)
-
-```
-[Student starts lesson]
-         |
-         v
-[POST /api/v1/lessons/{id}/start] --> FastAPI
-         |
-         v
-[Verify JWT (stateless)]
-         |
-         v
-[Double-gate access check]
-    |-- Gate 1: Redis GET memora:season:{season_id} (status + end_ts)
-    |-- Gate 2: Redis SISMEMBER memora:access:{player_id} (subject check)
-         |
-         v
-[Create session: Redis HSET memora:session:{session_id} + EXPIRE]
-         |
-         v
-[Return session_id to client]
-
-
-[Student completes stage]
-         |
-         v
-[POST /api/v1/sessions/{id}/stages/{stage}/complete]
-         |
-         v
-[Verify session exists]
-         |
-         v
-[Record interaction: Redis RPUSH memora:buffer:interactions]
-         |
-         v
-[Update progress: Redis SETBIT memora:progress:{player}:{subject} {bit_position} 1]
-         |
-         v
-[Mark dirty: Redis SADD memora:dirty:progress {player}:{subject}]
-         |
-         v
-[Return success (<10ms target)]
-
-
-[Student ends lesson]
-         |
-         v
-[POST /api/v1/sessions/{id}/complete]
-         |
-         v
-[Calculate XP (base + heart bonus)]
-         |
-         v
-[Update wallet: Redis HINCRBY memora:wallet:{player} xp {amount}]
-         |
-         v
-[Update streak: Redis HSET memora:wallet:{player} streak, streak_date]
-         |
-         v
-[Mark dirty: Redis SADD memora:dirty:wallets {player}]
-         |
-         v
-[Delete session: Redis DEL memora:session:{session_id}]
-         |
-         v
-[Return completion summary (<30ms target)]
-```
-
-**Confidence:** HIGH - Based on [Redis SETBIT/GETBIT documentation](https://redis.io/docs/latest/commands/setbit/) and [FastAPI background tasks patterns](https://fastapi.tiangolo.com/tutorial/background-tasks/).
-
-### 3. Sync Flow (Cold Path)
+### Leaderboards Flow
 
 ```
-[Frappe scheduled task: every 1 min]
-         |
-         v
-[Read dirty sets from Redis]
-    |-- SMEMBERS memora:dirty:progress
-    |-- SMEMBERS memora:dirty:wallets
-         |
-         v
-[For each dirty progress:]
-    |-- GET memora:progress:{player}:{subject} (raw bitmap bytes)
-    |-- Convert to hex string
-    |-- UPDATE Memora Structure Progress SET progress_hex = ... WHERE ...
-         |
-         v
-[For each dirty wallet:]
-    |-- HGETALL memora:wallet:{player}
-    |-- UPDATE Memora Player Wallet SET xp = ..., streak = ... WHERE ...
-         |
-         v
-[Flush interaction buffer:]
-    |-- LRANGE memora:buffer:interactions 0 -1
-    |-- Batch INSERT INTO `tabMemora Interaction Log` (...)
-    |-- LTRIM memora:buffer:interactions {count} -1
-         |
-         v
-[Clear dirty sets:]
-    |-- DEL memora:dirty:progress
-    |-- DEL memora:dirty:wallets
-         |
-         v
-[Log to Memora Sync Log]
+1. Student completes lesson → XP awarded
+   ↓
+2. WalletService.award_xp (existing)
+   - HINCRBY memora:wallet:{player_id} xp {amount}
+   - Marks dirty for MariaDB sync
+   ↓
+3. LeaderboardService.update_rankings (NEW)
+   - ZADD memora:leaderboard:daily:{today} {new_xp} {player_id}
+   - ZADD memora:leaderboard:alltime {total_xp} {player_id}
+   - O(log N) operations, sub-millisecond
+   ↓
+4. Student views leaderboard
+   - GET /api/v1/leaderboards/daily
+   - ZREVRANGE memora:leaderboard:daily:{today} 0 99 WITHSCORES
+   - Returns top 100 with ranks (0-indexed from top)
+   ↓
+5. Daily snapshot (23:59 cron)
+   - Frappe task reads sorted set
+   - Batch inserts to Memora Leaderboard Entry
+   - Provides historical data for analytics
 ```
 
-**Confidence:** MEDIUM - Sync pattern derived from standard [Redis pipeline patterns](https://redis.io/docs/latest/develop/clients/jedis/transpipe/) and batch insert best practices.
+**Redis Commands:**
 
-### 4. Authentication Flow
+- **Update rank:** `ZADD leaderboard:daily:{date} {xp} {player_id}` (upsert)
+- **Increment XP:** `ZINCRBY leaderboard:daily:{date} {amount} {player_id}` (atomic)
+- **Get top N:** `ZREVRANGE leaderboard:daily:{date} 0 99 WITHSCORES`
+- **Get player rank:** `ZREVRANK leaderboard:daily:{date} {player_id}`
+- **Get player score:** `ZSCORE leaderboard:daily:{date} {player_id}`
+
+**Memory Management:**
+
+- Daily leaderboards: 48-hour TTL (today + yesterday)
+- Pruning: ZREMRANGEBYRANK to keep top 10,000 players max
+- All-time leaderboard: No TTL, but capped at top 10,000
+
+### Device Management Flow
 
 ```
-[User logs in via Frappe]
-         |
-         v
-[Frappe validates credentials]
-         |
-         v
-[Generate JWT with player_id, exp, iat]
-    |-- Sign with shared secret (from Memora Settings)
-         |
-         v
-[Store refresh token: Redis SET memora:refresh:{token} {player_id} EX {30 days}]
-         |
-         v
-[Return access_token (short-lived) + refresh_token]
-
-
-[Game API request]
-         |
-         v
-[FastAPI extracts JWT from Authorization header]
-         |
-         v
-[Verify signature with shared secret (no Redis/DB call)]
-         |
-         v
-[Extract player_id from claims]
-         |
-         v
-[Proceed to endpoint handler]
+1. Student logs in on new device
+   ↓
+2. POST /api/v1/auth/login (existing endpoint, modified)
+   - Validates credentials (existing)
+   - Generates device_id from device_info fingerprint
+   - Calls DeviceService.register_device
+   ↓
+3. DeviceService.register_device
+   - SCARD memora:devices:{player_id} → check count
+   - If count >= 3: Return 403 "Device limit reached"
+   - SADD memora:devices:{player_id} {device_id}
+   - HSET memora:device:{device_id} (metadata)
+   ↓
+4. Student uses app
+   - JWT contains device_id claim
+   - Middleware validates device_id in set (SISMEMBER)
+   - If not in set: Return 401 "Device not authorized"
+   ↓
+5. Student revokes old device
+   - DELETE /api/v1/devices/{device_id}
+   - SREM memora:devices:{player_id} {device_id}
+   - DEL memora:device:{device_id}
+   - Old device gets 401 on next API call
 ```
 
-**Confidence:** HIGH - Standard JWT stateless verification pattern per [FastAPI JWT documentation](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/).
+**Integration with Auth:**
 
----
+- Login endpoint modified to call `DeviceService.register_device`
+- JWT payload adds `device_id` claim
+- Auth middleware validates device_id (new check after user validation)
 
-## Integration Patterns
+**Frappe Sync:**
 
-### Nginx Reverse Proxy Configuration
+- Device list synced to Memora Player Profile.authorized_devices table
+- Sync task: `sync_authorized_devices` (runs every 5 minutes)
+- Provides device management UI in Frappe Desk
 
-```nginx
-upstream frappe_backend {
-    server 127.0.0.1:8000;
-}
+### Scheduled Tasks Integration
 
-upstream fastapi_backend {
-    server 127.0.0.1:8001;
-}
+**Existing Pattern:**
 
-server {
-    listen 80;
-    server_name memora.example.com;
+Frappe scheduler (hooks.py) runs cron tasks:
+- 1-minute: Dirty set sync (progress, wallets, interactions)
+- 2-minute: Build worker for content pipeline
 
-    # FastAPI game API - prefix routing
-    location /api/v1/ {
-        proxy_pass http://fastapi_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+**New Tasks:**
 
-        # Important for FastAPI to know its root path
-        proxy_set_header X-Forwarded-Prefix /api/v1;
-    }
+| Task | Cron | Frappe Function | Redis Operations |
+|------|------|-----------------|------------------|
+| Session cleanup | `0 * * * *` | `tasks.cleanup.cleanup_expired_sessions` | SCAN, TTL, DEL |
+| Streak reset | `0 0 * * *` | `tasks.streak.reset_broken_streaks` | HGET, HSET on wallet hashes |
+| Leaderboard snapshot | `59 23 * * *` | `tasks.leaderboard.snapshot_daily_leaderboard` | ZREVRANGE, batch insert |
 
-    # Frappe admin and REST API
-    location / {
-        proxy_pass http://frappe_backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+**Implementation Files:**
 
-        # WebSocket support for Frappe realtime
-        proxy_http_version 1.1;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-
-    # Static CDN assets (if self-hosting mock CDN)
-    location /cdn/ {
-        alias /var/www/memora-cdn/;
-        expires 1y;
-        add_header Cache-Control "public, immutable";
-    }
-}
+```
+memora_admin/memora_admin/tasks/
+├── sync.py               (existing - progress, wallets, interactions)
+├── build_worker.py       (existing - content builds)
+├── cleanup.py            (NEW - session cleanup)
+├── streak.py             (NEW - streak resets)
+└── leaderboard.py        (NEW - leaderboard snapshots)
 ```
 
-**Confidence:** HIGH - Based on [Nginx reverse proxy documentation](https://www.getpagespeed.com/server-setup/nginx/nginx-reverse-proxy) and [FastAPI behind a proxy guide](https://fastapi.tiangolo.com/advanced/behind-a-proxy/).
+## Integration Points
 
-### Shared Redis Configuration
+### 1. Game Sessions → Progress Tracking
 
-**Current Frappe configuration (from common_site_config.json):**
-```json
-{
-    "redis_cache": "redis://127.0.0.1:13000",
-    "redis_queue": "redis://127.0.0.1:11000",
-    "redis_socketio": "redis://127.0.0.1:13000"
-}
-```
+**Connection:** Session end triggers completion flow
 
-**FastAPI configuration strategy:**
 ```python
-# FastAPI settings.py
-from pydantic_settings import BaseSettings
+# In sessions/endpoints.py
+@router.post("/sessions/{session_id}/end")
+async def end_session(session_id: str, user: CurrentUser):
+    session = await session_service.get_session(session_id)
 
-class Settings(BaseSettings):
-    # Use Frappe's cache Redis for shared data
-    REDIS_URL: str = "redis://127.0.0.1:13000"
-
-    # Connection pooling for high-performance
-    REDIS_MAX_CONNECTIONS: int = 50
-    REDIS_DECODE_RESPONSES: bool = True
-
-    # Key prefixes for isolation
-    REDIS_PREFIX: str = "memora:"
-
-# FastAPI Redis client initialization
-import redis.asyncio as redis
-
-async def get_redis_pool():
-    return redis.ConnectionPool.from_url(
-        settings.REDIS_URL,
-        max_connections=settings.REDIS_MAX_CONNECTIONS,
-        decode_responses=settings.REDIS_DECODE_RESPONSES,
-    )
-```
-
-**Key isolation:** Use `memora:` prefix for all Memora-specific keys to avoid collision with Frappe's `frappe:` prefixed keys.
-
-**Confidence:** HIGH - Based on [Redis connection pooling best practices](https://redis.io/docs/latest/develop/clients/pools-and-muxing/) and existing Frappe configuration.
-
-### Cache Invalidation via Pub/Sub
-
-**Publisher (Frappe side):**
-```python
-# In Frappe build worker after CDN upload
-import redis
-
-def publish_invalidation(subject_id: str, invalidation_type: str):
-    r = redis.Redis.from_url(frappe.conf.redis_cache)
-    message = json.dumps({
-        "type": invalidation_type,  # "hierarchy", "content", "lesson"
-        "subject_id": subject_id,
-        "timestamp": time.time()
-    })
-    r.publish("memora:invalidate", message)
-```
-
-**Subscriber (FastAPI side):**
-```python
-# FastAPI background task on startup
-import asyncio
-import redis.asyncio as redis
-
-async def cache_invalidation_listener():
-    r = await redis.from_url(settings.REDIS_URL)
-    pubsub = r.pubsub()
-    await pubsub.subscribe("memora:invalidate")
-
-    async for message in pubsub.listen():
-        if message["type"] == "message":
-            data = json.loads(message["data"])
-            await invalidate_local_cache(data)
-
-async def invalidate_local_cache(data: dict):
-    """Clear in-memory caches based on invalidation message."""
-    subject_id = data.get("subject_id")
-    inv_type = data.get("type")
-
-    if inv_type == "hierarchy":
-        hierarchy_cache.pop(subject_id, None)
-    elif inv_type == "content":
-        content_cache.clear()  # More aggressive for content changes
-    elif inv_type == "lesson":
-        lesson_cache.pop(subject_id, None)
-```
-
-**Confidence:** MEDIUM - Based on [Redis pub/sub for cache invalidation patterns](https://www.milanjovanovic.tech/blog/solving-the-distributed-cache-invalidation-problem-with-redis-and-hybridcache). Note: Redis pub/sub is fire-and-forget; messages are lost if subscriber is down. For critical invalidations, consider Redis Streams.
-
----
-
-## Patterns to Follow
-
-### Pattern 1: Bitmap-Based Progress Tracking
-
-**What:** Store lesson completion as bits in a Redis bitmap. Bit position = lesson's `bit_index` from the _b.json file.
-
-**When:** Any progress read/write operation.
-
-**Why:** O(1) completion check, minimal memory (1 bit per lesson vs. 1 row per lesson).
-
-**Example:**
-```python
-# Check if lesson at bit_index 42 is complete
-is_complete = await redis.getbit(f"memora:progress:{player_id}:{subject_id}", 42)
-
-# Mark lesson complete
-await redis.setbit(f"memora:progress:{player_id}:{subject_id}", 42, 1)
-
-# Count total completions
-total = await redis.bitcount(f"memora:progress:{player_id}:{subject_id}")
-```
-
-**Handling deleted lessons:** The `excluded_bits` array in _b.json lists bit positions that were deleted. When calculating progress percentage, exclude these from the total.
-
-**Confidence:** HIGH - Based on [Redis bitmap documentation](https://redis.io/docs/latest/develop/data-types/bitmaps/).
-
-### Pattern 2: Double-Gate Access Control
-
-**What:** Two-phase access validation before any content access.
-
-**When:** Every content request in FastAPI.
-
-**Structure:**
-```
-Gate 1: Season Validation (Global)
-    - Is the season active? (status == "active")
-    - Has the season expired? (end_ts > now)
-    - Fail fast: If season invalid, reject immediately
-
-Gate 2: Player Access (Individual)
-    - Does player have direct access? (SISMEMBER memora:access:{player} {subject})
-    - Does player have plan access? (SISMEMBER memora:access:{player} plan:{plan_id})
-    - Is content free? (is_free flag at Unit/Topic level)
-```
-
-**Example:**
-```python
-async def check_access(player_id: str, subject_id: str, season_id: str) -> bool:
-    # Gate 1: Season check (~1ms)
-    season = await redis.hgetall(f"memora:season:{season_id}")
-    if season.get("status") != "active":
-        return False
-    if float(season.get("end_ts", 0)) < time.time():
-        return False
-
-    # Gate 2: Player access check (~1ms)
-    if await redis.sismember(f"memora:access:{player_id}", subject_id):
-        return True
-
-    # Check plan membership
-    plans = await redis.smembers(f"memora:access:{player_id}:plans")
-    for plan_id in plans:
-        if await redis.sismember(f"memora:plan:{plan_id}:subjects", subject_id):
-            return True
-
-    return False
-```
-
-**Confidence:** MEDIUM - Pattern derived from PRD requirements. Specific Redis structure may need adjustment during implementation.
-
-### Pattern 3: Interaction Buffering with Batch Flush
-
-**What:** Buffer interactions in Redis list, batch flush to MariaDB.
-
-**When:** Every stage completion (high-frequency write).
-
-**Why:** Reduces database write load from N individual INSERTs to 1 batch INSERT.
-
-**Example:**
-```python
-# FastAPI: Buffer interaction
-async def record_interaction(interaction: dict):
-    await redis.rpush(
-        "memora:buffer:interactions",
-        json.dumps({
-            **interaction,
-            "created_at": datetime.utcnow().isoformat()
-        })
+    # Trigger existing completion endpoint
+    complete_request = CompleteRequest(
+        subject=session["subject"],
+        lesson=session["lesson"]
     )
 
-# Frappe: Batch flush (scheduled task)
-def flush_interactions():
-    r = get_redis()
-    interactions = r.lrange("memora:buffer:interactions", 0, 499)  # Max 500 at a time
+    # Reuse existing completion logic (idempotent)
+    response = await complete_lesson(complete_request, user, ...)
 
-    if interactions:
-        # Batch insert
-        values = [json.loads(i) for i in interactions]
-        frappe.db.bulk_insert("Memora Interaction Log", values)
-
-        # Remove flushed items
-        r.ltrim("memora:buffer:interactions", len(interactions), -1)
-
-        frappe.db.commit()
+    # Mark session completed
+    await session_service.finalize_session(session_id, status="completed")
 ```
 
-**Confidence:** HIGH - Standard [Redis list pattern](https://redis.io/docs/latest/develop/data-types/lists/) for buffering.
+**Benefit:** No duplication of completion logic. Sessions add tracking layer without changing progress mechanics.
 
----
+### 2. Leaderboards → Wallet Service
 
-## Anti-Patterns to Avoid
+**Connection:** Leaderboard updates piggyback on XP awards
 
-### Anti-Pattern 1: Direct Database Access from FastAPI
-
-**What:** FastAPI directly queries/writes MariaDB.
-
-**Why bad:**
-- Introduces coupling to Frappe's database schema
-- Bypasses Frappe's validation and hooks
-- Creates dual-write consistency issues
-- Violates data ownership boundaries
-
-**Instead:** FastAPI writes to Redis only. Frappe scheduled tasks sync to MariaDB.
-
-### Anti-Pattern 2: Synchronous Redis in Request Path
-
-**What:** Using blocking Redis operations in async FastAPI endpoints.
-
-**Why bad:**
-- Blocks event loop
-- Degrades throughput under load
-- Defeats purpose of async framework
-
-**Instead:** Use `redis.asyncio` client with connection pooling.
-
-### Anti-Pattern 3: Per-Request Redis Connections
-
-**What:** Creating new Redis connection for each request.
-
-**Why bad:**
-- Connection overhead (TCP handshake, auth)
-- Resource exhaustion under load
-- "Too many connections" errors
-
-**Instead:** Create connection pool on startup, inject pool into routes.
-
-### Anti-Pattern 4: Ignoring TTL on Session Data
-
-**What:** Creating Redis keys for sessions without expiration.
-
-**Why bad:**
-- Memory leak over time
-- Orphaned sessions accumulate
-- No natural cleanup
-
-**Instead:** Always set TTL on session keys:
 ```python
-await redis.hset(f"memora:session:{session_id}", mapping=session_data)
-await redis.expire(f"memora:session:{session_id}", 3600)  # 1 hour
+# In services/wallet.py (existing WalletService)
+async def award_xp(self, player_id: str, amount: int) -> int:
+    # Existing logic (unchanged)
+    new_total = await self.redis.hincrby(wallet_key, "xp", amount)
+    await self.redis.sadd(DIRTY_WALLETS_KEY, player_id)
+
+    # NEW: Update leaderboard (injected dependency)
+    if self.leaderboard_service:
+        await self.leaderboard_service.update_rankings(player_id, new_total, amount)
+
+    return new_total
 ```
 
-### Anti-Pattern 5: Pub/Sub as Reliable Queue
+**Alternative (Cleaner):** Leaderboard service listens to Redis pub/sub on `memora:events:xp_awarded` channel. Decouples services, follows event-driven pattern.
 
-**What:** Relying on Redis pub/sub for critical operations that must not be lost.
+### 3. Device Management → Auth Middleware
 
-**Why bad:**
-- Fire-and-forget: No message persistence
-- Subscriber misses messages if disconnected
-- No acknowledgment or retry
+**Connection:** JWT validation adds device check
 
-**Instead:**
-- For cache invalidation: Pub/sub is acceptable (eventual consistency OK)
-- For critical operations: Use Redis Streams or RQ (Redis Queue)
+```python
+# In middleware/auth.py (existing)
+async def verify_token(token: str = Depends(oauth2_scheme)):
+    payload = decode_jwt(token)  # Existing
+    user_id = payload["sub"]
+    device_id = payload.get("device_id")  # NEW claim
 
----
+    # Existing checks (session family, expiry)
+    # ...
 
-## Suggested Build Order
+    # NEW: Device authorization check
+    if device_id:
+        is_authorized = await device_service.is_device_authorized(user_id, device_id)
+        if not is_authorized:
+            raise HTTPException(401, "Device not authorized")
 
-Based on component dependencies, build in this order:
+    return CurrentUser(user_id=user_id, device_id=device_id)
+```
 
-### Phase 1: Infrastructure Foundation
-**Build:**
-1. FastAPI project scaffold with async Redis client
-2. Shared Redis key schema (prefixes, structures)
-3. Nginx reverse proxy configuration
-4. JWT authentication middleware
+**Backward Compatibility:** Old tokens without `device_id` claim skip device check. Gradual migration.
 
-**Why first:** All other components depend on Redis access and routing.
+### 4. Scheduled Tasks → Frappe Scheduler
 
-**Dependencies:** None (uses existing Frappe Redis)
+**Connection:** New tasks registered in hooks.py scheduler_events
 
-### Phase 2: Read Path (Progress/Access)
-**Build:**
-1. Season meta sync (Frappe on_update -> Redis)
-2. Access grant sync (Frappe on_update -> Redis)
-3. Progress fetch endpoint (Redis bitmap read)
-4. Access check middleware (double-gate)
+No code changes to scheduler itself. Frappe scheduler automatically discovers and runs tasks based on cron expressions in hooks.py.
 
-**Why second:** Read path is simpler, validates integration pattern.
+**After adding tasks:**
 
-**Dependencies:** Phase 1 (Redis client, auth middleware)
+```bash
+bench migrate  # Registers new scheduled events
+bench restart   # Restarts scheduler worker
+```
 
-### Phase 3: Write Path (Game Mechanics)
-**Build:**
-1. Session management (start/end lesson)
-2. Stage completion (progress bitmap write)
-3. Interaction buffering
-4. Wallet updates (XP, streak)
+## Build Order Recommendation
 
-**Why third:** Write path builds on read path, adds complexity.
+### Phase 1: Device Management (Foundation)
 
-**Dependencies:** Phase 2 (access check before writes)
+**Rationale:** Simplest feature, no dependencies, establishes device infrastructure for later use.
 
-### Phase 4: Sync Mechanisms
-**Build:**
-1. Dirty set tracking
-2. Progress sync task (Redis -> MariaDB)
-3. Wallet sync task
-4. Interaction flush task
-5. Sync Log DocType integration
+**Deliverables:**
+- DeviceService (Redis set operations)
+- Device endpoints (register, list, revoke)
+- JWT device_id claim
+- Auth middleware device check
 
-**Why fourth:** Sync requires both read and write paths working.
+**Estimated Effort:** 2 plans
+- Plan 1: DeviceService + endpoints
+- Plan 2: Auth integration + JWT claims
 
-**Dependencies:** Phase 3 (dirty sets populated by writes)
-
-### Phase 5: Build Pipeline
-**Build:**
-1. Frappe hooks for content changes
-2. Build queue management
-3. JSON generation (hierarchy, bitmap, content)
-4. Mock CDN upload
-5. Pub/sub invalidation
-
-**Why fifth:** Build pipeline is independent of game API but requires content structure.
-
-**Dependencies:** Phase 1 (pub/sub), existing DocTypes
-
-### Phase 6: Leaderboards
-**Build:**
-1. Leaderboard sorted sets (daily, weekly, monthly, alltime)
-2. Leaderboard update on lesson complete
-3. Leaderboard query endpoints
-
-**Why last:** Leaderboards are self-contained, low priority for core functionality.
-
-**Dependencies:** Phase 3 (wallet updates trigger leaderboard updates)
+**Dependencies:** None
 
 ---
 
-## Scalability Considerations
+### Phase 2: Game Sessions (Core Mechanic)
 
-| Concern | At 1K users | At 100K users | Notes |
-|---------|-------------|---------------|-------|
-| Redis memory | ~10MB | ~1GB | Bitmaps: ~64KB per subject per user |
-| Redis connections | 50 pooled | 500 pooled | Scale pool with traffic |
-| MariaDB writes | Real-time OK | Batch required | Sync interval critical |
-| CDN bandwidth | Local OK | R2 required | Swap mock for production |
-| FastAPI workers | 4 | 16+ (multi-node) | Horizontal scaling |
+**Rationale:** Builds on existing progress system, needed before leaderboards can show session-level data.
 
-**Confidence:** MEDIUM - Estimates based on bitmap size calculations and typical load patterns.
+**Deliverables:**
+- GameSessionService (Redis hash with TTL)
+- Session endpoints (start, stage, end)
+- Session cleanup task (hourly cron)
+- Memora Game Session DocType
+
+**Estimated Effort:** 3 plans
+- Plan 1: GameSessionService + start/stage endpoints
+- Plan 2: End session + completion integration
+- Plan 3: Cleanup task + Frappe sync
+
+**Dependencies:**
+- Progress tracking (v1.0 complete)
+- Interaction buffer (v1.0 complete)
 
 ---
+
+### Phase 3: Leaderboards (Competitive Feature)
+
+**Rationale:** Depends on wallet XP (v1.0) and benefits from session context (Phase 2).
+
+**Deliverables:**
+- LeaderboardService (Redis sorted sets)
+- Leaderboard endpoints (daily, all-time, streak)
+- XP award integration (update rankings)
+- Snapshot task (daily cron)
+- Memora Leaderboard Entry DocType
+
+**Estimated Effort:** 3 plans
+- Plan 1: LeaderboardService + Redis sorted set operations
+- Plan 2: Leaderboard endpoints + rankings
+- Plan 3: Snapshot task + historical data
+
+**Dependencies:**
+- WalletService (v1.0 complete)
+- Optional: Game sessions (for session-level leaderboards in future)
+
+---
+
+### Phase 4: Streak Maintenance (Gamification Polish)
+
+**Rationale:** Final polish for gamification system. Depends on leaderboards to showcase streaks.
+
+**Deliverables:**
+- Broken streak detection task (daily cron)
+- Streak reset logic (wallet hash updates)
+- Streak leaderboard (reuses LeaderboardService)
+
+**Estimated Effort:** 1 plan
+- Plan 1: Streak reset task + streak leaderboard
+
+**Dependencies:**
+- WalletService (v1.0 complete)
+- LeaderboardService (Phase 3)
+
+---
+
+### Total Estimated Effort
+
+**9 plans across 4 phases**
+
+**Timeline:** ~2-3 weeks with parallel work on independent phases.
+
+## Architecture Patterns Applied
+
+### 1. Redis as Source of Truth (Existing Pattern)
+
+**Pattern:** Hot data lives in Redis, syncs to MariaDB on schedule.
+
+**Applied to v1.1:**
+- Game sessions: Redis hash (hot) → Memora Game Session DocType (cold)
+- Leaderboards: Redis sorted sets (hot) → Memora Leaderboard Entry (cold)
+- Devices: Redis set (hot) → Memora Player Profile.authorized_devices (cold)
+
+**Consistency:** Same dirty set pattern used for progress/wallets.
+
+### 2. Service Layer (Existing Pattern)
+
+**Pattern:** Business logic in dedicated service classes, injected via FastAPI dependencies.
+
+**Applied to v1.1:**
+- `GameSessionService` - Session lifecycle management
+- `LeaderboardService` - Ranking calculations
+- `DeviceService` - Device authorization
+
+**Benefits:** Testable, reusable, follows existing ProgressService/WalletService pattern.
+
+### 3. Frappe Hooks (Existing Pattern)
+
+**Pattern:** Doc events for immediate sync, scheduler_events for periodic tasks.
+
+**Applied to v1.1:**
+- Hourly cron for session cleanup
+- Daily cron for streak reset
+- Daily cron for leaderboard snapshot
+
+**Benefits:** Reuses Frappe scheduler, no custom cron management needed.
+
+### 4. TTL for Ephemeral Data (Existing Pattern)
+
+**Pattern:** Redis keys with expiry for self-cleaning data (used for auth sessions).
+
+**Applied to v1.1:**
+- Game sessions: 2-hour TTL (lesson duration + grace period)
+- Daily leaderboards: 48-hour TTL (keep today + yesterday)
+- Device metadata: 90-day TTL (inactive device cleanup)
+
+**Benefits:** Reduces manual cleanup, prevents memory bloat.
+
+## Performance Characteristics
+
+### Game Sessions
+
+| Operation | Redis Command | Complexity | Target |
+|-----------|--------------|------------|--------|
+| Start session | HSET + EXPIRE | O(1) | <2ms |
+| Record stage | HINCRBY | O(1) | <1ms |
+| End session | HGET + HSET + DEL | O(1) | <3ms |
+| Hourly cleanup | SCAN + TTL + DEL | O(N) | <100ms for 10K sessions |
+
+**Scalability:** 10K concurrent sessions = ~5MB Redis memory (500 bytes per session hash).
+
+### Leaderboards
+
+| Operation | Redis Command | Complexity | Target |
+|-----------|--------------|------------|--------|
+| Update rank | ZADD | O(log N) | <2ms |
+| Increment XP | ZINCRBY | O(log N) | <2ms |
+| Get top 100 | ZREVRANGE 0 99 | O(log N + 100) | <5ms |
+| Get player rank | ZREVRANK | O(log N) | <2ms |
+
+**Scalability:** 100K players in leaderboard = O(log 100K) = ~17 operations worst case.
+
+**Memory:** 100K players × 40 bytes (member + score) = ~4MB per leaderboard.
+
+### Device Management
+
+| Operation | Redis Command | Complexity | Target |
+|-----------|--------------|------------|--------|
+| Check authorized | SISMEMBER | O(1) | <1ms |
+| Register device | SCARD + SADD | O(1) | <2ms |
+| List devices | SMEMBERS | O(N) | <2ms (N=3 max) |
+| Revoke device | SREM | O(1) | <1ms |
+
+**Scalability:** O(1) operations, no bottlenecks. Device limit (3) keeps sets tiny.
+
+### Scheduled Tasks
+
+| Task | Frequency | Execution Time | Impact |
+|------|-----------|----------------|--------|
+| Session cleanup | Hourly | <500ms | Low (SCAN with LIMIT) |
+| Streak reset | Daily | <5s | Medium (iterates wallets) |
+| Leaderboard snapshot | Daily | <2s | Low (batch insert 100 rows) |
+
+**Optimization:** Streak reset uses dirty set pattern (only check players who earned XP yesterday).
+
+## Anti-Patterns Avoided
+
+### 1. Session State in JWT
+
+**Bad:** Store session data in JWT payload (lesson, stage progress)
+
+**Why Bad:** JWTs are immutable; can't update state without reissuing token.
+
+**Solution:** Separate Redis session hash, JWT only contains session_id reference.
+
+---
+
+### 2. Leaderboard as Database Query
+
+**Bad:** Calculate rankings with SQL ORDER BY on every request
+
+**Why Bad:** O(N log N) query on 100K players = seconds of latency.
+
+**Solution:** Redis sorted sets maintain sorted order (O(log N) updates, O(1) retrieval).
+
+---
+
+### 3. Device List in JWT
+
+**Bad:** Embed authorized device IDs in JWT claims
+
+**Why Bad:** Revoking device requires waiting for JWT expiry (up to 30 days).
+
+**Solution:** Real-time Redis set check on every request (O(1) with SISMEMBER).
+
+---
+
+### 4. Synchronous Session Persistence
+
+**Bad:** Write session to MariaDB on every stage completion
+
+**Why Bad:** Adds 10-50ms database latency to every interaction.
+
+**Solution:** Redis-only sessions with periodic sync (hourly or on session end).
+
+---
+
+### 5. Global Leaderboard Lock
+
+**Bad:** Acquire distributed lock before updating leaderboard
+
+**Why Bad:** Serializes all XP awards, creates bottleneck.
+
+**Solution:** ZADD is atomic; no lock needed for sorted set updates.
+
+## Migration Strategy
+
+### Backward Compatibility
+
+**All v1.1 features are opt-in additions:**
+
+1. **Sessions:** Endpoints are new, existing /progress/complete unchanged
+2. **Leaderboards:** New endpoints, no changes to wallet or progress
+3. **Devices:** Old tokens without device_id still work (gradual migration)
+4. **Tasks:** New cron jobs, existing tasks unchanged
+
+**No breaking changes to v1.0 API.**
+
+### Rollout Plan
+
+**Week 1:** Device management (low risk, independent feature)
+**Week 2:** Game sessions (builds on progress, validates session pattern)
+**Week 3:** Leaderboards + streak tasks (final gamification layer)
+
+**Feature Flags:** Environment variable `ENABLE_V1_1_FEATURES` controls endpoint registration.
 
 ## Sources
 
-**HIGH Confidence:**
-- [Redis Bitmaps Documentation](https://redis.io/docs/latest/develop/data-types/bitmaps/)
-- [Redis SETBIT Command](https://redis.io/docs/latest/commands/setbit/)
-- [FastAPI Behind a Proxy](https://fastapi.tiangolo.com/advanced/behind-a-proxy/)
-- [FastAPI JWT Auth Tutorial](https://fastapi.tiangolo.com/tutorial/security/oauth2-jwt/)
-- [Redis Connection Pools](https://redis.io/docs/latest/develop/clients/pools-and-muxing/)
-- [Frappe Background Jobs](https://docs.frappe.io/framework/user/en/api/background_jobs)
+### Redis Patterns
 
-**MEDIUM Confidence:**
-- [Nginx Reverse Proxy Guide](https://www.getpagespeed.com/server-setup/nginx/nginx-reverse-proxy)
-- [Redis Pub/Sub Cache Invalidation](https://www.milanjovanovic.tech/blog/solving-the-distributed-cache-invalidation-problem-with-redis-and-hybridcache)
-- [FastAPI Production Deployment 2026](https://blog.greeden.me/en/2026/01/20/complete-guide-to-deploying-fastapi-in-production-reliable-operations-with-uvicorn-multi-workers-docker-and-a-reverse-proxy/)
-- [Frappe Docker Configuration](https://github.com/frappe/frappe_docker/blob/main/docs/getting-started.md)
-- [FastAPI Redis Connection Pooling](https://hoop.dev/blog/the-simplest-way-to-make-fastapi-redis-work-like-it-should/)
+- [Redis Leaderboards Official Documentation](https://redis.io/solutions/leaderboards/)
+- [Redis Sorted Sets Documentation](https://redis.io/docs/latest/develop/data-types/sorted-sets/)
+- [Redis ZADD Command Reference](https://redis.io/commands/zadd/)
+- [Redis Sorted Sets Best Practices - DragonflyDB](https://www.dragonflydb.io/guides/redis-sorted-sets-best-practices)
+- [Leaderboard System Design - System Design One](https://systemdesign.one/leaderboard-system-design/)
+- [Redis Session Management Official](https://redis.io/solutions/session-management/)
+- [Redis TTL Command](https://redis.io/commands/ttl/)
 
-**LOW Confidence (needs validation during implementation):**
-- Double-gate access control specific Redis structure
-- Exact sync interval tuning for 100K users
-- Memory estimates for bitmap storage at scale
+### FastAPI Patterns
+
+- [FastAPI Middleware Patterns - Johal.in](https://johal.in/fastapi-middleware-patterns-custom-logging-metrics-and-error-handling-2026-2/)
+- [FastAPI Security Guide - David Muraya](https://davidmuraya.com/blog/fastapi-security-guide/)
+- [7 FastAPI Security Patterns - Hash Block](https://medium.com/@connect.hashblock/7-fastapi-security-patterns-that-actually-ship-19c52d717668)
+
+### Frappe Scheduler
+
+- [Frappe Scheduler Source Code](https://github.com/frappe/frappe/blob/develop/frappe/utils/scheduler.py)
+- [Frappe Background Jobs Documentation](https://docs.frappe.io/framework/v14/user/en/api/background_jobs)
+- [Understanding Frappe's Scheduler - Frappe Blog](https://frappe.io/blog/engineering/if-you-wish-to-truly-understand-frappes-scheduler-you-must-first-invent-the-universe)
+- [Efficient Job Scheduling in Frappe - Frappe Forum](https://discuss.frappe.io/t/efficient-job-scheduling-in-frappe/133819)
+
+### Codebase Analysis
+
+- Existing v1.0 implementation (ProgressService, WalletService, SessionService)
+- Redis key schema from `fastapi_app/core/constants.py`
+- Frappe hooks configuration from `memora_admin/hooks.py`
+- Sync task patterns from `memora_admin/memora_admin/tasks/sync.py`
 
 ---
 
-*Architecture research completed: 2026-02-01*
+*Architecture research completed: 2026-02-02*
+*Confidence: HIGH - Based on v1.0 codebase analysis + official Redis/Frappe documentation*
