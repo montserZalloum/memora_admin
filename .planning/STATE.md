@@ -65,6 +65,8 @@ Recent decisions affecting current work:
 - [02-03]: HTTPBearer for token extraction from Authorization header
 - [02-03]: Generic 'Invalid credentials' for all auth failures (no enumeration)
 - [02-03]: Refresh token not rotated (reusable per CONTEXT.md)
+- [03-01]: SeasonMeta computed properties (is_active, is_expired, is_started) for O(1) validation
+- [03-01]: Single HSET with mapping dict for atomic Redis hash updates
 - [03-02]: Redis key pattern memora:access:{user_id} for player grants
 - [03-02]: Direct cache.sadd/srem in doc_events for sub-second sync
 
