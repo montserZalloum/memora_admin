@@ -52,7 +52,7 @@ class FrappeClient:
 
     async def _call_method(self, method: str, **kwargs) -> dict:
         """
-        Call a Frappe whitelisted method.
+        Call a Frappe whitelisted method (internal).
 
         Args:
             method: Full method path (e.g., memora_admin.api.products.get_grant_keys)
@@ -88,6 +88,27 @@ class FrappeClient:
 
         data = response.json()
         return data.get("message", data)
+
+    async def call(self, method: str, params: dict | None = None) -> dict | list | None:
+        """
+        Call a Frappe whitelisted method (public generic interface).
+
+        This allows calling any Frappe whitelisted method by name.
+        For common operations, prefer using specific methods like
+        get_grant_keys() or create_subscription() for type safety.
+
+        Args:
+            method: Full method path (e.g., memora_admin.api.hierarchy.get_subject_hierarchy)
+            params: Method parameters as a dictionary
+
+        Returns:
+            The 'message' field from Frappe response (dict, list, or None)
+
+        Raises:
+            FrappeAPIError: On non-200 response
+        """
+        params = params or {}
+        return await self._call_method(method, **params)
 
     async def get_grant_keys(self, product_grant_id: str) -> list[str]:
         """
