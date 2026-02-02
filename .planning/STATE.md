@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 3 of 7 (Access Control)
-Plan: 5 of ? in current phase (03-01, 03-02, 03-03, 03-04, 03-05 complete)
-Status: In progress
-Last activity: 2026-02-02 - Completed 03-05-PLAN.md (Frappe API Whitelisted Methods)
+Plan: 7 of 7 in current phase (03-01 through 03-07 complete)
+Status: Phase 3 complete - ready for verification
+Last activity: 2026-02-02 - Completed 03-07-PLAN.md (Grant Access Button)
 
-Progress: [#########.] ~88% (of discovered plans: 12/?)
+Progress: [##########] ~90% (of discovered plans: 14/?)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 12
-- Average duration: 2.1min
-- Total execution time: 0.42 hours
+- Total plans completed: 14
+- Average duration: 2.0min
+- Total execution time: 0.47 hours
 
 **By Phase:**
 
@@ -29,11 +29,11 @@ Progress: [#########.] ~88% (of discovered plans: 12/?)
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
-| 03-access-control | 5 | 10min | 2.0min |
+| 03-access-control | 7 | 13min | 1.9min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 2min, 2min, 3min, 1min
-- Trend: stable
+- Last 5 plans: 2min, 3min, 1min, 2min, 1min
+- Trend: stable/fast
 
 *Updated after each plan completion*
 
@@ -77,6 +77,11 @@ Recent decisions affecting current work:
 - [03-05]: Idempotent subscription creation (check exists, return existing info)
 - [03-05]: Frappe API module pattern: memora_admin.api.{resource}
 - [03-05]: Grant key format: SUB-{subject_name}, TRK-{track_name}
+- [03-06]: Singleton FrappeClient for HTTP connection reuse
+- [03-06]: Graceful degradation: Redis grant succeeds even if MariaDB subscription fails
+- [03-06]: Far-future date (2099-12-31) for permanent grants
+- [03-07]: Actions group button for standard Frappe pattern
+- [03-07]: Default expires_at to season end_date for subscription grants
 
 ### Pending Todos
 
@@ -88,8 +93,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T09:11:35Z
-Stopped at: Completed 03-05-PLAN.md (Frappe API Whitelisted Methods)
+Last session: 2026-02-02T09:12:30Z
+Stopped at: Completed 03-07-PLAN.md (Grant Access Button)
 Resume file: None
 
 Previous plan summaries:
@@ -106,3 +111,5 @@ Previous plan summaries:
 03-03: Double-Gate FastAPI dependencies for content access control with free content bypass and structured error responses
 03-04: Payment webhook with idempotency and background processing, admin grant/revoke endpoints with role-based access control
 03-05: Frappe whitelisted API methods for subscription creation and Product Grant key extraction callable via frappe.call()
+03-06: FrappeClient service with async httpx for Frappe API calls, wiring payment webhook to fetch grant keys and create subscriptions
+03-07: Frappe Desk Grant Access button on Player Profile creating subscriptions that auto-sync to Redis
