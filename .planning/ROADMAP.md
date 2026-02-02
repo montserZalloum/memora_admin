@@ -87,12 +87,13 @@ Plans:
   2. Progress endpoint returns lesson completion states with <20ms response time
   3. Unlock state calculation respects is_linear flags at Track/Unit/Topic levels (locked lessons show but cannot be started)
   4. Player cannot mark lesson complete without proper access (Double-Gate validated first)
-**Plans**: TBD
+**Plans**: 4 plans in 2 waves
 
 Plans:
-- [ ] 04-01: Bitmap slot allocation system and progress data structures
-- [ ] 04-02: Lesson completion endpoint with bitmap SETBIT
-- [ ] 04-03: Progress fetch endpoint with unlock state calculation
+- [ ] 04-01-PLAN.md — Progress models and ProgressService for bitmap operations (Wave 1)
+- [ ] 04-02-PLAN.md — Frappe hierarchy API and HierarchyService with Redis caching (Wave 1)
+- [ ] 04-03-PLAN.md — Completion endpoint with unlock state enforcement (Wave 2)
+- [ ] 04-04-PLAN.md — Progress fetch endpoints with percentage breakdown (Wave 2)
 
 ### Phase 5: Wallet & Gamification
 **Goal**: Players earn XP and maintain streaks on lesson completion
@@ -157,7 +158,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 1. Infrastructure Foundation | 4/4 | ✓ Complete | 2026-02-01 |
 | 2. Authentication | 3/3 | ✓ Complete | 2026-02-02 |
 | 3. Access Control | 7/7 | ✓ Complete | 2026-02-02 |
-| 4. Progress Tracking | 0/3 | Not started | - |
+| 4. Progress Tracking | 0/4 | Not started | - |
 | 5. Wallet & Gamification | 0/3 | Not started | - |
 | 6. Build Pipeline | 0/4 | Not started | - |
 | 7. Sync Mechanisms | 0/4 | Not started | - |
