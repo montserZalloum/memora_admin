@@ -118,18 +118,18 @@ Plans:
 **Requirements**: BUILD-01, BUILD-02, BUILD-03, BUILD-04, BUILD-05, BUILD-06, BUILD-07
 **Success Criteria** (what must be TRUE):
   1. Saving content DocType in Frappe queues a build (debounced for 2 minutes)
-  2. Build generates hierarchy JSON (_h.json) with tracks, units, topics structure
-  3. Build generates bitmap JSON (_b.json) with bit_range and excluded_bits per entity
-  4. Build generates unit content JSON (*_c.json) and lesson JSON with stages
+  2. Build generates hierarchy JSON (_subjects.json, track_*.json, etc.) with structure
+  3. Build generates bitmap JSON ({subject}_b.json) with bit_range and excluded_bits per entity
+  4. Build generates topic JSON with lessons array (id, title, url)
   5. Generated JSON files upload to mock CDN (abstraction layer ready for R2 swap)
-  6. FastAPI bitmap cache invalidates via Redis pub/sub when build completes
-**Plans**: TBD
+  6. FastAPI hierarchy cache invalidates via Redis pub/sub when build completes
+**Plans**: 4 plans in 3 waves
 
 Plans:
-- [ ] 06-01: Frappe doc_events hooks for build queue
-- [ ] 06-02: Hierarchy and bitmap JSON generation
-- [ ] 06-03: Unit content and lesson JSON generation
-- [ ] 06-04: Mock CDN upload and pub/sub cache invalidation
+- [ ] 06-01-PLAN.md — Frappe doc_events hooks for build queue with debounce (Wave 1)
+- [ ] 06-02-PLAN.md — JSON generator for hierarchy and bitmap files (Wave 1)
+- [ ] 06-03-PLAN.md — CDN storage abstraction with local filesystem backend (Wave 2)
+- [ ] 06-04-PLAN.md — Build worker scheduled task and FastAPI pub/sub listener (Wave 3)
 
 ### Phase 7: Sync Mechanisms
 **Goal**: Redis game state persists to MariaDB via scheduled background sync
@@ -166,5 +166,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 
 ---
 *Roadmap created: 2026-02-01*
-*Total phases: 7 | Total plans: 25 (estimated)*
+*Total phases: 7 | Total plans: 26 (estimated)*
 *Coverage: 30/30 v1 requirements mapped*
