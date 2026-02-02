@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 3 of 7 (Access Control)
-Plan: 4 of ? in current phase (03-01, 03-02, 03-03, 03-04 complete)
+Plan: 5 of ? in current phase (03-01, 03-02, 03-03, 03-04, 03-05 complete)
 Status: In progress
-Last activity: 2026-02-02 - Completed 03-04-PLAN.md (Webhook and Grant Endpoints)
+Last activity: 2026-02-02 - Completed 03-05-PLAN.md (Frappe API Whitelisted Methods)
 
-Progress: [#########.] ~85% (of discovered plans: 11/?)
+Progress: [#########.] ~88% (of discovered plans: 12/?)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 11
-- Average duration: 2.2min
-- Total execution time: 0.40 hours
+- Total plans completed: 12
+- Average duration: 2.1min
+- Total execution time: 0.42 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [#########.] ~85% (of discovered plans: 11/?)
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
-| 03-access-control | 4 | 9min | 2.3min |
+| 03-access-control | 5 | 10min | 2.0min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 2min, 2min, 2min, 3min
+- Last 5 plans: 2min, 2min, 2min, 3min, 1min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -74,6 +74,9 @@ Recent decisions affecting current work:
 - [03-04]: Webhook idempotency via Redis key with 24h TTL (processing/completed state)
 - [03-04]: FastAPI BackgroundTasks for webhook processing (fast acknowledgment)
 - [03-04]: Redis list retry queue for failed webhook payloads
+- [03-05]: Idempotent subscription creation (check exists, return existing info)
+- [03-05]: Frappe API module pattern: memora_admin.api.{resource}
+- [03-05]: Grant key format: SUB-{subject_name}, TRK-{track_name}
 
 ### Pending Todos
 
@@ -85,8 +88,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T07:58:47Z
-Stopped at: Completed 03-04-PLAN.md (Webhook and Grant Endpoints)
+Last session: 2026-02-02T09:11:35Z
+Stopped at: Completed 03-05-PLAN.md (Frappe API Whitelisted Methods)
 Resume file: None
 
 Previous plan summaries:
@@ -102,3 +105,4 @@ Previous plan summaries:
 03-02: Redis set-based player access management with Frappe doc_events hooks for immediate subscription/season sync
 03-03: Double-Gate FastAPI dependencies for content access control with free content bypass and structured error responses
 03-04: Payment webhook with idempotency and background processing, admin grant/revoke endpoints with role-based access control
+03-05: Frappe whitelisted API methods for subscription creation and Product Grant key extraction callable via frappe.call()
