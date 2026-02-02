@@ -23,11 +23,11 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Access Control
 
-- [ ] **ACCESS-01**: Gate 1 validates season status (active) and end timestamp (not expired)
-- [ ] **ACCESS-02**: Gate 2 checks player access set (direct grants + plan membership lookup)
-- [ ] **ACCESS-03**: Free preview logic bypasses Gate 2 for Units/Topics with is_free=true
-- [ ] **ACCESS-04**: Payment webhook grants access via Redis SADD and creates MariaDB subscription record
-- [ ] **ACCESS-05**: Admin can manually grant player access from Frappe Desk UI
+- [x] **ACCESS-01**: Gate 1 validates season status (active) and end timestamp (not expired)
+- [x] **ACCESS-02**: Gate 2 checks player access set (direct grants + plan membership lookup)
+- [x] **ACCESS-03**: Free preview logic bypasses Gate 2 for Units/Topics with is_free=true
+- [x] **ACCESS-04**: Payment webhook grants access via Redis SADD and creates MariaDB subscription record
+- [x] **ACCESS-05**: Admin can manually grant player access from Frappe Desk UI
 
 ### Progress Tracking
 
@@ -116,11 +116,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | AUTH-01 | Phase 2 | Complete |
 | AUTH-02 | Phase 2 | Complete |
 | AUTH-03 | Phase 2 | Complete |
-| ACCESS-01 | Phase 3 | Pending |
-| ACCESS-02 | Phase 3 | Pending |
-| ACCESS-03 | Phase 3 | Pending |
-| ACCESS-04 | Phase 3 | Pending |
-| ACCESS-05 | Phase 3 | Pending |
+| ACCESS-01 | Phase 3 | Complete |
+| ACCESS-02 | Phase 3 | Complete |
+| ACCESS-03 | Phase 3 | Complete |
+| ACCESS-04 | Phase 3 | Complete |
+| ACCESS-05 | Phase 3 | Complete |
 | PROG-01 | Phase 4 | Pending |
 | PROG-02 | Phase 4 | Pending |
 | PROG-03 | Phase 4 | Pending |
@@ -146,4 +146,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-01 after roadmap creation*
+*Last updated: 2026-02-02 after Phase 3 completion*
