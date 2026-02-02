@@ -5,32 +5,33 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 2 - Student Registration (Phase 1 complete)
+**Current focus:** Phase 2 - Authentication (Phase 1 complete)
 
 ## Current Position
 
-Phase: 1 of 7 (Infrastructure Foundation) - COMPLETE
-Plan: 4 of 4 in current phase
-Status: Phase complete
-Last activity: 2026-02-01 - Completed 01-04-PLAN.md (Server migration documentation)
+Phase: 2 of 7 (Authentication)
+Plan: 2 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-02 - Completed 02-02-PLAN.md (Session and rate limit services)
 
-Progress: [##........] 14%
+Progress: [#####.....] 71% (of discovered plans: 5/7)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 4
+- Total plans completed: 5
 - Average duration: 2.0min
-- Total execution time: 0.13 hours
+- Total execution time: 0.17 hours
 
 **By Phase:**
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
+| 02-authentication | 1 | 2min | 2.0min |
 
 **Recent Trend:**
-- Last 5 plans: 3min, 2min, 2min, 1min
+- Last 5 plans: 3min, 2min, 2min, 1min, 2min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -54,6 +55,9 @@ Recent decisions affecting current work:
 - [01-03]: Location block as commented example (requires manual server block insertion)
 - [01-04]: Documentation-only plan - no code changes required
 - [01-04]: 5-phase migration approach for clarity and safety
+- [02-02]: IP rate limit checked before account (fails fast on distributed attacks)
+- [02-02]: Email normalized to lowercase for consistent rate limiting
+- [02-02]: Handles both bytes and str Redis responses for compatibility
 
 ### Pending Todos
 
@@ -65,8 +69,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-01T19:42:19Z
-Stopped at: Completed 01-04-PLAN.md (Server migration documentation)
+Last session: 2026-02-02T06:48:26Z
+Stopped at: Completed 02-02-PLAN.md (Session and rate limit services)
 Resume file: None
 
 Previous plan summaries:
@@ -75,3 +79,4 @@ Previous plan summaries:
 01-02: Async Redis connection pool with fail-fast startup, dependency injection, and readiness health check
 01-03: Nginx upstream for FastAPI sidecar with X-Request-ID propagation and Frappe integration documentation
 01-04: Server migration guide for relocating Redis/FastAPI to dedicated server with rollback procedures
+02-02: Session management with token family ID for single-session enforcement and dual-key rate limiting with atomic Lua script
