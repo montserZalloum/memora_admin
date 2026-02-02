@@ -36,7 +36,7 @@ async def verify_redis_connection(pool: redis.ConnectionPool) -> None:
         await pool.disconnect()
         raise RuntimeError(f"Cannot start without Redis: {e}") from e
     finally:
-        await client.aclose()
+        await client.close()
 
 
 def log_slow_redis(threshold_ms: int | None = None) -> Callable[[F], F]:

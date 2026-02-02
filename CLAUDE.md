@@ -1,0 +1,111 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+Memora Admin is a gamified educational platform backend for Arabic-speaking students. It uses a **dual architecture**:
+- **Frappe v15**: Admin panel, content management, ORM, 31 DocTypes
+- **FastAPI sidecar**: High-performance game API (sub-20ms responses)
+
+Key data stores: Redis (hot data: progress bitmaps, wallets, sessions) + MariaDB (cold data via Frappe).
+
+## Development Commands
+
+```bash
+# Install app in Frappe bench
+cd $PATH_TO_YOUR_BENCH
+bench get-app $URL_OF_THIS_REPO --branch develop
+bench install-app memora_admin
+
+# Enable pre-commit hooks
+cd apps/memora_admin
+pre-commit install
+
+# Run Frappe development server
+bench start
+
+# Run FastAPI sidecar (from bench root)
+cd apps/memora_admin/fastapi_app
+uvicorn main:app --reload --port 8001
+
+# Install FastAPI dependencies
+pip install -r apps/memora_admin/requirements.txt
+```
+
+## Code Style
+
+- **Formatter**: Ruff with tabs, double quotes, 110 char line length
+- **Linters**: Ruff (Python), ESLint (JavaScript), Prettier
+- **Python target**: 3.10+
+- Run `pre-commit run --all-files` to check formatting
+
+## Architecture
+
+```
+memora_admin/
+├── memora_admin/memora_admin/         # Frappe module
+│   ├── doctype/                       # 31 DocTypes (content, players, analytics)
+│   ├── api/                           # Frappe API endpoints
+│   └── events/                        # Frappe hooks (access_sync.py)
+├── fastapi_app/                       # FastAPI sidecar
+│   ├── main.py                        # App entry, lifespan, Redis pool
+│   ├── api/v1/endpoints/              # Route handlers
+│   ├── services/                      # Business logic (progress, access)
+│   ├── models/                        # Pydantic schemas
+│   └── core/                          # Config, security, logging
+└── .planning/                         # Project docs and roadmap
+```
+
+### DocType Structure
+
+Each DocType follows:
+```
+doctype/memora_{entity}/
+├── memora_{entity}.py      # Document class (inherits Document)
+├── memora_{entity}.json    # Schema definition
+├── memora_{entity}.js      # Form handlers
+└── test_memora_{entity}.py # Unit tests
+```
+
+Content hierarchy: Subject → Track → Unit → Topic → Lesson → Stage
+
+### FastAPI Patterns
+
+- **Services**: Business logic with Redis operations (`services/progress.py`, `services/access.py`)
+- **Dependencies**: Injected via `Annotated` + `Depends`
+- **Redis keys**: Prefixed with `memora:` (e.g., `memora:progress:{user_id}:{subject_id}:v{version}`)
+- **Logging**: Structured via `structlog`
+
+### Access Control (Double-Gate)
+
+1. **Gate 1**: Season validation (status + end_ts via Redis hash)
+2. **Gate 2**: Player access set check (Redis SADD for grants)
+
+### Frappe Hooks
+
+Events in `memora_admin/events/access_sync.py`:
+- `on_season_updated`: Syncs season metadata to Redis
+- `on_subscription_change`: Manages access grants (SADD/SREM)
+
+## Performance Targets
+
+- Access check: <2ms
+- Progress fetch: <20ms
+- Stage complete: <10ms
+- Lesson complete: <30ms
+
+## Environment Configuration
+
+Copy `.env.example` to `.env`:
+```
+REDIS_URL=redis://localhost:6379/0
+JWT_SECRET=your-secret-key
+BITMAP_JSON_PATH=/path/to/bitmaps
+```
+
+## Planning Documents
+
+- `.planning/PROJECT.md` - Project vision and requirements
+- `.planning/ROADMAP.md` - Implementation roadmap
+- `.planning/codebase/` - Architecture, stack, conventions docs

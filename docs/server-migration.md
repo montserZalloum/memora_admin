@@ -14,7 +14,7 @@ This guide documents how to migrate the FastAPI sidecar and Redis to a separate 
 │       │                         │      │
 │       │       ┌─────────┐       │      │
 │       └───────│ FastAPI │───────┘      │
-│               │  :8001  │              │
+│               │  :8002  │              │
 │               └─────────┘              │
 └─────────────────────────────────────────┘
 ```
@@ -26,7 +26,7 @@ This guide documents how to migrate the FastAPI sidecar and Redis to a separate 
 │       Web Server            │     │       Game Server           │
 │  ┌─────────┐  ┌─────────┐  │     │  ┌─────────┐  ┌─────────┐  │
 │  │  Nginx  │──│ Frappe  │  │     │  │ FastAPI │──│  Redis  │  │
-│  │  :80    │  │  :8000  │  │     │  │  :8001  │  │  :6379  │  │
+│  │  :80    │  │  :8000  │  │     │  │  :8002  │  │  :6379  │  │
 │  └────┬────┘  └─────────┘  │     │  └─────────┘  └─────────┘  │
 │       │                    │     │                             │
 │       │     Internal LAN   │     │                             │
@@ -132,7 +132,7 @@ Environment="PATH=/opt/memora/venv/bin"
 EnvironmentFile=/opt/memora/.env
 ExecStart=/opt/memora/venv/bin/uvicorn fastapi_app.main:app \
     --host 0.0.0.0 \
-    --port 8001 \
+    --port 8002 \
     --workers 4 \
     --proxy-headers
 
@@ -153,11 +153,11 @@ sudo systemctl start memora-fastapi
 
 ```bash
 # Test FastAPI locally
-curl http://127.0.0.1:8001/api/v1/health/live
-curl http://127.0.0.1:8001/api/v1/health/ready
+curl http://127.0.0.1:8002/api/v1/health/live
+curl http://127.0.0.1:8002/api/v1/health/ready
 
 # Test from web server (replace with actual IP)
-curl http://10.0.0.2:8001/api/v1/health/live
+curl http://10.0.0.2:8002/api/v1/health/live
 ```
 
 ### Phase 2: Configure Network
@@ -167,7 +167,7 @@ curl http://10.0.0.2:8001/api/v1/health/live
 On game server:
 ```bash
 # Allow FastAPI from web server only
-sudo ufw allow from 10.0.0.1 to any port 8001
+sudo ufw allow from 10.0.0.1 to any port 8002
 
 # Allow Redis from web server (for Frappe access)
 sudo ufw allow from 10.0.0.1 to any port 6379
@@ -197,7 +197,7 @@ On web server, update nginx upstream to point to game server:
 
 ```nginx
 upstream memora-fastapi {
-    server 10.0.0.2:8001 fail_timeout=0;
+    server 10.0.0.2:8002 fail_timeout=0;
     keepalive 32;
 }
 ```
@@ -257,7 +257,7 @@ If issues occur, rollback to single-server setup:
 1. **Revert nginx upstream**
    ```nginx
    upstream memora-fastapi {
-       server 127.0.0.1:8001 fail_timeout=0;
+       server 127.0.0.1:8002 fail_timeout=0;
        keepalive 32;
    }
    ```
@@ -265,7 +265,7 @@ If issues occur, rollback to single-server setup:
 2. **Start local FastAPI** (if stopped)
    ```bash
    # On web server
-   uvicorn fastapi_app.main:app --port 8001 &
+   uvicorn fastapi_app.main:app --port 8002 &
    ```
 
 3. **Reload nginx**
