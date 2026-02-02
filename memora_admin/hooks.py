@@ -137,13 +137,18 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+    "Memora Season": {
+        "after_insert": "memora_admin.events.access_sync.on_season_change",
+        "on_update": "memora_admin.events.access_sync.on_season_change",
+        "on_trash": "memora_admin.events.access_sync.on_season_deleted",
+    },
+    "Memora Player Subscription": {
+        "after_insert": "memora_admin.events.access_sync.on_subscription_change",
+        "on_update": "memora_admin.events.access_sync.on_subscription_change",
+        "on_trash": "memora_admin.events.access_sync.on_subscription_deleted",
+    },
+}
 
 # Scheduled Tasks
 # ---------------
