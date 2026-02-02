@@ -5,25 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Planning next milestone (v1.1)
+**Current focus:** Milestone v1.1 Feature Expansion
 
 ## Current Position
 
-Phase: v1.0 complete
-Plan: All complete
-Status: Ready for next milestone
-Last activity: 2026-02-02 — v1.0 milestone shipped
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-02 — Milestone v1.1 started
 
-Progress: v1.0 [##########] 100% (30 plans / 30 total)
+Progress: v1.1 [░░░░░░░░░░] 0%
 
-## v1.0 Summary
+## Milestone v1.1 Scope
 
-**Shipped:** 2026-02-02
-**Phases:** 7 (Infrastructure, Auth, Access, Progress, Wallet, Build, Sync)
-**Plans:** 30 total
-
-See `.planning/MILESTONES.md` for details.
-See `.planning/milestones/v1.0-ROADMAP.md` for full phase archive.
+**Game Sessions:** Start/complete/end lesson flow with Redis session tracking
+**Leaderboards:** Daily, all-time, and streak leaderboards using sorted sets
+**Device Management:** Device registration and 3-device limit enforcement
+**Scheduled Tasks:** Daily streak reset and hourly session cleanup
 
 ## Accumulated Context
 
@@ -34,7 +32,7 @@ All v1.0 decisions marked as ✓ Good.
 
 ### Pending Todos
 
-None — v1.0 complete.
+None.
 
 ### Blockers/Concerns
 
@@ -43,19 +41,12 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-02
-Stopped at: v1.0 milestone completion
+Stopped at: Milestone v1.1 initialization
 Resume file: None
 
 ## Next Steps
 
-Run `/gsd:new-milestone` to:
-1. Define v1.1 scope through questioning
-2. Research implementation approaches
-3. Create REQUIREMENTS.md for v1.1
-4. Create ROADMAP.md for v1.1
-
-Potential v1.1 features (from v2 backlog):
-- Game sessions (start/complete/end flow)
-- Leaderboards (daily, weekly, all-time)
-- Device management (registration, 3-device limit)
-- Streak reset scheduler
+1. Research domain ecosystem for new features (optional)
+2. Define REQUIREMENTS.md with REQ-IDs
+3. Create ROADMAP.md with phases 8+
+4. Start planning with `/gsd:discuss-phase [N]` or `/gsd:plan-phase [N]`

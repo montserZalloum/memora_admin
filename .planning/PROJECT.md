@@ -54,21 +54,25 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 
 ### Active
 
-**Game Sessions (v2):**
+**Current Milestone: v1.1 Feature Expansion**
+
+**Goal:** Extend the platform with game sessions for lesson flow tracking, competitive leaderboards, device management for security, and scheduled maintenance tasks.
+
+**Game Sessions:**
 - [ ] Start lesson creates session in Redis with TTL
 - [ ] Complete stage records interaction in active session
 - [ ] End lesson finalizes session and triggers completion flow
 
-**Leaderboards (v2):**
+**Leaderboards:**
 - [ ] Daily XP leaderboard using Redis sorted set
 - [ ] All-time XP leaderboard
 - [ ] Current streak leaderboard
 
-**Device Management (v2):**
+**Device Management:**
 - [ ] Register authorized devices on login
 - [ ] Enforce maximum 3 devices per player
 
-**Scheduled Tasks (v2):**
+**Scheduled Tasks:**
 - [ ] Broken streak reset runs daily at midnight
 - [ ] Session cleanup runs hourly
 
@@ -131,4 +135,4 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 | 1-minute sync cycle | Minimizes data loss window without overloading | ✓ Good |
 
 ---
-*Last updated: 2026-02-02 after v1.0 milestone*
+*Last updated: 2026-02-02 after starting v1.1 milestone*
