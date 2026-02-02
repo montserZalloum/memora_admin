@@ -43,13 +43,13 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Build Pipeline
 
-- [ ] **BUILD-01**: Frappe doc_events hooks queue builds on content DocType changes
-- [ ] **BUILD-02**: Generate hierarchy JSON (_h.json) with tracks, units, topics structure
-- [ ] **BUILD-03**: Generate bitmap JSON (_b.json) with bit_range and excluded_bits per entity
-- [ ] **BUILD-04**: Generate unit content JSON (*_c.json) with topics and lesson metadata
-- [ ] **BUILD-05**: Generate lesson JSON with stages array and stage configurations
-- [ ] **BUILD-06**: Redis pub/sub invalidates FastAPI bitmap cache on rebuild completion
-- [ ] **BUILD-07**: Mock CDN layer with clean abstraction (swappable for Cloudflare R2)
+- [x] **BUILD-01**: Frappe doc_events hooks queue builds on content DocType changes
+- [x] **BUILD-02**: Generate hierarchy JSON (_h.json) with tracks, units, topics structure
+- [x] **BUILD-03**: Generate bitmap JSON (_b.json) with bit_range and excluded_bits per entity
+- [x] **BUILD-04**: Generate unit content JSON (*_c.json) with topics and lesson metadata
+- [x] **BUILD-05**: Generate lesson JSON with stages array and stage configurations
+- [x] **BUILD-06**: Redis pub/sub invalidates FastAPI bitmap cache on rebuild completion
+- [x] **BUILD-07**: Mock CDN layer with clean abstraction (swappable for Cloudflare R2)
 
 ### Sync Mechanisms
 
@@ -124,16 +124,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROG-01 | Phase 4 | Complete |
 | PROG-02 | Phase 4 | Complete |
 | PROG-03 | Phase 4 | Complete |
-| WALLET-01 | Phase 5 | Pending |
-| WALLET-02 | Phase 5 | Pending |
-| WALLET-03 | Phase 5 | Pending |
-| BUILD-01 | Phase 6 | Pending |
-| BUILD-02 | Phase 6 | Pending |
-| BUILD-03 | Phase 6 | Pending |
-| BUILD-04 | Phase 6 | Pending |
-| BUILD-05 | Phase 6 | Pending |
-| BUILD-06 | Phase 6 | Pending |
-| BUILD-07 | Phase 6 | Pending |
+| WALLET-01 | Phase 5 | Complete |
+| WALLET-02 | Phase 5 | Complete |
+| WALLET-03 | Phase 5 | Complete |
+| BUILD-01 | Phase 6 | Complete |
+| BUILD-02 | Phase 6 | Complete |
+| BUILD-03 | Phase 6 | Complete |
+| BUILD-04 | Phase 6 | Complete |
+| BUILD-05 | Phase 6 | Complete |
+| BUILD-06 | Phase 6 | Complete |
+| BUILD-07 | Phase 6 | Complete |
 | SYNC-01 | Phase 7 | Pending |
 | SYNC-02 | Phase 7 | Pending |
 | SYNC-03 | Phase 7 | Pending |
@@ -146,4 +146,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-01*
-*Last updated: 2026-02-02 after Phase 4 completion*
+*Last updated: 2026-02-02 after Phase 6 completion*

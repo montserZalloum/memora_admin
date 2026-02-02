@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 3: Access Control** - Double-Gate pattern (season + player grants) for content access
 - [x] **Phase 4: Progress Tracking** - Bitmap-based lesson completion with unlock states
 - [x] **Phase 5: Wallet & Gamification** - XP accumulation and streak tracking
-- [ ] **Phase 6: Build Pipeline** - Content JSON generation and CDN upload
+- [x] **Phase 6: Build Pipeline** - Content JSON generation and CDN upload
 - [ ] **Phase 7: Sync Mechanisms** - Redis to MariaDB persistence with scheduled tasks
 
 ## Phase Details
@@ -126,10 +126,10 @@ Plans:
 **Plans**: 4 plans in 3 waves
 
 Plans:
-- [ ] 06-01-PLAN.md — Frappe doc_events hooks for build queue with debounce (Wave 1)
-- [ ] 06-02-PLAN.md — JSON generator for hierarchy and bitmap files (Wave 1)
-- [ ] 06-03-PLAN.md — CDN storage abstraction with local filesystem backend (Wave 2)
-- [ ] 06-04-PLAN.md — Build worker scheduled task and FastAPI pub/sub listener (Wave 3)
+- [x] 06-01-PLAN.md — Frappe doc_events hooks for build queue with debounce (Wave 1)
+- [x] 06-02-PLAN.md — JSON generator for hierarchy and bitmap files (Wave 1)
+- [x] 06-03-PLAN.md — CDN storage abstraction with local filesystem backend (Wave 2)
+- [x] 06-04-PLAN.md — Build worker scheduled task and FastAPI pub/sub listener (Wave 3)
 
 ### Phase 7: Sync Mechanisms
 **Goal**: Redis game state persists to MariaDB via scheduled background sync
@@ -161,7 +161,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5 -> 6 -> 7
 | 3. Access Control | 7/7 | ✓ Complete | 2026-02-02 |
 | 4. Progress Tracking | 4/4 | ✓ Complete | 2026-02-02 |
 | 5. Wallet & Gamification | 4/4 | ✓ Complete | 2026-02-02 |
-| 6. Build Pipeline | 0/4 | Not started | - |
+| 6. Build Pipeline | 4/4 | ✓ Complete | 2026-02-02 |
 | 7. Sync Mechanisms | 0/4 | Not started | - |
 
 ---
