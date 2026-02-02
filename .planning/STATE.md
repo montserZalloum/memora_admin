@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 7 of 7 (Sync Mechanisms)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-02 - Completed 07-02-PLAN.md
+Last activity: 2026-02-02 - Completed 07-03-PLAN.md
 
-Progress: [########=-] 87% (28 plans / 32 total)
+Progress: [#########-] 91% (29 plans / 32 total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 28
+- Total plans completed: 29
 - Average duration: 2.0min
-- Total execution time: 0.90 hours
+- Total execution time: 0.93 hours
 
 **By Phase:**
 
@@ -33,7 +33,7 @@ Progress: [########=-] 87% (28 plans / 32 total)
 | 04-progress-tracking | 4 | 10min | 2.5min |
 | 05-wallet-gamification | 4 | 7min | 1.75min |
 | 06-build-pipeline | 4 | 7min | 1.75min |
-| 07-sync-mechanisms | 2 | 2min | 1.0min |
+| 07-sync-mechanisms | 3 | 4min | 1.3min |
 
 **Recent Trend:**
 - Last 5 plans: 2min, 1min, 2min, 2min, 1min
@@ -126,6 +126,9 @@ Recent decisions affecting current work:
 - [07-02]: SREM only after successful frappe.db write (prevents lost updates on crash)
 - [07-02]: Cache subject lesson count in Redis for percentage calculation (1-hour TTL)
 - [07-02]: Log all sync runs to Memora Sync Log for audit trail
+- [07-03]: Wallet dirty members are player_id directly (no versioning like progress)
+- [07-03]: Interaction buffer uses LRANGE + LTRIM for atomic batch processing
+- [07-03]: Fixed batch size of 1000 for memory-safe buffer flush
 
 ### Pending Todos
 
@@ -137,8 +140,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T18:43:46Z
-Stopped at: Completed 07-02-PLAN.md
+Last session: 2026-02-02T18:44:56Z
+Stopped at: Completed 07-03-PLAN.md
 Resume file: None
 
 Previous plan summaries:
@@ -171,3 +174,4 @@ Previous plan summaries:
 06-04: Scheduled build worker with Redis pub/sub cache invalidation wiring Frappe to FastAPI for end-to-end build pipeline
 07-01: Redis dirty set tracking for progress and wallet services enabling background sync to MariaDB
 07-02: Progress sync Frappe task persisting Redis bitmaps to Structure Progress with hex conversion and audit logging
+07-03: Wallet sync and interaction buffer flush tasks completing Redis-to-MariaDB persistence layer
