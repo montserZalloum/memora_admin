@@ -11,8 +11,10 @@ Scheduled via hooks.py scheduler_events (every 1 minute).
 
 from __future__ import annotations
 
+import json
 import logging
 import uuid
+from datetime import datetime
 
 import frappe
 import redis
@@ -129,6 +131,88 @@ def sync_dirty_progress():
 	_log_sync("Progress", synced, status)
 
 	logger.info(f"Progress sync: {synced} synced, {len(errors)} errors")
+
+
+def sync_dirty_wallets():
+	"""
+	Sync wallets from Redis to MariaDB.
+
+	Processes items from dirty:wallets set:
+	1. Get wallet hash from Redis (xp, streak, streak_date)
+	2. Update Player Wallet record
+	3. Remove from dirty set AFTER successful DB write
+
+	Scheduled: every 1 minute via hooks.py
+	"""
+	r = get_redis()
+
+	# Get all dirty players
+	dirty_players = r.smembers(DIRTY_WALLETS_KEY)
+	if not dirty_players:
+		logger.debug("No dirty wallets to sync")
+		return
+
+	synced = 0
+	errors = []
+
+	for player_id in dirty_players:
+		# Decode bytes if needed
+		player_id = player_id.decode() if isinstance(player_id, bytes) else player_id
+
+		try:
+			# Get wallet data from Redis hash
+			wallet_key = f"memora:wallet:{player_id}"
+			wallet_data = r.hgetall(wallet_key)
+
+			if not wallet_data:
+				# No wallet data in Redis - remove from dirty set
+				r.srem(DIRTY_WALLETS_KEY, player_id)
+				continue
+
+			# Parse wallet values (handle bytes from Redis)
+			xp_raw = wallet_data.get(b"xp") or wallet_data.get("xp")
+			streak_raw = wallet_data.get(b"streak") or wallet_data.get("streak")
+
+			xp = int(xp_raw) if xp_raw else 0
+			streak = int(streak_raw) if streak_raw else 0
+
+			# Find existing wallet record
+			wallet_name = frappe.db.get_value("Memora Player Wallet", {"player": player_id}, "name")
+
+			if wallet_name:
+				# Update existing wallet
+				frappe.db.set_value(
+					"Memora Player Wallet",
+					wallet_name,
+					{
+						"total_xp": xp,
+						"current_streak": streak,
+						"dirty_flag": 0,
+						"last_sync_at": datetime.now(),
+					},
+					update_modified=False,
+				)
+				synced += 1
+			else:
+				# Player wallet should exist - log warning but continue
+				logger.warning(f"No wallet record found for player {player_id}")
+
+			# Remove from dirty set AFTER successful operation
+			r.srem(DIRTY_WALLETS_KEY, player_id)
+
+		except Exception as e:
+			errors.append(f"{player_id}: {str(e)}")
+			frappe.log_error(f"Wallet sync failed for {player_id}: {e}")
+
+	# Commit all changes
+	if synced > 0:
+		frappe.db.commit()
+
+	# Log sync result
+	status = "Success" if not errors else "Failed"
+	_log_sync("Wallet", synced, status)
+
+	logger.info(f"Wallet sync: {synced} synced, {len(errors)} errors")
 
 
 def _get_subject_lesson_count(r, subject_id: str) -> int:
