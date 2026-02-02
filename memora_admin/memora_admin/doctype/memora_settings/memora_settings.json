@@ -24,6 +24,7 @@
   "column_break_game",
   "base_lesson_xp",
   "replay_xp",
+  "max_streak_multiplier_percent",
   "security_section",
   "max_devices_per_player",
   "session_timeout_days",
@@ -131,6 +132,13 @@
    "fieldname": "replay_xp",
    "fieldtype": "Int",
    "label": "Replay XP"
+  },
+  {
+   "default": "50",
+   "description": "\u0627\u0644\u062d\u062f \u0627\u0644\u0623\u0642\u0635\u0649 \u0644\u0645\u0636\u0627\u0639\u0641 \u0627\u0644\u0633\u0644\u0633\u0644\u0629 (\u0627\u0644\u0646\u0633\u0628\u0629 \u0627\u0644\u0645\u0626\u0648\u064a\u0629)",
+   "fieldname": "max_streak_multiplier_percent",
+   "fieldtype": "Int",
+   "label": "Max Streak Multiplier (%)"
   },
   {
    "fieldname": "security_section",
