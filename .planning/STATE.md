@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 4 of 7 (Progress Tracking)
-Plan: 1 of 5 in current phase
+Plan: 2 of 5 in current phase
 Status: In progress
-Last activity: 2026-02-02 - Completed 04-01-PLAN.md (Progress Models & Service)
+Last activity: 2026-02-02 - Completed 04-02-PLAN.md (Subject Hierarchy & Caching)
 
-Progress: [####------] 47% (15 plans / ~32 estimated total)
+Progress: [#####-----] 50% (16 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 15
+- Total plans completed: 16
 - Average duration: 2.0min
-- Total execution time: 0.50 hours
+- Total execution time: 0.53 hours
 
 **By Phase:**
 
@@ -30,10 +30,10 @@ Progress: [####------] 47% (15 plans / ~32 estimated total)
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
 | 03-access-control | 7 | 13min | 1.9min |
-| 04-progress-tracking | 1 | 2min | 2.0min |
+| 04-progress-tracking | 2 | 4min | 2.0min |
 
 **Recent Trend:**
-- Last 5 plans: 3min, 1min, 2min, 1min, 2min
+- Last 5 plans: 1min, 2min, 1min, 2min, 2min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -84,6 +84,9 @@ Recent decisions affecting current work:
 - [03-07]: Actions group button for standard Frappe pattern
 - [03-07]: Default expires_at to season end_date for subscription grants
 - [04-01]: Use computed_field decorator for percentage calculation
+- [04-02]: Sequential bit_index allocation starting from 0 for dense bitmap storage
+- [04-02]: 1 hour cache TTL for hierarchy (balances freshness vs. performance)
+- [04-02]: Public call() method added to FrappeClient for generic API calls
 
 ### Pending Todos
 
@@ -95,8 +98,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T11:47:25Z
-Stopped at: Completed 04-01-PLAN.md (Progress Models & Service)
+Last session: 2026-02-02T11:48:09Z
+Stopped at: Completed 04-02-PLAN.md (Subject Hierarchy & Caching)
 Resume file: None
 
 Previous plan summaries:
@@ -116,3 +119,4 @@ Previous plan summaries:
 03-06: FrappeClient service with async httpx for Frappe API calls, wiring payment webhook to fetch grant keys and create subscriptions
 03-07: Frappe Desk Grant Access button on Player Profile creating subscriptions that auto-sync to Redis
 04-01: Redis bitmap-based progress tracking with O(1) SETBIT/GETBIT operations and nested Pydantic hierarchy models for unlock calculation
+04-02: Frappe API for subject hierarchy with nested is_linear flags, HierarchyService with Redis caching for <20ms unlock calculations
