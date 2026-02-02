@@ -37,9 +37,9 @@ Requirements for initial release. Each maps to roadmap phases.
 
 ### Wallet & Gamification
 
-- [ ] **WALLET-01**: XP accumulates in Redis hash (wallet:{player_id}) on lesson completion
-- [ ] **WALLET-02**: Streak tracks consecutive learning days with streak_date field
-- [ ] **WALLET-03**: Replaying completed lessons awards reduced XP (50%)
+- [x] **WALLET-01**: XP accumulates in Redis hash (wallet:{player_id}) on lesson completion
+- [x] **WALLET-02**: Streak tracks consecutive learning days with streak_date field
+- [x] **WALLET-03**: Replaying completed lessons awards reduced XP (50%)
 
 ### Build Pipeline
 
