@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 7 - Sync Mechanisms (next up)
+**Current focus:** Phase 7 - Sync Mechanisms (in progress)
 
 ## Current Position
 
-Phase: 6 of 7 (Build Pipeline) - COMPLETE ✓
-Plan: 4 of 4 in current phase (all plans complete)
-Status: Phase 6 verified and complete
-Last activity: 2026-02-02 - Phase 6 verified (6/6 success criteria)
+Phase: 7 of 7 (Sync Mechanisms)
+Plan: 1 of ? in current phase
+Status: In progress
+Last activity: 2026-02-02 - Completed 07-01-PLAN.md
 
-Progress: [########=-] 81% (26 plans / ~32 estimated total)
+Progress: [########=-] 84% (27 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 26
+- Total plans completed: 27
 - Average duration: 2.0min
-- Total execution time: 0.87 hours
+- Total execution time: 0.88 hours
 
 **By Phase:**
 
@@ -33,9 +33,10 @@ Progress: [########=-] 81% (26 plans / ~32 estimated total)
 | 04-progress-tracking | 4 | 10min | 2.5min |
 | 05-wallet-gamification | 4 | 7min | 1.75min |
 | 06-build-pipeline | 4 | 7min | 1.75min |
+| 07-sync-mechanisms | 1 | 1min | 1.0min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 2min, 1min, 2min, 2min
+- Last 5 plans: 2min, 1min, 2min, 2min, 1min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -119,6 +120,9 @@ Recent decisions affecting current work:
 - [06-04]: Redis INCR for atomic retry count tracking
 - [06-04]: FrappeClient and HierarchyService stored in app.state for shared access
 - [06-04]: Dedicated Redis client for pub/sub (separate from pool)
+- [07-01]: Dirty member format for progress: user_id:subject_id:v{version} (allows key reconstruction)
+- [07-01]: Dirty member format for wallets: player_id directly (simpler, no versioning)
+- [07-01]: Wallet dirty only on streak update if was_updated=True (skip no-op same-day completions)
 
 ### Pending Todos
 
@@ -130,8 +134,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T17:03:25Z
-Stopped at: Completed 06-04-PLAN.md (Phase 6 complete)
+Last session: 2026-02-02T18:39:54Z
+Stopped at: Completed 07-01-PLAN.md
 Resume file: None
 
 Previous plan summaries:
@@ -162,3 +166,4 @@ Previous plan summaries:
 06-02: JSON generator service producing hierarchy, lesson content with stages, and bitmap metadata for mobile app
 06-03: Storage abstraction with local filesystem backend and atomic upload publisher using temp-then-rename pattern with 3-retry exponential backoff
 06-04: Scheduled build worker with Redis pub/sub cache invalidation wiring Frappe to FastAPI for end-to-end build pipeline
+07-01: Redis dirty set tracking for progress and wallet services enabling background sync to MariaDB
