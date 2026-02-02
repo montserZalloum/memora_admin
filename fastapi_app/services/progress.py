@@ -2,6 +2,8 @@
 
 import redis.asyncio as redis
 
+from fastapi_app.core.constants import DIRTY_PROGRESS_KEY
+
 
 class ProgressService:
     """Manages lesson completion via Redis bitmaps.
@@ -61,6 +63,12 @@ class ProgressService:
         key = self._progress_key(user_id, subject_id, version)
         # SETBIT returns previous value: 0 if first time, 1 if replay
         previous = await self.redis.setbit(key, bit_index, 1)
+
+        # Mark dirty for background sync to MariaDB
+        # Format: user_id:subject_id:v{version}
+        dirty_member = f"{user_id}:{subject_id}:v{version}"
+        await self.redis.sadd(DIRTY_PROGRESS_KEY, dirty_member)
+
         return bool(previous)
 
     async def is_complete(
