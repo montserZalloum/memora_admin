@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 4 - Progress Tracking (next up)
+**Current focus:** Phase 4 - Progress Tracking (in progress)
 
 ## Current Position
 
-Phase: 3 of 7 (Access Control) - COMPLETE ✓
-Plan: 7 of 7 in current phase (all plans complete)
-Status: Phase 3 verified and complete
-Last activity: 2026-02-02 - Phase 3 verified (5/5 success criteria)
+Phase: 4 of 7 (Progress Tracking)
+Plan: 1 of 5 in current phase
+Status: In progress
+Last activity: 2026-02-02 - Completed 04-01-PLAN.md (Progress Models & Service)
 
-Progress: [###-------] 43% (14 plans / ~32 estimated total)
+Progress: [####------] 47% (15 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 14
+- Total plans completed: 15
 - Average duration: 2.0min
-- Total execution time: 0.47 hours
+- Total execution time: 0.50 hours
 
 **By Phase:**
 
@@ -30,9 +30,10 @@ Progress: [###-------] 43% (14 plans / ~32 estimated total)
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
 | 03-access-control | 7 | 13min | 1.9min |
+| 04-progress-tracking | 1 | 2min | 2.0min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 3min, 1min, 2min, 1min
+- Last 5 plans: 3min, 1min, 2min, 1min, 2min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -82,6 +83,7 @@ Recent decisions affecting current work:
 - [03-06]: Far-future date (2099-12-31) for permanent grants
 - [03-07]: Actions group button for standard Frappe pattern
 - [03-07]: Default expires_at to season end_date for subscription grants
+- [04-01]: Use computed_field decorator for percentage calculation
 
 ### Pending Todos
 
@@ -93,8 +95,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T09:12:30Z
-Stopped at: Completed 03-07-PLAN.md (Grant Access Button)
+Last session: 2026-02-02T11:47:25Z
+Stopped at: Completed 04-01-PLAN.md (Progress Models & Service)
 Resume file: None
 
 Previous plan summaries:
@@ -113,3 +115,4 @@ Previous plan summaries:
 03-05: Frappe whitelisted API methods for subscription creation and Product Grant key extraction callable via frappe.call()
 03-06: FrappeClient service with async httpx for Frappe API calls, wiring payment webhook to fetch grant keys and create subscriptions
 03-07: Frappe Desk Grant Access button on Player Profile creating subscriptions that auto-sync to Redis
+04-01: Redis bitmap-based progress tracking with O(1) SETBIT/GETBIT operations and nested Pydantic hierarchy models for unlock calculation
