@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 3 of 7 (Access Control)
-Plan: 2 of ? in current phase (03-01, 03-02 complete)
+Plan: 3 of ? in current phase (03-01, 03-02, 03-03 complete)
 Status: In progress
-Last activity: 2026-02-02 - Completed 03-02-PLAN.md (Player access sets)
+Last activity: 2026-02-02 - Completed 03-03-PLAN.md (Double-Gate dependencies)
 
-Progress: [########..] ~80% (of discovered plans: 9/?)
+Progress: [########..] ~83% (of discovered plans: 10/?)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 9
-- Average duration: 2.3min
-- Total execution time: 0.35 hours
+- Total plans completed: 10
+- Average duration: 2.2min
+- Total execution time: 0.37 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [########..] ~80% (of discovered plans: 9/?)
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
-| 03-access-control | 2 | 4min | 2.0min |
+| 03-access-control | 3 | 6min | 2.0min |
 
 **Recent Trend:**
-- Last 5 plans: 3min, 3min, 4min, 2min, 2min
+- Last 5 plans: 3min, 4min, 2min, 2min, 2min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -69,6 +69,8 @@ Recent decisions affecting current work:
 - [03-01]: Single HSET with mapping dict for atomic Redis hash updates
 - [03-02]: Redis key pattern memora:access:{user_id} for player grants
 - [03-02]: Direct cache.sadd/srem in doc_events for sub-second sync
+- [03-03]: Free bypass checked FIRST in Gate 2 (avoids unnecessary Redis lookup)
+- [03-03]: Structured error detail {code, message} for 403 responses
 
 ### Pending Todos
 
@@ -80,8 +82,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T07:50:59Z
-Stopped at: Completed 03-02-PLAN.md (Player access sets)
+Last session: 2026-02-02T07:58:00Z
+Stopped at: Completed 03-03-PLAN.md (Double-Gate dependencies)
 Resume file: None
 
 Previous plan summaries:
@@ -95,3 +97,4 @@ Previous plan summaries:
 02-03: Login/refresh endpoints with dual rate limiting, session-based token family validation, and stateless JWT auth dependency
 03-01: SeasonMeta model and SeasonService for Gate 1 validation with Redis hash caching
 03-02: Redis set-based player access management with Frappe doc_events hooks for immediate subscription/season sync
+03-03: Double-Gate FastAPI dependencies for content access control with free content bypass and structured error responses
