@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-01)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 6 - Build Pipeline (next up)
+**Current focus:** Phase 6 - Build Pipeline
 
 ## Current Position
 
-Phase: 5 of 7 (Wallet & Gamification) - COMPLETE ✓
-Plan: 4 of 4 in current phase (all plans complete)
-Status: Phase 5 verified and complete
-Last activity: 2026-02-02 - Phase 5 verified (4/4 success criteria)
+Phase: 6 of 7 (Build Pipeline)
+Plan: 1 of 3 in current phase
+Status: In progress
+Last activity: 2026-02-02 - Completed 06-01-PLAN.md
 
-Progress: [#######---] 69% (22 plans / ~32 estimated total)
+Progress: [#######---] 72% (23 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 22
+- Total plans completed: 23
 - Average duration: 2.0min
-- Total execution time: 0.75 hours
+- Total execution time: 0.77 hours
 
 **By Phase:**
 
@@ -32,9 +32,10 @@ Progress: [#######---] 69% (22 plans / ~32 estimated total)
 | 03-access-control | 7 | 13min | 1.9min |
 | 04-progress-tracking | 4 | 10min | 2.5min |
 | 05-wallet-gamification | 4 | 7min | 1.75min |
+| 06-build-pipeline | 1 | 1min | 1.0min |
 
 **Recent Trend:**
-- Last 5 plans: 4min, 1min, 2min, 2min, 2min
+- Last 5 plans: 1min, 2min, 2min, 2min, 1min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -105,6 +106,9 @@ Recent decisions affecting current work:
 - [05-04]: Streak multiplier applies to both fresh and replay XP
 - [05-04]: Replays do NOT count toward streak maintenance
 - [05-04]: Floor XP result (int() not round()) for predictable minimum
+- [06-01]: Redis SET NX EX pattern for 2-minute debounce
+- [06-01]: Manual builds bypass debounce
+- [06-01]: Force Build button under Actions group
 
 ### Pending Todos
 
@@ -116,8 +120,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T13:50:00Z
-Stopped at: Completed 05-04-PLAN.md (Phase 5 complete)
+Last session: 2026-02-02T16:54:00Z
+Stopped at: Completed 06-01-PLAN.md
 Resume file: None
 
 Previous plan summaries:
@@ -144,3 +148,4 @@ Previous plan summaries:
 05-02: SettingsService with 5-minute Redis cache for admin-configurable XP values and streak multiplier cap
 05-03: GET /wallet and GET /wallet/{player_id} endpoints with role-based access control for XP and streak display
 05-04: Extended completion endpoint with atomic XP and streak updates via WalletService
+06-01: Debounced build triggers for content DocTypes via Redis SET NX EX pattern with Force Build button on Subject form
