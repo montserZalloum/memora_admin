@@ -45,16 +45,17 @@ Plans:
 **Depends on**: Phase 1
 **Requirements**: AUTH-01, AUTH-02, AUTH-03
 **Success Criteria** (what must be TRUE):
-  1. Player can login with Frappe credentials and receive JWT access token (15 min) + refresh token (7 days)
+  1. Player can login with Frappe credentials and receive JWT access token (15 min) + refresh token (30 days)
   2. Player can exchange refresh token for new access token without re-entering credentials
   3. FastAPI middleware validates JWT tokens without database lookup (stateless verification)
   4. Invalid/expired tokens are rejected with 401 response
-**Plans**: TBD
+  5. New login invalidates previous session (single-session per player)
+**Plans**: 3 plans in 2 waves
 
 Plans:
-- [ ] 02-01: Login endpoint with Frappe credential verification
-- [ ] 02-02: JWT token generation and refresh flow
-- [ ] 02-03: Stateless JWT middleware with algorithm whitelisting
+- [ ] 02-01-PLAN.md — Security foundation: JWT utilities, auth models, Frappe service (Wave 1)
+- [ ] 02-02-PLAN.md — Session management and rate limiting services (Wave 1)
+- [ ] 02-03-PLAN.md — Auth endpoints (login, refresh) and JWT middleware (Wave 2)
 
 ### Phase 3: Access Control
 **Goal**: Content access validated through Double-Gate pattern (season status + player grants)
