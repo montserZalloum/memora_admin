@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 6 of 7 (Build Pipeline)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-02-02 - Completed 06-03-PLAN.md
+Plan: 4 of 4 in current phase
+Status: Phase complete
+Last activity: 2026-02-02 - Completed 06-04-PLAN.md
 
-Progress: [########--] 78% (25 plans / ~32 estimated total)
+Progress: [########=-] 81% (26 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 25
+- Total plans completed: 26
 - Average duration: 2.0min
-- Total execution time: 0.83 hours
+- Total execution time: 0.87 hours
 
 **By Phase:**
 
@@ -32,10 +32,10 @@ Progress: [########--] 78% (25 plans / ~32 estimated total)
 | 03-access-control | 7 | 13min | 1.9min |
 | 04-progress-tracking | 4 | 10min | 2.5min |
 | 05-wallet-gamification | 4 | 7min | 1.75min |
-| 06-build-pipeline | 3 | 5min | 1.67min |
+| 06-build-pipeline | 4 | 7min | 1.75min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 2min, 2min, 1min, 2min
+- Last 5 plans: 2min, 2min, 1min, 2min, 2min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -115,6 +115,10 @@ Recent decisions affecting current work:
 - [06-03]: Added read() method to StorageBackend for atomic swap phase
 - [06-03]: Atomic swap uploads to temp, reads back, writes to final location
 - [06-03]: Best-effort temp cleanup (don't fail if cleanup fails)
+- [06-04]: frappe.cache.publish() for Redis pub/sub from Frappe build worker
+- [06-04]: Redis INCR for atomic retry count tracking
+- [06-04]: FrappeClient and HierarchyService stored in app.state for shared access
+- [06-04]: Dedicated Redis client for pub/sub (separate from pool)
 
 ### Pending Todos
 
@@ -126,8 +130,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T16:59:00Z
-Stopped at: Completed 06-03-PLAN.md
+Last session: 2026-02-02T17:03:25Z
+Stopped at: Completed 06-04-PLAN.md (Phase 6 complete)
 Resume file: None
 
 Previous plan summaries:
@@ -157,3 +161,4 @@ Previous plan summaries:
 06-01: Debounced build triggers for content DocTypes via Redis SET NX EX pattern with Force Build button on Subject form
 06-02: JSON generator service producing hierarchy, lesson content with stages, and bitmap metadata for mobile app
 06-03: Storage abstraction with local filesystem backend and atomic upload publisher using temp-then-rename pattern with 3-retry exponential backoff
+06-04: Scheduled build worker with Redis pub/sub cache invalidation wiring Frappe to FastAPI for end-to-end build pipeline
