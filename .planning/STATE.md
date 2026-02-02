@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 5 of 7 (Wallet & Gamification)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-02-02 - Completed 05-03-PLAN.md
+Plan: 4 of 4 in current phase
+Status: Phase complete
+Last activity: 2026-02-02 - Completed 05-04-PLAN.md
 
-Progress: [######----] 66% (21 plans / ~32 estimated total)
+Progress: [#######---] 69% (22 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 21
+- Total plans completed: 22
 - Average duration: 2.0min
-- Total execution time: 0.72 hours
+- Total execution time: 0.75 hours
 
 **By Phase:**
 
@@ -31,10 +31,10 @@ Progress: [######----] 66% (21 plans / ~32 estimated total)
 | 02-authentication | 3 | 9min | 3.0min |
 | 03-access-control | 7 | 13min | 1.9min |
 | 04-progress-tracking | 4 | 10min | 2.5min |
-| 05-wallet-gamification | 3 | 5min | 1.7min |
+| 05-wallet-gamification | 4 | 7min | 1.75min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 4min, 1min, 2min, 2min
+- Last 5 plans: 4min, 1min, 2min, 2min, 2min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -102,6 +102,9 @@ Recent decisions affecting current work:
 - [05-02]: Default max_streak_multiplier_percent = 50 (50% max bonus)
 - [05-03]: System Manager role check for admin wallet endpoint
 - [05-03]: Structured error detail {code: ADMIN_REQUIRED} for non-admin access
+- [05-04]: Streak multiplier applies to both fresh and replay XP
+- [05-04]: Replays do NOT count toward streak maintenance
+- [05-04]: Floor XP result (int() not round()) for predictable minimum
 
 ### Pending Todos
 
@@ -113,8 +116,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T13:47:00Z
-Stopped at: Completed 05-03-PLAN.md
+Last session: 2026-02-02T13:50:00Z
+Stopped at: Completed 05-04-PLAN.md (Phase 5 complete)
 Resume file: None
 
 Previous plan summaries:
@@ -140,3 +143,4 @@ Previous plan summaries:
 05-01: Redis-backed WalletService with atomic HINCRBY for XP and Lua script for streak date comparison
 05-02: SettingsService with 5-minute Redis cache for admin-configurable XP values and streak multiplier cap
 05-03: GET /wallet and GET /wallet/{player_id} endpoints with role-based access control for XP and streak display
+05-04: Extended completion endpoint with atomic XP and streak updates via WalletService
