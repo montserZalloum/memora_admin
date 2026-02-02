@@ -2,12 +2,13 @@
 
 from datetime import timedelta
 
+import jwt
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from fastapi_app.api.deps import RedisClient, SettingsDep
-from fastapi_app.core.security import create_access_token, create_refresh_token
-from fastapi_app.models.auth import LoginRequest, TokenResponse
+from fastapi_app.core.security import create_access_token, create_refresh_token, decode_token
+from fastapi_app.models.auth import LoginRequest, RefreshRequest, TokenResponse
 from fastapi_app.services.frappe import FrappeAuthService
 from fastapi_app.services.rate_limit import RateLimiter
 from fastapi_app.services.session import SessionService
@@ -102,3 +103,67 @@ async def login(
         access_token=access_token,
         refresh_token=refresh_token,
     )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh(
+    body: RefreshRequest,
+    redis: RedisClient,
+    settings: SettingsDep,
+) -> TokenResponse:
+    """
+    Exchange refresh token for new access token.
+
+    Per CONTEXT.md:
+    - Validates session is still active (not invalidated by new login)
+    - Returns same refresh token (not rotated)
+    - Refresh token is reusable
+    """
+    try:
+        # Decode refresh token (validates signature, expiry, type)
+        payload = decode_token(body.refresh_token, verify_type="refresh")
+
+        user_id = payload["sub"]
+        family_id = payload["fid"]
+
+        # Validate session is still active
+        session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
+        is_valid = await session_service.validate_session(user_id, family_id)
+
+        if not is_valid:
+            # Session invalidated by new login on another device
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid credentials",
+            )
+
+        # Create new access token with SAME family_id
+        # Note: Refresh token has minimal claims, so we use what we have
+        # For full user data, we'd need to cache it or fetch from Frappe
+        # Using placeholder values that will be refreshed on next full login
+        access_token = create_access_token(
+            user_id=user_id,
+            email=payload.get("email", ""),
+            role=payload.get("role", "player"),
+            timezone_str=payload.get("tz", "UTC"),
+            display_name=payload.get("name", ""),
+            family_id=family_id,
+            expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
+        )
+
+        # Return same refresh token (per CONTEXT.md: not rotated)
+        return TokenResponse(
+            access_token=access_token,
+            refresh_token=body.refresh_token,
+        )
+
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
+    except jwt.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
