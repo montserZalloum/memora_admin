@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 3 of 7 (Access Control)
-Plan: 3 of ? in current phase (03-01, 03-02, 03-03 complete)
+Plan: 4 of ? in current phase (03-01, 03-02, 03-03, 03-04 complete)
 Status: In progress
-Last activity: 2026-02-02 - Completed 03-03-PLAN.md (Double-Gate dependencies)
+Last activity: 2026-02-02 - Completed 03-04-PLAN.md (Webhook and Grant Endpoints)
 
-Progress: [########..] ~83% (of discovered plans: 10/?)
+Progress: [#########.] ~85% (of discovered plans: 11/?)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 10
+- Total plans completed: 11
 - Average duration: 2.2min
-- Total execution time: 0.37 hours
+- Total execution time: 0.40 hours
 
 **By Phase:**
 
@@ -29,10 +29,10 @@ Progress: [########..] ~83% (of discovered plans: 10/?)
 |-------|-------|-------|----------|
 | 01-infrastructure-foundation | 4 | 8min | 2.0min |
 | 02-authentication | 3 | 9min | 3.0min |
-| 03-access-control | 3 | 6min | 2.0min |
+| 03-access-control | 4 | 9min | 2.3min |
 
 **Recent Trend:**
-- Last 5 plans: 3min, 4min, 2min, 2min, 2min
+- Last 5 plans: 4min, 2min, 2min, 2min, 3min
 - Trend: stable
 
 *Updated after each plan completion*
@@ -71,6 +71,9 @@ Recent decisions affecting current work:
 - [03-02]: Direct cache.sadd/srem in doc_events for sub-second sync
 - [03-03]: Free bypass checked FIRST in Gate 2 (avoids unnecessary Redis lookup)
 - [03-03]: Structured error detail {code, message} for 403 responses
+- [03-04]: Webhook idempotency via Redis key with 24h TTL (processing/completed state)
+- [03-04]: FastAPI BackgroundTasks for webhook processing (fast acknowledgment)
+- [03-04]: Redis list retry queue for failed webhook payloads
 
 ### Pending Todos
 
@@ -82,8 +85,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T07:58:00Z
-Stopped at: Completed 03-03-PLAN.md (Double-Gate dependencies)
+Last session: 2026-02-02T07:58:47Z
+Stopped at: Completed 03-04-PLAN.md (Webhook and Grant Endpoints)
 Resume file: None
 
 Previous plan summaries:
@@ -98,3 +101,4 @@ Previous plan summaries:
 03-01: SeasonMeta model and SeasonService for Gate 1 validation with Redis hash caching
 03-02: Redis set-based player access management with Frappe doc_events hooks for immediate subscription/season sync
 03-03: Double-Gate FastAPI dependencies for content access control with free content bypass and structured error responses
+03-04: Payment webhook with idempotency and background processing, admin grant/revoke endpoints with role-based access control
