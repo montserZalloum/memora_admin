@@ -10,18 +10,18 @@ See: .planning/PROJECT.md (updated 2026-02-01)
 ## Current Position
 
 Phase: 5 of 7 (Wallet & Gamification)
-Plan: 2 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-02 - Completed 05-02-PLAN.md
+Last activity: 2026-02-02 - Completed 05-03-PLAN.md
 
-Progress: [######----] 63% (20 plans / ~32 estimated total)
+Progress: [######----] 66% (21 plans / ~32 estimated total)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 20
+- Total plans completed: 21
 - Average duration: 2.0min
-- Total execution time: 0.68 hours
+- Total execution time: 0.72 hours
 
 **By Phase:**
 
@@ -31,10 +31,10 @@ Progress: [######----] 63% (20 plans / ~32 estimated total)
 | 02-authentication | 3 | 9min | 3.0min |
 | 03-access-control | 7 | 13min | 1.9min |
 | 04-progress-tracking | 4 | 10min | 2.5min |
-| 05-wallet-gamification | 2 | 3min | 1.5min |
+| 05-wallet-gamification | 3 | 5min | 1.7min |
 
 **Recent Trend:**
-- Last 5 plans: 2min, 2min, 4min, 1min, 2min
+- Last 5 plans: 2min, 4min, 1min, 2min, 2min
 - Trend: stable/fast
 
 *Updated after each plan completion*
@@ -100,6 +100,8 @@ Recent decisions affecting current work:
 - [05-02]: 5-minute cache TTL for settings (shorter than hierarchy due to admin mutability)
 - [05-02]: Fallback to defaults if Frappe unavailable (graceful degradation)
 - [05-02]: Default max_streak_multiplier_percent = 50 (50% max bonus)
+- [05-03]: System Manager role check for admin wallet endpoint
+- [05-03]: Structured error detail {code: ADMIN_REQUIRED} for non-admin access
 
 ### Pending Todos
 
@@ -111,8 +113,8 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-02-02T13:42:00Z
-Stopped at: Completed 05-02-PLAN.md
+Last session: 2026-02-02T13:47:00Z
+Stopped at: Completed 05-03-PLAN.md
 Resume file: None
 
 Previous plan summaries:
@@ -137,3 +139,4 @@ Previous plan summaries:
 04-04: GET /progress and GET /progress/{subject} endpoints with completion percentages and unlock states wired into API
 05-01: Redis-backed WalletService with atomic HINCRBY for XP and Lua script for streak date comparison
 05-02: SettingsService with 5-minute Redis cache for admin-configurable XP values and streak multiplier cap
+05-03: GET /wallet and GET /wallet/{player_id} endpoints with role-based access control for XP and streak display
