@@ -7,6 +7,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from fastapi_app.api.deps import RedisClient
 from fastapi_app.models.access import WebhookPayload, WebhookResponse
+from fastapi_app.services.frappe_client import FrappeAPIError, FrappeClient
 
 logger = structlog.get_logger()
 
@@ -17,31 +18,80 @@ IDEMPOTENCY_PREFIX = "memora:webhook:"
 RETRY_QUEUE_KEY = "memora:webhook:retry_queue"
 IDEMPOTENCY_TTL = 86400  # 24 hours
 
+# Module-level client (singleton pattern for connection reuse)
+_frappe_client: FrappeClient | None = None
 
-async def process_payment_webhook(payload: WebhookPayload, redis: RedisClient) -> None:
+
+def get_frappe_client() -> FrappeClient:
+    """Get or create FrappeClient singleton."""
+    global _frappe_client
+    if _frappe_client is None:
+        _frappe_client = FrappeClient()
+    return _frappe_client
+
+
+async def process_payment_webhook(
+    payload: WebhookPayload,
+    redis: RedisClient,
+    frappe_client: FrappeClient,
+) -> None:
     """
     Background processing of payment webhook.
 
     Per CONTEXT.md:
-    - Creates MariaDB subscription record (via Frappe API - stubbed for now)
+    - Creates MariaDB subscription records (via Frappe API)
     - Adds grants to Redis (idempotent via SADD)
     - Transaction log for failure recovery
     """
     try:
         # 1. Get grant components from Product Grant
-        # TODO: Implement Frappe API call to get grant keys from product_grant_id
-        # For now, use product_grant_id as the grant key directly
-        grant_keys = [payload.product_grant_id]
+        try:
+            grant_keys = await frappe_client.get_grant_keys(payload.product_grant_id)
+        except FrappeAPIError as e:
+            logger.error(
+                "failed_to_get_grant_keys",
+                product_grant_id=payload.product_grant_id,
+                error=str(e),
+            )
+            # Queue for retry on Frappe API failure
+            await queue_for_retry(payload, redis)
+            return
 
-        # 2. Create MariaDB subscription record
-        # TODO: Implement Frappe API call to create Memora Player Subscription
-        # This is stubbed - actual implementation depends on Frappe whitelisted method
-        logger.info(
-            "subscription_creation_stub",
-            player_id=payload.player_id,
-            product_grant_id=payload.product_grant_id,
-            transaction_id=payload.transaction_id,
-        )
+        if not grant_keys:
+            logger.warning(
+                "no_grant_keys_found",
+                product_grant_id=payload.product_grant_id,
+            )
+
+        # 2. Create MariaDB subscription records for each grant key
+        # Per CONTEXT.md: "Grants are permanent until explicitly revoked (no expiration dates)"
+        # Use sentinel far-future date for permanent grants
+        expires_at = "2099-12-31"
+
+        for grant_key in grant_keys:
+            try:
+                result = await frappe_client.create_subscription(
+                    player_id=payload.player_id,
+                    access_key=grant_key,
+                    expires_at=expires_at,
+                    transaction_id=payload.transaction_id,
+                )
+                logger.info(
+                    "subscription_created",
+                    player_id=payload.player_id,
+                    access_key=grant_key,
+                    subscription=result.get("name"),
+                    created=result.get("created"),
+                )
+            except FrappeAPIError as e:
+                logger.error(
+                    "failed_to_create_subscription",
+                    player_id=payload.player_id,
+                    access_key=grant_key,
+                    error=str(e),
+                )
+                # Continue with Redis grant even if MariaDB fails
+                # doc_events hook won't fire, but Redis will have grant
 
         # 3. Add grants to Redis (idempotent via SADD)
         access_key = f"memora:access:{payload.player_id}"
@@ -120,16 +170,26 @@ async def payment_webhook(
     await redis.set(idempotency_key, "processing", ex=IDEMPOTENCY_TTL)
 
     # Process in background for fast acknowledgment
-    background_tasks.add_task(process_payment_webhook, payload, redis)
+    frappe_client = get_frappe_client()
+    background_tasks.add_task(process_payment_webhook, payload, redis, frappe_client)
 
     return WebhookResponse(status="accepted", message="Webhook received and queued for processing")
 
 
-async def process_retry_queue(redis: RedisClient, max_items: int = 10) -> int:
+async def process_retry_queue(
+    redis: RedisClient,
+    frappe_client: FrappeClient,
+    max_items: int = 10,
+) -> int:
     """
     Process items from retry queue.
 
     Called by Frappe scheduled task (to be implemented in Phase 7).
+
+    Args:
+        redis: Redis client for queue operations
+        frappe_client: Frappe API client for subscription creation
+        max_items: Maximum number of items to process in one batch
 
     Returns:
         Number of items processed
@@ -144,7 +204,7 @@ async def process_retry_queue(redis: RedisClient, max_items: int = 10) -> int:
         try:
             data = item.decode() if isinstance(item, bytes) else item
             payload = WebhookPayload(**json.loads(data))
-            await process_payment_webhook(payload, redis)
+            await process_payment_webhook(payload, redis, frappe_client)
             processed += 1
 
         except Exception as e:
