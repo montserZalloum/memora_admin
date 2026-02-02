@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # Logging
     slow_redis_threshold_ms: int = 50
 
+    # Auth Token Configuration
+    jwt_access_token_expire_minutes: int = 15
+    jwt_refresh_token_expire_days: int = 30
+
+    # Frappe Integration
+    frappe_url: str = "http://localhost:8000"
+
 
 @lru_cache
 def get_settings() -> Settings:
