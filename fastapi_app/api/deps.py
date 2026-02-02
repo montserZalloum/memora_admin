@@ -12,6 +12,9 @@ from fastapi_app.core.security import decode_token
 from fastapi_app.models.access import ContentAccessRequest, SeasonMeta
 from fastapi_app.models.auth import TokenPayload
 from fastapi_app.services.access import AccessService
+from fastapi_app.services.frappe_client import FrappeClient
+from fastapi_app.services.hierarchy import HierarchyService
+from fastapi_app.services.progress import ProgressService
 from fastapi_app.services.season import SeasonService
 
 # Common dependencies
@@ -89,6 +92,37 @@ async def get_access_service(request: Request) -> AccessService:
 
 
 AccessServiceDep = Annotated[AccessService, Depends(get_access_service)]
+
+
+async def get_progress_service(request: Request) -> ProgressService:
+    """Get ProgressService with Redis from app state."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    return ProgressService(redis_client)
+
+
+ProgressServiceDep = Annotated[ProgressService, Depends(get_progress_service)]
+
+
+# Singleton for FrappeClient
+_frappe_client: FrappeClient | None = None
+
+
+async def get_frappe_client() -> FrappeClient:
+    """Get singleton FrappeClient instance."""
+    global _frappe_client
+    if _frappe_client is None:
+        _frappe_client = FrappeClient()
+    return _frappe_client
+
+
+async def get_hierarchy_service(request: Request) -> HierarchyService:
+    """Get HierarchyService with Redis and FrappeClient."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    frappe_client = await get_frappe_client()
+    return HierarchyService(redis_client, frappe_client)
+
+
+HierarchyServiceDep = Annotated[HierarchyService, Depends(get_hierarchy_service)]
 
 
 # --- Double-Gate Dependencies ---
