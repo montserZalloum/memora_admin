@@ -99,7 +99,7 @@ Plans:
 - [x] 08-01-PLAN.md — Device service foundation (models, Lua script, DeviceService)
 - [x] 08-02-PLAN.md — Login integration and admin removal hook
 
-#### Phase 9: Game Sessions
+#### Phase 9: Game Sessions ✓
 **Goal**: Lesson flow tracking with session lifecycle and validation
 **Depends on**: Phase 4 (progress tracking), Phase 8 (device metadata optional)
 **Requirements**: SESSION-01, SESSION-02, SESSION-03, SESSION-04, SESSION-05, SESSION-06
@@ -111,12 +111,13 @@ Plans:
   5. User can resume a lesson after app crash (session recovery)
   6. User cannot be in multiple lessons simultaneously (concurrent session detection)
 **Plans**: 4 plans
+**Completed**: 2026-02-03
 
 Plans:
 - [x] 09-01-PLAN.md — GameSession models and service (Lua script, TTL, force-close)
 - [x] 09-02-PLAN.md — Session endpoints (start, end) with completion flow integration
-- [ ] 09-03-PLAN.md — [Gap closure] Session validation in /progress/complete
-- [ ] 09-04-PLAN.md — [Gap closure] GET /sessions/current for session recovery
+- [x] 09-03-PLAN.md — [Gap closure] Session validation in /progress/complete
+- [x] 09-04-PLAN.md — [Gap closure] GET /sessions/current for session recovery
 
 #### Phase 10: Leaderboards
 **Goal**: Competitive rankings with daily/all-time/streak leaderboards
@@ -165,6 +166,6 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 6. Content Pipeline | v1.0 | 4/4 | Complete | 2026-02-02 |
 | 7. Sync Mechanisms | v1.0 | 4/4 | Complete | 2026-02-02 |
 | 8. Device Management | v1.1 | 2/2 | Complete | 2026-02-03 |
-| 9. Game Sessions | v1.1 | 2/4 | Gap closure | - |
+| 9. Game Sessions | v1.1 | 4/4 | Complete | 2026-02-03 |
 | 10. Leaderboards | v1.1 | 0/TBD | Not started | - |
 | 11. Scheduled Tasks | v1.1 | 0/TBD | Not started | - |

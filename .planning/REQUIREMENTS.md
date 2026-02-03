@@ -9,12 +9,12 @@ Requirements for v1.1 feature expansion. Each maps to roadmap phases.
 
 ### Game Sessions
 
-- [ ] **SESSION-01**: Start session creates Redis hash with lesson metadata and 1-hour TTL
-- [ ] **SESSION-02**: Stage completion updates session with interaction data
-- [ ] **SESSION-03**: End session finalizes lesson and triggers completion flow (XP, progress, streak)
-- [ ] **SESSION-04**: Session validation rejects stage completions without active session
-- [ ] **SESSION-05**: Session recovery allows resuming mid-lesson after app crash
-- [ ] **SESSION-06**: Concurrent session detection prevents same user in multiple lessons simultaneously
+- [x] **SESSION-01**: Start session creates Redis hash with lesson metadata and 1-hour TTL
+- [x] **SESSION-02**: Stage completion updates session with interaction data
+- [x] **SESSION-03**: End session finalizes lesson and triggers completion flow (XP, progress, streak)
+- [x] **SESSION-04**: Session validation rejects stage completions without active session
+- [x] **SESSION-05**: Session recovery allows resuming mid-lesson after app crash
+- [x] **SESSION-06**: Concurrent session detection prevents same user in multiple lessons simultaneously
 
 ### Leaderboards
 
@@ -78,12 +78,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | DEVICE-01 | Phase 8 | Complete |
 | DEVICE-02 | Phase 8 | Complete |
-| SESSION-01 | Phase 9 | Pending |
-| SESSION-02 | Phase 9 | Pending |
-| SESSION-03 | Phase 9 | Pending |
-| SESSION-04 | Phase 9 | Pending |
-| SESSION-05 | Phase 9 | Pending |
-| SESSION-06 | Phase 9 | Pending |
+| SESSION-01 | Phase 9 | Complete |
+| SESSION-02 | Phase 9 | Complete |
+| SESSION-03 | Phase 9 | Complete |
+| SESSION-04 | Phase 9 | Complete |
+| SESSION-05 | Phase 9 | Complete |
+| SESSION-06 | Phase 9 | Complete |
 | LEADER-01 | Phase 10 | Pending |
 | LEADER-02 | Phase 10 | Pending |
 | LEADER-03 | Phase 10 | Pending |
@@ -106,4 +106,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-02*
-*Last updated: 2026-02-02 after roadmap creation*
+*Last updated: 2026-02-03 after Phase 9 completion*
