@@ -5,13 +5,7 @@
 - SHIPPED **v1.0 MVP** — Phases 1-7 (shipped 2026-02-02)
 - SHIPPED **v1.1 Feature Expansion** — Phases 8-11 (shipped 2026-02-03)
 - SHIPPED **v1.2 Plan System Enhancement** — Phase 12 (shipped 2026-02-03)
-- ACTIVE **v1.2.1 Gap Closure** — Phase 13 (gap fix from v1.2 audit)
-
-## Active Milestone: v1.2.1 Gap Closure
-
-Phase 13 addresses integration gap found during v1.2 milestone audit.
-
----
+- SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
 
 ## Phases
 
@@ -51,18 +45,14 @@ See: `.planning/milestones/v1.2-ROADMAP.md` for full details
 
 </details>
 
-### v1.2.1 Gap Closure (Phase 13) — ACTIVE
+<details>
+<summary>v1.2.1 Gap Closure (Phase 13) — SHIPPED 2026-02-03</summary>
 
-- [ ] Phase 13: Plan Cache Invalidation Fix (1 plan)
+- [x] Phase 13: Plan Cache Invalidation Fix (1/1 plans) — completed 2026-02-03
 
-**Goal:** Wire Plan cache invalidation into FastAPI pubsub listener
+See: `.planning/phases/13-plan-cache-invalidation-fix/13-VERIFICATION.md` for details
 
-**Gap Closure:**
-- Integration: FastAPI pubsub → Plan cache invalidation (`type="plan"` messages ignored)
-- Flow: Plan save → Build → CDN → Cache invalidation (steps 8-9 broken)
-
-Plans:
-- [ ] 13-01-PLAN.md — Register PlanService and add pubsub handler for Plan messages
+</details>
 
 ## Progress
 
@@ -80,6 +70,6 @@ Plans:
 | 10. Leaderboards | v1.1 | 3/3 | Complete | 2026-02-03 |
 | 11. Scheduled Tasks | v1.1 | 4/4 | Complete | 2026-02-03 |
 | 12. Plan System Enhancement | v1.2 | 4/4 | Complete | 2026-02-03 |
-| 13. Plan Cache Invalidation Fix | v1.2.1 | 0/1 | Planning Complete | - |
+| 13. Plan Cache Invalidation Fix | v1.2.1 | 1/1 | Complete | 2026-02-03 |
 
-**Total:** 13 phases, 47 plans completed across 4 milestones
+**Total:** 13 phases, 48 plans completed across 4 milestones
