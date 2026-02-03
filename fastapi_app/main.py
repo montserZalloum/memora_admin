@@ -16,6 +16,7 @@ from fastapi_app.core.redis import create_redis_pool, verify_redis_connection
 from fastapi_app.middleware.request_id import RequestIDMiddleware
 from fastapi_app.services.frappe_client import FrappeClient, FrappeClientSettings
 from fastapi_app.services.hierarchy import HierarchyService
+from fastapi_app.services.plan import PlanService
 
 logger = structlog.get_logger()
 
@@ -47,6 +48,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         frappe_client=frappe_client,
     )
     app.state.hierarchy_service = hierarchy_service
+
+    # Create PlanService instance
+    plan_service = PlanService(
+        redis_client=redis_client,
+        frappe_client=frappe_client,
+    )
+    app.state.plan_service = plan_service
 
     # Start pub/sub listener background task
     pubsub_task = asyncio.create_task(
