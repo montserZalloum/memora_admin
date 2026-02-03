@@ -85,7 +85,7 @@ doctype_js = {
 # ------------
 
 # before_install = "memora_admin.install.before_install"
-# after_install = "memora_admin.install.after_install"
+after_install = "memora_admin.memora_admin.setup.after_install"
 
 # Uninstallation
 # ------------
