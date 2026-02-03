@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 11 (Scheduled Tasks) - Plan 01 complete, infrastructure foundation ready
+**Current focus:** Phase 11 (Scheduled Tasks) - Plan 03 complete, Task Dashboard ready
 
 ## Current Position
 
 Phase: 11 of 11 (Scheduled Tasks)
-Plan: 1 of 4 in current phase
+Plan: 3 of 4 in current phase
 Status: In progress
-Last activity: 2026-02-03 - Completed 11-01-PLAN.md (Task Infrastructure Foundation)
+Last activity: 2026-02-03 - Completed 11-03-PLAN.md (Task Dashboard)
 
-Progress: [█████████░] 90% (37 of 41 plans completed across v1.0 and v1.1)
+Progress: [█████████░] 93% (38 of 41 plans completed across v1.0 and v1.1)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 37 (v1.0 milestone + Phase 8-10 + 11-01)
+- Total plans completed: 38 (v1.0 milestone + Phase 8-10 + 11-01, 11-03)
 - Average duration: ~38 min
 - Total execution time: ~20.4 hours
 
@@ -37,7 +37,7 @@ Progress: [█████████░] 90% (37 of 41 plans completed across 
 | 8. Device Management | 2 | ~5 min | ~2.5 min |
 | 9. Game Sessions | 4 | ~12 min | ~3 min |
 | 10. Leaderboards | 3 | ~7 min | ~2.5 min |
-| 11. Scheduled Tasks | 1 | ~3 min | ~3 min |
+| 11. Scheduled Tasks | 2 | ~5 min | ~2.5 min |
 
 **Recent Trend:**
 - Last 5 plans: stable at ~2-3 min per plan (service/integration plans)
@@ -81,6 +81,7 @@ Recent decisions affecting current work:
 - [10-03]: Subject-specific boards updated when session provides subject_id
 - [11-01]: Task Admin role created via after_install hook
 - [11-01]: prometheus_client for task metrics (Grafana compatible)
+- [11-03]: trigger_task() passes triggered_by="Manual" for accurate log attribution
 
 ### Pending Todos
 
@@ -88,11 +89,12 @@ None.
 
 ### Blockers/Concerns
 
-None. Phase 11 infrastructure complete:
+None. Phase 11 infrastructure and dashboard complete:
 - Memora Task Run Log DocType for execution history
 - Task Admin role with full permissions
 - prometheus_client metrics (TASK_RUNS, TASK_DURATION, USERS_PROCESSED, USERS_FAILED)
 - task_utils.py utilities (date helpers, logging, idempotency, notifications)
+- Task Dashboard at /app/task_dashboard for viewing history and manual triggers
 
 Research pitfalls being addressed:
 - Phase 8: Device limit race conditions (COMPLETE - addressed via Lua script)
@@ -104,6 +106,6 @@ Research pitfalls being addressed:
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 11-01-PLAN.md (Task Infrastructure Foundation)
+Stopped at: Completed 11-03-PLAN.md (Task Dashboard)
 Resume file: None
-Next action: Execute 11-02-PLAN.md (Streak Reset Task)
+Next action: Execute 11-02-PLAN.md (Streak Reset Task) or 11-04-PLAN.md (Leaderboard Archive Task)
