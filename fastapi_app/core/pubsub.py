@@ -86,6 +86,7 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 
 		msg_type = payload.get("type")
 		subject_id = payload.get("subject_id")
+		plan_id = payload.get("plan_id")
 		timestamp = payload.get("timestamp")
 
 		if msg_type == "hierarchy" and subject_id:
@@ -103,6 +104,22 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 				logger.warning(
 					"hierarchy_service_not_available",
 					subject_id=subject_id,
+				)
+		elif msg_type == "plan" and plan_id:
+			# Get plan service from app state
+			plan_service = getattr(app_state, "plan_service", None)
+
+			if plan_service:
+				await plan_service.invalidate(plan_id)
+				logger.info(
+					"plan_cache_invalidated",
+					plan_id=plan_id,
+					timestamp=timestamp,
+				)
+			else:
+				logger.warning(
+					"plan_service_not_available",
+					plan_id=plan_id,
 				)
 		else:
 			logger.debug(
