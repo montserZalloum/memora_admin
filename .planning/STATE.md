@@ -5,23 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 9 complete (verified), ready for Phase 10 (Leaderboards)
+**Current focus:** Phase 10 (Leaderboards) in progress
 
 ## Current Position
 
-Phase: 9 of 11 (Game Sessions)
-Plan: 4 of 4 in current phase (including gap closure plans)
-Status: Phase verified (6/6 must-haves passed)
-Last activity: 2026-02-03 - Completed 09-03 and 09-04 gap closure plans, verification passed
+Phase: 10 of 11 (Leaderboards)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-03 - Completed 10-01-PLAN.md (Leaderboard Service Foundation)
 
-Progress: [████████░░] 78% (32 of 41 plans completed across v1.0 and v1.1)
+Progress: [████████░░] 80% (33 of 41 plans completed across v1.0 and v1.1)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 32 (v1.0 milestone + Phase 8 + Phase 9)
+- Total plans completed: 33 (v1.0 milestone + Phase 8 + Phase 9 + 10-01)
 - Average duration: ~40 min
-- Total execution time: ~20.2 hours
+- Total execution time: ~20.3 hours
 
 **By Phase:**
 
@@ -36,12 +36,13 @@ Progress: [████████░░] 78% (32 of 41 plans completed across 
 | 7. Sync Mechanisms | 4 | ~3h | ~45 min |
 | 8. Device Management | 2 | ~5 min | ~2.5 min |
 | 9. Game Sessions | 4 | ~12 min | ~3 min |
+| 10. Leaderboards | 1 | ~3 min | ~3 min |
 
 **Recent Trend:**
-- Last 5 plans: stable at ~45 min per plan
-- Trend: Stable (Phases 8-9 service-only plans are faster)
+- Last 5 plans: stable at ~3 min per plan (service-only plans)
+- Trend: Fast execution for service/model-only plans
 
-*Updated after 09-02 completion*
+*Updated after 10-01 completion*
 
 ## Accumulated Context
 
@@ -71,32 +72,32 @@ Recent decisions affecting current work:
 - [09-04]: GET /sessions/current endpoint for crash recovery
 - [09-03]: Session check placed after access check, before unlock check (early failure pattern)
 - [09-03]: Uses has_active_session() O(1) EXISTS check for session validation
+- [10-01]: Composite score formula: xp + (1.0 - (timestamp % 1e9) / 1e9) for tie-breaking
+- [10-01]: Dense rank via ZCOUNT of scores strictly greater
+- [10-01]: Unranked users get rank = total + 1, xp = 0
+- [10-01]: ISO week format (%G-W%V) for weekly board keys
 
 ### Pending Todos
 
-None yet.
+None.
 
 ### Blockers/Concerns
 
-None. Phase 9 complete with gap closures:
-- GameSessionService with atomic Lua script for session lifecycle (09-01)
-- GameSession Pydantic models with from_redis_hash classmethod (09-01)
-- GAME_SESSION_TTL constant (3600s) for 1-hour auto-expiry (09-01)
-- POST /sessions/start with validation (09-02)
-- POST /sessions/end with completion flow (09-02)
-- GameSessionServiceDep dependency injection (09-02)
-- GET /sessions/current for crash recovery (09-04 gap closure)
-- Session validation on /progress/complete endpoint (09-03 gap closure)
+None. Phase 10 Plan 01 complete:
+- LeaderboardService with ZSET operations (get_top, get_my_rank, update_leaderboards)
+- Pydantic models (LeaderboardEntry, LeaderboardResponse, MyRankResponse, LeaderboardType)
+- compute_composite_score function for "earlier achiever wins" tie-breaking
+- Dense ranking via ZCOUNT for fair position display
 
 Research identified key pitfalls to address:
 - Phase 8: Device limit race conditions (COMPLETE - addressed via Lua script)
 - Phase 9: Session TTL memory leaks (COMPLETE - addressed via 1-hour TTL), connection pool exhaustion
-- Phase 10: Leaderboard hot key bottlenecks (hourly sharding strategy)
+- Phase 10: Leaderboard hot key bottlenecks (monitor; sharding strategy available if needed)
 - Phase 11: Timezone-naive streak resets (Asia/Amman enforcement), non-idempotent tasks
 
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Phase 9 complete, all 4 plans executed, verification passed (6/6)
+Stopped at: Completed 10-01-PLAN.md (Leaderboard Service Foundation)
 Resume file: None
-Next action: Plan Phase 10 - Leaderboards
+Next action: Execute 10-02-PLAN.md (Leaderboard API Endpoints)
