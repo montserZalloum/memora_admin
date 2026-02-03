@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-02)
 ## Current Position
 
 Phase: 9 of 11 (Game Sessions)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-03 - Completed 09-02-PLAN.md
+Plan: 4 of 4 in current phase (including gap closure plans)
+Status: Phase complete (with gap closures)
+Last activity: 2026-02-03 - Completed 09-04-PLAN.md (gap closure)
 
-Progress: [████████░░] 73% (30 of 41 plans completed across v1.0 and v1.1)
+Progress: [████████░░] 76% (31 of 41 plans completed across v1.0 and v1.1)
 
 ## Performance Metrics
 
@@ -67,6 +67,8 @@ Recent decisions affecting current work:
 - [09-02]: XP calculation function inlined in sessions.py to avoid circular imports
 - [09-02]: 403 NO_ACTIVE_SESSION for end without active session
 - [09-02]: Stage analytics pushed to INTERACTION_BUFFER_KEY via RPUSH
+- [09-04]: 404 for absent session (resource not found, not access denied)
+- [09-04]: GET /sessions/current endpoint for crash recovery
 
 ### Pending Todos
 
@@ -74,13 +76,14 @@ None yet.
 
 ### Blockers/Concerns
 
-None. Phase 9 complete:
+None. Phase 9 complete with gap closures:
 - GameSessionService with atomic Lua script for session lifecycle (09-01)
 - GameSession Pydantic models with from_redis_hash classmethod (09-01)
 - GAME_SESSION_TTL constant (3600s) for 1-hour auto-expiry (09-01)
 - POST /sessions/start with validation (09-02)
 - POST /sessions/end with completion flow (09-02)
 - GameSessionServiceDep dependency injection (09-02)
+- GET /sessions/current for crash recovery (09-04 gap closure)
 
 Research identified key pitfalls to address:
 - Phase 8: Device limit race conditions (COMPLETE - addressed via Lua script)
@@ -91,6 +94,6 @@ Research identified key pitfalls to address:
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 09-02-PLAN.md (Phase 9 complete)
+Stopped at: Completed 09-04-PLAN.md (Phase 9 gap closure complete)
 Resume file: None
-Next action: Execute Phase 10 - Leaderboard
+Next action: Execute remaining gap closure plans or Phase 10 - Leaderboard
