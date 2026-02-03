@@ -18,6 +18,7 @@ from fastapi_app.services.progress import ProgressService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.device import DeviceService
+from fastapi_app.services.game_session import GameSessionService
 from fastapi_app.services.wallet import WalletService
 
 # Common dependencies
@@ -122,6 +123,15 @@ async def get_device_service(request: Request) -> DeviceService:
 
 
 DeviceServiceDep = Annotated[DeviceService, Depends(get_device_service)]
+
+
+async def get_game_session_service(request: Request) -> GameSessionService:
+    """Get GameSessionService with Redis from app state."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    return GameSessionService(redis_client)
+
+
+GameSessionServiceDep = Annotated[GameSessionService, Depends(get_game_session_service)]
 
 
 # Singleton for FrappeClient
