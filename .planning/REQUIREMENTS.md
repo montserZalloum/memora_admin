@@ -26,8 +26,8 @@ Requirements for v1.1 feature expansion. Each maps to roadmap phases.
 
 ### Device Management
 
-- [ ] **DEVICE-01**: Device is registered with metadata on login
-- [ ] **DEVICE-02**: Login is rejected when user exceeds 3-device limit
+- [x] **DEVICE-01**: Device is registered with metadata on login
+- [x] **DEVICE-02**: Login is rejected when user exceeds 3-device limit
 
 ### Scheduled Tasks
 
@@ -76,8 +76,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DEVICE-01 | Phase 8 | Pending |
-| DEVICE-02 | Phase 8 | Pending |
+| DEVICE-01 | Phase 8 | Complete |
+| DEVICE-02 | Phase 8 | Complete |
 | SESSION-01 | Phase 9 | Pending |
 | SESSION-02 | Phase 9 | Pending |
 | SESSION-03 | Phase 9 | Pending |
