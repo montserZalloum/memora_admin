@@ -8,6 +8,7 @@ from fastapi_app.models.auth import (
     TokenPayload,
     TokenResponse,
 )
+from fastapi_app.models.plan import PlanManifest, PlanSubject
 from fastapi_app.models.progress import (
     CompleteRequest,
     CompleteResponse,
@@ -32,6 +33,9 @@ __all__ = [
     "RefreshRequest",
     "TokenPayload",
     "TokenResponse",
+    # Plan models
+    "PlanManifest",
+    "PlanSubject",
     # Progress models
     "CompleteRequest",
     "CompleteResponse",
