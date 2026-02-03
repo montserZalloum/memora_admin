@@ -18,6 +18,7 @@ from fastapi_app.api.deps import (
 )
 from fastapi_app.core.constants import INTERACTION_BUFFER_KEY
 from fastapi_app.models.game_session import (
+	CurrentSessionResponse,
 	EndSessionRequest,
 	EndSessionResponse,
 	StartSessionRequest,
@@ -56,6 +57,46 @@ def _calculate_xp_award(
 
 	# Floor the result per RESEARCH.md recommendation
 	return int(base * multiplier)
+
+
+@router.get("/current", response_model=CurrentSessionResponse)
+async def get_current_session(
+	user: CurrentUser,
+	game_session_service: GameSessionServiceDep,
+) -> CurrentSessionResponse:
+	"""
+	Get current active session for user.
+
+	Per VERIFICATION gap closure:
+	- Enables session recovery after app crash
+	- Client can check if session exists before restarting lesson
+	- Returns 404 if no active session
+
+	Args:
+		user: Current authenticated user
+		game_session_service: Session management service
+
+	Returns:
+		CurrentSessionResponse with session details
+
+	Raises:
+		404: No active session
+	"""
+	session = await game_session_service.get_active_session(user.sub)
+
+	if not session:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail={"code": "NO_ACTIVE_SESSION", "message": "No active session"},
+		)
+
+	return CurrentSessionResponse(
+		session_id=session.session_id,
+		lesson_id=session.lesson_id,
+		subject_id=session.subject_id,
+		device_id=session.device_id,
+		started_at=session.started_at,
+	)
 
 
 @router.post("/start", response_model=StartSessionResponse)
