@@ -120,21 +120,21 @@ Plans:
 - [x] 09-04-PLAN.md — [Gap closure] GET /sessions/current for session recovery
 
 #### Phase 10: Leaderboards
-**Goal**: Competitive rankings with daily/all-time/streak leaderboards
-**Depends on**: Phase 5 (XP and streak mechanics), Phase 9 (session context optional)
-**Requirements**: LEADER-01, LEADER-02, LEADER-03, LEADER-04, LEADER-05
+**Goal**: Competitive XP rankings via Redis sorted sets (daily/weekly/all-time)
+**Depends on**: Phase 5 (XP and streak mechanics), Phase 9 (session context for subject)
+**Requirements**: LEADER-01, LEADER-02, LEADER-04
 **Success Criteria** (what must be TRUE):
   1. User can view all-time XP leaderboard with top N players
   2. User can view daily XP leaderboard (resets at midnight Asia/Amman)
-  3. User can view streak leaderboard ranked by current streak length
-  4. User can retrieve their rank position in any leaderboard
-  5. Yesterday's daily leaderboard is archived for 30 days
-**Plans**: TBD
+  3. User can view weekly XP leaderboard (resets Friday midnight Asia/Amman)
+  4. User can retrieve their rank position with neighbors context
+  5. Leaderboards update atomically when XP is awarded
+**Plans**: 3 plans
 
 Plans:
-- [ ] 10-01: TBD
-- [ ] 10-02: TBD
-- [ ] 10-03: TBD
+- [ ] 10-01-PLAN.md — Leaderboard service foundation (models, ZSET operations, composite scoring)
+- [ ] 10-02-PLAN.md — Leaderboard API endpoints (GET /leaderboard/{type}, GET /leaderboard/{type}/me)
+- [ ] 10-03-PLAN.md — XP award integration (session end updates leaderboards)
 
 #### Phase 11: Scheduled Tasks
 **Goal**: Automated maintenance for streaks, sessions, and leaderboards
@@ -167,5 +167,5 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 7. Sync Mechanisms | v1.0 | 4/4 | Complete | 2026-02-02 |
 | 8. Device Management | v1.1 | 2/2 | Complete | 2026-02-03 |
 | 9. Game Sessions | v1.1 | 4/4 | Complete | 2026-02-03 |
-| 10. Leaderboards | v1.1 | 0/TBD | Not started | - |
+| 10. Leaderboards | v1.1 | 0/3 | Planned | - |
 | 11. Scheduled Tasks | v1.1 | 0/TBD | Not started | - |
