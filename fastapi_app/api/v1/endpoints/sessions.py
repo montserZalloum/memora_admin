@@ -11,6 +11,7 @@ from fastapi_app.api.deps import (
 	CurrentUser,
 	GameSessionServiceDep,
 	HierarchyServiceDep,
+	LeaderboardServiceDep,
 	ProgressServiceDep,
 	RedisClient,
 	SettingsServiceDep,
@@ -186,6 +187,7 @@ async def end_session(
 	hierarchy_service: HierarchyServiceDep,
 	progress_service: ProgressServiceDep,
 	wallet_service: WalletServiceDep,
+	leaderboard_service: LeaderboardServiceDep,
 	settings_service: SettingsServiceDep,
 	redis_client: RedisClient,
 ) -> EndSessionResponse:
@@ -285,6 +287,15 @@ async def end_session(
 	# Award XP atomically
 	new_total_xp = await wallet_service.award_xp(user.sub, xp_awarded)
 
+	# Update leaderboards with new XP
+	# Per CONTEXT.md: subject_id enables filtered leaderboards
+	await leaderboard_service.update_leaderboards(
+		player_id=user.sub,
+		xp_amount=xp_awarded,
+		new_total_xp=new_total_xp,
+		subject_id=session.subject_id,
+	)
+
 	logger.info(
 		"session_ended",
 		user_id=user.sub,
@@ -297,6 +308,7 @@ async def end_session(
 		streak=streak,
 		streak_updated=streak_updated,
 		stages_count=len(request.stages),
+		leaderboards_updated=True,
 	)
 
 	return EndSessionResponse(
