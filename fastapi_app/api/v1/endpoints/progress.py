@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, status
 from fastapi_app.api.deps import (
     AccessServiceDep,
     CurrentUser,
+    GameSessionServiceDep,
     HierarchyServiceDep,
     ProgressServiceDep,
     SettingsServiceDep,
@@ -75,6 +76,7 @@ async def complete_lesson(
     access_service: AccessServiceDep,
     wallet_service: WalletServiceDep,
     settings_service: SettingsServiceDep,
+    game_session_service: GameSessionServiceDep,
 ) -> CompleteResponse:
     """
     Mark a lesson as complete.
@@ -112,6 +114,14 @@ async def complete_lesson(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"code": "NO_ACCESS", "message": "Content access required"},
+        )
+
+    # Check active session (enforces session-based flow per VERIFICATION gap)
+    has_session = await game_session_service.has_active_session(user.sub)
+    if not has_session:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"code": "NO_ACTIVE_SESSION", "message": "Active session required"},
         )
 
     # Get completed bits for unlock calculation
