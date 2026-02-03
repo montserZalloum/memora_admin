@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 10 (Leaderboards) in progress
+**Current focus:** Phase 10 (Leaderboards) Wave 2 complete
 
 ## Current Position
 
 Phase: 10 of 11 (Leaderboards)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-03 - Completed 10-01-PLAN.md (Leaderboard Service Foundation)
+Plan: 3 of 3 in current phase
+Status: Phase complete
+Last activity: 2026-02-03 - Completed 10-03-PLAN.md (Leaderboard Integration)
 
-Progress: [████████░░] 80% (33 of 41 plans completed across v1.0 and v1.1)
+Progress: [█████████░] 88% (36 of 41 plans completed across v1.0 and v1.1)
 
 ## Performance Metrics
 
@@ -36,13 +36,13 @@ Progress: [████████░░] 80% (33 of 41 plans completed across 
 | 7. Sync Mechanisms | 4 | ~3h | ~45 min |
 | 8. Device Management | 2 | ~5 min | ~2.5 min |
 | 9. Game Sessions | 4 | ~12 min | ~3 min |
-| 10. Leaderboards | 1 | ~3 min | ~3 min |
+| 10. Leaderboards | 3 | ~7 min | ~2.5 min |
 
 **Recent Trend:**
-- Last 5 plans: stable at ~3 min per plan (service-only plans)
-- Trend: Fast execution for service/model-only plans
+- Last 5 plans: stable at ~2-3 min per plan (service/integration plans)
+- Trend: Fast execution for service-only and integration plans
 
-*Updated after 10-01 completion*
+*Updated after 10-03 completion*
 
 ## Accumulated Context
 
@@ -76,6 +76,8 @@ Recent decisions affecting current work:
 - [10-01]: Dense rank via ZCOUNT of scores strictly greater
 - [10-01]: Unranked users get rank = total + 1, xp = 0
 - [10-01]: ISO week format (%G-W%V) for weekly board keys
+- [10-03]: Leaderboard update happens AFTER wallet.award_xp() for accurate composite score
+- [10-03]: Subject-specific boards updated when session provides subject_id
 
 ### Pending Todos
 
@@ -83,21 +85,23 @@ None.
 
 ### Blockers/Concerns
 
-None. Phase 10 Plan 01 complete:
+None. Phase 10 complete:
 - LeaderboardService with ZSET operations (get_top, get_my_rank, update_leaderboards)
 - Pydantic models (LeaderboardEntry, LeaderboardResponse, MyRankResponse, LeaderboardType)
 - compute_composite_score function for "earlier achiever wins" tie-breaking
 - Dense ranking via ZCOUNT for fair position display
+- API endpoints for top N and my-rank queries
+- Session integration: leaderboards updated on every XP award
 
 Research identified key pitfalls to address:
 - Phase 8: Device limit race conditions (COMPLETE - addressed via Lua script)
 - Phase 9: Session TTL memory leaks (COMPLETE - addressed via 1-hour TTL), connection pool exhaustion
-- Phase 10: Leaderboard hot key bottlenecks (monitor; sharding strategy available if needed)
+- Phase 10: Leaderboard hot key bottlenecks (COMPLETE - monitor; sharding strategy available if needed)
 - Phase 11: Timezone-naive streak resets (Asia/Amman enforcement), non-idempotent tasks
 
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 10-01-PLAN.md (Leaderboard Service Foundation)
+Stopped at: Completed 10-03-PLAN.md (Leaderboard Integration)
 Resume file: None
-Next action: Execute 10-02-PLAN.md (Leaderboard API Endpoints)
+Next action: Execute Phase 11 (Analytics Pipeline)
