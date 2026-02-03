@@ -7,3 +7,7 @@ DIRTY_WALLETS_KEY = "memora:dirty:wallets"
 
 # Interaction buffer key
 INTERACTION_BUFFER_KEY = "memora:buffer:interactions"
+
+# Game session TTL (1 hour in seconds)
+# Per CONTEXT.md: Sessions auto-expire after 1 hour
+GAME_SESSION_TTL = 3600
