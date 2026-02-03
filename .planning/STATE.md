@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 12 of 12 (Plan System Enhancement)
-Plan: 1 of 4 complete
+Plan: 2 of 4 complete (12-01, 12-03)
 Status: In progress
-Last activity: 2026-02-03 — Completed 12-01-PLAN.md (Grade-Major Linking)
+Last activity: 2026-02-03 — Completed 12-03-PLAN.md (Plan JSON Serving Endpoint)
 
-Progress: [##########] 100% v1.0+v1.1 (43 plans) | v1.2: 25% (1/4 plans)
+Progress: [##########] 100% v1.0+v1.1 (43 plans) | v1.2: 50% (2/4 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 44 (v1.0 + v1.1 + v1.2)
+- Total plans completed: 45 (v1.0 + v1.1 + v1.2)
 - Milestones shipped: 2
 
 **By Milestone:**
@@ -28,7 +28,7 @@ Progress: [##########] 100% v1.0+v1.1 (43 plans) | v1.2: 25% (1/4 plans)
 |-----------|--------|-------|--------|
 | v1.0 MVP | 7 | 30 | Shipped 2026-02-02 |
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
-| v1.2 Plan System Enhancement | 1 | 4 | In Progress (1/4) |
+| v1.2 Plan System Enhancement | 1 | 4 | In Progress (2/4) |
 
 ## Accumulated Context
 
@@ -41,17 +41,18 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Plan JSON trigger: Build queue with 2-min debounce (consistency with Subject JSON)
 - `is_free_preview`: Derived from subject's free units/topics, not stored
 - Server-side query via frm.set_query for Major filtering (prevents client-side data exposure)
+- Plan manifest caching: 1hr TTL with Redis, follows HierarchyService pattern
 
 ### Pending Todos
 
 - [x] Execute Phase 12 Plan 01 (Grade-Major Linking)
 - [ ] Execute Phase 12 Plan 02 (Plan JSON Generation)
-- [ ] Execute Phase 12 Plan 03 (is_free_preview field)
+- [x] Execute Phase 12 Plan 03 (Plan JSON Serving Endpoint)
 - [ ] Execute Phase 12 Plan 04 (Final integration)
 
 ### Blockers/Concerns
 
-None — Plan 01 complete, ready for Plan 02.
+None — Plans 01 and 03 complete, ready for Plan 02.
 
 **Deferred from v1.1:**
 - LEADER-03: Streak leaderboard
@@ -61,12 +62,13 @@ None — Plan 01 complete, ready for Plan 02.
 
 ## Session Continuity
 
-Last session: 2026-02-03 15:19:15Z
-Stopped at: Completed 12-01-PLAN.md
+Last session: 2026-02-03 15:25:25Z
+Stopped at: Completed 12-03-PLAN.md
 Resume file: None
-Next action: Execute 12-02-PLAN.md (Plan JSON Generation)
+Next action: Execute 12-02-PLAN.md (Plan JSON Generation) or 12-04-PLAN.md
 
 ### Roadmap Evolution
 
 - Phase 12 added: Plan System Enhancement (Grade-Major linking + Plan JSON generation)
 - 12-01 complete: Memora Grade Major child table + Plan form filtering
+- 12-03 complete: FastAPI endpoint /api/v1/plans/{plan_id}/manifest with PlanService caching
