@@ -31,9 +31,9 @@ Requirements for v1.1 feature expansion. Each maps to roadmap phases.
 
 ### Scheduled Tasks
 
-- [ ] **SCHED-01**: Daily streak reset runs at midnight for users who missed activity
-- [ ] **SCHED-02**: Hourly session cleanup removes expired session keys
-- [ ] **SCHED-03**: Daily leaderboard reset archives yesterday and creates new daily key
+- [x] **SCHED-01**: Daily streak reset runs at midnight for users who missed activity
+- [x] **SCHED-02**: Hourly session cleanup removes expired session keys
+- [x] **SCHED-03**: Daily leaderboard reset archives yesterday and creates new daily key
 
 ## Future Requirements
 
@@ -89,9 +89,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | LEADER-03 | Phase 10 | Pending |
 | LEADER-04 | Phase 10 | Complete |
 | LEADER-05 | Phase 10 | Pending |
-| SCHED-01 | Phase 11 | Pending |
-| SCHED-02 | Phase 11 | Pending |
-| SCHED-03 | Phase 11 | Pending |
+| SCHED-01 | Phase 11 | Complete |
+| SCHED-02 | Phase 11 | Complete |
+| SCHED-03 | Phase 11 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 16 total
@@ -106,4 +106,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-02*
-*Last updated: 2026-02-03 after Phase 9 completion*
+*Last updated: 2026-02-03 after Phase 11 completion*

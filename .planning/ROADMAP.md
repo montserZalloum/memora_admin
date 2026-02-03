@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.0 MVP** - Phases 1-7 (shipped 2026-02-02)
-- 🚧 **v1.1 Feature Expansion** - Phases 8-11 (current)
+- ✅ **v1.1 Feature Expansion** - Phases 8-11 (shipped 2026-02-03)
 
 ## Phases
 
@@ -80,9 +80,11 @@ Plans:
 
 </details>
 
-### 🚧 v1.1 Feature Expansion (In Progress)
+### ✅ v1.1 Feature Expansion (Complete)
 
 **Milestone Goal:** Extend the platform with game sessions for lesson flow tracking, competitive leaderboards, device management for security, and scheduled maintenance tasks.
+
+**Shipped:** 2026-02-03
 
 #### Phase 8: Device Management ✓
 **Goal**: Secure device registration with 3-device limit enforcement
@@ -137,7 +139,7 @@ Plans:
 - [x] 10-02-PLAN.md — Leaderboard API endpoints (GET /leaderboard/{type}, GET /leaderboard/{type}/me)
 - [x] 10-03-PLAN.md — XP award integration (session end updates leaderboards)
 
-#### Phase 11: Scheduled Tasks
+#### Phase 11: Scheduled Tasks ✓
 **Goal**: Automated maintenance for streaks, sessions, and leaderboards
 **Depends on**: Phase 5 (streaks), Phase 9 (sessions), Phase 10 (leaderboards)
 **Requirements**: SCHED-01, SCHED-02, SCHED-03
@@ -146,12 +148,14 @@ Plans:
   2. Expired session keys are removed hourly
   3. Daily leaderboard archives yesterday's data and creates new key at midnight
   4. All scheduled tasks are idempotent (safe on retry/duplicate execution)
-**Plans**: 3 plans
+**Plans**: 4 plans
+**Completed**: 2026-02-03
 
 Plans:
-- [ ] 11-01-PLAN.md — Task infrastructure foundation (DocType, Prometheus metrics, task_utils.py)
-- [ ] 11-02-PLAN.md — Core scheduled tasks (streak_reset, session_cleanup, leaderboard_reset) + hooks.py
-- [ ] 11-03-PLAN.md — Task Dashboard page with manual trigger API
+- [x] 11-01-PLAN.md — Task infrastructure foundation (DocType, Prometheus metrics, task_utils.py)
+- [x] 11-02-PLAN.md — Core scheduled tasks (streak_reset, session_cleanup, leaderboard_reset)
+- [x] 11-03-PLAN.md — Task Dashboard page with manual trigger API
+- [x] 11-04-PLAN.md — Scheduler hooks registration in hooks.py
 
 ## Progress
 
@@ -170,4 +174,4 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 8. Device Management | v1.1 | 2/2 | Complete | 2026-02-03 |
 | 9. Game Sessions | v1.1 | 4/4 | Complete | 2026-02-03 |
 | 10. Leaderboards | v1.1 | 3/3 | Complete | 2026-02-03 |
-| 11. Scheduled Tasks | v1.1 | 0/3 | Planned | - |
+| 11. Scheduled Tasks | v1.1 | 4/4 | Complete | 2026-02-03 |
