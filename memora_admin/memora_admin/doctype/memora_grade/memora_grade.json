@@ -8,7 +8,8 @@
  "engine": "InnoDB",
  "field_order": [
   "grade_title",
-  "sort_order"
+  "sort_order",
+  "majors"
  ],
  "fields": [
   {
@@ -23,12 +24,19 @@
    "fieldname": "sort_order",
    "fieldtype": "Int",
    "label": "Sort Order"
+  },
+  {
+   "description": "Majors available for this grade",
+   "fieldname": "majors",
+   "fieldtype": "Table",
+   "label": "Majors",
+   "options": "Memora Grade Major"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 10:37:54.614848",
+ "modified": "2026-02-03 15:17:37.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Grade",
