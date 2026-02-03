@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.2.1 Gap Closure — Phase 13
+**Current focus:** v1.2.1 Gap Closure Complete
 
 ## Current Position
 
 Phase: 13 of 13 (Plan Cache Invalidation Fix)
-Plan: 0 of 1 complete
-Status: Pending planning
-Last activity: 2026-02-03 — Created gap closure phase from v1.2 audit
+Plan: 1 of 1 complete
+Status: Phase complete
+Last activity: 2026-02-03 — Completed 13-01-PLAN.md
 
-Progress: [##########] 100% v1.0+v1.1+v1.2 (47 plans) | Phase 13 pending
+Progress: [###########] 100% v1.0+v1.1+v1.2+v1.2.1 (48 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 47 (v1.0 + v1.1 + v1.2)
-- Milestones shipped: 3
+- Total plans completed: 48 (v1.0 + v1.1 + v1.2 + v1.2.1)
+- Milestones shipped: 4
 
 **By Milestone:**
 
@@ -29,6 +29,7 @@ Progress: [##########] 100% v1.0+v1.1+v1.2 (47 plans) | Phase 13 pending
 | v1.0 MVP | 7 | 30 | Shipped 2026-02-02 |
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
+| v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
 
 ## Accumulated Context
 
@@ -47,18 +48,23 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Build worker routes by target_type (minimal change to existing infrastructure) - IMPLEMENTED
 - Cache invalidation sends separate types for plan/hierarchy - IMPLEMENTED
 
+**Phase 13 Decisions:**
+- PlanService registration follows HierarchyService pattern - IMPLEMENTED
+- elif dispatch for plan messages maintains proper flow - IMPLEMENTED
+
 ### Pending Todos
 
 - [x] Execute Phase 12 Plan 01 (Grade-Major Linking)
 - [x] Execute Phase 12 Plan 02 (Plan JSON Generation)
 - [x] Execute Phase 12 Plan 03 (Plan JSON Serving Endpoint)
 - [x] Execute Phase 12 Plan 04 (Build Queue Integration)
+- [x] Execute Phase 13 Plan 01 (Wire Plan Cache Invalidation)
 
 ### Blockers/Concerns
 
-**Critical gap from v1.2 audit:**
-- FastAPI pubsub does not handle `type="plan"` cache invalidation messages
-- Plan cache never invalidated after rebuild (serves stale until 1hr TTL)
+**Resolved:**
+- ~~FastAPI pubsub does not handle `type="plan"` cache invalidation messages~~ Fixed in 13-01
+- ~~Plan cache never invalidated after rebuild (serves stale until 1hr TTL)~~ Fixed in 13-01
 
 **Deferred from v1.1:**
 - LEADER-03: Streak leaderboard
@@ -68,10 +74,10 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-02-03 18:30:00Z
-Stopped at: Created gap closure phase 13 from v1.2 audit
+Last session: 2026-02-03 19:00:00Z
+Stopped at: Completed 13-01-PLAN.md (Phase 13 complete)
 Resume file: None
-Next action: `/gsd:plan-phase 13` to create execution plan
+Next action: All phases complete
 
 ### Roadmap Evolution
 
@@ -82,3 +88,4 @@ Next action: `/gsd:plan-phase 13` to create execution plan
 - 12-04 complete: Build queue integration, hooks registration, Frappe API fallback
 - **v1.2 audit**: Found integration gap — Plan cache invalidation not wired
 - **Phase 13 added**: Plan Cache Invalidation Fix (gap closure from v1.2 audit)
+- **13-01 complete**: PlanService registered, pubsub handler wired (gap closed)
