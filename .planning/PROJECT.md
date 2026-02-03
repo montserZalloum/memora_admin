@@ -60,9 +60,20 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - Hourly session cleanup removes expired keys — v1.1
 - Daily leaderboard archival with 90-day retention — v1.1
 
+**v1.2 Plan System Enhancement:**
+- Grade-Major child table linking with Plan form filtering — v1.2
+- Plan-centric JSON generation (manifest, subject hierarchies, unit content) — v1.2
+- FastAPI endpoint for Plan manifest serving with Redis caching — v1.2
+- Build queue integration with hooks for Plan, Plan Subject, Plan Overrider — v1.2
+- Plan Overrides applied during generation — v1.2
+
+**v1.2.1 Gap Closure:**
+- Plan cache invalidation wired to PlanService.invalidate() — v1.2.1
+- Complete end-to-end flow: Build → CDN → Cache invalidation — v1.2.1
+
 ### Active
 
-**Next Milestone: v1.2**
+**Next Milestone: v1.3**
 
 Pending items from v1.1 audit:
 - [ ] Streak leaderboard ranks players by current streak length (LEADER-03)
@@ -84,12 +95,12 @@ Pending items from v1.1 audit:
 
 ## Context
 
-**Current State (v1.1 shipped):**
-- FastAPI sidecar: ~5,600 lines Python
-- Frappe module: ~3,700 lines Python
-- 31 Frappe DocTypes + Memora Task Run Log
-- 11 phases completed, 43 plans executed
-- 2 milestones shipped (v1.0, v1.1)
+**Current State (v1.2.1 shipped):**
+- FastAPI sidecar: ~6,200 lines Python
+- Frappe module: ~4,300 lines Python
+- 32 Frappe DocTypes (including Memora Grade Major child table)
+- 13 phases completed, 48 plans executed
+- 4 milestones shipped (v1.0, v1.1, v1.2, v1.2.1)
 
 **Technical Environment:**
 - Frappe v15 for admin panel and content management
@@ -139,6 +150,12 @@ Pending items from v1.1 audit:
 | Dense ranking | No gaps in rank sequence (1,1,3 not 1,1,2) | Good |
 | SCAN for scheduled tasks | Safe iteration without blocking Redis | Good |
 | Idempotent task execution | has_run_today() prevents duplicate effects | Good |
+| Grade-Major child table (A2) | Flexible linking, Plan form filtering by grade | Good |
+| Plan-centric folder structure | Subjects nested in plans, lessons shared at root | Good |
+| Plan manifest caching (1hr TTL) | Follows HierarchyService pattern, reduces Frappe calls | Good |
+| Plan Overrides loaded once per plan | O(1) lookup via dict, efficient generation | Good |
+| PlanService registration pattern | Consistent with HierarchyService for pubsub dispatch | Good |
+| elif dispatch for plan messages | Only one handler fires per message type | Good |
 
 ---
-*Last updated: 2026-02-03 after v1.1 milestone*
+*Last updated: 2026-02-03 after v1.2.1 milestone*

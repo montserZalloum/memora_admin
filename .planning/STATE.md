@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.2.1 Gap Closure Complete
+**Current focus:** Planning next milestone (v1.3)
 
 ## Current Position
 
-Phase: 13 of 13 (Plan Cache Invalidation Fix)
-Plan: 1 of 1 complete
-Status: Phase complete
-Last activity: 2026-02-03 — Completed 13-01-PLAN.md
+Phase: 13 of 13 complete
+Plan: All complete
+Status: Milestone v1.2.1 shipped
+Last activity: 2026-02-03 — v1.2.1 Gap Closure complete
 
-Progress: [###########] 100% v1.0+v1.1+v1.2+v1.2.1 (48 plans)
+Progress: [###########] 100% (48 plans across 4 milestones)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 48 (v1.0 + v1.1 + v1.2 + v1.2.1)
+- Total plans completed: 48
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -37,55 +37,20 @@ Progress: [###########] 100% v1.0+v1.1+v1.2+v1.2.1 (48 plans)
 
 All decisions logged in PROJECT.md Key Decisions table.
 
-**Phase 12 Decisions:**
-- Grade-Major linking: Option A2 (child table `Memora Grade Major`) - IMPLEMENTED
-- Plan JSON trigger: Build queue with 2-min debounce (consistency with Subject JSON) - IMPLEMENTED
-- `is_free_preview`: Derived from subject's free units/topics, not stored - IMPLEMENTED
-- Server-side query via frm.set_query for Major filtering (prevents client-side data exposure)
-- Plan manifest caching: 1hr TTL with Redis, follows HierarchyService pattern - IMPLEMENTED
-- Plan Overrides loaded once per plan for efficiency (O(1) lookup via dict) - IMPLEMENTED
-- Lesson JSON files shared at root level (not per-plan) - IMPLEMENTED
-- Build worker routes by target_type (minimal change to existing infrastructure) - IMPLEMENTED
-- Cache invalidation sends separate types for plan/hierarchy - IMPLEMENTED
-
-**Phase 13 Decisions:**
-- PlanService registration follows HierarchyService pattern - IMPLEMENTED
-- elif dispatch for plan messages maintains proper flow - IMPLEMENTED
-
 ### Pending Todos
 
-- [x] Execute Phase 12 Plan 01 (Grade-Major Linking)
-- [x] Execute Phase 12 Plan 02 (Plan JSON Generation)
-- [x] Execute Phase 12 Plan 03 (Plan JSON Serving Endpoint)
-- [x] Execute Phase 12 Plan 04 (Build Queue Integration)
-- [x] Execute Phase 13 Plan 01 (Wire Plan Cache Invalidation)
+None — milestone complete.
 
 ### Blockers/Concerns
 
-**Resolved:**
-- ~~FastAPI pubsub does not handle `type="plan"` cache invalidation messages~~ Fixed in 13-01
-- ~~Plan cache never invalidated after rebuild (serves stale until 1hr TTL)~~ Fixed in 13-01
-
-**Deferred from v1.1:**
+**Deferred to v1.3:**
 - LEADER-03: Streak leaderboard
-- LEADER-05: Daily leaderboard 30-day archival clarity
 - Profile lookup for leaderboard display names
 - Device self-management (list, deauthorize)
 
 ## Session Continuity
 
-Last session: 2026-02-03 19:00:00Z
-Stopped at: Completed 13-01-PLAN.md (Phase 13 complete)
+Last session: 2026-02-03
+Stopped at: Milestone v1.2.1 complete
 Resume file: None
-Next action: All phases complete
-
-### Roadmap Evolution
-
-- Phase 12 added: Plan System Enhancement (Grade-Major linking + Plan JSON generation)
-- 12-01 complete: Memora Grade Major child table + Plan form filtering
-- 12-02 complete: plan_generator.py with generate_plan_json() function
-- 12-03 complete: FastAPI endpoint /api/v1/plans/{plan_id}/manifest with PlanService caching
-- 12-04 complete: Build queue integration, hooks registration, Frappe API fallback
-- **v1.2 audit**: Found integration gap — Plan cache invalidation not wired
-- **Phase 13 added**: Plan Cache Invalidation Fix (gap closure from v1.2 audit)
-- **13-01 complete**: PlanService registered, pubsub handler wired (gap closed)
+Next action: `/gsd:new-milestone` for v1.3 planning

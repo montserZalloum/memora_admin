@@ -1,5 +1,52 @@
 # Project Milestones: Memora Platform
 
+## v1.2.1 Gap Closure (Shipped: 2026-02-03)
+
+**Delivered:** Closed critical integration gap where Plan cache invalidation messages were not wired to PlanService.
+
+**Phases completed:** 13 (1 plan total)
+
+**Key accomplishments:**
+- Wired Plan cache invalidation into FastAPI pubsub listener
+- PlanService registered in FastAPI lifespan following HierarchyService pattern
+- Plan cache now clears within seconds of rebuild (previously stale until 1hr TTL)
+- Complete end-to-end flow: Build worker → pubsub → PlanService.invalidate() → Redis DELETE
+
+**Stats:**
+- +25 lines Python (2 files modified)
+- 1 phase, 1 plan
+- Same day as v1.2 (2026-02-03)
+
+**Git range:** `feat(13-01)` (2 commits)
+
+**What's next:** v1.3 with streak leaderboard, profile display names, and device self-management
+
+---
+
+## v1.2 Plan System Enhancement (Shipped: 2026-02-03)
+
+**Delivered:** Academic plan system with Grade-Major linking and plan-centric JSON generation for mobile app consumption.
+
+**Phases completed:** 12 (4 plans total)
+
+**Key accomplishments:**
+- Grade-Major child table linking with Plan form filtering
+- Plan-centric JSON generation (manifest, subject hierarchies, unit content)
+- FastAPI endpoint for Plan manifest serving with Redis caching (1hr TTL)
+- Build queue integration with hooks for Plan, Plan Subject, Plan Overrider changes
+- Plan Overrides applied during generation (hidden units/topics, adjusted is_free flags)
+
+**Stats:**
+- ~600 lines Python added
+- 1 phase, 4 plans
+- Same day (2026-02-03)
+
+**Git range:** `feat(12-01)` → `feat(12-04)`
+
+**What's next:** v1.2.1 gap closure (Plan cache invalidation wiring)
+
+---
+
 ## v1.1 Feature Expansion (Shipped: 2026-02-03)
 
 **Delivered:** Extended platform with game sessions for lesson flow tracking, competitive leaderboards, device management for security, and scheduled maintenance tasks.
