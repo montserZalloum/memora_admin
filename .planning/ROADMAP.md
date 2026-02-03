@@ -4,6 +4,34 @@
 
 - SHIPPED **v1.0 MVP** — Phases 1-7 (shipped 2026-02-02)
 - SHIPPED **v1.1 Feature Expansion** — Phases 8-11 (shipped 2026-02-03)
+- **v1.2 Plan System Enhancement** — Phases 12+ (in progress)
+
+## Current Milestone: v1.2 Plan System Enhancement
+
+### Phase 12: Plan System Enhancement
+
+**Goal:** Grade-Major linking + Plan JSON generation for mobile app consumption
+**Depends on:** Phase 6 (Content Pipeline)
+**Plans:** 4 plans in 3 waves
+
+Plans:
+- [ ] 12-01-PLAN.md — Grade-Major child table + Plan form Major filtering (Wave 1)
+- [ ] 12-02-PLAN.md — Plan JSON generator with Plan Overrides and is_free_preview (Wave 2)
+- [ ] 12-03-PLAN.md — FastAPI endpoint for Plan JSON serving + Redis caching (Wave 2)
+- [ ] 12-04-PLAN.md — Integration: hooks, build worker, cache invalidation (Wave 3)
+
+**Details:**
+
+Key deliverables:
+- `Memora Grade Major` child table for Grade -> Majors relationship
+- Plan-centric JSON structure (subjects nested inside plans, lessons shared)
+- `is_free_preview` derived from subject's free units/topics (with Plan Overrides)
+- FastAPI endpoint with Redis caching for Plan JSON serving
+- Build queue integration with hooks for automatic regeneration
+
+See: `.planning/milestones/v1.2-ROADMAP.md` for full details
+
+---
 
 ## Phases
 
@@ -49,5 +77,6 @@ See: `.planning/milestones/v1.1-ROADMAP.md` for full details
 | 9. Game Sessions | v1.1 | 4/4 | Complete | 2026-02-03 |
 | 10. Leaderboards | v1.1 | 3/3 | Complete | 2026-02-03 |
 | 11. Scheduled Tasks | v1.1 | 4/4 | Complete | 2026-02-03 |
+| 12. Plan System Enhancement | v1.2 | 0/4 | Planned | — |
 
-**Total:** 11 phases, 43 plans completed across 2 milestones
+**Total:** 12 phases, 43 plans completed across 2 milestones (+4 planned for v1.2)
