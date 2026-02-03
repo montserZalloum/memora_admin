@@ -6,12 +6,14 @@ import jwt
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from fastapi_app.api.deps import RedisClient, SettingsDep
+from fastapi_app.api.deps import RedisClient, SettingsDep, get_frappe_client
 from fastapi_app.core.security import create_access_token, create_refresh_token, decode_token
 from fastapi_app.models.auth import LoginRequest, RefreshRequest, TokenResponse
+from fastapi_app.services.device import DeviceService
 from fastapi_app.services.frappe import FrappeAuthService
 from fastapi_app.services.rate_limit import RateLimiter
 from fastapi_app.services.session import SessionService
+from fastapi_app.services.settings import SettingsService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -35,9 +37,23 @@ async def login(
     """
     Login with Frappe credentials, receive JWT tokens.
 
+    Requires X-Device-ID header for device registration.
     Rate limited: 10 attempts/min per IP, 5 attempts/min per account.
     New login invalidates any previous session.
+    Device registration enforces max_devices_per_player limit.
     """
+    # Require X-Device-ID header
+    device_id = request.headers.get("X-Device-ID")
+    if not device_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "DEVICE_ID_REQUIRED", "message": "X-Device-ID header required"},
+        )
+
+    # Extract optional headers for device info
+    user_agent = request.headers.get("User-Agent", "Unknown")
+    platform_hint = request.headers.get("X-Platform")  # Optional: iOS, Android, Web
+
     client_ip = _get_client_ip(request)
 
     # Check rate limits
@@ -70,6 +86,32 @@ async def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid credentials",
+        )
+
+    # Get device limit from settings
+    frappe_client = await get_frappe_client()
+    settings_service = SettingsService(redis, frappe_client)
+    game_settings = await settings_service.get_gamification_settings()
+    max_devices = game_settings.max_devices_per_player
+
+    # Register device (atomic with limit check)
+    device_service = DeviceService(redis, key_prefix=settings.redis_key_prefix)
+    device_result = await device_service.register_device(
+        user_id=user.user_id,
+        device_id=device_id,
+        user_agent=user_agent,
+        max_devices=max_devices,
+        platform_hint=platform_hint,
+    )
+
+    if not device_result.success:
+        # Per CONTEXT.md: HTTP 429 with specific message
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "code": "DEVICE_LIMIT_EXCEEDED",
+                "message": f"Device limit reached ({device_result.current_count}/{device_result.max_count}). Contact support to manage your devices.",
+            },
         )
 
     # Create new session (invalidates any existing session)
