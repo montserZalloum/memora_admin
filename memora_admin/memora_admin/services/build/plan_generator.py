@@ -45,22 +45,34 @@ def generate_plan_json(plan_id: str) -> list[dict]:
 	# Load Plan Overrides once for efficiency
 	overrides = _load_plan_overrides(plan_id)
 
-	# Get plan subjects from child table
-	plan_subjects = [ps.subject for ps in plan_doc.plan_subjects or []]
+	# Get plan subjects from child table (keep full objects for is_premium, alias_title)
+	plan_subjects = plan_doc.plan_subjects or []
 
 	if not plan_subjects:
 		logger.warning(f"Plan {plan_id} has no subjects, skipping")
 		return files
 
+	# Build lookup dict for Plan Subject metadata (is_premium, alias_title)
+	plan_subject_meta = {
+		ps.subject: {
+			"is_premium": bool(ps.is_premium) if hasattr(ps, "is_premium") else True,
+			"alias_title": getattr(ps, "alias_title", None),
+		}
+		for ps in plan_subjects
+	}
+
+	# Extract subject IDs for iteration
+	subject_ids = [ps.subject for ps in plan_subjects]
+
 	# Generate manifest
-	manifest_data = _generate_manifest(plan_doc, plan_subjects, overrides)
+	manifest_data = _generate_manifest(plan_doc, subject_ids, overrides, plan_subject_meta)
 	files.append({
 		"filename": f"plans/{plan_id}/manifest.json",
 		"content": _to_json(manifest_data),
 	})
 
 	# Generate per-subject files
-	for subject_id in plan_subjects:
+	for subject_id in subject_ids:
 		subject_files = _generate_subject_files(plan_id, subject_id, overrides)
 		files.extend(subject_files)
 
@@ -101,8 +113,17 @@ def _is_override_free(overrides: dict, doctype: str, name: str) -> bool | None:
 	return None
 
 
-def _generate_manifest(plan_doc: Any, subject_ids: list[str], overrides: dict) -> dict:
-	"""Generate manifest.json for the plan."""
+def _generate_manifest(
+	plan_doc: Any, subject_ids: list[str], overrides: dict, plan_subject_meta: dict
+) -> dict:
+	"""Generate manifest.json for the plan.
+
+	Args:
+		plan_doc: The Memora Academic Plan document
+		subject_ids: List of subject IDs in the plan
+		overrides: Plan Overrides dict
+		plan_subject_meta: Dict of subject_id -> {is_premium, alias_title} from Plan Subject child table
+	"""
 	version = int(datetime.now(timezone.utc).timestamp())
 
 	# Get grade and major titles
@@ -128,14 +149,17 @@ def _generate_manifest(plan_doc: Any, subject_ids: list[str], overrides: dict) -
 		# Calculate stats and is_free_preview
 		stats = _calculate_subject_stats(subject_id, overrides)
 
+		# Get is_premium and alias_title from Plan Subject (not from Subject itself)
+		ps_meta = plan_subject_meta.get(subject_id, {})
+
 		subjects.append({
 			"id": subject_id,
 			"title": subject_doc.subject_title,
-			"alias_title": getattr(subject_doc, "alias_title", None),
+			"alias_title": ps_meta.get("alias_title"),
 			"image": _relative_path(subject_doc.image),
 			"total_lessons": stats["total_lessons"],
 			"total_tracks": stats["total_tracks"],
-			"is_premium": bool(getattr(subject_doc, "is_premium", False)),
+			"is_premium": ps_meta.get("is_premium", True),
 			"is_free_preview": stats["is_free_preview"],
 			"hierarchy_url": f"/files/cdn/plans/{plan_doc.name}/subjects/{subject_id}/_h.json",
 		})

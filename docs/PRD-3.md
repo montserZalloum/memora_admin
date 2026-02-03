@@ -38,16 +38,15 @@
 │  │  • Edge caching                                                         │   │
 │  │                                                                          │   │
 │  │  Cache Rules:                                                            │   │
-│  │  ┌────────────────────────────────┬───────────────┬─────────────────┐   │   │
-│  │  │ Path Pattern                   │ Cache TTL     │ Notes           │   │   │
-│  │  ├────────────────────────────────┼───────────────┼─────────────────┤   │   │
-│  │  │ /manifest.json                 │ 5 minutes     │ Global manifest │   │   │
-│  │  │ /plans/*/manifest.json         │ 5 minutes     │ Plan manifests  │   │   │
-│  │  │ /subjects/*/_h.json            │ 5 minutes     │ Hierarchies     │   │   │
-│  │  │ /subjects/*/units/*_c.json     │ 1 hour        │ Unit content    │   │   │
-│  │  │ /lessons/*.json                │ 30 days       │ Lesson content  │   │   │
-│  │  │ /assets/*                      │ 1 year        │ Static assets   │   │   │
-│  │  └────────────────────────────────┴───────────────┴─────────────────┘   │   │
+│  │  ┌────────────────────────────────────────────┬───────────────┬─────────────────┐   │
+│  │  │ Path Pattern                               │ Cache TTL     │ Notes           │   │
+│  │  ├────────────────────────────────────────────┼───────────────┼─────────────────┤   │
+│  │  │ /files/cdn/plans/*/manifest.json           │ 5 minutes     │ Plan manifests  │   │
+│  │  │ /files/cdn/plans/*/subjects/*/_h.json      │ 5 minutes     │ Hierarchies     │   │
+│  │  │ /files/cdn/plans/*/subjects/*/units/*_c.json│ 1 hour       │ Unit content    │   │
+│  │  │ /files/cdn/lessons/*.json                  │ 30 days       │ Lesson content  │   │
+│  │  │ /assets/*                                  │ 1 year        │ Static assets   │   │
+│  │  └────────────────────────────────────────────┴───────────────┴─────────────────┘   │
 │  └─────────────────────────────────────────────────────────────────────────┘   │
 │                                 │                                               │
 │                                 │ Cache MISS                                    │
@@ -646,22 +645,22 @@ collation-server = utf8mb4_unicode_ci
 │   │   ├── common_site_config.json           # JWT secrets, Redis URL
 │   │   └── x.conanacademy.com/
 │   │       ├── public/
-│   │       │   └── memora_content/           # Public JSON (CDN source)
-│   │       │       ├── manifest.json
-│   │       │       ├── plans/
-│   │       │       │   └── {plan_id}/
-│   │       │       │       └── manifest.json
-│   │       │       ├── subjects/
-│   │       │       │   └── {subject_id}/
-│   │       │       │       ├── _h.json
-│   │       │       │       └── units/
-│   │       │       │           └── {unit_id}_c.json
-│   │       │       └── lessons/
-│   │       │           └── {lesson_id}.json
+│   │       │   └── files/cdn/                # Public JSON (CDN source)
+│   │       │       ├── lessons/              # SHARED - lesson content
+│   │       │       │   └── {lesson_id}.json
+│   │       │       │
+│   │       │       └── plans/                # PLAN-CENTRIC structure
+│   │       │           └── {plan_id}/
+│   │       │               ├── manifest.json # Plan metadata + subjects
+│   │       │               └── subjects/
+│   │       │                   └── {subject_id}/
+│   │       │                       ├── _h.json           # Hierarchy (Plan Overrides applied)
+│   │       │                       └── units/
+│   │       │                           └── {unit_id}_c.json
 │   │       │
 │   │       └── private/
 │   │           └── memora_bitmaps/           # Private JSON (FastAPI)
-│   │               └── {subject_id}_b.json
+│   │               └── {subject_id}_b.json   # Per-subject (shared across plans)
 │   │
 │   └── logs/
 │

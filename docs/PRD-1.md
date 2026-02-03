@@ -715,88 +715,102 @@ Operations:
 
 ## 5.1 File Organization
 
+**Architecture:** Plan-centric structure where subjects are nested inside plans. This allows the same subject to have different visibility per plan (via Plan Overrider). Lessons are shared at root level since content doesn't change per plan.
+
 ```
 /home/corex/aurevia-bench/sites/x.conanacademy.com/
 ├── public/
-│   └── memora_content/              # Public (CDN + Local Fallback)
-│       ├── manifest.json            # Global manifest
-│       ├── plans/
-│       │   └── {plan_id}/
-│       │       └── manifest.json    # Plan-specific manifest
-│       ├── subjects/
-│       │   └── {subject_id}/
-│       │       ├── _h.json          # Hierarchy (Tracks > Units)
-│       │       └── units/
-│       │           └── {unit_id}_c.json  # Unit content
-│       └── lessons/
-│           └── {lesson_id}.json     # Lesson stages
+│   └── files/cdn/                   # Public (CDN + Local Fallback)
+│       ├── lessons/                 # SHARED - lesson content (stages)
+│       │   └── {lesson_id}.json
+│       │
+│       └── plans/                   # PLAN-CENTRIC - subjects nested in plans
+│           └── {plan_id}/
+│               ├── manifest.json    # Plan metadata + subject list
+│               └── subjects/
+│                   └── {subject_id}/
+│                       ├── _h.json              # Hierarchy (with Plan Overrides applied)
+│                       └── units/
+│                           └── {unit_id}_c.json # Unit content (topics + lessons)
 │
 └── private/
     └── memora_bitmaps/              # Private (Backend only)
-        └── {subject_id}_b.json      # BitMap index for FastAPI
+        └── {subject_id}_b.json      # BitMap index for FastAPI (per-subject, shared)
 ```
+
+**Key Design Decisions:**
+
+| Decision | Rationale |
+|----------|-----------|
+| Subjects nested in plans | Same subject can have different visibility per plan (via Plan Overrider) |
+| Lessons shared at root | Content (stages, questions) doesn't change per plan, only visibility |
+| Bitmap files per-subject | Progress tracking is subject-based, not plan-based |
 
 ## 5.2 Public JSON Schemas
 
-### 5.2.1 Global Manifest (manifest.json)
+### 5.2.1 Plan Manifest (plans/{plan_id}/manifest.json)
+
+The plan manifest is the entry point for mobile apps. Contains plan metadata and list of subjects with their visibility settings.
 
 ```json
 {
+  "schema_version": 1,
   "version": 1706275200,
-  "generated_at": "2026-02-01T10:00:00Z",
-  "plans": [
-    {
-      "id": "PLAN-00001",
-      "title": "High School - Scientific",
-      "grade": "high_3",
-      "stream": "scientific",
-      "season": "2025-2026",
-      "subjects_count": 8,
-      "manifest_url": "/plans/PLAN-00001/manifest.json?v=1706275200"
-    }
-  ]
-}
-```
-
-### 5.2.2 Plan Manifest (plans/{plan_id}/manifest.json)
-
-```json
-{
-  "version": 1706275200,
+  "generated_at": "2026-02-03T14:30:00Z",
   "plan_id": "PLAN-00001",
-  "title": "High School - Scientific",
+  "title": "High School 3 - Scientific",
+  "grade_id": "GRD-00001",
+  "grade_title": "الصف الثالث الثانوي",
+  "major_id": "MJR-00001",
+  "major_title": "علمي",
+  "season_id": "SEASON-00001",
   "subjects": [
     {
-      "id": "SUB-MATH-101",
-      "title": "Mathematics",
+      "id": "SUBJ-00001",
+      "title": "الرياضيات",
+      "alias_title": null,
+      "image": "/files/math.png",
       "total_lessons": 450,
       "total_tracks": 4,
-      "is_free_preview": false,
-      "hierarchy_url": "/subjects/SUB-MATH-101/_h.json?v=1706275200"
+      "is_premium": true,
+      "is_free_preview": true,
+      "hierarchy_url": "/files/cdn/plans/PLAN-00001/subjects/SUBJ-00001/_h.json"
     }
   ]
 }
 ```
 
-### 5.2.3 Subject Hierarchy (subjects/{subject_id}/_h.json)
+**Field Notes:**
+- `is_premium`: From Plan Subject table - requires subscription
+- `is_free_preview`: **Derived** - true if ANY unit OR topic in subject has `is_free=true` (after Plan Overrides applied)
+- `alias_title`: Optional override of subject title for this plan
+
+### 5.2.2 Subject Hierarchy (plans/{plan_id}/subjects/{subject_id}/_h.json)
+
+Subject hierarchy with Plan Overrides applied. Hidden units/topics are excluded from this file.
 
 ```json
 {
+  "schema_version": 1,
   "version": 1706275200,
-  "subject_id": "SUB-MATH-101",
-  "title": "Mathematics",
+  "subject_id": "SUBJ-00001",
+  "title": "الرياضيات",
   "is_linear": true,
   "tracks": [
     {
       "id": "TRK-00001",
-      "title": "Chapter 1",
+      "title": "الفصل الأول",
       "sort_order": 1,
-      "total_lessons": 120,
+      "is_linear": true,
+      "image": "/files/track1.png",
       "units": [
         {
           "id": "UNT-00001",
-          "title": "Real Numbers",
-          "content_url": "/subjects/SUB-MATH-101/units/UNT-00001_c.json?v=1706275200"
+          "title": "الوحدة الأولى",
+          "sort_order": 1,
+          "is_linear": true,
+          "is_free": true,
+          "content_url": "/files/cdn/plans/PLAN-00001/subjects/SUBJ-00001/units/UNT-00001_c.json"
         }
       ]
     }
@@ -804,27 +818,33 @@ Operations:
 }
 ```
 
-### 5.2.4 Unit Content (subjects/{subject_id}/units/{unit_id}_c.json)
+**Note:** This hierarchy has Plan Overrides applied - hidden units/topics are removed, `is_free` flags may be adjusted per plan.
+
+### 5.2.3 Unit Content (plans/{plan_id}/subjects/{subject_id}/units/{unit_id}_c.json)
+
+Detailed unit content with nested topics and lesson metadata. Plan Overrides applied.
 
 ```json
 {
+  "schema_version": 1,
   "version": 1706275200,
   "unit_id": "UNT-00001",
-  "title": "Real Numbers",
+  "title": "الوحدة الأولى",
   "is_linear": true,
+  "is_free": true,
   "topics": [
     {
       "id": "TPC-00001",
-      "title": "Introduction",
+      "title": "المقدمة",
       "sort_order": 1,
       "is_linear": true,
-      "is_free": false,
+      "is_free": true,
       "lessons": [
         {
           "id": "LSN-00001",
-          "title": "What are Real Numbers?",
+          "title": "الدرس الأول",
           "bit_index": 0,
-          "content_url": "/lessons/LSN-00001.json"
+          "content_url": "/files/cdn/lessons/LSN-00001.json"
         }
       ]
     }
@@ -832,38 +852,42 @@ Operations:
 }
 ```
 
-### 5.2.5 Lesson Content (lessons/{lesson_id}.json)
+### 5.2.4 Lesson Content (lessons/{lesson_id}.json) - SHARED
+
+Lesson content is **shared across all plans** since the actual stages/questions don't change per plan - only visibility does (handled in hierarchy).
 
 ```json
 {
+  "schema_version": 1,
   "version": 1706275200,
   "lesson_id": "LSN-00001",
-  "title": "What are Real Numbers?",
-  "subject_id": "SUB-MATH-101",
-  "xp_reward": 10,
-  "hearts_cost": 1,
+  "title": "الدرس الأول",
+  "base_xp": 10,
+  "max_hearts": 3,
+  "bit_index": 0,
+  "is_reviewable": true,
   "stages": [
     {
-      "index": 0,
-      "type": "info",
+      "stage_id": "STG-001",
+      "stage_type": "info",
       "is_skippable": true,
-      "content": {
-        "text": "Real numbers include...",
-        "image_url": "/assets/real-numbers.png"
+      "config": {
+        "text": "مقدمة في الأعداد الحقيقية...",
+        "image_url": "/files/real-numbers.png"
       }
     },
     {
-      "index": 1,
-      "type": "mcq",
+      "stage_id": "STG-002",
+      "stage_type": "mcq",
       "is_skippable": false,
-      "content": {
-        "question": "Which of the following is irrational?",
+      "config": {
+        "question": "أي من التالي عدد غير نسبي؟",
         "options": [
           {"id": "a", "text": "3/4", "is_correct": false},
           {"id": "b", "text": "√2", "is_correct": true}
         ]
       },
-      "explanation": "√2 is irrational because..."
+      "explanation": "√2 عدد غير نسبي لأن..."
     }
   ]
 }

@@ -74,10 +74,72 @@ def on_content_updated(doc, method):
 			"Build Trigger Error",
 		)
 
+	# Also trigger builds for all plans that contain this subject
+	_queue_plan_builds_for_subject(subject_id, doc)
+
 
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
+
+def _queue_plan_builds_for_subject(subject_id: str, doc):
+	"""
+	Queue builds for all plans that contain the given subject.
+
+	When content changes, plans that reference the subject need rebuilding
+	to update aggregated fields like is_free_preview in their manifest.
+	"""
+	# Find all plans that contain this subject
+	plan_subjects = frappe.get_all(
+		"Memora Plan Subject",
+		filters={"subject": subject_id},
+		fields=["parent"],
+	)
+
+	if not plan_subjects:
+		return
+
+	cache = frappe.cache
+	timestamp = str(int(time.time()))
+
+	for ps in plan_subjects:
+		plan_id = ps["parent"]
+		if not plan_id:
+			continue
+
+		debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"
+
+		# Redis SET NX EX pattern for debounce
+		was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
+
+		if not was_set:
+			frappe.logger().debug(f"Build already pending for plan {plan_id}")
+			continue
+
+		try:
+			build_queue = frappe.get_doc(
+				{
+					"doctype": "Memora Build Queue",
+					"target_type": "Memora Academic Plan",
+					"target_name": plan_id,
+					"trigger_reason": "content_update",
+					"triggered_by": frappe.session.user,
+					"status": "Pending",
+				}
+			)
+			build_queue.insert(ignore_permissions=True)
+
+			frappe.logger().info(
+				f"Build queued: {build_queue.name} for plan {plan_id} "
+				f"(triggered by {doc.doctype} {doc.name} in subject {subject_id})"
+			)
+		except Exception as e:
+			cache.delete_value(debounce_key)
+			frappe.log_error(
+				f"Failed to queue build for plan {plan_id}: {e}",
+				"Build Trigger Error",
+			)
 
 
 def _get_subject_id(doc) -> str | None:
