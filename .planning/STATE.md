@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-02)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Phase 11 (Scheduled Tasks) - Plan 02 complete, core scheduled tasks ready
+**Current focus:** v1.1 COMPLETE - All 4 phases (Device Management, Game Sessions, Leaderboards, Scheduled Tasks) delivered
 
 ## Current Position
 
 Phase: 11 of 11 (Scheduled Tasks)
-Plan: 3 of 4 in current phase
-Status: In progress
-Last activity: 2026-02-03 - Completed 11-02-PLAN.md (Core Scheduled Tasks)
+Plan: 4 of 4 in current phase
+Status: COMPLETE
+Last activity: 2026-02-03 - Completed 11-04-PLAN.md (Scheduler Hooks Registration)
 
-Progress: [█████████░] 95% (39 of 41 plans completed across v1.0 and v1.1)
+Progress: [██████████] 100% (40 of 40 plans completed across v1.0 and v1.1)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 39 (v1.0 milestone + Phase 8-10 + 11-01, 11-02, 11-03)
+- Total plans completed: 40 (v1.0 milestone + v1.1 Phases 8-11)
 - Average duration: ~38 min
 - Total execution time: ~20.5 hours
 
@@ -37,13 +37,13 @@ Progress: [█████████░] 95% (39 of 41 plans completed across 
 | 8. Device Management | 2 | ~5 min | ~2.5 min |
 | 9. Game Sessions | 4 | ~12 min | ~3 min |
 | 10. Leaderboards | 3 | ~7 min | ~2.5 min |
-| 11. Scheduled Tasks | 3 | ~7 min | ~2.3 min |
+| 11. Scheduled Tasks | 4 | ~8 min | ~2 min |
 
 **Recent Trend:**
 - Last 5 plans: stable at ~2-3 min per plan (service/integration plans)
 - Trend: Fast execution for foundation and service plans
 
-*Updated after 11-02 completion*
+*Updated after 11-04 completion*
 
 ## Accumulated Context
 
@@ -85,6 +85,7 @@ Recent decisions affecting current work:
 - [11-02]: Session cleanup TTL -1 only (safety net, not primary expiry)
 - [11-02]: Wildcard SCAN patterns for global + subject leaderboards
 - [11-03]: trigger_task() passes triggered_by="Manual" for accurate log attribution
+- [11-04]: Cron entries staggered (00:05, 00:10, 00:15) to avoid overlap
 
 ### Pending Todos
 
@@ -92,15 +93,31 @@ None.
 
 ### Blockers/Concerns
 
-None. Phase 11 core tasks complete:
-- Memora Task Run Log DocType for execution history
-- Task Admin role with full permissions
-- prometheus_client metrics (TASK_RUNS, TASK_DURATION, USERS_PROCESSED, USERS_FAILED)
-- task_utils.py utilities (date helpers, logging, idempotency, notifications)
-- Task Dashboard at /app/task_dashboard for viewing history and manual triggers
-- streak_reset.py: Daily streak maintenance with idempotency
-- session_cleanup.py: Hourly orphaned session cleanup (TTL -1 safety net)
-- leaderboard_reset.py: Daily/weekly archival with 90-day retention
+None. v1.1 COMPLETE. All phases delivered:
+
+**Phase 8 - Device Management:**
+- Fingerprint-based device recognition
+- Lua script for atomic registration with race prevention
+- Admin device removal with session invalidation
+
+**Phase 9 - Game Sessions:**
+- Single active session per user (atomic force-close)
+- 1-hour TTL auto-expiry
+- XP/analytics on session end
+- Crash recovery endpoint
+
+**Phase 10 - Leaderboards:**
+- Composite score with tie-breaking
+- Daily/weekly boards (global + per-subject)
+- Dense rank calculation
+
+**Phase 11 - Scheduled Tasks:**
+- Task Admin role and Memora Task Run Log DocType
+- prometheus_client metrics (Grafana compatible)
+- streak_reset.py (00:05 daily)
+- session_cleanup.py (hourly :15)
+- leaderboard_reset.py (00:10 daily, Friday 00:15 weekly)
+- All tasks registered in hooks.py scheduler_events
 
 Research pitfalls addressed:
 - Phase 8: Device limit race conditions (COMPLETE - addressed via Lua script)
@@ -112,6 +129,6 @@ Research pitfalls addressed:
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 11-02-PLAN.md (Core Scheduled Tasks)
+Stopped at: Completed 11-04-PLAN.md (Scheduler Hooks Registration)
 Resume file: None
-Next action: Execute 11-04-PLAN.md (Scheduler Hooks Registration)
+Next action: v1.1 COMPLETE - All phases delivered
