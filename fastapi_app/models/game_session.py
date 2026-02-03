@@ -100,3 +100,13 @@ class EndSessionResponse(BaseModel):
 	xp_awarded: int = 0
 	is_replay: bool = False
 	streak: int = 0
+
+
+class CurrentSessionResponse(BaseModel):
+	"""Response for GET /sessions/current."""
+
+	session_id: str
+	lesson_id: str
+	subject_id: str
+	device_id: str | None = None
+	started_at: str
