@@ -6,6 +6,7 @@
 - SHIPPED **v1.1 Feature Expansion** — Phases 8-11 (shipped 2026-02-03)
 - SHIPPED **v1.2 Plan System Enhancement** — Phase 12 (shipped 2026-02-03)
 - SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
+- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-16
 
 ## Phases
 
@@ -54,6 +55,57 @@ See: `.planning/phases/13-plan-cache-invalidation-fix/13-VERIFICATION.md` for de
 
 </details>
 
+### v1.3 Leaderboard Profiles & Admin Device Management (In Progress)
+
+**Milestone Goal:** Enhance leaderboards with player display names and avatars, simplify JWT token structure, and provide admin tooling for device management.
+
+#### Phase 14: Profile Display Names
+**Goal**: Leaderboard responses show human-readable display names and avatars instead of player IDs
+**Depends on**: Phase 13 (existing leaderboard infrastructure)
+**Requirements**: PROF-01, PROF-02, PROF-03, PROF-04, PROF-05
+**Success Criteria** (what must be TRUE):
+  1. Leaderboard API returns display_name and avatar for each entry (not player_id placeholders)
+  2. Profile data cached in Redis with 1-hour TTL (sub-2ms lookup)
+  3. Batch profile fetch for 100 entries completes in under 25ms total
+  4. Profile cache invalidates within seconds when admin updates Memora Player Profile
+  5. Missing profiles gracefully fall back to "Player XXXX" format
+**Plans**: 3 plans
+
+Plans:
+- [ ] 14-01: ProfileService + Cache Infrastructure
+- [ ] 14-02: Frappe Integration (profile_sync hook, pub/sub handler)
+- [ ] 14-03: Leaderboard Enrichment (inject ProfileService, modify response)
+
+#### Phase 15: JWT Simplification
+**Goal**: Streamline access token payload by adding plan_id and removing unused fields
+**Depends on**: Phase 14 (no code dependency, but sequential for testing)
+**Requirements**: JWT-01, JWT-02, JWT-03
+**Success Criteria** (what must be TRUE):
+  1. Access token includes plan_id field (from Memora Player Profile)
+  2. Access token no longer contains timezone field (hardcoded to Asia/Amman in code)
+  3. Access token no longer contains role field (all API users are players)
+  4. Existing login/refresh flows work unchanged with new token structure
+**Plans**: 1 plan
+
+Plans:
+- [ ] 15-01: JWT Token Payload Changes
+
+#### Phase 16: Admin Device Management
+**Goal**: Admins can view and remove player devices from Frappe Desk
+**Depends on**: Phase 15 (no code dependency, but sequential for milestone flow)
+**Requirements**: ADMDEV-01, ADMDEV-02, ADMDEV-03
+**Success Criteria** (what must be TRUE):
+  1. Admin can see all registered devices in Memora Player Profile form
+  2. Device list shows device_name, platform, and last_login for each device
+  3. Admin can remove a specific device via UI action with confirmation dialog
+  4. Device removal clears the device from Redis (source of truth)
+  5. Frappe child table reflects current Redis device state (synced on form load)
+**Plans**: 2 plans
+
+Plans:
+- [ ] 16-01: Device Sync to Frappe (Redis -> authorized_devices child table)
+- [ ] 16-02: Device Removal UI (form script with removal dialog)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -71,5 +123,8 @@ See: `.planning/phases/13-plan-cache-invalidation-fix/13-VERIFICATION.md` for de
 | 11. Scheduled Tasks | v1.1 | 4/4 | Complete | 2026-02-03 |
 | 12. Plan System Enhancement | v1.2 | 4/4 | Complete | 2026-02-03 |
 | 13. Plan Cache Invalidation Fix | v1.2.1 | 1/1 | Complete | 2026-02-03 |
+| 14. Profile Display Names | v1.3 | 0/3 | Not started | - |
+| 15. JWT Simplification | v1.3 | 0/1 | Not started | - |
+| 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 
-**Total:** 13 phases, 48 plans completed across 4 milestones
+**Total:** 16 phases, 48 plans completed, 6 plans pending (v1.3)

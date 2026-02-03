@@ -63,23 +63,23 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROF-01 | TBD | Pending |
-| PROF-02 | TBD | Pending |
-| PROF-03 | TBD | Pending |
-| PROF-04 | TBD | Pending |
-| PROF-05 | TBD | Pending |
-| ADMDEV-01 | TBD | Pending |
-| ADMDEV-02 | TBD | Pending |
-| ADMDEV-03 | TBD | Pending |
-| JWT-01 | TBD | Pending |
-| JWT-02 | TBD | Pending |
-| JWT-03 | TBD | Pending |
+| PROF-01 | Phase 14 | Pending |
+| PROF-02 | Phase 14 | Pending |
+| PROF-03 | Phase 14 | Pending |
+| PROF-04 | Phase 14 | Pending |
+| PROF-05 | Phase 14 | Pending |
+| JWT-01 | Phase 15 | Pending |
+| JWT-02 | Phase 15 | Pending |
+| JWT-03 | Phase 15 | Pending |
+| ADMDEV-01 | Phase 16 | Pending |
+| ADMDEV-02 | Phase 16 | Pending |
+| ADMDEV-03 | Phase 16 | Pending |
 
 **Coverage:**
 - v1.3 requirements: 11 total
-- Mapped to phases: 0
-- Unmapped: 11
+- Mapped to phases: 11
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 after initial definition*
+*Last updated: 2026-02-03 after roadmap creation*
