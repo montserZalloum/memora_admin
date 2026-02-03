@@ -18,10 +18,10 @@ Requirements for v1.1 feature expansion. Each maps to roadmap phases.
 
 ### Leaderboards
 
-- [ ] **LEADER-01**: All-time XP leaderboard ranks players by total XP earned
-- [ ] **LEADER-02**: Daily XP leaderboard ranks players by XP earned today
+- [x] **LEADER-01**: All-time XP leaderboard ranks players by total XP earned
+- [x] **LEADER-02**: Daily XP leaderboard ranks players by XP earned today
 - [ ] **LEADER-03**: Streak leaderboard ranks players by current streak length
-- [ ] **LEADER-04**: User can retrieve their rank position in any leaderboard
+- [x] **LEADER-04**: User can retrieve their rank position in any leaderboard
 - [ ] **LEADER-05**: Daily leaderboard resets at midnight (archived for 30 days)
 
 ### Device Management
@@ -84,10 +84,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SESSION-04 | Phase 9 | Complete |
 | SESSION-05 | Phase 9 | Complete |
 | SESSION-06 | Phase 9 | Complete |
-| LEADER-01 | Phase 10 | Pending |
-| LEADER-02 | Phase 10 | Pending |
+| LEADER-01 | Phase 10 | Complete |
+| LEADER-02 | Phase 10 | Complete |
 | LEADER-03 | Phase 10 | Pending |
-| LEADER-04 | Phase 10 | Pending |
+| LEADER-04 | Phase 10 | Complete |
 | LEADER-05 | Phase 10 | Pending |
 | SCHED-01 | Phase 11 | Pending |
 | SCHED-02 | Phase 11 | Pending |

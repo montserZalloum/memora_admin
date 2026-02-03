@@ -119,7 +119,7 @@ Plans:
 - [x] 09-03-PLAN.md — [Gap closure] Session validation in /progress/complete
 - [x] 09-04-PLAN.md — [Gap closure] GET /sessions/current for session recovery
 
-#### Phase 10: Leaderboards
+#### Phase 10: Leaderboards ✓
 **Goal**: Competitive XP rankings via Redis sorted sets (daily/weekly/all-time)
 **Depends on**: Phase 5 (XP and streak mechanics), Phase 9 (session context for subject)
 **Requirements**: LEADER-01, LEADER-02, LEADER-04
@@ -130,11 +130,12 @@ Plans:
   4. User can retrieve their rank position with neighbors context
   5. Leaderboards update atomically when XP is awarded
 **Plans**: 3 plans
+**Completed**: 2026-02-03
 
 Plans:
-- [ ] 10-01-PLAN.md — Leaderboard service foundation (models, ZSET operations, composite scoring)
-- [ ] 10-02-PLAN.md — Leaderboard API endpoints (GET /leaderboard/{type}, GET /leaderboard/{type}/me)
-- [ ] 10-03-PLAN.md — XP award integration (session end updates leaderboards)
+- [x] 10-01-PLAN.md — Leaderboard service foundation (models, ZSET operations, composite scoring)
+- [x] 10-02-PLAN.md — Leaderboard API endpoints (GET /leaderboard/{type}, GET /leaderboard/{type}/me)
+- [x] 10-03-PLAN.md — XP award integration (session end updates leaderboards)
 
 #### Phase 11: Scheduled Tasks
 **Goal**: Automated maintenance for streaks, sessions, and leaderboards
@@ -167,5 +168,5 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 7. Sync Mechanisms | v1.0 | 4/4 | Complete | 2026-02-02 |
 | 8. Device Management | v1.1 | 2/2 | Complete | 2026-02-03 |
 | 9. Game Sessions | v1.1 | 4/4 | Complete | 2026-02-03 |
-| 10. Leaderboards | v1.1 | 0/3 | Planned | - |
+| 10. Leaderboards | v1.1 | 3/3 | Complete | 2026-02-03 |
 | 11. Scheduled Tasks | v1.1 | 0/TBD | Not started | - |
