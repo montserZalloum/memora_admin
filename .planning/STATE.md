@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.2 Plan System Enhancement — COMPLETE
+**Current focus:** v1.2.1 Gap Closure — Phase 13
 
 ## Current Position
 
-Phase: 12 of 12 (Plan System Enhancement)
-Plan: 4 of 4 complete (12-01, 12-02, 12-03, 12-04)
-Status: Phase complete
-Last activity: 2026-02-03 — Completed 12-04-PLAN.md (Build Queue Integration)
+Phase: 13 of 13 (Plan Cache Invalidation Fix)
+Plan: 0 of 1 complete
+Status: Pending planning
+Last activity: 2026-02-03 — Created gap closure phase from v1.2 audit
 
-Progress: [##########] 100% v1.0+v1.1+v1.2 (47 plans)
+Progress: [##########] 100% v1.0+v1.1+v1.2 (47 plans) | Phase 13 pending
 
 ## Performance Metrics
 
@@ -56,7 +56,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ### Blockers/Concerns
 
-None — v1.2 milestone complete.
+**Critical gap from v1.2 audit:**
+- FastAPI pubsub does not handle `type="plan"` cache invalidation messages
+- Plan cache never invalidated after rebuild (serves stale until 1hr TTL)
 
 **Deferred from v1.1:**
 - LEADER-03: Streak leaderboard
@@ -66,10 +68,10 @@ None — v1.2 milestone complete.
 
 ## Session Continuity
 
-Last session: 2026-02-03 17:00:00Z
-Stopped at: Completed 12-04-PLAN.md (v1.2 COMPLETE)
+Last session: 2026-02-03 18:30:00Z
+Stopped at: Created gap closure phase 13 from v1.2 audit
 Resume file: None
-Next action: None (awaiting new milestone/phase)
+Next action: `/gsd:plan-phase 13` to create execution plan
 
 ### Roadmap Evolution
 
@@ -78,4 +80,5 @@ Next action: None (awaiting new milestone/phase)
 - 12-02 complete: plan_generator.py with generate_plan_json() function
 - 12-03 complete: FastAPI endpoint /api/v1/plans/{plan_id}/manifest with PlanService caching
 - 12-04 complete: Build queue integration, hooks registration, Frappe API fallback
-- **v1.2 COMPLETE**: All Plan System Enhancement features delivered
+- **v1.2 audit**: Found integration gap — Plan cache invalidation not wired
+- **Phase 13 added**: Plan Cache Invalidation Fix (gap closure from v1.2 audit)
