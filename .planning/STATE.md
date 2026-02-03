@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Planning next milestone (v1.3)
+**Current focus:** Milestone v1.3 — Leaderboard Profiles & Admin Device Management
 
 ## Current Position
 
-Phase: 13 of 13 complete
-Plan: All complete
-Status: Milestone v1.2.1 shipped
-Last activity: 2026-02-03 — v1.2.1 Gap Closure complete
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-03 — Milestone v1.3 started
 
 Progress: [###########] 100% (48 plans across 4 milestones)
 
@@ -30,6 +30,7 @@ Progress: [###########] 100% (48 plans across 4 milestones)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
+| v1.3 Profiles & Devices | — | — | In Progress |
 
 ## Accumulated Context
 
@@ -39,18 +40,17 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-None — milestone complete.
+None — defining v1.3 scope.
 
 ### Blockers/Concerns
 
-**Deferred to v1.3:**
-- LEADER-03: Streak leaderboard
-- Profile lookup for leaderboard display names
-- Device self-management (list, deauthorize)
+**Deferred from v1.3:**
+- LEADER-03: Streak leaderboard — moved to future milestone
+- User-facing device management — admin-only for v1.3
 
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Milestone v1.2.1 complete
+Stopped at: Defining v1.3 requirements
 Resume file: None
-Next action: `/gsd:new-milestone` for v1.3 planning
+Next action: Complete requirements and roadmap definition

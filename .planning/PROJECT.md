@@ -73,12 +73,13 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 
 ### Active
 
-**Next Milestone: v1.3**
+**Current Milestone: v1.3 Leaderboard Profiles & Admin Device Management**
 
-Pending items from v1.1 audit:
-- [ ] Streak leaderboard ranks players by current streak length (LEADER-03)
-- [ ] Profile lookup for leaderboard display names
-- [ ] Device self-management (list, deauthorize)
+**Goal:** Enhance leaderboards with player display names and provide admin tooling for device management.
+
+**Target features:**
+- [ ] Profile display names in leaderboard responses (from Memora Player Profile)
+- [ ] Admin device management (view/remove player devices via Frappe Desk)
 
 ### Out of Scope
 
@@ -92,6 +93,8 @@ Pending items from v1.1 audit:
 - Monitoring (Grafana/Prometheus) — future roadmap
 - League-based leaderboards — complex cohort logic
 - Real-time leaderboard updates — WebSocket complexity
+- Streak leaderboard — deferred from v1.3 to future milestone
+- User-facing device management — admin-only for now
 
 ## Context
 
@@ -158,4 +161,4 @@ Pending items from v1.1 audit:
 | elif dispatch for plan messages | Only one handler fires per message type | Good |
 
 ---
-*Last updated: 2026-02-03 after v1.2.1 milestone*
+*Last updated: 2026-02-03 after starting v1.3 milestone*
