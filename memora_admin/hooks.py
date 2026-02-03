@@ -185,7 +185,23 @@ scheduler_events = {
 		# Every 2 minutes: Process pending content builds
 		"*/2 * * * *": [
 			"memora_admin.memora_admin.tasks.build_worker.process_pending_builds"
-		]
+		],
+		# Daily at 00:05: Streak reset (after midnight Asia/Amman)
+		"5 0 * * *": [
+			"memora_admin.memora_admin.tasks.streak_reset.reset_broken_streaks"
+		],
+		# Hourly at :15: Session cleanup (safety net for orphaned keys)
+		"15 * * * *": [
+			"memora_admin.memora_admin.tasks.session_cleanup.cleanup_expired_sessions"
+		],
+		# Daily at 00:10: Daily leaderboard archive
+		"10 0 * * *": [
+			"memora_admin.memora_admin.tasks.leaderboard_reset.archive_daily_leaderboard"
+		],
+		# Friday at 00:15: Weekly leaderboard archive (Islamic week ends Thursday)
+		"15 0 * * 5": [
+			"memora_admin.memora_admin.tasks.leaderboard_reset.archive_weekly_leaderboard"
+		],
 	}
 }
 
