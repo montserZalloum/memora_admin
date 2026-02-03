@@ -19,6 +19,7 @@ from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.device import DeviceService
 from fastapi_app.services.game_session import GameSessionService
+from fastapi_app.services.leaderboard import LeaderboardService
 from fastapi_app.services.wallet import WalletService
 
 # Common dependencies
@@ -132,6 +133,15 @@ async def get_game_session_service(request: Request) -> GameSessionService:
 
 
 GameSessionServiceDep = Annotated[GameSessionService, Depends(get_game_session_service)]
+
+
+async def get_leaderboard_service(request: Request) -> LeaderboardService:
+    """Get LeaderboardService with Redis from app state."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    return LeaderboardService(redis_client)
+
+
+LeaderboardServiceDep = Annotated[LeaderboardService, Depends(get_leaderboard_service)]
 
 
 # Singleton for FrappeClient
