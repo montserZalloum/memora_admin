@@ -16,7 +16,7 @@ Utilities (task_utils):
 - TASK_RUNS, TASK_DURATION, USERS_PROCESSED, USERS_FAILED: Prometheus metrics
 """
 
-from memora_admin.memora_admin.tasks.task_utils import (
+from memora_admin.tasks.task_utils import (
 	AMMAN_TZ,
 	TASK_DURATION,
 	TASK_RUNS,

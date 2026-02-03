@@ -22,7 +22,7 @@ from datetime import datetime
 import frappe
 import redis
 
-from memora_admin.memora_admin.tasks.task_utils import (
+from memora_admin.tasks.task_utils import (
 	TASK_DURATION,
 	TASK_RUNS,
 	log_task_run,
