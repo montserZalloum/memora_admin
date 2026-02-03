@@ -53,7 +53,7 @@ See: `.planning/milestones/v1.2-ROADMAP.md` for full details
 
 ### v1.2.1 Gap Closure (Phase 13) — ACTIVE
 
-- [ ] Phase 13: Plan Cache Invalidation Fix (0/1 plans)
+- [ ] Phase 13: Plan Cache Invalidation Fix (1 plan)
 
 **Goal:** Wire Plan cache invalidation into FastAPI pubsub listener
 
@@ -61,10 +61,8 @@ See: `.planning/milestones/v1.2-ROADMAP.md` for full details
 - Integration: FastAPI pubsub → Plan cache invalidation (`type="plan"` messages ignored)
 - Flow: Plan save → Build → CDN → Cache invalidation (steps 8-9 broken)
 
-**Tasks:**
-1. Add Plan invalidation handler in `pubsub.py` for `type="plan"` messages
-2. Register PlanService in `app.state` during lifespan (main.py)
-3. Call `plan_service.invalidate(plan_id)` on plan cache invalidation messages
+Plans:
+- [ ] 13-01-PLAN.md — Register PlanService and add pubsub handler for Plan messages
 
 ## Progress
 
@@ -82,6 +80,6 @@ See: `.planning/milestones/v1.2-ROADMAP.md` for full details
 | 10. Leaderboards | v1.1 | 3/3 | Complete | 2026-02-03 |
 | 11. Scheduled Tasks | v1.1 | 4/4 | Complete | 2026-02-03 |
 | 12. Plan System Enhancement | v1.2 | 4/4 | Complete | 2026-02-03 |
-| 13. Plan Cache Invalidation Fix | v1.2.1 | 0/1 | Pending | - |
+| 13. Plan Cache Invalidation Fix | v1.2.1 | 0/1 | Planning Complete | - |
 
 **Total:** 13 phases, 47 plans completed across 4 milestones
