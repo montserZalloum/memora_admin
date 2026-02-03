@@ -169,6 +169,20 @@ doc_events = {
     "Memora Lesson": {
         "on_update": "memora_admin.events.build_trigger.on_content_updated",
     },
+    # Plan build trigger events (debounced)
+    "Memora Academic Plan": {
+        "on_update": "memora_admin.events.build_trigger.on_plan_updated",
+    },
+    "Memora Plan Subject": {
+        "after_insert": "memora_admin.events.build_trigger.on_plan_subject_changed",
+        "on_update": "memora_admin.events.build_trigger.on_plan_subject_changed",
+        "on_trash": "memora_admin.events.build_trigger.on_plan_subject_changed",
+    },
+    "Memora Plan Overrider": {
+        "after_insert": "memora_admin.events.build_trigger.on_plan_overrider_changed",
+        "on_update": "memora_admin.events.build_trigger.on_plan_overrider_changed",
+        "on_trash": "memora_admin.events.build_trigger.on_plan_overrider_changed",
+    },
 }
 
 # Scheduled Tasks
