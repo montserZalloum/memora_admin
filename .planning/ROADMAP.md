@@ -146,11 +146,12 @@ Plans:
   2. Expired session keys are removed hourly
   3. Daily leaderboard archives yesterday's data and creates new key at midnight
   4. All scheduled tasks are idempotent (safe on retry/duplicate execution)
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 11-01: TBD
-- [ ] 11-02: TBD
+- [ ] 11-01-PLAN.md — Task infrastructure foundation (DocType, Prometheus metrics, task_utils.py)
+- [ ] 11-02-PLAN.md — Core scheduled tasks (streak_reset, session_cleanup, leaderboard_reset) + hooks.py
+- [ ] 11-03-PLAN.md — Task Dashboard page with manual trigger API
 
 ## Progress
 
@@ -169,4 +170,4 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 8. Device Management | v1.1 | 2/2 | Complete | 2026-02-03 |
 | 9. Game Sessions | v1.1 | 4/4 | Complete | 2026-02-03 |
 | 10. Leaderboards | v1.1 | 3/3 | Complete | 2026-02-03 |
-| 11. Scheduled Tasks | v1.1 | 0/TBD | Not started | - |
+| 11. Scheduled Tasks | v1.1 | 0/3 | Planned | - |
