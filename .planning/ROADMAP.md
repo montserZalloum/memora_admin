@@ -110,11 +110,13 @@ Plans:
   4. User can end a lesson and trigger completion flow (XP, progress, streak)
   5. User can resume a lesson after app crash (session recovery)
   6. User cannot be in multiple lessons simultaneously (concurrent session detection)
-**Plans**: 2 plans
+**Plans**: 4 plans
 
 Plans:
-- [ ] 09-01-PLAN.md — GameSession models and service (Lua script, TTL, force-close)
-- [ ] 09-02-PLAN.md — Session endpoints (start, end) with completion flow integration
+- [x] 09-01-PLAN.md — GameSession models and service (Lua script, TTL, force-close)
+- [x] 09-02-PLAN.md — Session endpoints (start, end) with completion flow integration
+- [ ] 09-03-PLAN.md — [Gap closure] Session validation in /progress/complete
+- [ ] 09-04-PLAN.md — [Gap closure] GET /sessions/current for session recovery
 
 #### Phase 10: Leaderboards
 **Goal**: Competitive rankings with daily/all-time/streak leaderboards
@@ -163,6 +165,6 @@ Phases execute in numeric order: 8 → 9 → 10 → 11
 | 6. Content Pipeline | v1.0 | 4/4 | Complete | 2026-02-02 |
 | 7. Sync Mechanisms | v1.0 | 4/4 | Complete | 2026-02-02 |
 | 8. Device Management | v1.1 | 2/2 | Complete | 2026-02-03 |
-| 9. Game Sessions | v1.1 | 0/2 | Not started | - |
+| 9. Game Sessions | v1.1 | 2/4 | Gap closure | - |
 | 10. Leaderboards | v1.1 | 0/TBD | Not started | - |
 | 11. Scheduled Tasks | v1.1 | 0/TBD | Not started | - |
