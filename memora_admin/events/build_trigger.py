@@ -116,3 +116,156 @@ def _get_subject_id(doc) -> str | None:
 		return doc.subject
 
 	return None
+
+
+# =============================================================================
+# Plan Update Handlers
+# =============================================================================
+
+
+def on_plan_updated(doc, method):
+	"""
+	Queue a build when Academic Plan is updated.
+
+	Uses same debounce pattern as content updates:
+	- If key doesn't exist: set key with TTL, queue build
+	- If key exists: skip (build already pending)
+	"""
+	plan_id = doc.name
+
+	cache = frappe.cache
+	debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"
+
+	# Redis SET NX EX pattern for debounce
+	timestamp = str(int(time.time()))
+	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
+
+	if not was_set:
+		frappe.logger().debug(f"Build already pending for plan {plan_id}")
+		return
+
+	# Create Build Queue entry
+	try:
+		build_queue = frappe.get_doc(
+			{
+				"doctype": "Memora Build Queue",
+				"target_type": "Memora Academic Plan",
+				"target_name": plan_id,
+				"trigger_reason": "plan_update",
+				"triggered_by": frappe.session.user,
+				"status": "Pending",
+			}
+		)
+		build_queue.insert(ignore_permissions=True)
+
+		frappe.logger().info(
+			f"Build queued: {build_queue.name} for plan {plan_id} "
+			f"(triggered by {doc.doctype} {doc.name})"
+		)
+	except Exception as e:
+		cache.delete_value(debounce_key)
+		frappe.log_error(
+			f"Failed to queue build for plan {plan_id}: {e}",
+			"Build Trigger Error",
+		)
+
+
+def on_plan_subject_changed(doc, method):
+	"""
+	Queue a build when Plan Subject is added/modified/removed.
+
+	Triggers rebuild of the parent plan.
+	"""
+	plan_id = doc.parent
+
+	if not plan_id:
+		frappe.log_error(
+			f"Plan Subject {doc.name} has no parent plan",
+			"Build Trigger Error",
+		)
+		return
+
+	# Reuse plan debounce logic
+	cache = frappe.cache
+	debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"
+
+	timestamp = str(int(time.time()))
+	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
+
+	if not was_set:
+		frappe.logger().debug(f"Build already pending for plan {plan_id}")
+		return
+
+	try:
+		build_queue = frappe.get_doc(
+			{
+				"doctype": "Memora Build Queue",
+				"target_type": "Memora Academic Plan",
+				"target_name": plan_id,
+				"trigger_reason": "plan_subject_change",
+				"triggered_by": frappe.session.user,
+				"status": "Pending",
+			}
+		)
+		build_queue.insert(ignore_permissions=True)
+
+		frappe.logger().info(
+			f"Build queued: {build_queue.name} for plan {plan_id} "
+			f"(triggered by Plan Subject change)"
+		)
+	except Exception as e:
+		cache.delete_value(debounce_key)
+		frappe.log_error(
+			f"Failed to queue build for plan {plan_id}: {e}",
+			"Build Trigger Error",
+		)
+
+
+def on_plan_overrider_changed(doc, method):
+	"""
+	Queue a build when Plan Overrider is created/modified/deleted.
+
+	Triggers rebuild of the associated plan.
+	"""
+	plan_id = doc.plan
+
+	if not plan_id:
+		frappe.log_error(
+			f"Plan Overrider {doc.name} has no plan reference",
+			"Build Trigger Error",
+		)
+		return
+
+	cache = frappe.cache
+	debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"
+
+	timestamp = str(int(time.time()))
+	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
+
+	if not was_set:
+		frappe.logger().debug(f"Build already pending for plan {plan_id}")
+		return
+
+	try:
+		build_queue = frappe.get_doc(
+			{
+				"doctype": "Memora Build Queue",
+				"target_type": "Memora Academic Plan",
+				"target_name": plan_id,
+				"trigger_reason": "plan_overrider_change",
+				"triggered_by": frappe.session.user,
+				"status": "Pending",
+			}
+		)
+		build_queue.insert(ignore_permissions=True)
+
+		frappe.logger().info(
+			f"Build queued: {build_queue.name} for plan {plan_id} "
+			f"(triggered by Plan Overrider {doc.name})"
+		)
+	except Exception as e:
+		cache.delete_value(debounce_key)
+		frappe.log_error(
+			f"Failed to queue build for plan {plan_id}: {e}",
+			"Build Trigger Error",
+		)
