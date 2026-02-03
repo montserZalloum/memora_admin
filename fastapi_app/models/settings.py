@@ -15,3 +15,4 @@ class GamificationSettings(BaseModel):
 	base_lesson_xp: int = 100
 	replay_xp: int = 25
 	max_streak_multiplier_percent: int = 50
+	max_devices_per_player: int = 3
