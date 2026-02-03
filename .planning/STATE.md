@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-02-02)
 ## Current Position
 
 Phase: 8 of 11 (Device Management)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-03 — Completed 08-01-PLAN.md (Device Service Foundation)
+Last activity: 2026-02-03 - Completed 08-02-PLAN.md (Login Integration)
 
-Progress: [███████░░░] 66% (27 of 41 plans completed across v1.0 and v1.1)
+Progress: [███████░░░] 68% (28 of 41 plans completed across v1.0 and v1.1)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 27 (v1.0 milestone + 08-01)
-- Average duration: ~44 min
+- Total plans completed: 28 (v1.0 milestone + 08-01 + 08-02)
+- Average duration: ~43 min
 - Total execution time: ~20 hours
 
 **By Phase:**
@@ -34,13 +34,13 @@ Progress: [███████░░░] 66% (27 of 41 plans completed across 
 | 5. Gamification | 4 | ~3h | ~45 min |
 | 6. Content Pipeline | 4 | ~3.5h | ~52 min |
 | 7. Sync Mechanisms | 4 | ~3h | ~45 min |
-| 8. Device Management | 1 | ~3 min | ~3 min |
+| 8. Device Management | 2 | ~5 min | ~2.5 min |
 
 **Recent Trend:**
 - Last 5 plans: stable at ~45 min per plan
-- Trend: Stable (08-01 was unusually fast - service foundation only)
+- Trend: Stable (Phase 8 plans unusually fast - service/integration only)
 
-*Updated after 08-01 completion*
+*Updated after 08-02 completion*
 
 ## Accumulated Context
 
@@ -57,6 +57,9 @@ Recent decisions affecting current work:
 - [08-01]: Fingerprint uses stable UA components (no versions) for device recognition
 - [08-01]: Lua script for atomic device registration with race condition prevention
 - [08-01]: Device hash structure: memora:devices:{user_id} with device:{id}:{attr} fields
+- [08-02]: Device registration after credential verification, before session creation
+- [08-02]: HTTP 429 for device limit exceeded (matches rate limiting semantics)
+- [08-02]: Immediate session invalidation on admin device removal
 
 ### Pending Todos
 
@@ -66,8 +69,8 @@ None yet.
 
 None. Phase 8 proceeding smoothly:
 - 08-01 complete: DeviceService with atomic Lua script registration
-- Next: 08-02 will integrate into login endpoint
-- Phase 8 pitfall (device limit race conditions) addressed by Lua script atomicity
+- 08-02 complete: Login integration with device limit enforcement
+- Next: 08-03 will add device management endpoints
 
 Research identified key pitfalls to address:
 - Phase 8: Device limit race conditions (ADDRESSED in 08-01 via Lua script)
@@ -78,6 +81,6 @@ Research identified key pitfalls to address:
 ## Session Continuity
 
 Last session: 2026-02-03
-Stopped at: Completed 08-01-PLAN.md (Device Service Foundation)
+Stopped at: Completed 08-02-PLAN.md (Login Integration)
 Resume file: None
-Next action: Execute 08-02-PLAN.md (Login Integration)
+Next action: Execute 08-03-PLAN.md (Device Management Endpoints)
