@@ -263,3 +263,50 @@ class SubjectSummary(BaseModel):
     percentage: float
     completed: int
     total: int
+
+
+# --- SSE Streaming Models (for documentation) ---
+
+
+class SSESubjectEvent(BaseModel):
+    """Subject summary event payload for SSE streaming.
+
+    First event sent, arrives within 10ms of request.
+    """
+
+    subject_id: str
+    completed: int
+    total: int
+    percentage: float
+
+
+class SSETopicData(BaseModel):
+    """Topic data within SSE track event."""
+
+    topic_id: str
+    completed: int
+    total: int
+    percentage: float
+
+
+class SSEUnitData(BaseModel):
+    """Unit data within SSE track event."""
+
+    unit_id: str
+    completed: int
+    total: int
+    percentage: float
+    topics: list[SSETopicData]
+
+
+class SSETrackEvent(BaseModel):
+    """Track event payload for SSE streaming.
+
+    Sent progressively for each track in subject.
+    """
+
+    track_id: str
+    completed: int
+    total: int
+    percentage: float
+    units: list[SSEUnitData]
