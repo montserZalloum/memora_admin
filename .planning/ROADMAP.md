@@ -77,18 +77,21 @@ Plans:
 - [x] 14-03: Leaderboard Enrichment (inject ProfileService, modify response) — completed 2026-02-05
 
 #### Phase 15: JWT Simplification
-**Goal**: Streamline access token payload by adding plan_id and removing unused fields
+**Goal**: Streamline access token payload, enable mobile login, and enrich login response with profile data
 **Depends on**: Phase 14 (no code dependency, but sequential for testing)
 **Requirements**: JWT-01, JWT-02, JWT-03
 **Success Criteria** (what must be TRUE):
   1. Access token includes plan_id field (from Memora Player Profile)
   2. Access token no longer contains timezone field (hardcoded to Asia/Amman in code)
   3. Access token no longer contains role field (all API users are players)
-  4. Existing login/refresh flows work unchanged with new token structure
-**Plans**: 1 plan
+  4. Login accepts email or mobile number (identifier field)
+  5. Login response includes profile data (display_name, avatar, gender, xp)
+  6. Plan change invalidates session (player must re-login)
+**Plans**: 2 plans
 
 Plans:
-- [ ] 15-01: JWT Token Payload Changes
+- [ ] 15-01-PLAN.md — Schema update + token payload changes + session storage
+- [ ] 15-02-PLAN.md — Identifier login + enriched response + plan change hook
 
 #### Phase 16: Admin Device Management
 **Goal**: Admins can view and remove player devices from Frappe Desk
@@ -124,7 +127,7 @@ Plans:
 | 12. Plan System Enhancement | v1.2 | 4/4 | Complete | 2026-02-03 |
 | 13. Plan Cache Invalidation Fix | v1.2.1 | 1/1 | Complete | 2026-02-03 |
 | 14. Profile Display Names | v1.3 | 3/3 | Complete | 2026-02-05 |
-| 15. JWT Simplification | v1.3 | 0/1 | Not started | - |
+| 15. JWT Simplification | v1.3 | 0/2 | Not started | - |
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 
-**Total:** 16 phases, 51 plans completed, 3 plans pending (v1.3)
+**Total:** 16 phases, 51 plans completed, 4 plans pending (v1.3)
