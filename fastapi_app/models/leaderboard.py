@@ -22,7 +22,7 @@ class LeaderboardEntry(BaseModel):
 	- rank: Dense rank (tied players share same number, e.g., two #5s then #7)
 	- display_name: Player's display name
 	- xp: XP value for the leaderboard period
-	- avatar_url: Optional avatar image URL
+	- avatar: File identifier for avatar (client constructs full URL)
 	- is_me: True when this entry is the requesting user (for neighbors list)
 	"""
 
@@ -30,7 +30,7 @@ class LeaderboardEntry(BaseModel):
 	player_id: str
 	display_name: str
 	xp: int
-	avatar_url: str | None = None
+	avatar: str | None = None
 	is_me: bool = False
 
 
