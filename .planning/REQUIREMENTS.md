@@ -23,9 +23,9 @@ Requirements for milestone v1.3: Leaderboard Profiles & Admin Device Management.
 
 ### JWT Simplification
 
-- [ ] **JWT-01**: Add plan_id to access token (from Memora Player Profile)
-- [ ] **JWT-02**: Remove timezone from access token (hardcode Asia/Amman)
-- [ ] **JWT-03**: Remove role from access token (all API users are players)
+- [x] **JWT-01**: Add plan_id to access token (from Memora Player Profile)
+- [x] **JWT-02**: Remove timezone from access token (hardcode Asia/Amman)
+- [x] **JWT-03**: Remove role from access token (all API users are players)
 
 ## Future Requirements
 
@@ -68,9 +68,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PROF-03 | Phase 14 | Complete |
 | PROF-04 | Phase 14 | Complete |
 | PROF-05 | Phase 14 | Complete |
-| JWT-01 | Phase 15 | Pending |
-| JWT-02 | Phase 15 | Pending |
-| JWT-03 | Phase 15 | Pending |
+| JWT-01 | Phase 15 | Complete |
+| JWT-02 | Phase 15 | Complete |
+| JWT-03 | Phase 15 | Complete |
 | ADMDEV-01 | Phase 16 | Pending |
 | ADMDEV-02 | Phase 16 | Pending |
 | ADMDEV-03 | Phase 16 | Pending |
@@ -82,4 +82,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-05 after Phase 14 completion*
+*Last updated: 2026-02-05 after Phase 15 completion*

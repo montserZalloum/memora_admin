@@ -90,8 +90,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 15-01-PLAN.md — Schema update + token payload changes + session storage
-- [ ] 15-02-PLAN.md — Identifier login + enriched response + plan change hook
+- [x] 15-01: JWT token structure + session storage — completed 2026-02-05
+- [x] 15-02: Identifier login + enriched response + plan change hook — completed 2026-02-05
 
 #### Phase 16: Admin Device Management
 **Goal**: Admins can view and remove player devices from Frappe Desk
@@ -127,7 +127,7 @@ Plans:
 | 12. Plan System Enhancement | v1.2 | 4/4 | Complete | 2026-02-03 |
 | 13. Plan Cache Invalidation Fix | v1.2.1 | 1/1 | Complete | 2026-02-03 |
 | 14. Profile Display Names | v1.3 | 3/3 | Complete | 2026-02-05 |
-| 15. JWT Simplification | v1.3 | 0/2 | Not started | - |
+| 15. JWT Simplification | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 
-**Total:** 16 phases, 51 plans completed, 4 plans pending (v1.3)
+**Total:** 16 phases, 53 plans completed, 2 plans pending (v1.3)
