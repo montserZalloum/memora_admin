@@ -15,6 +15,7 @@ from fastapi_app.services.access import AccessService
 from fastapi_app.services.frappe_client import FrappeClient
 from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.plan import PlanService
+from fastapi_app.services.profile import ProfileService
 from fastapi_app.services.progress import ProgressService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
@@ -185,6 +186,16 @@ async def get_plan_service(request: Request) -> PlanService:
 
 
 PlanServiceDep = Annotated[PlanService, Depends(get_plan_service)]
+
+
+async def get_profile_service(request: Request) -> ProfileService:
+    """Get ProfileService with Redis and FrappeClient."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    frappe_client = await get_frappe_client()
+    return ProfileService(redis_client, frappe_client)
+
+
+ProfileServiceDep = Annotated[ProfileService, Depends(get_profile_service)]
 
 
 # --- Double-Gate Dependencies ---
