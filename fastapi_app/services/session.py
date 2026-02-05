@@ -1,5 +1,6 @@
 """Session management for single-session per player via token family ID."""
 
+import json
 import uuid
 from typing import Optional
 
@@ -13,18 +14,22 @@ class SessionService:
     Per CONTEXT.md:
     - New login invalidates previous session
     - Old device discovers invalidation on next API call (401)
+
+    Session data is stored as JSON: {"fid": family_id, "plan": plan_id}
+    This allows refresh token flow to get plan_id without Frappe roundtrip.
     """
 
     def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:session:"):
         self.redis = redis_client
         self.prefix = key_prefix
 
-    async def create_session(self, user_id: str, ttl_days: int = 30) -> str:
+    async def create_session(self, user_id: str, plan_id: str, ttl_days: int = 30) -> str:
         """
         Create new session, invalidating any previous session.
 
         Args:
             user_id: The player's user ID
+            plan_id: Player's plan document name (e.g., 'PLAN-00001')
             ttl_days: Session TTL (matches refresh token lifetime)
 
         Returns:
@@ -33,28 +38,29 @@ class SessionService:
         family_id = str(uuid.uuid4())
         key = f"{self.prefix}{user_id}"
 
-        # Store new family_id (overwrites old, auto-invalidating previous session)
-        await self.redis.set(key, family_id, ex=ttl_days * 24 * 3600)
+        # Store session data as JSON (overwrites old, auto-invalidating previous session)
+        session_data = json.dumps({"fid": family_id, "plan": plan_id})
+        await self.redis.set(key, session_data, ex=ttl_days * 24 * 3600)
         return family_id
 
-    async def validate_session(self, user_id: str, family_id: str) -> bool:
+    async def validate_session(self, user_id: str, family_id: str) -> tuple[bool, str | None]:
         """
         Check if family_id matches current session.
 
         Returns:
-            True if session is valid, False if invalidated by new login
+            Tuple of (is_valid, plan_id):
+            - (True, plan_id) if session is valid
+            - (False, None) if invalidated by new login or no session
         """
-        key = f"{self.prefix}{user_id}"
-        current_fid = await self.redis.get(key)
+        session_data = await self.get_session_data(user_id)
 
-        if current_fid is None:
-            return False
+        if session_data is None:
+            return (False, None)
 
-        # Handle both bytes and str responses (depends on decode_responses setting)
-        if isinstance(current_fid, bytes):
-            current_fid = current_fid.decode("utf-8")
+        if session_data.get("fid") != family_id:
+            return (False, None)
 
-        return current_fid == family_id
+        return (True, session_data.get("plan"))
 
     async def invalidate_session(self, user_id: str) -> bool:
         """
@@ -67,6 +73,29 @@ class SessionService:
         deleted = await self.redis.delete(key)
         return deleted > 0
 
+    async def get_session_data(self, user_id: str) -> dict | None:
+        """
+        Get session data including plan_id for refresh flow.
+
+        Returns:
+            Dict with "fid" and "plan" keys, or None if no session
+        """
+        key = f"{self.prefix}{user_id}"
+        raw = await self.redis.get(key)
+
+        if raw is None:
+            return None
+
+        # Handle both bytes and str responses (depends on decode_responses setting)
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError:
+            # Legacy format (plain family_id string) - return as dict for compatibility
+            return {"fid": raw, "plan": None}
+
     async def get_session_family_id(self, user_id: str) -> Optional[str]:
         """
         Get current session's family_id (for debugging/admin).
@@ -74,13 +103,9 @@ class SessionService:
         Returns:
             Current family_id or None if no session
         """
-        key = f"{self.prefix}{user_id}"
-        fid = await self.redis.get(key)
+        session_data = await self.get_session_data(user_id)
 
-        if fid is None:
+        if session_data is None:
             return None
 
-        if isinstance(fid, bytes):
-            return fid.decode("utf-8")
-
-        return fid
+        return session_data.get("fid")
