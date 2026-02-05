@@ -15,6 +15,7 @@ from fastapi_app.api.deps import (
 	ProgressServiceDep,
 	RedisClient,
 	SettingsServiceDep,
+	StatsServiceDep,
 	WalletServiceDep,
 )
 from fastapi_app.core.constants import INTERACTION_BUFFER_KEY
@@ -189,6 +190,7 @@ async def end_session(
 	wallet_service: WalletServiceDep,
 	leaderboard_service: LeaderboardServiceDep,
 	settings_service: SettingsServiceDep,
+	stats_service: StatsServiceDep,
 	redis_client: RedisClient,
 ) -> EndSessionResponse:
 	"""
@@ -265,6 +267,21 @@ async def end_session(
 		version=hierarchy.version,
 	)
 
+	# Update stats cache if NOT a replay (replay = already counted)
+	stats_updated = False
+	if not is_replay:
+		lesson_path = hierarchy.find_lesson_path(session.lesson_id)
+		if lesson_path:
+			await stats_service.increment_completion_stats(
+				user_id=user.sub,
+				subject_id=session.subject_id,
+				version=hierarchy.version,
+				track_id=lesson_path.track_id,
+				unit_id=lesson_path.unit_id,
+				topic_id=lesson_path.topic_id,
+			)
+			stats_updated = True
+
 	# Get gamification settings (cached)
 	settings = await settings_service.get_gamification_settings()
 
@@ -309,6 +326,7 @@ async def end_session(
 		streak_updated=streak_updated,
 		stages_count=len(request.stages),
 		leaderboards_updated=True,
+		stats_updated=stats_updated,
 	)
 
 	return EndSessionResponse(

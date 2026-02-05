@@ -19,6 +19,7 @@ from fastapi_app.services.profile import ProfileService
 from fastapi_app.services.progress import ProgressService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
+from fastapi_app.services.stats import StatsService
 from fastapi_app.services.device import DeviceService
 from fastapi_app.services.game_session import GameSessionService
 from fastapi_app.services.leaderboard import LeaderboardService
@@ -144,6 +145,15 @@ async def get_leaderboard_service(request: Request) -> LeaderboardService:
 
 
 LeaderboardServiceDep = Annotated[LeaderboardService, Depends(get_leaderboard_service)]
+
+
+async def get_stats_service(request: Request) -> StatsService:
+    """Get StatsService with Redis from app state."""
+    redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+    return StatsService(redis_client)
+
+
+StatsServiceDep = Annotated[StatsService, Depends(get_stats_service)]
 
 
 # Singleton for FrappeClient

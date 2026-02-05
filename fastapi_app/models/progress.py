@@ -40,6 +40,18 @@ class LessonInfo(BaseModel):
     xp: int = 0  # XP awarded on completion
 
 
+class LessonPath(BaseModel):
+    """Path to a lesson in the hierarchy.
+
+    Used for stats updates to identify track/unit/topic for a lesson.
+    """
+
+    track_id: str
+    unit_id: str
+    topic_id: str
+    bit_index: int
+
+
 class TopicInfo(BaseModel):
     """Topic containing lessons."""
 
@@ -95,6 +107,30 @@ class SubjectHierarchy(BaseModel):
                     for lesson in topic.lessons:
                         if lesson.lesson_id == lesson_id:
                             return lesson
+        return None
+
+    def find_lesson_path(self, lesson_id: str) -> LessonPath | None:
+        """Find lesson and return its path (track/unit/topic IDs).
+
+        Used for stats updates to identify all parent containers.
+
+        Args:
+            lesson_id: The lesson identifier to find
+
+        Returns:
+            LessonPath with track_id, unit_id, topic_id, bit_index if found
+        """
+        for track in self.tracks:
+            for unit in track.units:
+                for topic in unit.topics:
+                    for lesson in topic.lessons:
+                        if lesson.lesson_id == lesson_id:
+                            return LessonPath(
+                                track_id=track.track_id,
+                                unit_id=unit.unit_id,
+                                topic_id=topic.topic_id,
+                                bit_index=lesson.bit_index,
+                            )
         return None
 
     def is_lesson_free(self, lesson_id: str) -> bool:
