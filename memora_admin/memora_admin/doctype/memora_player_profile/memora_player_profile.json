@@ -11,6 +11,7 @@
   "display_name",
   "plan",
   "avatar",
+  "gender",
   "grade",
   "major",
   "season",
@@ -49,6 +50,12 @@
    "label": "Avatar",
    "options": "avatar 1\navatar 2",
    "reqd": 1
+  },
+  {
+   "fieldname": "gender",
+   "fieldtype": "Select",
+   "label": "Gender",
+   "options": "male\nfemale"
   },
   {
    "fieldname": "grade",
