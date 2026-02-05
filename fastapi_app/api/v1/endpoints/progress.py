@@ -26,10 +26,14 @@ from fastapi_app.models.progress import (
     SubjectSummary,
     TopicInfo,
     TopicProgress,
+    TrackDetail,
     TrackInfo,
     TrackProgress,
+    TrackSummary,
+    UnitDetail,
     UnitInfo,
     UnitProgress,
+    UnitSummary,
 )
 from fastapi_app.services.unlock import is_lesson_unlocked
 
@@ -534,6 +538,291 @@ async def stream_subject_progress(
     return EventSourceResponse(
         event_generator(),
         headers={"X-Accel-Buffering": "no"},  # Disable nginx buffering
+    )
+
+
+# --- Granular Endpoints (Phase 17.2) ---
+# NOTE: Must come BEFORE /{subject} route (more specific paths first)
+
+
+@router.get("/{subject}/tracks", response_model=list[TrackSummary])
+async def get_subject_tracks(
+    subject: str,
+    user: CurrentUser,
+    hierarchy_service: HierarchyServiceDep,
+    access_service: AccessServiceDep,
+    stats_service: StatsServiceDep,
+    progress_service: ProgressServiceDep,
+) -> list[TrackSummary]:
+    """
+    Get all tracks for a subject with their progress.
+
+    Returns track summaries without nested units/topics.
+    Frontend can lazy-load units by calling /{subject}/tracks/{track_id}.
+
+    Performance: O(T) where T = number of tracks (typically 5-10)
+    """
+    # Get hierarchy (validate subject exists)
+    hierarchy = await hierarchy_service.get_hierarchy(subject)
+    if not hierarchy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
+        )
+
+    # Check access (same logic as existing endpoint)
+    content_key = f"SUB-{subject}"
+    has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+    if not has_access:
+        if not hierarchy.has_any_free_content():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "NO_ACCESS", "message": "Content access required"},
+            )
+
+    # Get or initialize stats (cold start handled)
+    stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
+    if stats is None:
+        completed_bits = await progress_service.get_completed_bits(
+            user.sub, subject, hierarchy.bit_range, hierarchy.version
+        )
+        stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+        await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
+
+    # Get completed bits for unlock calculation
+    completed_bits = await progress_service.get_completed_bits(
+        user.sub, subject, hierarchy.bit_range, hierarchy.version
+    )
+
+    # Build track summaries
+    tracks_summary = []
+    for track_idx, track in enumerate(hierarchy.tracks):
+        # Check unlock state (reuse existing helper)
+        track_unlocked = track_idx == 0 or not hierarchy.is_linear
+        if track_idx > 0 and hierarchy.is_linear:
+            prev_track = hierarchy.tracks[track_idx - 1]
+            track_unlocked = _is_track_complete(prev_track, completed_bits)
+
+        # Read from cached stats
+        track_completed = int(stats.get(f"{track.track_id}:completed", "0"))
+        track_total = int(stats.get(f"{track.track_id}:total", "0"))
+
+        tracks_summary.append(
+            TrackSummary(
+                track_id=track.track_id,
+                completed=track_completed,
+                total=track_total,
+                unlocked=track_unlocked,
+            )
+        )
+
+    return tracks_summary
+
+
+@router.get("/{subject}/tracks/{track_id}", response_model=TrackDetail)
+async def get_track_detail(
+    subject: str,
+    track_id: str,
+    user: CurrentUser,
+    hierarchy_service: HierarchyServiceDep,
+    access_service: AccessServiceDep,
+    stats_service: StatsServiceDep,
+    progress_service: ProgressServiceDep,
+) -> TrackDetail:
+    """
+    Get detailed progress for a specific track with its units.
+
+    Returns track with unit summaries (without topics).
+    Frontend can lazy-load topics by calling /{subject}/tracks/{track_id}/units/{unit_id}.
+
+    Performance: O(U) where U = units in track (typically 5-20)
+    """
+    # Get hierarchy
+    hierarchy = await hierarchy_service.get_hierarchy(subject)
+    if not hierarchy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
+        )
+
+    # Find track in hierarchy
+    track_info = None
+    track_idx = None
+    for idx, track in enumerate(hierarchy.tracks):
+        if track.track_id == track_id:
+            track_info = track
+            track_idx = idx
+            break
+
+    if track_info is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "TRACK_NOT_FOUND", "message": "Track not found"},
+        )
+
+    # Check access
+    content_key = f"SUB-{subject}"
+    has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+    if not has_access:
+        if not hierarchy.has_any_free_content():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "NO_ACCESS", "message": "Content access required"},
+            )
+
+    # Get or initialize stats
+    stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
+    if stats is None:
+        completed_bits = await progress_service.get_completed_bits(
+            user.sub, subject, hierarchy.bit_range, hierarchy.version
+        )
+        stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+        await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
+
+    # Get completed bits for unlock calculation
+    completed_bits = await progress_service.get_completed_bits(
+        user.sub, subject, hierarchy.bit_range, hierarchy.version
+    )
+
+    # Check track unlock state
+    track_unlocked = track_idx == 0 or not hierarchy.is_linear
+    if track_idx > 0 and hierarchy.is_linear:
+        prev_track = hierarchy.tracks[track_idx - 1]
+        track_unlocked = _is_track_complete(prev_track, completed_bits)
+
+    # Read track stats
+    track_completed = int(stats.get(f"{track_id}:completed", "0"))
+    track_total = int(stats.get(f"{track_id}:total", "0"))
+
+    # Build unit summaries
+    units_summary = []
+    for unit_idx, unit in enumerate(track_info.units):
+        unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
+
+        unit_completed = int(stats.get(f"{unit.unit_id}:completed", "0"))
+        unit_total = int(stats.get(f"{unit.unit_id}:total", "0"))
+
+        units_summary.append(
+            UnitSummary(
+                unit_id=unit.unit_id,
+                completed=unit_completed,
+                total=unit_total,
+                unlocked=unit_unlocked,
+            )
+        )
+
+    return TrackDetail(
+        track_id=track_id,
+        completed=track_completed,
+        total=track_total,
+        unlocked=track_unlocked,
+        units=units_summary,
+    )
+
+
+@router.get("/{subject}/tracks/{track_id}/units/{unit_id}", response_model=UnitDetail)
+async def get_unit_detail(
+    subject: str,
+    track_id: str,
+    unit_id: str,
+    user: CurrentUser,
+    hierarchy_service: HierarchyServiceDep,
+    access_service: AccessServiceDep,
+    stats_service: StatsServiceDep,
+    progress_service: ProgressServiceDep,
+) -> UnitDetail:
+    """
+    Get detailed progress for a specific unit with its topics.
+
+    Returns unit with topic progress (without lessons).
+
+    Performance: O(To) where To = topics in unit (typically 5-10)
+    """
+    # Get hierarchy
+    hierarchy = await hierarchy_service.get_hierarchy(subject)
+    if not hierarchy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
+        )
+
+    # Find track and unit in hierarchy
+    track_info = None
+    track_idx = None
+    unit_info = None
+    unit_idx = None
+
+    for t_idx, track in enumerate(hierarchy.tracks):
+        if track.track_id == track_id:
+            track_info = track
+            track_idx = t_idx
+            for u_idx, unit in enumerate(track.units):
+                if unit.unit_id == unit_id:
+                    unit_info = unit
+                    unit_idx = u_idx
+                    break
+            break
+
+    if unit_info is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "UNIT_NOT_FOUND", "message": "Unit not found"},
+        )
+
+    # Check access
+    content_key = f"SUB-{subject}"
+    has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+    if not has_access:
+        if not hierarchy.has_any_free_content():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "NO_ACCESS", "message": "Content access required"},
+            )
+
+    # Get or initialize stats
+    stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
+    if stats is None:
+        completed_bits = await progress_service.get_completed_bits(
+            user.sub, subject, hierarchy.bit_range, hierarchy.version
+        )
+        stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+        await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
+
+    # Get completed bits for unlock calculation
+    completed_bits = await progress_service.get_completed_bits(
+        user.sub, subject, hierarchy.bit_range, hierarchy.version
+    )
+
+    # Check unit unlock state
+    unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
+
+    # Read unit stats
+    unit_completed = int(stats.get(f"{unit_id}:completed", "0"))
+    unit_total = int(stats.get(f"{unit_id}:total", "0"))
+
+    # Build topic progress (reuse existing TopicProgress model)
+    topics_progress = []
+    for topic_idx, topic in enumerate(unit_info.topics):
+        topic_unlocked = _is_topic_unlocked(track_idx, unit_idx, topic_idx, hierarchy, completed_bits)
+
+        topic_completed = int(stats.get(f"{topic.topic_id}:completed", "0"))
+        topic_total = int(stats.get(f"{topic.topic_id}:total", "0"))
+
+        topics_progress.append(
+            TopicProgress(
+                topic_id=topic.topic_id,
+                completed=topic_completed,
+                total=topic_total,
+                unlocked=topic_unlocked,
+            )
+        )
+
+    return UnitDetail(
+        unit_id=unit_id,
+        completed=unit_completed,
+        total=unit_total,
+        unlocked=unit_unlocked,
+        topics=topics_progress,
     )
 
 

@@ -328,3 +328,88 @@ class SSETrackEvent(BaseModel):
     total: int
     percentage: float
     units: list[SSEUnitData]
+
+
+# --- Granular Endpoint Models (Phase 17.2) ---
+
+
+class TrackSummary(BaseModel):
+    """Track progress without nested units.
+
+    Used by GET /{subject}/tracks endpoint.
+    """
+
+    track_id: str
+    completed: int
+    total: int
+    unlocked: bool = True
+
+    @computed_field
+    @property
+    def percentage(self) -> float:
+        """Calculate completion percentage."""
+        if self.total == 0:
+            return 0.0
+        return round(self.completed / self.total * 100, 1)
+
+
+class UnitSummary(BaseModel):
+    """Unit progress without nested topics.
+
+    Used by GET /{subject}/tracks/{track_id} endpoint.
+    """
+
+    unit_id: str
+    completed: int
+    total: int
+    unlocked: bool = True
+
+    @computed_field
+    @property
+    def percentage(self) -> float:
+        """Calculate completion percentage."""
+        if self.total == 0:
+            return 0.0
+        return round(self.completed / self.total * 100, 1)
+
+
+class TrackDetail(BaseModel):
+    """Track with units (no topics).
+
+    Used by GET /{subject}/tracks/{track_id} endpoint.
+    """
+
+    track_id: str
+    completed: int
+    total: int
+    unlocked: bool = True
+    units: list[UnitSummary]
+
+    @computed_field
+    @property
+    def percentage(self) -> float:
+        """Calculate completion percentage."""
+        if self.total == 0:
+            return 0.0
+        return round(self.completed / self.total * 100, 1)
+
+
+class UnitDetail(BaseModel):
+    """Unit with topics (no lessons).
+
+    Used by GET /{subject}/tracks/{track_id}/units/{unit_id} endpoint.
+    """
+
+    unit_id: str
+    completed: int
+    total: int
+    unlocked: bool = True
+    topics: list[TopicProgress]
+
+    @computed_field
+    @property
+    def percentage(self) -> float:
+        """Calculate completion percentage."""
+        if self.total == 0:
+            return 0.0
+        return round(self.completed / self.total * 100, 1)
