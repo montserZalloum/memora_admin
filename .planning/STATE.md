@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 15 of 16 (JWT Simplification)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-05 — Completed 15-01-PLAN.md
+Last activity: 2026-02-05 — Completed 15-02-PLAN.md
 
-Progress: [###############---] 96% (52/54 plans)
+Progress: [################--] 98% (53/54 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 52
+- Total plans completed: 53
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -44,6 +44,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Role removed from token (all FastAPI users are players)
 - Gender field optional in Player Profile schema
 - Session JSON format: {fid, plan} for extensibility
+- is_email helper uses simple @ check (no regex)
+- Mobile lookup returns None on any error (generic failure)
+- Plan change invalidates session immediately (no graceful transition)
 
 **Phase 14 decisions:**
 - Use individual Redis keys with pipeline MGET (not HEXPIRE) for Redis <7.4 compatibility
@@ -68,6 +71,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-05
-Stopped at: Completed 15-01-PLAN.md
+Stopped at: Completed 15-02-PLAN.md
 Resume file: None
-Next action: Execute 15-02-PLAN.md (Login flow with identifier)
+Next action: Execute 15-03-PLAN.md (Integration tests)
