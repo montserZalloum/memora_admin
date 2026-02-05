@@ -10,8 +10,10 @@ from fastapi_app.api.deps import (
     HierarchyServiceDep,
     ProgressServiceDep,
     SettingsServiceDep,
+    StatsServiceDep,
     WalletServiceDep,
 )
+from fastapi_app.services.stats import compute_stats_from_hierarchy
 from fastapi_app.models.progress import (
     CompleteRequest,
     CompleteResponse,
@@ -387,6 +389,7 @@ async def get_subject_progress(
     progress_service: ProgressServiceDep,
     hierarchy_service: HierarchyServiceDep,
     access_service: AccessServiceDep,
+    stats_service: StatsServiceDep,
 ) -> SubjectProgress:
     """
     Get detailed progress breakdown for a subject.
@@ -401,6 +404,11 @@ async def get_subject_progress(
     - Full breakdown: subject + tracks + units + topics
     - Includes unlock state at each level
     - Percentages only (not raw data)
+
+    Per Phase 17 optimization:
+    - Stats read from Redis hash cache (O(1) HGETALL)
+    - Cold start lazily initializes cache from bitmap
+    - Unlock states still computed from completed_bits (O(1) set membership)
     """
     # Get hierarchy first (needed for both access check and progress calc)
     hierarchy = await hierarchy_service.get_hierarchy(subject)
@@ -423,7 +431,14 @@ async def get_subject_progress(
                 detail={"code": "NO_ACCESS", "message": "Content access required"},
             )
 
-    # Get completed bits
+    # Try to get cached stats (O(1) read)
+    stats = await stats_service.get_stats(
+        user_id=user.sub,
+        subject_id=subject,
+        version=hierarchy.version,
+    )
+
+    # Always need completed_bits for unlock state calculation
     completed_bits = await progress_service.get_completed_bits(
         user_id=user.sub,
         subject_id=subject,
@@ -431,11 +446,21 @@ async def get_subject_progress(
         version=hierarchy.version,
     )
 
-    # Build response with nested progress
+    if stats is None:
+        # Cold start: compute stats from bitmap and cache
+        stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+        await stats_service.set_stats(
+            user_id=user.sub,
+            subject_id=subject,
+            version=hierarchy.version,
+            stats=stats,
+        )
+
+    # Build response with nested progress using cached stats
     tracks_progress = []
 
     for track_idx, track in enumerate(hierarchy.tracks):
-        # Check track unlock state
+        # Check track unlock state (still uses completed_bits)
         track_unlocked = track_idx == 0 or not hierarchy.is_linear
         if track_idx > 0 and hierarchy.is_linear:
             prev_track = hierarchy.tracks[track_idx - 1]
@@ -453,8 +478,9 @@ async def get_subject_progress(
                     track_idx, unit_idx, topic_idx, hierarchy, completed_bits
                 )
 
-                topic_completed = _count_topic_completed(topic, completed_bits)
-                topic_total = _count_topic_lessons(topic)
+                # Read counts from cached stats (O(1) dict access)
+                topic_completed = int(stats.get(f"{topic.topic_id}:completed", "0"))
+                topic_total = int(stats.get(f"{topic.topic_id}:total", "0"))
 
                 topics_progress.append(
                     TopicProgress(
@@ -465,8 +491,9 @@ async def get_subject_progress(
                     )
                 )
 
-            unit_completed = _count_unit_completed(unit, completed_bits)
-            unit_total = _count_unit_lessons(unit)
+            # Read counts from cached stats
+            unit_completed = int(stats.get(f"{unit.unit_id}:completed", "0"))
+            unit_total = int(stats.get(f"{unit.unit_id}:total", "0"))
 
             units_progress.append(
                 UnitProgress(
@@ -478,8 +505,9 @@ async def get_subject_progress(
                 )
             )
 
-        track_completed = _count_track_completed(track, completed_bits)
-        track_total = _count_track_lessons(track)
+        # Read counts from cached stats
+        track_completed = int(stats.get(f"{track.track_id}:completed", "0"))
+        track_total = int(stats.get(f"{track.track_id}:total", "0"))
 
         tracks_progress.append(
             TrackProgress(
@@ -491,9 +519,9 @@ async def get_subject_progress(
             )
         )
 
-    # Calculate subject totals
-    subject_completed = sum(t.completed for t in tracks_progress)
-    subject_total = sum(t.total for t in tracks_progress)
+    # Read subject totals from cached stats
+    subject_completed = int(stats.get("completed", "0"))
+    subject_total = int(stats.get("total", "0"))
 
     return SubjectProgress(
         subject_id=subject,
