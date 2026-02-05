@@ -5,7 +5,7 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Milestone v1.3 — Phase 14: Profile Display Names (COMPLETE)
+**Current focus:** Milestone v1.3 — Phase 15: JWT Simplification (next)
 
 ## Current Position
 
@@ -63,4 +63,4 @@ None.
 Last session: 2026-02-05
 Stopped at: Completed 14-03-PLAN.md (Phase 14 complete)
 Resume file: None
-Next action: Execute Phase 15 (Device Management) or Phase 16 (Streak Reminders)
+Next action: `/gsd:plan-phase 15`

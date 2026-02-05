@@ -72,9 +72,9 @@ See: `.planning/phases/13-plan-cache-invalidation-fix/13-VERIFICATION.md` for de
 **Plans**: 3 plans
 
 Plans:
-- [ ] 14-01: ProfileService + Cache Infrastructure
-- [ ] 14-02: Frappe Integration (profile_sync hook, pub/sub handler)
-- [ ] 14-03: Leaderboard Enrichment (inject ProfileService, modify response)
+- [x] 14-01: ProfileService + Cache Infrastructure — completed 2026-02-05
+- [x] 14-02: Frappe Integration (profile_sync hook, pub/sub handler) — completed 2026-02-05
+- [x] 14-03: Leaderboard Enrichment (inject ProfileService, modify response) — completed 2026-02-05
 
 #### Phase 15: JWT Simplification
 **Goal**: Streamline access token payload by adding plan_id and removing unused fields
@@ -123,8 +123,8 @@ Plans:
 | 11. Scheduled Tasks | v1.1 | 4/4 | Complete | 2026-02-03 |
 | 12. Plan System Enhancement | v1.2 | 4/4 | Complete | 2026-02-03 |
 | 13. Plan Cache Invalidation Fix | v1.2.1 | 1/1 | Complete | 2026-02-03 |
-| 14. Profile Display Names | v1.3 | 0/3 | Not started | - |
+| 14. Profile Display Names | v1.3 | 3/3 | Complete | 2026-02-05 |
 | 15. JWT Simplification | v1.3 | 0/1 | Not started | - |
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 
-**Total:** 16 phases, 48 plans completed, 6 plans pending (v1.3)
+**Total:** 16 phases, 51 plans completed, 3 plans pending (v1.3)

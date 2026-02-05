@@ -9,11 +9,11 @@ Requirements for milestone v1.3: Leaderboard Profiles & Admin Device Management.
 
 ### Profile Display Names
 
-- [ ] **PROF-01**: Leaderboard responses include display_name from Memora Player Profile
-- [ ] **PROF-02**: Leaderboard responses include avatar from Memora Player Profile
-- [ ] **PROF-03**: ProfileService caches profiles in Redis hash (1hr TTL)
-- [ ] **PROF-04**: Batch profile lookup via Redis pipeline (<25ms for 100 entries)
-- [ ] **PROF-05**: Profile cache invalidated on Memora Player Profile update
+- [x] **PROF-01**: Leaderboard responses include display_name from Memora Player Profile
+- [x] **PROF-02**: Leaderboard responses include avatar from Memora Player Profile
+- [x] **PROF-03**: ProfileService caches profiles in Redis hash (1hr TTL)
+- [x] **PROF-04**: Batch profile lookup via Redis pipeline (<25ms for 100 entries)
+- [x] **PROF-05**: Profile cache invalidated on Memora Player Profile update
 
 ### Admin Device Management
 
@@ -63,11 +63,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| PROF-01 | Phase 14 | Pending |
-| PROF-02 | Phase 14 | Pending |
-| PROF-03 | Phase 14 | Pending |
-| PROF-04 | Phase 14 | Pending |
-| PROF-05 | Phase 14 | Pending |
+| PROF-01 | Phase 14 | Complete |
+| PROF-02 | Phase 14 | Complete |
+| PROF-03 | Phase 14 | Complete |
+| PROF-04 | Phase 14 | Complete |
+| PROF-05 | Phase 14 | Complete |
 | JWT-01 | Phase 15 | Pending |
 | JWT-02 | Phase 15 | Pending |
 | JWT-03 | Phase 15 | Pending |
@@ -82,4 +82,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 after roadmap creation*
+*Last updated: 2026-02-05 after Phase 14 completion*
