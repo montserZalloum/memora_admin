@@ -111,7 +111,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
                 lessons = frappe.get_all(
                     "Memora Lesson",
                     filters={"topic": topic.name},
-                    fields=["name", "xp"],
+                    fields=["name", "base_xp"],
                     order_by="idx asc",
                 )
 
@@ -119,7 +119,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
                     lesson_info = {
                         "lesson_id": lesson.name,
                         "bit_index": bit_index,
-                        "xp": lesson.xp if lesson.xp else 10,  # Default 10 XP
+                        "xp": lesson.base_xp if lesson.base_xp else 10,  # Default 10 XP
                     }
                     topic_info["lessons"].append(lesson_info)
                     bit_index += 1

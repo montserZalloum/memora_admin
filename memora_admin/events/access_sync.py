@@ -2,9 +2,34 @@
 
 Sync subscription and season changes to Redis for O(1) access checks.
 Per CONTEXT.md: immediate sync, sub-second propagation.
+
+IMPORTANT: This module writes to TWO Redis instances:
+1. Frappe cache (frappe.cache) - for Frappe-only data
+2. FastAPI Redis (get_fastapi_redis()) - for data shared with FastAPI sidecar
+
+The FastAPI sidecar uses a separate Redis instance without Frappe's site prefix.
 """
 
+import os
+from pathlib import Path
+
 import frappe
+import redis
+from dotenv import load_dotenv
+
+# Load FastAPI .env file
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(_env_path)
+
+
+def get_fastapi_redis():
+    """Get Redis connection for FastAPI sidecar.
+
+    Uses the REDIS_URL from the FastAPI .env file.
+    This is separate from frappe.cache which has site-specific prefixes.
+    """
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    return redis.from_url(redis_url)
 
 
 # =============================================================================
@@ -20,11 +45,11 @@ def on_season_updated(doc, method):
     - Gate 1 validates season is active and not expired
     - Uses Redis hash for atomic multi-field updates
     """
-    cache = frappe.cache
+    r = get_fastapi_redis()
     redis_key = f"memora:season:{doc.name}"
 
     # Use single hset with mapping for atomic update
-    cache.hset(
+    r.hset(
         redis_key,
         mapping={
             "is_published": "1" if doc.is_published else "0",
@@ -38,9 +63,9 @@ def on_season_updated(doc, method):
 
 def on_season_deleted(doc, method):
     """Remove season from Redis cache when deleted."""
-    cache = frappe.cache
+    r = get_fastapi_redis()
     redis_key = f"memora:season:{doc.name}"
-    cache.delete_value(redis_key)
+    r.delete(redis_key)
 
     frappe.logger().info(f"Season {doc.name} removed from Redis")
 
@@ -81,14 +106,14 @@ def on_subscription_change(doc, method):
         )
         return
 
-    cache = frappe.cache
+    r = get_fastapi_redis()
     redis_key = f"memora:access:{user_id}"
 
     if doc.is_active:
-        cache.sadd(redis_key, access_key)
+        r.sadd(redis_key, access_key)
         frappe.logger().info(f"Granted {access_key} to {user_id}")
     else:
-        cache.srem(redis_key, access_key)
+        r.srem(redis_key, access_key)
         frappe.logger().info(f"Revoked {access_key} from {user_id}")
 
 
@@ -106,9 +131,9 @@ def on_subscription_deleted(doc, method):
         user_id = player_id
 
     if user_id:
-        cache = frappe.cache
+        r = get_fastapi_redis()
         redis_key = f"memora:access:{user_id}"
-        cache.srem(redis_key, doc.access_key)
+        r.srem(redis_key, doc.access_key)
         frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
 
 
@@ -127,19 +152,19 @@ def on_plan_subject_changed(doc, method):
     subject_id = doc.subject
     redis_key = f"memora:plan:{plan_id}:free_subjects"
 
-    cache = frappe.cache
+    r = get_fastapi_redis()
 
     if method == "on_trash":
         # Remove from set regardless of is_premium (it's being deleted)
-        cache.srem(redis_key, subject_id)
+        r.srem(redis_key, subject_id)
         frappe.logger().info(f"Plan subject {subject_id} removed from plan {plan_id}")
     elif not doc.is_premium:
         # Add to free set (is_premium=0 means free)
-        cache.sadd(redis_key, subject_id)
+        r.sadd(redis_key, subject_id)
         frappe.logger().info(f"Plan subject {subject_id} marked free in plan {plan_id}")
     else:
         # Remove from free set (is_premium=1 means paid)
-        cache.srem(redis_key, subject_id)
+        r.srem(redis_key, subject_id)
         frappe.logger().info(f"Plan subject {subject_id} marked premium in plan {plan_id}")
 
 
@@ -155,15 +180,15 @@ def rebuild_plan_free_subjects(plan_id: str):
         pluck="subject",
     )
 
-    cache = frappe.cache
+    r = get_fastapi_redis()
     redis_key = f"memora:plan:{plan_id}:free_subjects"
 
     # Clear and rebuild
-    cache.delete_key(redis_key)
+    r.delete(redis_key)
     if subjects:
-        cache.sadd(redis_key, *subjects)
+        r.sadd(redis_key, *subjects)
 
-    frappe.logger().info(f"Rebuilt plan free subjects for {plan_id}: {len(subjects)} subjects")
+    print(f"Rebuilt plan free subjects for {plan_id}: {len(subjects)} subjects")
 
 
 # =============================================================================
@@ -186,18 +211,18 @@ def on_unit_free_changed(doc, method):
 
     subject_id = track.subject
     redis_key = "memora:subjects_with_free_content"
-    cache = frappe.cache
+    r = get_fastapi_redis()
 
     if method == "on_trash":
         # Check if subject still has free content after this unit is deleted
-        _update_subject_free_content_status(subject_id, cache, redis_key)
+        _update_subject_free_content_status(subject_id, r, redis_key)
     elif doc.is_free:
         # Subject now has free content
-        cache.sadd(redis_key, subject_id)
+        r.sadd(redis_key, subject_id)
         frappe.logger().info(f"Subject {subject_id} now has free content (unit {doc.name})")
     else:
         # Check if subject still has other free content
-        _update_subject_free_content_status(subject_id, cache, redis_key)
+        _update_subject_free_content_status(subject_id, r, redis_key)
 
 
 def on_topic_free_changed(doc, method):
@@ -219,50 +244,50 @@ def on_topic_free_changed(doc, method):
 
     subject_id = track.subject
     redis_key = "memora:subjects_with_free_content"
-    cache = frappe.cache
+    r = get_fastapi_redis()
 
     if method == "on_trash":
         # Check if subject still has free content after this topic is deleted
-        _update_subject_free_content_status(subject_id, cache, redis_key)
+        _update_subject_free_content_status(subject_id, r, redis_key)
     elif doc.is_free:
         # Subject now has free content
-        cache.sadd(redis_key, subject_id)
+        r.sadd(redis_key, subject_id)
         frappe.logger().info(f"Subject {subject_id} now has free content (topic {doc.name})")
     else:
         # Check if subject still has other free content
-        _update_subject_free_content_status(subject_id, cache, redis_key)
+        _update_subject_free_content_status(subject_id, r, redis_key)
 
 
-def _update_subject_free_content_status(subject_id: str, cache, redis_key: str):
+def _update_subject_free_content_status(subject_id: str, r, redis_key: str):
     """Check if subject still has any free units or topics and update Redis.
 
     Args:
         subject_id: The subject to check
-        cache: Frappe cache object
+        r: Redis connection (from get_fastapi_redis())
         redis_key: The Redis key for subjects_with_free_content set
     """
     # Check for free units
+    tracks = frappe.get_all("Memora Track", filters={"subject": subject_id}, pluck="name")
+    if not tracks:
+        r.srem(redis_key, subject_id)
+        return
+
     free_units = frappe.db.count(
         "Memora Unit",
         filters={
-            "track": ["in", frappe.get_all("Memora Track", filters={"subject": subject_id}, pluck="name")],
+            "track": ["in", tracks],
             "is_free": 1,
         },
     )
 
     if free_units > 0:
-        cache.sadd(redis_key, subject_id)
+        r.sadd(redis_key, subject_id)
         return
 
     # Check for free topics
-    tracks = frappe.get_all("Memora Track", filters={"subject": subject_id}, pluck="name")
-    if not tracks:
-        cache.srem(redis_key, subject_id)
-        return
-
     units = frappe.get_all("Memora Unit", filters={"track": ["in", tracks]}, pluck="name")
     if not units:
-        cache.srem(redis_key, subject_id)
+        r.srem(redis_key, subject_id)
         return
 
     free_topics = frappe.db.count(
@@ -271,9 +296,9 @@ def _update_subject_free_content_status(subject_id: str, cache, redis_key: str):
     )
 
     if free_topics > 0:
-        cache.sadd(redis_key, subject_id)
+        r.sadd(redis_key, subject_id)
     else:
-        cache.srem(redis_key, subject_id)
+        r.srem(redis_key, subject_id)
 
     frappe.logger().info(
         f"Subject {subject_id} free content status: {free_units} free units, {free_topics} free topics"
@@ -282,11 +307,11 @@ def _update_subject_free_content_status(subject_id: str, cache, redis_key: str):
 
 def rebuild_subjects_with_free_content():
     """Rebuild entire subjects_with_free_content set (for initial sync or repair)."""
-    cache = frappe.cache
+    r = get_fastapi_redis()
     redis_key = "memora:subjects_with_free_content"
 
     # Clear existing
-    cache.delete_key(redis_key)
+    r.delete(redis_key)
 
     # Find all subjects with free units
     free_unit_subjects = frappe.db.sql(
@@ -321,6 +346,6 @@ def rebuild_subjects_with_free_content():
             all_subjects.add(row.subject)
 
     if all_subjects:
-        cache.sadd(redis_key, *all_subjects)
+        r.sadd(redis_key, *all_subjects)
 
-    frappe.logger().info(f"Rebuilt subjects_with_free_content: {len(all_subjects)} subjects")
+    print(f"Rebuilt subjects_with_free_content: {len(all_subjects)} subjects")
