@@ -5,21 +5,23 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Milestone v1.3 — Phase 16: Admin Device Management (next)
+**Current focus:** Milestone v1.3 — Phase 17: Progress API Optimization
 
 ## Current Position
 
-Phase: 15 of 16 (JWT Simplification)
-Plan: 2 of 2 in current phase
-Status: Phase complete
-Last activity: 2026-02-05 — Completed Phase 15 (JWT Simplification)
+Phase: 17 of 17 (Progress API Optimization)
+Plan: 1 of 2 in current phase
+Status: Plan 01 complete
+Last activity: 2026-02-05 — Completed 17-01 (Stats Caching Layer)
 
-Progress: [################--] 98% (53/55 plans)
+Progress: [###############---] 95% (54/57 plans)
+
+**Next:** Plan 02 (SSE Streaming) in Phase 17
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 53
+- Total plans completed: 54
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -30,13 +32,19 @@ Progress: [################--] 98% (53/55 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 3 | 6 | In Progress |
+| v1.3 Profiles & Devices | 4 | 9 | In Progress |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 17 Plan 01 decisions:**
+- 1 hour TTL on stats cache, matching HierarchyService
+- Stats update only on non-replay completion (is_replay=False)
+- Keep completed_bits loading for unlock state calculation
+- Lazy initialization from bitmap on cold start
 
 **Phase 15 decisions:**
 - Store plan_id in Redis session JSON to avoid Frappe roundtrip on refresh
@@ -61,6 +69,10 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 None.
 
+### Roadmap Evolution
+
+- Phase 17 added: Progress API Optimization (Caching + Streaming for scalable progress tracking)
+
 ### Blockers/Concerns
 
 **Research notes for v1.3:**
@@ -71,6 +83,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-05
-Stopped at: Completed Phase 15 (JWT Simplification)
+Stopped at: Completed 17-01-PLAN.md (Stats Caching Layer)
 Resume file: None
-Next action: `/gsd:discuss-phase 16`
+Next action: `/gsd:execute-plan 02` of Phase 17
