@@ -6,7 +6,7 @@
 - SHIPPED **v1.1 Feature Expansion** — Phases 8-11 (shipped 2026-02-03)
 - SHIPPED **v1.2 Plan System Enhancement** — Phase 12 (shipped 2026-02-03)
 - SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
-- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-16
+- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-17
 
 ## Phases
 
@@ -109,6 +109,23 @@ Plans:
 - [ ] 16-01: Device Sync to Frappe (Redis -> authorized_devices child table)
 - [ ] 16-02: Device Removal UI (form script with removal dialog)
 
+#### Phase 17: Progress API Optimization
+**Goal**: Scalable progress tracking with caching and streaming for next-gen UX
+**Depends on**: Phase 16 (no code dependency, but sequential for milestone flow)
+**Requirements**: PROG-OPT-01, PROG-OPT-02
+**Success Criteria** (what must be TRUE):
+  1. Progress stats cached in Redis hash (subject/track/unit/topic completion counts)
+  2. Lesson completion updates cached stats atomically (O(1) instead of O(N) recomputation)
+  3. GET /progress/{subject} returns in <10ms regardless of subject size (50K+ lessons)
+  4. SSE streaming endpoint delivers progress data progressively (subject header first, then tracks)
+  5. Client receives first data chunk within 10ms of request
+  6. Existing bitmap storage unchanged (backward compatible)
+**Plans**: 2 plans
+
+Plans:
+- [x] 17-01: Progress Stats Caching Layer (Redis hash + completion hook updates) — completed 2026-02-05
+- [x] 17-02: SSE Streaming Endpoint (progressive progress delivery) — completed 2026-02-05
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -129,5 +146,6 @@ Plans:
 | 14. Profile Display Names | v1.3 | 3/3 | Complete | 2026-02-05 |
 | 15. JWT Simplification | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
+| 17. Progress API Optimization | v1.3 | 2/2 | Complete | 2026-02-05 |
 
-**Total:** 16 phases, 53 plans completed, 2 plans pending (v1.3)
+**Total:** 17 phases, 55 plans completed, 2 plans pending (v1.3)
