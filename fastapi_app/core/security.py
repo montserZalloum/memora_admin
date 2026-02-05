@@ -12,26 +12,28 @@ from fastapi_app.core.config import get_settings
 def create_access_token(
     user_id: str,
     email: str,
-    role: str,
-    timezone_str: str,
+    plan_id: str,
     display_name: str,
     family_id: str,
     expires_delta: timedelta | None = None,
 ) -> str:
     """
-    Create a JWT access token with rich user payload.
+    Create a JWT access token with user payload.
 
     Args:
         user_id: Unique user identifier (goes in 'sub' claim)
         email: User email address
-        role: User role (e.g., 'player', 'parent', 'admin')
-        timezone_str: User's timezone (e.g., 'Asia/Riyadh')
+        plan_id: Player's plan document name (e.g., 'PLAN-00001')
         display_name: User's display name
         family_id: Family identifier for session management
         expires_delta: Optional custom expiration time
 
     Returns:
         Encoded JWT token string
+
+    Note:
+        Timezone is hardcoded to Asia/Amman for all players.
+        Role field removed - all FastAPI users are players (admins use Frappe Desk).
     """
     settings = get_settings()
 
@@ -44,8 +46,7 @@ def create_access_token(
     payload: dict[str, Any] = {
         "sub": user_id,
         "email": email,
-        "role": role,
-        "tz": timezone_str,
+        "plan": plan_id,
         "name": display_name,
         "fid": family_id,
         "type": "access",

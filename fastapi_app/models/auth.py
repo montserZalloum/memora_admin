@@ -28,7 +28,7 @@ class TokenPayload(BaseModel):
     """Decoded JWT token payload.
 
     For access tokens: all fields populated.
-    For refresh tokens: email, role, tz, name are None.
+    For refresh tokens: email, plan, name are None.
     """
 
     sub: str  # User ID
@@ -39,12 +39,29 @@ class TokenPayload(BaseModel):
 
     # Access token specific fields (None for refresh tokens)
     email: str | None = None
-    role: str | None = None
-    tz: str | None = None  # Timezone
+    plan: str | None = None  # Player's plan document name (e.g., 'PLAN-00001')
     name: str | None = None  # Display name
 
     # Optional fields
     iat: int | None = None  # Issued at timestamp
+
+
+class LoginProfile(BaseModel):
+    """Player profile data returned with login response."""
+
+    display_name: str
+    avatar: str
+    gender: str | None = None  # Optional - may not be set
+    xp: int
+
+
+class EnrichedTokenResponse(BaseModel):
+    """Login response with tokens and profile data."""
+
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    profile: LoginProfile
 
 
 class FrappeUser(BaseModel):
