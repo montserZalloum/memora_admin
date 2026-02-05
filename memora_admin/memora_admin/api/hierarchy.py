@@ -46,12 +46,17 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
     subject = frappe.get_doc("Memora Subject", subject_id)
 
     # Build hierarchy
+    free_units = []
+    free_topics = []
+
     hierarchy = {
         "subject_id": subject.name,
         "version": getattr(subject, "version", 1),
         "bit_range": 0,  # Will be calculated
         "excluded_bits": [],
         "is_linear": getattr(subject, "is_linear", True),
+        "free_units": free_units,  # Will be populated
+        "free_topics": free_topics,  # Will be populated
         "tracks": [],
     }
 
@@ -81,27 +86,41 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
         )
 
         for unit in units:
+            unit_is_free = unit.is_free if unit.is_free is not None else False
+
             unit_info = {
                 "unit_id": unit.name,
                 "is_linear": unit.is_linear if unit.is_linear is not None else True,
-                "is_free": unit.is_free if unit.is_free is not None else False,
+                "is_free": unit_is_free,
                 "topics": [],
             }
+
+            # Track free units
+            if unit_is_free:
+                free_units.append(unit.name)
 
             # Get topics ordered by idx
             topics = frappe.get_all(
                 "Memora Topic",
                 filters={"unit": unit.name},
-                fields=["name", "is_linear"],
+                fields=["name", "is_linear", "is_free"],
                 order_by="idx asc",
             )
 
             for topic in topics:
+                topic_is_free = topic.is_free if topic.is_free is not None else False
+
+                # If any topic in unit is free, mark unit as free
+                if topic_is_free and not unit_is_free:
+                    free_topics.append(topic.name)
+                    unit_info["is_free"] = True
+
                 topic_info = {
                     "topic_id": topic.name,
                     "is_linear": (
                         topic.is_linear if topic.is_linear is not None else True
                     ),
+                    "is_free": topic_is_free,
                     "lessons": [],
                 }
 

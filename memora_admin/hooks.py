@@ -219,7 +219,8 @@ scheduler_events = {
 			"memora_admin.tasks.sync.flush_interaction_buffer",
 		],
 		# Every 2 minutes: Process pending content builds
-		"*/2 * * * *": [
+		# "*/2 * * * *": [
+		"* * * * *": [
 			"memora_admin.tasks.build_worker.process_pending_builds"
 		],
 		# Daily at 00:05: Streak reset (after midnight Asia/Amman)

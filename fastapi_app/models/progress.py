@@ -90,6 +90,8 @@ class SubjectHierarchy(BaseModel):
     bit_range: int  # Total bits allocated in bitmap
     excluded_bits: list[int] = []  # Deleted lessons (for accurate percentage)
     is_linear: bool = True  # If true, tracks must complete in order
+    free_units: list[str] = []  # Unit IDs that are marked as free
+    free_topics: list[str] = []  # Topic IDs that are marked as free
     tracks: list[TrackInfo]
 
     def find_lesson(self, lesson_id: str) -> LessonInfo | None:
@@ -139,18 +141,39 @@ class SubjectHierarchy(BaseModel):
         Per CONTEXT.md: Free content bypasses Gate 2 (player access grant check).
         Unit.is_free=1 or Topic.is_free=1 makes all lessons within free.
 
+        Uses cached free_units/free_topics for O(1) set lookup instead of full tree traversal.
+
         Args:
             lesson_id: The lesson identifier to check
 
         Returns:
             True if lesson is in a free unit or topic
         """
+        free_units_set = set(self.free_units)
+        free_topics_set = set(self.free_topics)
+
         for track in self.tracks:
             for unit in track.units:
-                for topic in unit.topics:
-                    for lesson in topic.lessons:
-                        if lesson.lesson_id == lesson_id:
-                            return unit.is_free or topic.is_free
+                # Quick O(1) check against cached free units
+                if unit.unit_id in free_units_set:
+                    for topic in unit.topics:
+                        for lesson in topic.lessons:
+                            if lesson.lesson_id == lesson_id:
+                                return True
+                else:
+                    # Only traverse topics if unit isn't free
+                    for topic in unit.topics:
+                        # Quick O(1) check against cached free topics
+                        if topic.topic_id in free_topics_set:
+                            for lesson in topic.lessons:
+                                if lesson.lesson_id == lesson_id:
+                                    return True
+                        else:
+                            # Fall back to is_free flags as last resort
+                            for lesson in topic.lessons:
+                                if lesson.lesson_id == lesson_id:
+                                    return topic.is_free
+
         return False
 
     def has_any_free_content(self) -> bool:
@@ -159,17 +182,12 @@ class SubjectHierarchy(BaseModel):
         Used to determine if a subject should be visible to players
         without explicit grants (for subjects with free samples).
 
+        Uses cached free_units/free_topics for O(1) check.
+
         Returns:
-            True if any unit or topic has is_free=True
+            True if any unit or topic is marked as free
         """
-        for track in self.tracks:
-            for unit in track.units:
-                if unit.is_free:
-                    return True
-                for topic in unit.topics:
-                    if topic.is_free:
-                        return True
-        return False
+        return bool(self.free_units or self.free_topics)
 
 
 # Progress response models with computed percentages

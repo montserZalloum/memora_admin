@@ -113,6 +113,29 @@ def _is_override_free(overrides: dict, doctype: str, name: str) -> bool | None:
 	return None
 
 
+def _update_plan_subject_metadata(plan_id: str, subject_id: str, free_content: dict) -> None:
+	"""
+	Update Memora Plan Subject child table row with free content metadata.
+
+	Args:
+		plan_id: The Memora Academic Plan document name
+		subject_id: The Memora Subject document name
+		free_content: Dict with "free_units" and "free_topics" arrays
+	"""
+	try:
+		plan_doc = frappe.get_doc("Memora Academic Plan", plan_id)
+
+		# Find the Plan Subject row for this subject
+		for plan_subject in plan_doc.plan_subjects or []:
+			if plan_subject.subject == subject_id:
+				# Update meta_data field with free content index
+				plan_subject.meta_data = json.dumps(free_content)
+				plan_doc.save()
+				return
+	except Exception as e:
+		logger.error(f"Failed to update meta_data for Plan {plan_id}, Subject {subject_id}: {e}")
+
+
 def _generate_manifest(
 	plan_doc: Any, subject_ids: list[str], overrides: dict, plan_subject_meta: dict
 ) -> dict:
@@ -262,11 +285,14 @@ def _generate_subject_files(plan_id: str, subject_id: str, overrides: dict) -> l
 		return files
 
 	# Generate _h.json (hierarchy with Plan Overrides applied)
-	hierarchy_data = _generate_hierarchy(plan_id, subject_doc, overrides)
+	hierarchy_data, free_content = _generate_hierarchy(plan_id, subject_doc, overrides)
 	files.append({
 		"filename": f"plans/{plan_id}/subjects/{subject_id}/_h.json",
 		"content": _to_json(hierarchy_data),
 	})
+
+	# Update Plan Subject meta_data with free content index
+	_update_plan_subject_metadata(plan_id, subject_id, free_content)
 
 	# Generate unit content files
 	tracks = frappe.get_all(
@@ -320,11 +346,19 @@ def _generate_subject_files(plan_id: str, subject_id: str, overrides: dict) -> l
 	return files
 
 
-def _generate_hierarchy(plan_id: str, subject_doc: Any, overrides: dict) -> dict:
-	"""Generate _h.json subject hierarchy with Plan Overrides applied."""
+def _generate_hierarchy(plan_id: str, subject_doc: Any, overrides: dict) -> tuple[dict, dict]:
+	"""Generate _h.json subject hierarchy with Plan Overrides applied.
+
+	Returns:
+		Tuple of (hierarchy_data, free_content_index)
+		free_content_index: {"free_units": [...], "free_topics": [...]}
+	"""
 	version = int(datetime.now(timezone.utc).timestamp())
 
 	tracks_data = []
+	free_units = []
+	free_topics = []
+
 	tracks = frappe.get_all(
 		"Memora Track",
 		filters={"subject": subject_doc.name, "is_published": 1},
@@ -348,10 +382,31 @@ def _generate_hierarchy(plan_id: str, subject_doc: Any, overrides: dict) -> dict
 			if _is_hidden(overrides, "Memora Unit", unit["name"]):
 				continue
 
-			# Apply is_free override
+			# Apply is_free override for unit
 			unit_is_free = _is_override_free(overrides, "Memora Unit", unit["name"])
 			if unit_is_free is None:
 				unit_is_free = bool(unit.get("is_free"))
+
+			# Track free units
+			if unit_is_free:
+				free_units.append(unit["name"])
+
+			# If unit is not already free, check if any topic is free
+			if not unit_is_free:
+				topics = frappe.get_all(
+					"Memora Topic",
+					filters={"unit": unit["name"], "is_published": 1},
+					fields=["name", "is_free"],
+				)
+				for topic in topics:
+					if _is_hidden(overrides, "Memora Topic", topic["name"]):
+						continue
+					topic_is_free = _is_override_free(overrides, "Memora Topic", topic["name"])
+					if topic_is_free is None:
+						topic_is_free = bool(topic.get("is_free"))
+					if topic_is_free:
+						unit_is_free = True
+						free_topics.append(topic["name"])
 
 			units_data.append({
 				"id": unit["name"],
@@ -371,7 +426,7 @@ def _generate_hierarchy(plan_id: str, subject_doc: Any, overrides: dict) -> dict
 			"units": units_data,
 		})
 
-	return {
+	hierarchy_data = {
 		"schema_version": SCHEMA_VERSION,
 		"version": version,
 		"subject_id": subject_doc.name,
@@ -379,6 +434,13 @@ def _generate_hierarchy(plan_id: str, subject_doc: Any, overrides: dict) -> dict
 		"is_linear": bool(getattr(subject_doc, "is_linear", True)),
 		"tracks": tracks_data,
 	}
+
+	free_content = {
+		"free_units": free_units,
+		"free_topics": free_topics,
+	}
+
+	return hierarchy_data, free_content
 
 
 def _generate_unit_content(unit_id: str, overrides: dict) -> dict:

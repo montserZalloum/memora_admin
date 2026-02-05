@@ -9,6 +9,7 @@
   "subject",
   "alias_title",
   "notes",
+  "meta_data",
   "is_premium"
  ],
  "fields": [
@@ -36,13 +37,19 @@
    "fieldname": "alias_title",
    "fieldtype": "Data",
    "label": "Alias Title"
+  },
+  {
+   "fieldname": "meta_data",
+   "fieldtype": "JSON",
+   "label": "Payload",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-02-01 10:56:50.117384",
+ "modified": "2026-02-05 23:15:58.056864",
  "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Plan Subject",

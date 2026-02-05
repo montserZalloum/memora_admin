@@ -26,11 +26,54 @@ pre-commit install
 bench start
 
 # Run FastAPI sidecar (from bench root)
-cd apps/memora_admin/fastapi_app
-uvicorn main:app --reload --port 8001
+cd apps/memora_admin
+uvicorn fastapi_app.main:app --reload --port 8002
 
 # Install FastAPI dependencies
 pip install -r apps/memora_admin/requirements.txt
+```
+
+## FastAPI Server Management
+
+**Current deployment**: FastAPI is running on **port 8002** at `http://127.0.0.1:8002`
+
+**IMPORTANT**: The FastAPI server is managed by a process supervisor and does NOT auto-reload on code changes.
+
+**When to restart**:
+- After adding new endpoints or routes
+- After modifying endpoint logic, dependencies, or middleware
+- After changing models, services, or core configuration
+- Basically, after ANY code change to `fastapi_app/*`
+
+**How to restart**:
+```bash
+# Find and kill the uvicorn process
+pkill -f "uvicorn fastapi_app.main:app"
+
+# Or kill by port
+fuser -k 8002/tcp
+
+# The process supervisor will automatically restart it
+# Wait 2-3 seconds and verify it's running:
+curl http://127.0.0.1:8002/api/v1/health/live
+
+# Expected response: {"status":"alive","api_version":"v1"}
+```
+
+**Testing endpoints**:
+```bash
+# Health check
+curl http://127.0.0.1:8002/api/v1/health/live
+
+# List all routes (from project root)
+python3 -c "
+import sys
+sys.path.insert(0, '.')
+from fastapi_app.main import app
+for route in app.routes:
+    if hasattr(route, 'path') and hasattr(route, 'methods'):
+        print(f'{route.path} - {route.methods}')
+"
 ```
 
 ## Code Style
