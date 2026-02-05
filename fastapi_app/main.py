@@ -17,6 +17,7 @@ from fastapi_app.middleware.request_id import RequestIDMiddleware
 from fastapi_app.services.frappe_client import FrappeClient, FrappeClientSettings
 from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.plan import PlanService
+from fastapi_app.services.profile import ProfileService
 
 logger = structlog.get_logger()
 
@@ -55,6 +56,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         frappe_client=frappe_client,
     )
     app.state.plan_service = plan_service
+
+    # Create ProfileService instance for pub/sub cache invalidation
+    profile_service = ProfileService(
+        redis_client=redis_client,
+        frappe_client=frappe_client,
+    )
+    app.state.profile_service = profile_service
 
     # Start pub/sub listener background task
     pubsub_task = asyncio.create_task(

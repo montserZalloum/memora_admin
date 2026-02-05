@@ -10,7 +10,7 @@ from typing import Literal
 import structlog
 from fastapi import APIRouter, Query
 
-from fastapi_app.api.deps import CurrentUser, LeaderboardServiceDep
+from fastapi_app.api.deps import CurrentUser, LeaderboardServiceDep, ProfileServiceDep
 from fastapi_app.models.leaderboard import (
     LeaderboardEntry,
     LeaderboardResponse,
@@ -29,6 +29,7 @@ async def get_leaderboard(
     lb_type: LeaderboardTypeParam,
     user: CurrentUser,
     leaderboard_service: LeaderboardServiceDep,
+    profile_service: ProfileServiceDep,
     limit: int = Query(10, ge=1, le=100, description="Number of entries to return"),
     subject_id: str | None = Query(None, description="Optional subject filter"),
 ) -> LeaderboardResponse:
@@ -44,6 +45,7 @@ async def get_leaderboard(
         lb_type: Leaderboard type (daily, weekly, alltime)
         user: Current authenticated user
         leaderboard_service: Service for leaderboard operations
+        profile_service: Service for profile lookups
         limit: Maximum entries to return (1-100, default 10)
         subject_id: Optional subject for filtered leaderboards
 
@@ -57,15 +59,18 @@ async def get_leaderboard(
     key = leaderboard_service._get_key(lb_type, subject_id)
     total_players = await leaderboard_service.redis.zcard(key)
 
-    # Build LeaderboardEntry list
-    # Note: display_name/avatar_url need profile lookup - Phase 10 uses player_id as placeholder
+    # Batch fetch profiles for all entries (single round-trip)
+    player_ids = [entry["player_id"] for entry in raw_entries]
+    profiles = await profile_service.get_profiles_batch(player_ids)
+
+    # Build LeaderboardEntry list with profile data
     entries = [
         LeaderboardEntry(
             rank=entry["rank"],
             player_id=entry["player_id"],
-            display_name=entry["player_id"],  # Placeholder: profile lookup in future phase
+            display_name=profiles[entry["player_id"]].display_name,
             xp=entry["xp"],
-            avatar_url=None,  # Placeholder: profile lookup in future phase
+            avatar=profiles[entry["player_id"]].avatar,
             is_me=entry["player_id"] == user.sub,
         )
         for entry in raw_entries
@@ -94,6 +99,7 @@ async def get_my_rank(
     lb_type: LeaderboardTypeParam,
     user: CurrentUser,
     leaderboard_service: LeaderboardServiceDep,
+    profile_service: ProfileServiceDep,
     subject_id: str | None = Query(None, description="Optional subject filter"),
 ) -> MyRankResponse:
     """
@@ -109,6 +115,7 @@ async def get_my_rank(
         lb_type: Leaderboard type (daily, weekly, alltime)
         user: Current authenticated user
         leaderboard_service: Service for leaderboard operations
+        profile_service: Service for profile lookups
         subject_id: Optional subject for filtered leaderboards
 
     Returns:
@@ -122,15 +129,18 @@ async def get_my_rank(
         neighbor_count=2,  # Per CONTEXT.md: +/-2 neighbors
     )
 
-    # Service always returns a dict (handles unranked case)
-    # Build neighbor entries with display_name placeholder
+    # Batch fetch profiles for neighbors (single round-trip)
+    player_ids = [n["player_id"] for n in result["neighbors"]]
+    profiles = await profile_service.get_profiles_batch(player_ids)
+
+    # Build neighbor entries with profile data
     neighbors = [
         LeaderboardEntry(
             rank=n["rank"],
             player_id=n["player_id"],
-            display_name=n["player_id"],  # Placeholder: profile lookup in future phase
+            display_name=profiles[n["player_id"]].display_name,
             xp=n["xp"],
-            avatar_url=None,  # Placeholder: profile lookup in future phase
+            avatar=profiles[n["player_id"]].avatar,
             is_me=n.get("is_me", False),
         )
         for n in result["neighbors"]
