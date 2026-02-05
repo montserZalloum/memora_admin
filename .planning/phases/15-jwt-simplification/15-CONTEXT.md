@@ -33,7 +33,7 @@ Streamline JWT access token payload and enhance login flow. Adds plan_id to toke
 - Change from `{ email, password }` to `{ identifier, password }`
 - `identifier` field accepts either email or mobile number
 - Auto-detect type: email format → email lookup, otherwise → mobile lookup
-- Mobile number lookup: query Memora Player Profile by mobile_number field
+- Mobile number lookup: query Frappe User doctype by mobile_no field (standard Frappe User field)
 - Mobile match: exact match required (no normalization)
 
 ### Login Response Changes
