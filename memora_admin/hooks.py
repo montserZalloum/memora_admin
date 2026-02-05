@@ -220,6 +220,10 @@ scheduler_events = {
 		"15 0 * * 5": [
 			"memora_admin.tasks.leaderboard_reset.archive_weekly_leaderboard"
 		],
+		# Hourly at :30: Pre-warm profile cache for active leaderboard players
+		"30 * * * *": [
+			"memora_admin.tasks.profile_cache.warm_profile_cache"
+		],
 	}
 }
 

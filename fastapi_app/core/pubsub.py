@@ -121,6 +121,23 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 					"plan_service_not_available",
 					plan_id=plan_id,
 				)
+		elif msg_type == "profile" and payload.get("player_id"):
+			# Get profile service from app state
+			player_id = payload.get("player_id")
+			profile_service = getattr(app_state, "profile_service", None)
+
+			if profile_service:
+				await profile_service.invalidate(player_id)
+				logger.info(
+					"profile_cache_invalidated",
+					player_id=player_id,
+					timestamp=timestamp,
+				)
+			else:
+				logger.warning(
+					"profile_service_not_available",
+					player_id=player_id,
+				)
 		else:
 			logger.debug(
 				"unknown_invalidation_message",
