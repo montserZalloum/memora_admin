@@ -1,7 +1,11 @@
 """Progress tracking endpoints for completion and percentages."""
 
+import json
+
 import structlog
 from fastapi import APIRouter, HTTPException, status
+from starlette.requests import Request
+from sse_starlette import EventSourceResponse
 
 from fastapi_app.api.deps import (
     AccessServiceDep,
@@ -528,4 +532,154 @@ async def get_subject_progress(
         completed=subject_completed,
         total=subject_total,
         tracks=tracks_progress,
+    )
+
+
+# --- SSE Streaming Endpoint ---
+
+
+@router.get("/stream/{subject}")
+async def stream_subject_progress(
+    subject: str,
+    request: Request,
+    user: CurrentUser,
+    stats_service: StatsServiceDep,
+    hierarchy_service: HierarchyServiceDep,
+    access_service: AccessServiceDep,
+    progress_service: ProgressServiceDep,
+) -> EventSourceResponse:
+    """
+    Stream progress data via Server-Sent Events.
+
+    Per Phase 17 requirements:
+    - First data chunk (subject summary) within 10ms
+    - Track details stream progressively
+    - 'complete' event signals end of stream
+
+    Events emitted:
+    - subject: {subject_id, completed, total, percentage}
+    - track: {track_id, completed, total, units: [...]}
+    - complete: signals end of stream
+
+    Args:
+        subject: Subject identifier
+        request: Starlette request for disconnect detection
+        user: Current authenticated user
+        stats_service: For cached stats
+        hierarchy_service: For subject structure
+        access_service: For access validation
+        progress_service: For cold start initialization
+
+    Returns:
+        EventSourceResponse streaming progress data
+    """
+    # Validate subject exists
+    hierarchy = await hierarchy_service.get_hierarchy(subject)
+    if not hierarchy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
+        )
+
+    # Verify access (same as REST endpoint)
+    content_key = f"SUB-{subject}"
+    has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+    if not has_access:
+        if not hierarchy.has_any_free_content():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "NO_ACCESS", "message": "Content access required"},
+            )
+
+    async def event_generator():
+        # Get or initialize stats (same logic as REST endpoint)
+        stats = await stats_service.get_stats(
+            user_id=user.sub,
+            subject_id=subject,
+            version=hierarchy.version,
+        )
+
+        if stats is None:
+            # Cold start: compute from bitmap
+            completed_bits = await progress_service.get_completed_bits(
+                user_id=user.sub,
+                subject_id=subject,
+                bit_range=hierarchy.bit_range,
+                version=hierarchy.version,
+            )
+            stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+            await stats_service.set_stats(
+                user_id=user.sub,
+                subject_id=subject,
+                version=hierarchy.version,
+                stats=stats,
+            )
+
+        # First event: subject summary (within 10ms target)
+        subject_completed = int(stats.get("completed", "0"))
+        subject_total = int(stats.get("total", "0"))
+        percentage = round(subject_completed / subject_total * 100, 1) if subject_total > 0 else 0.0
+
+        yield {
+            "event": "subject",
+            "data": json.dumps({
+                "subject_id": subject,
+                "completed": subject_completed,
+                "total": subject_total,
+                "percentage": percentage,
+            }),
+        }
+
+        # Stream tracks progressively
+        for track in hierarchy.tracks:
+            # Check for client disconnect
+            if await request.is_disconnected():
+                break
+
+            track_completed = int(stats.get(f"{track.track_id}:completed", "0"))
+            track_total = int(stats.get(f"{track.track_id}:total", "0"))
+
+            # Build units for this track
+            units_data = []
+            for unit in track.units:
+                unit_completed = int(stats.get(f"{unit.unit_id}:completed", "0"))
+                unit_total = int(stats.get(f"{unit.unit_id}:total", "0"))
+
+                # Build topics for this unit
+                topics_data = []
+                for topic in unit.topics:
+                    topic_completed = int(stats.get(f"{topic.topic_id}:completed", "0"))
+                    topic_total = int(stats.get(f"{topic.topic_id}:total", "0"))
+                    topics_data.append({
+                        "topic_id": topic.topic_id,
+                        "completed": topic_completed,
+                        "total": topic_total,
+                        "percentage": round(topic_completed / topic_total * 100, 1) if topic_total > 0 else 0.0,
+                    })
+
+                units_data.append({
+                    "unit_id": unit.unit_id,
+                    "completed": unit_completed,
+                    "total": unit_total,
+                    "percentage": round(unit_completed / unit_total * 100, 1) if unit_total > 0 else 0.0,
+                    "topics": topics_data,
+                })
+
+            yield {
+                "event": "track",
+                "data": json.dumps({
+                    "track_id": track.track_id,
+                    "completed": track_completed,
+                    "total": track_total,
+                    "percentage": round(track_completed / track_total * 100, 1) if track_total > 0 else 0.0,
+                    "units": units_data,
+                }),
+            }
+
+        # Final event signals completion
+        yield {"event": "complete", "data": ""}
+
+    return EventSourceResponse(
+        event_generator(),
+        headers={"X-Accel-Buffering": "no"},  # Disable nginx buffering
     )
