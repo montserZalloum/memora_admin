@@ -45,6 +45,7 @@ class TopicInfo(BaseModel):
 
     topic_id: str
     is_linear: bool = True  # If true, lessons must complete in order
+    is_free: bool = False  # If true, bypasses Gate 2
     lessons: list[LessonInfo]
 
 
@@ -95,6 +96,44 @@ class SubjectHierarchy(BaseModel):
                         if lesson.lesson_id == lesson_id:
                             return lesson
         return None
+
+    def is_lesson_free(self, lesson_id: str) -> bool:
+        """Check if lesson is in a free Unit or Topic.
+
+        Per CONTEXT.md: Free content bypasses Gate 2 (player access grant check).
+        Unit.is_free=1 or Topic.is_free=1 makes all lessons within free.
+
+        Args:
+            lesson_id: The lesson identifier to check
+
+        Returns:
+            True if lesson is in a free unit or topic
+        """
+        for track in self.tracks:
+            for unit in track.units:
+                for topic in unit.topics:
+                    for lesson in topic.lessons:
+                        if lesson.lesson_id == lesson_id:
+                            return unit.is_free or topic.is_free
+        return False
+
+    def has_any_free_content(self) -> bool:
+        """Check if subject has any free units or topics.
+
+        Used to determine if a subject should be visible to players
+        without explicit grants (for subjects with free samples).
+
+        Returns:
+            True if any unit or topic has is_free=True
+        """
+        for track in self.tracks:
+            for unit in track.units:
+                if unit.is_free:
+                    return True
+                for topic in unit.topics:
+                    if topic.is_free:
+                        return True
+        return False
 
 
 # Progress response models with computed percentages

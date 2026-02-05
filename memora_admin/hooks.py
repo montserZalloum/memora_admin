@@ -166,10 +166,18 @@ doc_events = {
         "on_update": "memora_admin.events.build_trigger.on_content_updated",
     },
     "Memora Unit": {
-        "on_update": "memora_admin.events.build_trigger.on_content_updated",
+        "on_update": [
+            "memora_admin.events.build_trigger.on_content_updated",
+            "memora_admin.events.access_sync.on_unit_free_changed",
+        ],
+        "on_trash": "memora_admin.events.access_sync.on_unit_free_changed",
     },
     "Memora Topic": {
-        "on_update": "memora_admin.events.build_trigger.on_content_updated",
+        "on_update": [
+            "memora_admin.events.build_trigger.on_content_updated",
+            "memora_admin.events.access_sync.on_topic_free_changed",
+        ],
+        "on_trash": "memora_admin.events.access_sync.on_topic_free_changed",
     },
     "Memora Lesson": {
         "on_update": "memora_admin.events.build_trigger.on_content_updated",
@@ -179,9 +187,18 @@ doc_events = {
         "on_update": "memora_admin.events.build_trigger.on_plan_updated",
     },
     "Memora Plan Subject": {
-        "after_insert": "memora_admin.events.build_trigger.on_plan_subject_changed",
-        "on_update": "memora_admin.events.build_trigger.on_plan_subject_changed",
-        "on_trash": "memora_admin.events.build_trigger.on_plan_subject_changed",
+        "after_insert": [
+            "memora_admin.events.build_trigger.on_plan_subject_changed",
+            "memora_admin.events.access_sync.on_plan_subject_changed",
+        ],
+        "on_update": [
+            "memora_admin.events.build_trigger.on_plan_subject_changed",
+            "memora_admin.events.access_sync.on_plan_subject_changed",
+        ],
+        "on_trash": [
+            "memora_admin.events.build_trigger.on_plan_subject_changed",
+            "memora_admin.events.access_sync.on_plan_subject_changed",
+        ],
     },
     "Memora Plan Overrider": {
         "after_insert": "memora_admin.events.build_trigger.on_plan_overrider_changed",

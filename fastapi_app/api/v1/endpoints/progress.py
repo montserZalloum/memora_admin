@@ -106,15 +106,21 @@ async def complete_lesson(
             detail={"code": "LESSON_NOT_FOUND", "message": "Lesson not found"},
         )
 
-    # Check content access (Gate 2 - without full Double-Gate for simplicity)
-    # Use subject-level access key
-    content_key = f"SUB-{request.subject}"
-    has_access = await access_service.check_access(user.sub, content_key)
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "NO_ACCESS", "message": "Content access required"},
+    # Check content access (Three-level access control)
+    # Level 2 & 3: Check if lesson is in free unit/topic
+    is_free_content = hierarchy.is_lesson_free(request.lesson)
+
+    if not is_free_content:
+        # Level 1: Check explicit grant OR plan membership
+        content_key = f"SUB-{request.subject}"
+        has_access = await access_service.check_access_with_plan(
+            user.sub, content_key, user.plan
         )
+        if not has_access:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "NO_ACCESS", "message": "Content access required"},
+            )
 
     # Check active session (enforces session-based flow per VERIFICATION gap)
     has_session = await game_session_service.has_active_session(user.sub)
@@ -321,21 +327,30 @@ async def get_progress_summary(
     Get progress summary for all player's subjects.
 
     Returns list of subjects with completion percentages.
-    Only includes subjects player has access to.
+    Includes subjects accessible via:
+    1. Explicit grants (Memora Player Subscription)
+    2. Plan membership (subjects with is_premium=0 in player's plan)
+    3. Subjects with free content (units/topics with is_free=True)
 
     Per CONTEXT.md:
     - Returns completion percentages only (not raw bitmaps)
     - Lightweight endpoint for dashboard/overview
     """
-    # Get all grants for player
+    # Get explicit grants for player
     grants = await access_service.get_player_grants(user.sub)
+    granted_subjects = {g.replace("SUB-", "") for g in grants if g.startswith("SUB-")}
 
-    # Filter to subject grants (SUB-* pattern)
-    subject_keys = [g for g in grants if g.startswith("SUB-")]
-    subject_ids = [k.replace("SUB-", "") for k in subject_keys]
+    # Get subjects from player's plan (those with is_premium=0)
+    plan_subjects = set(await access_service.get_plan_free_subjects(user.plan))
+
+    # Get subjects with free content (units/topics with is_free=True)
+    subjects_with_free = set(await hierarchy_service.get_subjects_with_free_content())
+
+    # Combine all accessible subjects (deduplicated via set union)
+    all_accessible = granted_subjects | plan_subjects | subjects_with_free
 
     summaries = []
-    for subject_id in subject_ids:
+    for subject_id in all_accessible:
         # Get hierarchy to calculate total
         hierarchy = await hierarchy_service.get_hierarchy(subject_id)
         if not hierarchy:
@@ -387,22 +402,26 @@ async def get_subject_progress(
     - Includes unlock state at each level
     - Percentages only (not raw data)
     """
-    # Verify access
-    content_key = f"SUB-{subject}"
-    has_access = await access_service.check_access(user.sub, content_key)
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "NO_ACCESS", "message": "Content access required"},
-        )
-
-    # Get hierarchy
+    # Get hierarchy first (needed for both access check and progress calc)
     hierarchy = await hierarchy_service.get_hierarchy(subject)
     if not hierarchy:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
         )
+
+    # Verify access (three-level check)
+    content_key = f"SUB-{subject}"
+    has_access = await access_service.check_access_with_plan(
+        user.sub, content_key, user.plan
+    )
+    if not has_access:
+        # Still allow if subject has free content (units/topics with is_free=True)
+        if not hierarchy.has_any_free_content():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "NO_ACCESS", "message": "Content access required"},
+            )
 
     # Get completed bits
     completed_bits = await progress_service.get_completed_bits(

@@ -28,6 +28,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
                             {
                                 "topic_id": "TOPIC-001",
                                 "is_linear": true,
+                                "is_free": false,
                                 "lessons": [
                                     {"lesson_id": "LESSON-001", "bit_index": 0, "xp": 10}
                                 ]
@@ -92,7 +93,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
             topics = frappe.get_all(
                 "Memora Topic",
                 filters={"unit": unit.name},
-                fields=["name", "is_linear"],
+                fields=["name", "is_linear", "is_free"],
                 order_by="idx asc",
             )
 
@@ -102,6 +103,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
                     "is_linear": (
                         topic.is_linear if topic.is_linear is not None else True
                     ),
+                    "is_free": topic.is_free if topic.is_free is not None else False,
                     "lessons": [],
                 }
 

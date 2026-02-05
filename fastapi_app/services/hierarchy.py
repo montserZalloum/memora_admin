@@ -100,3 +100,24 @@ class HierarchyService:
                 await self.redis.delete(*keys)
             if cursor == 0:
                 break
+
+    # =========================================================================
+    # Free Content Methods
+    # =========================================================================
+
+    def _free_content_subjects_key(self) -> str:
+        """Redis key for set of subjects that have free units or topics."""
+        return f"{self.prefix}subjects_with_free_content"
+
+    async def get_subjects_with_free_content(self) -> list[str]:
+        """Get list of subjects that have free units or topics.
+
+        This is cached in Redis and updated by Frappe hooks when
+        Unit.is_free or Topic.is_free changes.
+
+        Returns:
+            List of subject IDs that have at least one free unit/topic
+        """
+        key = self._free_content_subjects_key()
+        members = await self.redis.smembers(key)
+        return [m.decode() if isinstance(m, bytes) else m for m in members]
