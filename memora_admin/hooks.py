@@ -151,7 +151,11 @@ doc_events = {
         "on_trash": "memora_admin.events.access_sync.on_subscription_deleted",
     },
     "Memora Player Profile": {
-        "on_update": "memora_admin.events.device_sync.on_player_profile_update",
+        "after_insert": "memora_admin.events.profile_sync.on_player_profile_updated",
+        "on_update": [
+            "memora_admin.events.device_sync.on_player_profile_update",
+            "memora_admin.events.profile_sync.on_player_profile_updated",
+        ],
     },
     # Build trigger events for content DocTypes (debounced)
     "Memora Subject": {
