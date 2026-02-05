@@ -155,6 +155,7 @@ doc_events = {
         "on_update": [
             "memora_admin.events.device_sync.on_player_profile_update",
             "memora_admin.events.profile_sync.on_player_profile_updated",
+            "memora_admin.events.plan_change_sync.on_player_profile_plan_changed",
         ],
     },
     # Build trigger events for content DocTypes (debounced)
