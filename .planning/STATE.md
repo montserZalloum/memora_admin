@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 14 of 16 (Profile Display Names)
-Plan: 1 of 3 in current phase
+Plan: 2 of 3 in current phase
 Status: In progress
-Last activity: 2026-02-05 — Completed 14-01-PLAN.md
+Last activity: 2026-02-05 — Completed 14-02-PLAN.md
 
-Progress: [#############-----] 91% (49/54 plans)
+Progress: [#############-----] 93% (50/54 plans)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 49
+- Total plans completed: 50
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -42,6 +42,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Use individual Redis keys with pipeline MGET (not HEXPIRE) for Redis <7.4 compatibility
 - Limit Frappe batch fetch to 50 profiles to avoid timeouts
 - Empty display_name treated as missing, apply fallback
+- Use set_value with expires_in_sec for Frappe cache TTL
+- Hourly idempotency via Redis key rather than daily task log
 
 ### Pending Todos
 
@@ -57,6 +59,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-05
-Stopped at: Completed 14-01-PLAN.md
+Stopped at: Completed 14-02-PLAN.md
 Resume file: None
-Next action: Execute 14-02-PLAN.md (leaderboard integration)
+Next action: Execute 14-03-PLAN.md (leaderboard integration)
