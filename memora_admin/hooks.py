@@ -243,6 +243,10 @@ scheduler_events = {
 		"30 * * * *": [
 			"memora_admin.tasks.profile_cache.warm_profile_cache"
 		],
+		# Every 6 hours: Sync all plan subjects to Redis (safety net)
+		"0 */6 * * *": [
+			"memora_admin.tasks.plan_sync.sync_all_plan_subjects_to_redis"
+		],
 	}
 }
 
