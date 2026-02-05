@@ -38,6 +38,7 @@ class Settings(BaseSettings):
 
     # Frappe Integration
     frappe_url: str = "http://localhost:8000"
+    frappe_site: str = "x.conanacademy.com"
 
 
 @lru_cache

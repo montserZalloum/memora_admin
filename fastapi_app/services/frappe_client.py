@@ -2,7 +2,7 @@
 
 import httpx
 import structlog
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = structlog.get_logger()
 
@@ -10,13 +10,16 @@ logger = structlog.get_logger()
 class FrappeClientSettings(BaseSettings):
     """Settings for Frappe API client."""
 
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
     frappe_url: str = "http://localhost:8000"
+    frappe_site: str = "x.conanacademy.com"
     frappe_api_key: str = ""
     frappe_api_secret: str = ""
-
-    class Config:
-        env_prefix = ""
-        extra = "ignore"
 
 
 class FrappeAPIError(Exception):
@@ -45,6 +48,7 @@ class FrappeClient:
                 headers={
                     "Authorization": f"token {auth_token}",
                     "Content-Type": "application/json",
+                    "Host": self.settings.frappe_site,
                 },
                 timeout=30.0,
             )

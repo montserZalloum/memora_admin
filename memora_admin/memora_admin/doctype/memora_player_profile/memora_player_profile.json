@@ -9,9 +9,9 @@
  "field_order": [
   "user",
   "display_name",
+  "gender",
   "plan",
   "avatar",
-  "gender",
   "grade",
   "major",
   "season",
@@ -55,7 +55,7 @@
    "fieldname": "gender",
    "fieldtype": "Select",
    "label": "Gender",
-   "options": "male\nfemale"
+   "options": "Male\nFemale"
   },
   {
    "fieldname": "grade",
@@ -103,8 +103,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 11:08:51.024486",
- "modified_by": "Administrator",
+ "modified": "2026-02-05 13:10:05.572436",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Player Profile",
  "owner": "Administrator",

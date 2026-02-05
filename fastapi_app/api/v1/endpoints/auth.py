@@ -85,7 +85,7 @@ async def login(
         )
 
     # Resolve identifier to email
-    frappe_service = FrappeAuthService(settings.frappe_url)
+    frappe_service = FrappeAuthService(settings.frappe_url, settings.frappe_site)
 
     if is_email(credentials.identifier):
         # Identifier is email - use directly
@@ -100,8 +100,8 @@ async def login(
                 detail="Invalid credentials",
             )
 
-    # Verify credentials with Frappe
-    user = await frappe_service.verify_credentials(email, credentials.password)
+    # Verify credentials with Frappe and fetch player profile in one authenticated session
+    user, profile_data = await frappe_service.verify_credentials(email, credentials.password)
 
     if not user:
         # Per CONTEXT.md: generic error, don't reveal if email exists
@@ -110,8 +110,7 @@ async def login(
             detail="Invalid credentials",
         )
 
-    # Fetch player profile (includes plan_id)
-    profile_data = await frappe_service.get_player_profile(user.user_id)
+    # Check if player profile exists and has plan assigned
     if not profile_data or not profile_data.get("plan"):
         # Per CONTEXT.md: Player must have a plan assigned to login
         raise HTTPException(
