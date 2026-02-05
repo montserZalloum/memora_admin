@@ -1,12 +1,16 @@
 """Authentication-related Pydantic models."""
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 
 
 class LoginRequest(BaseModel):
-    """Request body for user login."""
+    """Request body for user login.
 
-    email: EmailStr
+    Accepts either email or mobile number as identifier.
+    Per CONTEXT.md: Auto-detect type - email has @, mobile doesn't.
+    """
+
+    identifier: str
     password: str
 
 

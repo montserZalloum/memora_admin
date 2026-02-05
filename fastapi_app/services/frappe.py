@@ -5,6 +5,14 @@ import httpx
 from fastapi_app.models.auth import FrappeUser
 
 
+def is_email(identifier: str) -> bool:
+    """Check if identifier is email format.
+
+    Per CONTEXT.md: Simple detection - email has @, mobile doesn't.
+    """
+    return "@" in identifier
+
+
 class FrappeAuthService:
     """Authenticate against Frappe server via REST API.
 
@@ -103,4 +111,64 @@ class FrappeAuthService:
 
         except httpx.RequestError:
             # Network error, timeout, etc. - return None (generic failure)
+            return None
+
+    async def lookup_user_by_mobile(self, mobile: str) -> str | None:
+        """Find Frappe User by mobile_no field.
+
+        Per CONTEXT.md: Query Frappe User doctype by mobile_no field.
+        Returns user email if found, None otherwise.
+        Exact match required (no normalization).
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                # Query User doctype with mobile_no filter
+                # Using Frappe REST API list filters
+                response = await client.get(
+                    f"{self.frappe_url}/api/resource/User",
+                    params={
+                        "filters": f'[["mobile_no", "=", "{mobile}"]]',
+                        "fields": '["email"]',
+                        "limit_page_length": 1,
+                    },
+                )
+
+                if response.status_code != 200:
+                    return None
+
+                data = response.json().get("data", [])
+                if data and len(data) > 0:
+                    return data[0].get("email")
+
+                return None
+
+        except httpx.RequestError:
+            return None
+
+    async def get_player_profile(self, user_id: str) -> dict | None:
+        """Get player profile including plan, display_name, avatar, gender.
+
+        Returns dict with profile fields or None if not found.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                response = await client.get(
+                    f"{self.frappe_url}/api/resource/Memora Player Profile/{user_id}",
+                    params={
+                        "fields": '["plan", "display_name", "avatar", "gender"]',
+                    },
+                )
+
+                if response.status_code != 200:
+                    return None
+
+                data = response.json().get("data", {})
+                return {
+                    "plan": data.get("plan"),
+                    "display_name": data.get("display_name"),
+                    "avatar": data.get("avatar"),
+                    "gender": data.get("gender"),
+                }
+
+        except httpx.RequestError:
             return None
