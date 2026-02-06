@@ -139,7 +139,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 18-01-PLAN.md — Lesson completion status endpoint (models + endpoint)
+- [x] 18-01: Lesson completion status endpoint (models + endpoint) — completed 2026-02-06
 
 ## Progress
 
@@ -162,6 +162,6 @@ Plans:
 | 15. JWT Simplification | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 | 17. Progress API Optimization | v1.3 | 2/2 | Complete | 2026-02-05 |
-| 18. Lesson Completion Status API | v1.3 | 0/1 | Not started | - |
+| 18. Lesson Completion Status API | v1.3 | 1/1 | Complete | 2026-02-06 |
 
-**Total:** 18 phases, 55 plans completed, 3 plans pending (v1.3)
+**Total:** 18 phases, 56 plans completed, 2 plans pending (v1.3)
