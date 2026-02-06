@@ -21,10 +21,12 @@ from fastapi_app.services.stats import compute_stats_from_hierarchy
 from fastapi_app.models.progress import (
     CompleteRequest,
     CompleteResponse,
+    LessonCompletionStatus,
     SubjectHierarchy,
     SubjectProgress,
     SubjectSummary,
     TopicInfo,
+    TopicLessonsResponse,
     TopicProgress,
     TrackDetail,
     TrackInfo,
@@ -321,6 +323,27 @@ def _is_topic_unlocked(
         return _is_topic_complete(prev_topic, completed_bits)
 
     return True
+
+
+def _find_topic_in_hierarchy(hierarchy: SubjectHierarchy, topic_id: str) -> TopicInfo | None:
+    """Find topic by ID within hierarchy.
+
+    O(T * U * To) worst case, but typically <100 iterations total.
+    Used by get_topic_lessons endpoint for topic lookup.
+
+    Args:
+        hierarchy: Subject hierarchy structure
+        topic_id: Topic identifier to find
+
+    Returns:
+        TopicInfo if found, None otherwise
+    """
+    for track in hierarchy.tracks:
+        for unit in track.units:
+            for topic in unit.topics:
+                if topic.topic_id == topic_id:
+                    return topic
+    return None
 
 
 # --- Endpoints ---
@@ -823,6 +846,95 @@ async def get_unit_detail(
         total=unit_total,
         unlocked=unit_unlocked,
         topics=topics_progress,
+    )
+
+
+@router.get("/{subject}/topics/{topic_id}/lessons", response_model=TopicLessonsResponse)
+async def get_topic_lessons(
+    subject: str,
+    topic_id: str,
+    user: CurrentUser,
+    hierarchy_service: HierarchyServiceDep,
+    access_service: AccessServiceDep,
+    progress_service: ProgressServiceDep,
+) -> TopicLessonsResponse:
+    """
+    Get completion status for all lessons in a topic.
+
+    Returns lesson_id, bit_index, and completed boolean for each lesson.
+    Uses pipeline GETBIT for <5ms response regardless of lesson count.
+
+    Performance:
+    - Hierarchy fetch: O(1) from Redis cache
+    - Topic lookup: O(T*U*To) but <1ms for typical subjects
+    - GETBIT pipeline: O(L) in single round-trip, ~1ms
+
+    Args:
+        subject: Subject identifier
+        topic_id: Topic identifier
+        user: Current authenticated user
+        hierarchy_service: For subject structure
+        access_service: For access validation
+        progress_service: For Redis bitmap access
+
+    Returns:
+        TopicLessonsResponse with completion status for each lesson
+    """
+    # Get cached hierarchy
+    hierarchy = await hierarchy_service.get_hierarchy(subject)
+    if not hierarchy:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
+        )
+
+    # Find topic in hierarchy
+    topic = _find_topic_in_hierarchy(hierarchy, topic_id)
+    if not topic:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "TOPIC_NOT_FOUND", "message": "Topic not found"},
+        )
+
+    # Check access (same logic as existing endpoints)
+    content_key = f"SUB-{subject}"
+    has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+    if not has_access:
+        if not hierarchy.has_any_free_content():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"code": "NO_ACCESS", "message": "Content access required"},
+            )
+
+    # Get completion status for all lessons via pipeline GETBIT
+    lessons_status = []
+    completed_count = 0
+
+    if topic.lessons:
+        # Use pipeline for batch GETBIT (single round-trip, ~1ms for 100 lessons)
+        key = f"memora:progress:{user.sub}:{subject}:v{hierarchy.version}"
+        pipe = progress_service.redis.pipeline()
+        for lesson in topic.lessons:
+            pipe.getbit(key, lesson.bit_index)
+        results = await pipe.execute()
+
+        for lesson, is_completed in zip(topic.lessons, results):
+            completed = bool(is_completed)
+            if completed:
+                completed_count += 1
+            lessons_status.append(
+                LessonCompletionStatus(
+                    lesson_id=lesson.lesson_id,
+                    bit_index=lesson.bit_index,
+                    completed=completed,
+                )
+            )
+
+    return TopicLessonsResponse(
+        topic_id=topic_id,
+        total=len(topic.lessons),
+        completed=completed_count,
+        lessons=lessons_status,
     )
 
 
