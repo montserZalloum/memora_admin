@@ -413,3 +413,38 @@ class UnitDetail(BaseModel):
         if self.total == 0:
             return 0.0
         return round(self.completed / self.total * 100, 1)
+
+
+# --- Lesson Completion Models (Phase 18) ---
+
+
+class LessonCompletionStatus(BaseModel):
+    """Completion status for a single lesson.
+
+    Used by GET /{subject}/topics/{topic_id}/lessons endpoint.
+    """
+
+    lesson_id: str
+    bit_index: int  # Position in bitmap (useful for debugging/verification)
+    completed: bool
+
+
+class TopicLessonsResponse(BaseModel):
+    """All lessons in a topic with completion status.
+
+    Used by GET /{subject}/topics/{topic_id}/lessons endpoint.
+    Performance: <5ms for topics with up to 100 lessons.
+    """
+
+    topic_id: str
+    total: int
+    completed: int
+    lessons: list[LessonCompletionStatus]
+
+    @computed_field
+    @property
+    def percentage(self) -> float:
+        """Calculate completion percentage."""
+        if self.total == 0:
+            return 0.0
+        return round(self.completed / self.total * 100, 1)
