@@ -6,7 +6,7 @@
 - SHIPPED **v1.1 Feature Expansion** — Phases 8-11 (shipped 2026-02-03)
 - SHIPPED **v1.2 Plan System Enhancement** — Phase 12 (shipped 2026-02-03)
 - SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
-- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-17
+- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-18
 
 ## Phases
 
@@ -126,6 +126,21 @@ Plans:
 - [x] 17-01: Progress Stats Caching Layer (Redis hash + completion hook updates) — completed 2026-02-05
 - [x] 17-02: SSE Streaming Endpoint (progressive progress delivery) — completed 2026-02-05
 
+#### Phase 18: Lesson Completion Status API
+**Goal**: Fast per-lesson completion lookups for topic pages at scale (100K concurrent players, 100+ lessons per topic)
+**Depends on**: Phase 17 (leverages existing bitmap infrastructure)
+**Requirements**: LESSON-STATUS-01, LESSON-STATUS-02
+**Success Criteria** (what must be TRUE):
+  1. GET /progress/{subject}/topics/{topic_id}/lessons returns completion status for all lessons in topic
+  2. Response includes lesson_id, bit_index, and completed (boolean) for each lesson
+  3. Endpoint returns in <5ms regardless of lesson count (leverages existing bitmap)
+  4. Works correctly with 100K concurrent players (stateless, Redis-only lookups)
+  5. Integrates with existing bit_index system (no new storage, O(1) per-lesson lookup)
+**Plans**: 1 plan
+
+Plans:
+- [ ] 18-01-PLAN.md — Lesson completion status endpoint (models + endpoint)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -147,5 +162,6 @@ Plans:
 | 15. JWT Simplification | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 | 17. Progress API Optimization | v1.3 | 2/2 | Complete | 2026-02-05 |
+| 18. Lesson Completion Status API | v1.3 | 0/1 | Not started | - |
 
-**Total:** 17 phases, 55 plans completed, 2 plans pending (v1.3)
+**Total:** 18 phases, 55 plans completed, 3 plans pending (v1.3)
