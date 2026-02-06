@@ -9,19 +9,19 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 
 ## Current Position
 
-Phase: 17 of 17 (Progress API Optimization)
-Plan: 2 of 2 in current phase
-Status: Phase 17 complete, Phase 16 pending
-Last activity: 2026-02-05 — Completed 17-02 (SSE Streaming)
+Phase: 18 of 18 (Lesson Completion Status API)
+Plan: 1 of 1 in current phase
+Status: Phase 18 complete, Phase 16 pending
+Last activity: 2026-02-06 — Completed 18-01-PLAN.md (Lesson Completion Status API)
 
-Progress: [################--] 96% (55/57 plans)
+Progress: [#################-] ~97% (56/58 plans)
 
-**Next Phase:** 16 (Admin Device Management) — 2 plans remaining in v1.3
+**Next Phase:** 16 (Admin Device Management) — 2 plans remaining
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 55
+- Total plans completed: 56
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -32,13 +32,18 @@ Progress: [################--] 96% (55/57 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 4 | 9 | In Progress (7/9) |
+| v1.3 Profiles & Devices | 5 | 10 | In Progress (8/10) |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 18 Plan 01 decisions:**
+- Pipeline GETBIT instead of full bitmap load for <5ms response
+- Route placed before /{subject} catch-all for correct routing
+- Return bit_index in response for debugging/verification purposes
 
 **Phase 17 Plan 02 decisions:**
 - sse-starlette library for mature SSE support
@@ -79,6 +84,7 @@ None.
 ### Roadmap Evolution
 
 - Phase 17 completed: Progress API Optimization (Caching + Streaming for scalable progress tracking)
+- Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
 
 ### Blockers/Concerns
 
@@ -89,7 +95,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-05
-Stopped at: Completed 17-02-PLAN.md (SSE Streaming) - Phase 17 complete
+Last session: 2026-02-06
+Stopped at: Completed 18-01-PLAN.md (Lesson Completion Status API) - Phase 18 complete
 Resume file: None
 Next action: `/gsd:plan-phase 16` or `/gsd:execute-phase 16` (if planned)
