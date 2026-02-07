@@ -5,19 +5,19 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Milestone v1.3 — Phase 16: Admin Device Management (remaining)
+**Current focus:** Milestone v1.3 — Phase 20: Lesson Complete Pipeline Overhaul
 
 ## Current Position
 
-Phase: 19 of 19 (Stage Content Editor)
-Plan: 2 of 2 in current phase
-Status: Phase 19 complete, verified (8/8 must-haves)
-Last activity: 2026-02-07 — Phase 19 verification passed
+Phase: 20 of 20 (Lesson Complete Pipeline Overhaul)
+Plan: 0 of 4 in current phase
+Status: Phase 20 planned (4 plans in 2 waves)
+Last activity: 2026-02-07 — Phase 20 planning complete
 
-Progress: [##################] ~97% (58/60 plans)
+Progress: [##################] ~91% (58/64 plans)
 
-**Completed Phase:** 19 — Stage Content Editor (2 plans)
-**Next Phase:** 16 (Admin Device Management) — 2 plans remaining
+**Planned Phase:** 20 — Lesson Complete Pipeline Overhaul (4 plans)
+**Also Pending:** 16 (Admin Device Management) — 2 plans remaining
 
 ## Performance Metrics
 
@@ -33,7 +33,7 @@ Progress: [##################] ~97% (58/60 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 6 | 12 | In Progress (10/12) |
+| v1.3 Profiles & Devices | 8 | 16 | In Progress (10/16) |
 
 ## Accumulated Context
 
@@ -91,6 +91,7 @@ None.
 - Phase 17 completed: Progress API Optimization (Caching + Streaming for scalable progress tracking)
 - Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
 - Phase 19 completed: Stage Content Editor (Edit Content button + build generator stage_id fix)
+- Phase 20 planned: Lesson Complete Pipeline Overhaul — 4 plans in 2 waves (FSRS, Lua optimization, hearts XP, legacy removal)
 
 ### Blockers/Concerns
 
@@ -102,6 +103,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 19-02-PLAN.md (Use Frappe name as stage_id)
+Stopped at: Phase 20 planning complete (4 plans created)
 Resume file: None
-Next action: `/gsd:plan-phase 16` to plan Admin Device Management
+Next action: `/gsd:execute-phase 20` to execute Lesson Complete Pipeline Overhaul
