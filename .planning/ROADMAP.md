@@ -177,7 +177,7 @@ Plans:
 
 Plans:
 - [x] 20-01-PLAN.md — Hierarchy & settings enrichment (base_xp, max_hearts, xp_per_heart + fsrs dep) — completed 2026-02-07
-- [ ] 20-02-PLAN.md — StageResult time_spent to milliseconds + legacy endpoint removal
+- [x] 20-02-PLAN.md — StageResult time_spent to milliseconds + legacy endpoint removal — completed 2026-02-07
 - [ ] 20-03-PLAN.md — Lua session_complete script + pipeline hot path rewrite + hearts XP
 - [ ] 20-04-PLAN.md — FSRS background task (scheduled processor + hooks registration)
 
@@ -204,6 +204,6 @@ Plans:
 | 17. Progress API Optimization | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 18. Lesson Completion Status API | v1.3 | 1/1 | Complete | 2026-02-06 |
 | 19. Stage Content Editor | v1.3 | 2/2 | Complete | 2026-02-07 |
-| 20. Lesson Complete Pipeline Overhaul | v1.3 | 1/4 | In Progress | - |
+| 20. Lesson Complete Pipeline Overhaul | v1.3 | 2/4 | In Progress | - |
 
-**Total:** 20 phases, 59 plans completed, 5 plans pending (v1.3)
+**Total:** 20 phases, 60 plans completed, 4 plans pending (v1.3)

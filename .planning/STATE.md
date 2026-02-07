@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 20 of 20 (Lesson Complete Pipeline Overhaul)
-Plan: 1 of 4 in current phase
-Status: In progress (Plan 20-01 complete)
-Last activity: 2026-02-07 — Completed 20-01-PLAN.md
+Plan: 2 of 4 in current phase
+Status: In progress (Plans 20-01, 20-02 complete)
+Last activity: 2026-02-07 — Completed 20-02-PLAN.md
 
-Progress: [##################-] ~92% (59/64 plans)
+Progress: [##################-] ~94% (60/64 plans)
 
-**In Progress:** 20 — Lesson Complete Pipeline Overhaul (1/4 plans complete)
+**In Progress:** 20 — Lesson Complete Pipeline Overhaul (2/4 plans complete)
 **Also Pending:** 16 (Admin Device Management) — 2 plans remaining
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 59
+- Total plans completed: 60
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -33,13 +33,18 @@ Progress: [##################-] ~92% (59/64 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 8 | 16 | In Progress (11/16) |
+| v1.3 Profiles & Devices | 8 | 16 | In Progress (12/16) |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 20 Plan 02 decisions:**
+- Keep CompleteRequest/CompleteResponse with DEPRECATED comments (models/__init__.py re-exports)
+- Remove calculate_xp_award from progress.py (duplicated in sessions.py)
+- time_spent stays int pass-through (FSRS consumes as milliseconds)
 
 **Phase 20 Plan 01 decisions:**
 - XP fallback from Memora Settings base_lesson_xp (not hardcoded 10)
@@ -97,7 +102,7 @@ None.
 - Phase 17 completed: Progress API Optimization (Caching + Streaming for scalable progress tracking)
 - Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
 - Phase 19 completed: Stage Content Editor (Edit Content button + build generator stage_id fix)
-- Phase 20 in progress: Lesson Complete Pipeline Overhaul — 1/4 plans complete (hierarchy/settings enrichment done)
+- Phase 20 in progress: Lesson Complete Pipeline Overhaul — 2/4 plans complete (hierarchy/settings + legacy removal done)
 
 ### Blockers/Concerns
 
@@ -109,6 +114,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 20-01-PLAN.md (hierarchy & settings enrichment)
+Stopped at: Completed 20-02-PLAN.md (StageResult time_spent + legacy endpoint removal)
 Resume file: None
-Next action: Execute 20-02-PLAN.md (StageResult time_spent + legacy endpoint removal)
+Next action: Execute 20-03-PLAN.md (Lua session_complete script + pipeline hot path + hearts XP)
