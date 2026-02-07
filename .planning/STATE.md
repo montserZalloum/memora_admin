@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 16 of 20 (Admin Device Management)
-Plan: 1 of 2 in current phase
-Status: In progress
-Last activity: 2026-02-07 — Completed 16-01-PLAN.md
+Plan: 2 of 2 in current phase (16-02 code complete, checkpoint pending)
+Status: In progress — awaiting human verification
+Last activity: 2026-02-07 — 16-02 auto tasks done, checkpoint not yet verified
 
 Progress: [####################] ~98% (63/64 plans)
 
 **Completed:** 16-01 — Device Management APIs (sync + removal + bug fixes)
-**Remaining:** 16-02 (Admin Device Management UI)
+**In Progress:** 16-02 — Admin Device Management UI (code done, needs verification)
 
 ## Performance Metrics
 
@@ -40,6 +40,12 @@ Progress: [####################] ~98% (63/64 plans)
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 16 Plan 02 decisions:**
+- ISO 8601 last_login from Redis converted to MySQL datetime format via _parse_last_login()
+- Anti-loop flag (frm.__device_sync_in_progress) prevents infinite reload cycle
+- Remove buttons added via grid row iteration (works with read-only grids)
+- Tasks 1 & 2 in single commit (structurally inseparable)
 
 **Phase 16 Plan 01 decisions:**
 - Both device APIs use get_fastapi_redis() from access_sync (not frappe.cache)
@@ -122,7 +128,7 @@ None.
 - Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
 - Phase 19 completed: Stage Content Editor (Edit Content button + build generator stage_id fix)
 - Phase 20 completed: Lesson Complete Pipeline Overhaul — 4/4 plans complete (hierarchy/settings + legacy removal + Lua hot path + FSRS background processor)
-- Phase 16 in progress: Admin Device Management — 1/2 plans complete (device APIs + sync bug fixes)
+- Phase 16 in progress: Admin Device Management — 16-01 done, 16-02 code done (checkpoint pending)
 
 ### Blockers/Concerns
 
@@ -134,6 +140,12 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 16-01-PLAN.md (device APIs + device_sync bug fixes)
+Stopped at: 16-02 auto tasks complete, checkpoint:human-verify pending
 Resume file: None
-Next action: Phase 16-02 (Admin Device Management UI)
+Next action: Verify 16-02 UI (open Player Profile, test device sync + Remove button), then approve checkpoint to complete phase 16
+
+### Resume Context
+- 16-02 commits: 9c19f50 (JS form script), 151aaba (datetime fix)
+- Checkpoint verification: open Player Profile in Frappe Desk, confirm device table loads from Redis, test Remove button
+- After approval: create 16-02-SUMMARY.md, run phase verifier, update ROADMAP.md, complete phase 16
+- Phase 16 is the LAST phase in v1.3 milestone
