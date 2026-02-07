@@ -153,9 +153,9 @@ async def start_session(
 			detail={"code": "LESSON_NOT_FOUND", "message": "Lesson not found"},
 		)
 
-	# Check content access (Gate 2)
+	# Check content access (Gate 2) - check both explicit grants AND plan membership
 	content_key = f"SUB-{request.subject_id}"
-	has_access = await access_service.check_access(user.sub, content_key)
+	has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
 	if not has_access:
 		raise HTTPException(
 			status_code=status.HTTP_403_FORBIDDEN,

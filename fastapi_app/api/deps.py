@@ -269,9 +269,10 @@ async def require_content_access(
     if content.is_free:
         return True
 
-    has_access = await access_service.check_access(
+    has_access = await access_service.check_access_with_plan(
         player_id=user.sub,
         content_key=content.content_key,
+        plan_id=user.plan,
     )
 
     if not has_access:
