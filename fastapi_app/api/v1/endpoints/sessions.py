@@ -12,13 +12,11 @@ from fastapi_app.api.deps import (
 	GameSessionServiceDep,
 	HierarchyServiceDep,
 	LeaderboardServiceDep,
-	ProgressServiceDep,
 	RedisClient,
 	SettingsServiceDep,
-	StatsServiceDep,
 	WalletServiceDep,
 )
-from fastapi_app.core.constants import INTERACTION_BUFFER_KEY
+from fastapi_app.core.constants import DIRTY_WALLETS_KEY
 from fastapi_app.models.game_session import (
 	CurrentSessionResponse,
 	EndSessionRequest,
@@ -39,19 +37,25 @@ def _calculate_xp_award(
 	max_multiplier_percent: int,
 	is_replay: bool,
 	replay_xp: int,
+	hearts_remaining: int = 0,
+	xp_per_heart: int = 0,
 ) -> int:
 	"""Calculate XP to award for completion.
 
-	Per CONTEXT.md:
-	- Fresh completion: lesson_xp (if > 0) else base_xp
-	- Replay: fixed replay_xp amount
+	Per Phase 20:
+	- Fresh completion: (lesson_xp or base_xp) + hearts_bonus
+	- Hearts bonus: remaining_hearts * xp_per_heart (added before streak multiplier)
+	- Replay: fixed replay_xp amount (no hearts bonus)
 	- Streak multiplier: +1% per day, capped at max_multiplier_percent
-	- Streak multiplier applies to BOTH fresh and replay per CONTEXT.md
+	- Streak multiplier applies to BOTH fresh and replay
 	"""
 	if is_replay:
 		base = replay_xp
 	else:
 		base = lesson_xp if lesson_xp > 0 else base_xp
+		# Hearts bonus: remaining hearts * xp_per_heart
+		hearts_bonus = hearts_remaining * xp_per_heart
+		base += hearts_bonus
 
 	# Apply streak multiplier (linear +1% per day, capped)
 	capped_streak = min(current_streak, max_multiplier_percent)
@@ -186,39 +190,40 @@ async def end_session(
 	user: CurrentUser,
 	game_session_service: GameSessionServiceDep,
 	hierarchy_service: HierarchyServiceDep,
-	progress_service: ProgressServiceDep,
 	wallet_service: WalletServiceDep,
 	leaderboard_service: LeaderboardServiceDep,
 	settings_service: SettingsServiceDep,
-	stats_service: StatsServiceDep,
 	redis_client: RedisClient,
 ) -> EndSessionResponse:
-	"""
-	End current lesson session and trigger completion flow.
+	"""End lesson session and trigger completion flow.
 
-	Per CONTEXT.md:
-	- Validates active session exists
-	- Logs stage analytics to interaction buffer
-	- Marks lesson complete (idempotent)
-	- Updates streak and awards XP
+	Optimized hot path (~6-7 Redis round-trips, down from 17+N):
+	RT1: HGETALL session
+	RT2: GET hierarchy (cache hit)
+	RT3: Lua complete_session (DEL + SETBIT + SADD + batch RPUSH)
+	RT4: GET settings (cache hit)
+	RT5: Lua streak update
+	RT6: Pipeline (XP + dirty + stats)
+	RT7: Leaderboard updates
 
 	Args:
 		request: EndSessionRequest with stage results
 		user: Current authenticated user
 		game_session_service: Session management service
 		hierarchy_service: For lesson info
-		progress_service: For completion tracking
 		wallet_service: For XP and streak
+		leaderboard_service: For leaderboard updates
 		settings_service: For gamification settings
-		redis_client: For interaction buffer
+		redis_client: For pipeline operations
 
 	Returns:
 		EndSessionResponse with xp_awarded, is_replay, streak
 
 	Raises:
 		403: No active session
+		404: Subject or lesson not found
 	"""
-	# Get active session
+	# RT1: Get active session
 	session = await game_session_service.get_active_session(user.sub)
 	if not session:
 		raise HTTPException(
@@ -226,7 +231,7 @@ async def end_session(
 			detail={"code": "NO_ACTIVE_SESSION", "message": "No active lesson session"},
 		)
 
-	# Get hierarchy for lesson info
+	# RT2: Get hierarchy (cache hit)
 	hierarchy = await hierarchy_service.get_hierarchy(session.subject_id)
 	if not hierarchy:
 		raise HTTPException(
@@ -234,7 +239,6 @@ async def end_session(
 			detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
 		)
 
-	# Find lesson to get bit_index and xp
 	lesson_info = hierarchy.find_lesson(session.lesson_id)
 	if not lesson_info:
 		raise HTTPException(
@@ -242,7 +246,8 @@ async def end_session(
 			detail={"code": "LESSON_NOT_FOUND", "message": "Lesson not found"},
 		)
 
-	# Push stage analytics to interaction buffer
+	# Prepare interaction JSONs (batch, not N individual pushes)
+	interaction_jsons = []
 	for stage in request.stages:
 		interaction = {
 			"player": user.sub,
@@ -254,44 +259,36 @@ async def end_session(
 			"timestamp": stage.completed_at,
 			"metadata": stage.metadata,
 		}
-		await redis_client.rpush(INTERACTION_BUFFER_KEY, json.dumps(interaction))
+		interaction_jsons.append(json.dumps(interaction))
 
-	# End session
-	await game_session_service.end_session(user.sub)
-
-	# Mark lesson complete (idempotent)
-	is_replay = await progress_service.complete_lesson(
+	# RT3: Lua script -- atomic session delete + SETBIT + SADD + batch RPUSH
+	lua_success, is_replay, _ = await game_session_service.complete_session(
 		user_id=user.sub,
-		subject_id=session.subject_id,
 		bit_index=lesson_info.bit_index,
+		subject_id=session.subject_id,
 		version=hierarchy.version,
+		interaction_jsons=interaction_jsons,
 	)
+	if not lua_success:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail={"code": "NO_ACTIVE_SESSION", "message": "Session already ended"},
+		)
 
-	# Update stats cache if NOT a replay (replay = already counted)
-	stats_updated = False
-	if not is_replay:
-		lesson_path = hierarchy.find_lesson_path(session.lesson_id)
-		if lesson_path:
-			await stats_service.increment_completion_stats(
-				user_id=user.sub,
-				subject_id=session.subject_id,
-				version=hierarchy.version,
-				track_id=lesson_path.track_id,
-				unit_id=lesson_path.unit_id,
-				topic_id=lesson_path.topic_id,
-			)
-			stats_updated = True
-
-	# Get gamification settings (cached)
+	# RT4: Get settings (cache hit)
 	settings = await settings_service.get_gamification_settings()
 
-	# Update streak atomically (replay doesn't count per CONTEXT.md)
+	# RT5: Streak update (Lua script)
 	streak, streak_updated = await wallet_service.update_streak(
 		player_id=user.sub,
 		is_replay=is_replay,
 	)
 
-	# Calculate XP with streak multiplier
+	# Calculate hearts remaining
+	total_fails = sum(stage.fail_count for stage in request.stages)
+	hearts_remaining = max(0, lesson_info.max_hearts - total_fails)
+
+	# Calculate XP with hearts bonus
 	xp_awarded = _calculate_xp_award(
 		base_xp=settings.base_lesson_xp,
 		lesson_xp=lesson_info.xp,
@@ -299,13 +296,37 @@ async def end_session(
 		max_multiplier_percent=settings.max_streak_multiplier_percent,
 		is_replay=is_replay,
 		replay_xp=settings.replay_xp,
+		hearts_remaining=hearts_remaining,
+		xp_per_heart=settings.xp_per_heart,
 	)
 
-	# Award XP atomically
-	new_total_xp = await wallet_service.award_xp(user.sub, xp_awarded)
+	# RT6: Pipeline for XP + dirty + stats
+	pipe = redis_client.pipeline()
 
-	# Update leaderboards with new XP
-	# Per CONTEXT.md: subject_id enables filtered leaderboards
+	# XP award
+	wallet_key = f"memora:wallet:{user.sub}"
+	pipe.hincrby(wallet_key, "xp", xp_awarded)
+
+	# Dirty wallet
+	pipe.sadd(DIRTY_WALLETS_KEY, user.sub)
+
+	# Stats (non-replay only)
+	stats_updated = False
+	if not is_replay:
+		lesson_path = hierarchy.find_lesson_path(session.lesson_id)
+		if lesson_path:
+			stats_key = f"memora:stats:{user.sub}:{session.subject_id}:v{hierarchy.version}"
+			pipe.hincrby(stats_key, "completed", 1)
+			pipe.hincrby(stats_key, f"{lesson_path.track_id}:completed", 1)
+			pipe.hincrby(stats_key, f"{lesson_path.unit_id}:completed", 1)
+			pipe.hincrby(stats_key, f"{lesson_path.topic_id}:completed", 1)
+			pipe.expire(stats_key, 3600)
+			stats_updated = True
+
+	pipe_results = await pipe.execute()
+	new_total_xp = pipe_results[0]  # HINCRBY returns new value
+
+	# RT7: Leaderboard updates
 	await leaderboard_service.update_leaderboards(
 		player_id=user.sub,
 		xp_amount=xp_awarded,
@@ -321,11 +342,11 @@ async def end_session(
 		subject_id=session.subject_id,
 		is_replay=is_replay,
 		xp_awarded=xp_awarded,
+		hearts_remaining=hearts_remaining,
 		new_total_xp=new_total_xp,
 		streak=streak,
 		streak_updated=streak_updated,
 		stages_count=len(request.stages),
-		leaderboards_updated=True,
 		stats_updated=stats_updated,
 	)
 
