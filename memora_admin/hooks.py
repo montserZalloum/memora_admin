@@ -44,7 +44,8 @@ app_license = "mit"
 
 # include js in doctype views
 doctype_js = {
-    "Memora Player Profile": "memora_admin/doctype/memora_player_profile/memora_player_profile.js"
+    "Memora Player Profile": "memora_admin/doctype/memora_player_profile/memora_player_profile.js",
+    "Memora Lesson": "public/js/game_lesson.js"
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}

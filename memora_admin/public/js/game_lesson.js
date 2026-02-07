@@ -56,7 +56,7 @@ function open_matching_dialog(frm, cdt, cdn, row, data) {
                 label: 'الأزواج',
                 fieldname: 'pairs_table',
                 fieldtype: 'Table',
-                options: 'Game Content Builder Item',
+                cannot_add_rows: false,
                 // 👇 الحل السحري: تعريف الحقول يدوياً هنا
                 fields: [
                     {
@@ -127,7 +127,7 @@ function open_reveal_dialog(frm, cdt, cdn, row, data) {
                 label: 'الكلمات',
                 fieldname: 'highlights_table',
                 fieldtype: 'Table',
-                options: 'Game Content Builder Item',
+                cannot_add_rows: false,
                 // 👇 تعريف الحقول يدوياً هنا أيضاً
                 fields: [
                     {
@@ -202,7 +202,7 @@ function open_sentence_builder_dialog(frm, cdt, cdn, row, data) {
                 label: 'الكلمات/المقاطع مرتبة (Words Tokens)',
                 fieldname: 'words_table',
                 fieldtype: 'Table',
-                options: 'Game Content Builder Item',
+                cannot_add_rows: false,
                 description: 'أضف الكلمات بالترتيب الصحيح. ملاحظة: يمكنك إضافة عبارة كاملة في سطر واحد لتظهر كزر واحد (مثل: حق إصدار العملة)',
                 fields: [
                     {

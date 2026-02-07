@@ -6,21 +6,13 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "stage_id",
+  "stage_title",
   "stage_type",
   "is_skippable",
   "config_json",
   "edit_content_btn"
  ],
  "fields": [
-  {
-   "description": "\u0645\u0639\u0631\u0641 \u0641\u0631\u064a\u062f \u0644\u0644\u0645\u0631\u062d\u0644\u0629",
-   "fieldname": "stage_id",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Stage ID",
-   "reqd": 1
-  },
   {
    "fieldname": "stage_type",
    "fieldtype": "Link",
@@ -48,14 +40,21 @@
    "fieldtype": "Button",
    "in_list_view": 1,
    "label": "Edit Content"
+  },
+  {
+   "fieldname": "stage_title",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "title",
+   "reqd": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "istable": 1,
  "links": [],
- "modified": "2026-02-07 10:00:00.000000",
- "modified_by": "Administrator",
+ "modified": "2026-02-07 10:10:39.112619",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Lesson Stage",
  "owner": "Administrator",

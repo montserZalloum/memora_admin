@@ -1,7 +1,6 @@
 {
  "actions": [],
- "allow_rename": 1,
- "autoname": "format:LSS-{#####}",
+ "autoname": "field:stage_title",
  "creation": "2026-02-01 10:28:14.148134",
  "doctype": "DocType",
  "editable_grid": 1,
@@ -18,7 +17,8 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Stage Title",
-   "reqd": 1
+   "reqd": 1,
+   "unique": 1
   },
   {
    "default": "0",
@@ -44,10 +44,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 10:28:14.148134",
- "modified_by": "Administrator",
+ "modified": "2026-02-07 08:34:32.057408",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Lesson Stage Settings",
+ "naming_rule": "By fieldname",
  "owner": "Administrator",
  "permissions": [
   {
@@ -65,10 +66,9 @@
  ],
  "row_format": "Dynamic",
  "rows_threshold_for_grid_search": 20,
- "search_fields": "stage_title",
  "show_name_in_global_search": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "stage_title"
+ "translated_doctype": 1
 }
