@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 20 of 20 (Lesson Complete Pipeline Overhaul)
-Plan: 2 of 4 in current phase
-Status: In progress (Plans 20-01, 20-02 complete)
-Last activity: 2026-02-07 — Completed 20-02-PLAN.md
+Plan: 3 of 4 in current phase
+Status: In progress (Plans 20-01, 20-02, 20-03 complete)
+Last activity: 2026-02-07 — Completed 20-03-PLAN.md
 
-Progress: [##################-] ~94% (60/64 plans)
+Progress: [##################-] ~95% (61/64 plans)
 
-**In Progress:** 20 — Lesson Complete Pipeline Overhaul (2/4 plans complete)
+**In Progress:** 20 — Lesson Complete Pipeline Overhaul (3/4 plans complete)
 **Also Pending:** 16 (Admin Device Management) — 2 plans remaining
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 60
+- Total plans completed: 61
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -33,13 +33,19 @@ Progress: [##################-] ~94% (60/64 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 8 | 16 | In Progress (12/16) |
+| v1.3 Profiles & Devices | 8 | 16 | In Progress (13/16) |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 20 Plan 03 decisions:**
+- Inline stats HINCRBY in pipeline instead of StatsService call (saves round-trip)
+- Remove both ProgressServiceDep and StatsServiceDep from end_session signature
+- Hearts bonus not applied to replays (fixed replay_xp only)
+- Remove unused StatsServiceDep import from sessions.py (no other endpoint uses it)
 
 **Phase 20 Plan 02 decisions:**
 - Keep CompleteRequest/CompleteResponse with DEPRECATED comments (models/__init__.py re-exports)
@@ -102,7 +108,7 @@ None.
 - Phase 17 completed: Progress API Optimization (Caching + Streaming for scalable progress tracking)
 - Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
 - Phase 19 completed: Stage Content Editor (Edit Content button + build generator stage_id fix)
-- Phase 20 in progress: Lesson Complete Pipeline Overhaul — 2/4 plans complete (hierarchy/settings + legacy removal done)
+- Phase 20 in progress: Lesson Complete Pipeline Overhaul — 3/4 plans complete (hierarchy/settings + legacy removal + Lua hot path done)
 
 ### Blockers/Concerns
 
@@ -114,6 +120,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 20-02-PLAN.md (StageResult time_spent + legacy endpoint removal)
+Stopped at: Completed 20-03-PLAN.md (Lua session_complete script + pipeline hot path + hearts XP)
 Resume file: None
-Next action: Execute 20-03-PLAN.md (Lua session_complete script + pipeline hot path + hearts XP)
+Next action: Execute 20-04-PLAN.md (integration testing of the full pipeline)
