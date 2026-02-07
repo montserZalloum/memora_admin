@@ -54,23 +54,23 @@ Requirements for Product Store milestone. Players can discover and purchase avai
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CTLG-01 | — | Pending |
-| CTLG-02 | — | Pending |
-| CTLG-03 | — | Pending |
-| CTLG-04 | — | Pending |
-| CTLG-05 | — | Pending |
-| CTLG-06 | — | Pending |
-| PRCHS-01 | — | Pending |
-| PRCHS-02 | — | Pending |
-| PRCHS-03 | — | Pending |
-| PRCHS-04 | — | Pending |
-| PRCHS-05 | — | Pending |
+| CTLG-01 | Phase 21 | Pending |
+| CTLG-02 | Phase 21 | Pending |
+| CTLG-03 | Phase 21 | Pending |
+| CTLG-04 | Phase 21 | Pending |
+| CTLG-05 | Phase 21 | Pending |
+| CTLG-06 | Phase 21 | Pending |
+| PRCHS-01 | Phase 22 | Pending |
+| PRCHS-02 | Phase 22 | Pending |
+| PRCHS-03 | Phase 22 | Pending |
+| PRCHS-04 | Phase 22 | Pending |
+| PRCHS-05 | Phase 23 | Pending |
 
 **Coverage:**
 - v1.4 requirements: 11 total
-- Mapped to phases: 0
-- Unmapped: 11 (awaiting roadmap)
+- Mapped to phases: 11
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-07 after initial definition*
+*Last updated: 2026-02-07 after roadmap creation*
