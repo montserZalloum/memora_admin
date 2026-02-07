@@ -91,7 +91,10 @@ See: `.planning/milestones/v1.3-ROADMAP.md` for full details
   3. Products with pending purchase transactions display a "pending approval" status instead of a buy action
   4. Catalog response returns in under 100ms on subsequent requests (Redis cache hit)
   5. When a Product Grant is created, updated, or deleted in Frappe, the cached catalog for that plan refreshes on the next request
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 21-01-PLAN.md — Catalog endpoint, service, models, and Frappe data API
+- [ ] 21-02-PLAN.md — Cache invalidation wiring (Frappe hooks + pubsub + lifespan)
 
 ### Phase 22: Purchase Request Flow
 **Goal**: Players can submit a purchase request for a product, creating a trackable Subscription Transaction with appropriate approval routing
@@ -139,7 +142,7 @@ See: `.planning/milestones/v1.3-ROADMAP.md` for full details
 | 18. Lesson Completion Status API | v1.3 | 1/1 | Complete | 2026-02-06 |
 | 19. Stage Content Editor | v1.3 | 2/2 | Complete | 2026-02-07 |
 | 20. Lesson Complete Pipeline Overhaul | v1.3 | 4/4 | Complete | 2026-02-07 |
-| 21. Product Catalog API | v1.4 | 0/TBD | Not started | - |
+| 21. Product Catalog API | v1.4 | 0/2 | Not started | - |
 | 22. Purchase Request Flow | v1.4 | 0/TBD | Not started | - |
 | 23. Approval and Access Grant | v1.4 | 0/TBD | Not started | - |
 
