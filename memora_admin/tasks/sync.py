@@ -14,12 +14,53 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+import os
 from datetime import datetime
 
 import frappe
 import redis
 
 logger = logging.getLogger(__name__)
+
+# Debug file for troubleshooting sync issues
+DEBUG_LOG_FILE = "/tmp/memora_sync_debug.log"
+
+def _write_debug_log(message: str):
+	"""Write to debug log file for troubleshooting"""
+	try:
+		with open(DEBUG_LOG_FILE, 'a') as f:
+			f.write(f"{datetime.now().isoformat()} - {message}\n")
+	except Exception:
+		pass  # Silent fail - don't break sync on log failures
+
+
+def _parse_timestamp(timestamp_str: str) -> str:
+	"""Convert ISO format timestamp to MariaDB format.
+
+	Input: 2026-02-07T10:53:59.380Z (ISO 8601 with Z suffix)
+	Output: 2026-02-07 10:53:59 (MariaDB format)
+	"""
+	if not timestamp_str:
+		return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+	try:
+		# Remove Z suffix if present
+		if timestamp_str.endswith('Z'):
+			timestamp_str = timestamp_str[:-1]
+
+		# Parse the ISO format timestamp
+		if '.' in timestamp_str:
+			# Has milliseconds: 2026-02-07T10:53:59.380
+			dt = datetime.fromisoformat(timestamp_str)
+		else:
+			# No milliseconds: 2026-02-07T10:53:59
+			dt = datetime.fromisoformat(timestamp_str)
+
+		# Return in MariaDB format: YYYY-MM-DD HH:MM:SS
+		return dt.strftime("%Y-%m-%d %H:%M:%S")
+	except Exception as e:
+		logger.warning(f"Failed to parse timestamp {timestamp_str}: {e}")
+		return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 # Redis key constants (must match FastAPI constants)
 DIRTY_PROGRESS_KEY = "memora:dirty:progress"
@@ -44,6 +85,7 @@ def sync_dirty_progress():
 
 	Scheduled: every 1 minute via hooks.py
 	"""
+	_write_debug_log("=== sync_dirty_progress STARTED ===")
 	r = get_redis()
 
 	# Get all dirty items
@@ -228,58 +270,98 @@ def flush_interaction_buffer():
 
 	Per RESEARCH.md: Fixed batch size (1000) prevents memory spikes.
 	"""
-	r = get_redis()
+	_write_debug_log("=== flush_interaction_buffer STARTED ===")
 
-	# Batch size limit to prevent memory issues
-	BATCH_SIZE = 1000
+	try:
+		r = get_redis()
 
-	# Get batch of items from head of list
-	items = r.lrange(INTERACTION_BUFFER_KEY, 0, BATCH_SIZE - 1)
-	if not items:
-		logger.debug("No interactions to flush")
-		return
+		# Batch size limit to prevent memory issues
+		BATCH_SIZE = 1000
 
-	count = len(items)
-	inserted = 0
-	errors = []
+		# Get batch of items from head of list
+		items = r.lrange(INTERACTION_BUFFER_KEY, 0, BATCH_SIZE - 1)
+		_write_debug_log(f"Found {len(items)} items in buffer")
 
-	for item_bytes in items:
-		try:
-			# Parse JSON (handle bytes from Redis)
-			item_str = item_bytes.decode() if isinstance(item_bytes, bytes) else item_bytes
-			item = json.loads(item_str)
+		if not items:
+			logger.debug("No interactions to flush")
+			_write_debug_log("No items to flush - returning")
+			return
 
-			# Insert to Interaction Log DocType
-			frappe.get_doc({
-				"doctype": "Memora Interaction Log",
-				"player": item["player"],
-				"lesson": item["lesson"],
-				"stage_id": str(item.get("stage_id", "")),
-				"event_type": item.get("event_type", "Completed"),
-				"time_spent": item.get("time_spent", 0),
-				"errors_count": item.get("errors_count", 0),
-				"timestamp": item.get("timestamp", datetime.now().isoformat()),
-				"client_metadata": json.dumps(item.get("metadata", {})),
-			}).insert(ignore_permissions=True)
-			inserted += 1
+		count = len(items)
+		inserted = 0
+		errors = []
 
-		except Exception as e:
-			errors.append(str(e))
-			frappe.log_error(f"Insert interaction failed: {e}")
+		for i, item_bytes in enumerate(items):
+			try:
+				# Parse JSON (handle bytes from Redis)
+				item_str = item_bytes.decode() if isinstance(item_bytes, bytes) else item_bytes
+				item = json.loads(item_str)
+				_write_debug_log(f"Item {i+1}/{count}: player={item.get('player')}, lesson={item.get('lesson')}")
 
-	# Trim processed items from list (atomic operation)
-	# LTRIM keeps elements from count to end, removing processed ones
-	r.ltrim(INTERACTION_BUFFER_KEY, count, -1)
+				# Validate required fields exist in Redis data
+				if not item.get("player") or not item.get("lesson"):
+					error_msg = f"Missing player or lesson in item: {item_str[:100]}"
+					errors.append(error_msg)
+					_write_debug_log(f"SKIP: {error_msg}")
+					logger.warning(error_msg)
+					continue
 
-	# Commit all inserts
-	if inserted > 0:
-		frappe.db.commit()
+				# Insert to Interaction Log DocType
+				doc = frappe.get_doc({
+					"doctype": "Memora Interaction Log",
+					"player": item["player"],
+					"lesson": item["lesson"],
+					"stage_id": str(item.get("stage_id", "")),
+					"event_type": item.get("event_type", "Completed"),
+					"time_spent": item.get("time_spent", 0),
+					"errors_count": item.get("errors_count", 0),
+					"timestamp": _parse_timestamp(item.get("timestamp", "")),
+					"client_metadata": json.dumps(item.get("metadata", {})),
+				})
+				_write_debug_log(f"  Creating doc object...")
+				doc.insert(ignore_permissions=True)
+				_write_debug_log(f"  ✓ Inserted: {doc.name}")
+				inserted += 1
+				logger.debug(f"Inserted interaction: {item['player']} - {item['lesson']} - {item.get('stage_id')}")
 
-	# Log sync result - "Memory" is the sync_type for interactions per DocType schema
-	status = "Success" if not errors else "Failed"
-	_log_sync("Memory", inserted, status)
+			except Exception as e:
+				error_msg = f"Insert interaction failed: {str(e)}"
+				errors.append(error_msg)
+				_write_debug_log(f"  ✗ ERROR: {error_msg}")
+				logger.error(error_msg, exc_info=True)
+				frappe.log_error(error_msg)
 
-	logger.info(f"Interaction flush: {inserted} inserted, {len(errors)} errors")
+		# Trim processed items from list (atomic operation)
+		# LTRIM keeps elements from count to end, removing processed ones
+		_write_debug_log(f"Trimming {count} items from buffer...")
+		r.ltrim(INTERACTION_BUFFER_KEY, count, -1)
+		_write_debug_log(f"Trim complete")
+
+		# Commit all inserts
+		if inserted > 0:
+			try:
+				_write_debug_log(f"Committing {inserted} inserts to database...")
+				frappe.db.commit()
+				_write_debug_log(f"✓ Database commit successful")
+				logger.info(f"Database commit successful for {inserted} interactions")
+			except Exception as e:
+				error_msg = f"Database commit failed: {e}"
+				_write_debug_log(f"✗ {error_msg}")
+				logger.error(error_msg, exc_info=True)
+				frappe.log_error(error_msg)
+
+		# Log sync result - "Memory" is the sync_type for interactions per DocType schema
+		status = "Success" if not errors else "Failed"
+		_log_sync("Memory", inserted, status)
+
+		_write_debug_log(f"=== COMPLETE: {inserted} inserted, {len(errors)} errors, status={status} ===\n")
+		logger.info(f"Interaction flush: {inserted} inserted, {len(errors)} errors")
+
+	except Exception as e:
+		error_msg = f"FATAL ERROR in flush_interaction_buffer: {e}"
+		_write_debug_log(error_msg)
+		logger.error(error_msg, exc_info=True)
+		frappe.log_error(error_msg)
 
 
 def _get_subject_lesson_count(r, subject_id: str) -> int:

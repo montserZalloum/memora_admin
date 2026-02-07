@@ -15,15 +15,17 @@ class Settings(BaseSettings):
     )
 
     # Redis Configuration
-    redis_url: str = "redis://localhost:6379/0"
+    # CRITICAL: Must match Frappe's redis_cache in common_site_config.json
+    # If not set in .env, app will fail to start (prevents silent port mismatches)
+    redis_url: str  # REQUIRED in .env - no default
     redis_key_prefix: str = "memora:"
 
     # JWT Configuration
-    jwt_secret: str
+    jwt_secret: str  # REQUIRED in .env - no default
     jwt_algorithm: str = "HS256"
 
     # Paths
-    bitmap_json_path: str
+    bitmap_json_path: str  # REQUIRED in .env - no default
 
     # Environment
     environment: str = "development"
@@ -37,8 +39,11 @@ class Settings(BaseSettings):
     jwt_refresh_token_expire_days: int = 30
 
     # Frappe Integration
-    frappe_url: str = "http://localhost:8000"
-    frappe_site: str = "x.conanacademy.com"
+    # REQUIRED in .env - no defaults (fail fast if not configured)
+    frappe_url: str  # REQUIRED in .env - no default
+    frappe_site: str  # REQUIRED in .env - no default
+    frappe_api_key: str = ""
+    frappe_api_secret: str = ""
 
 
 @lru_cache

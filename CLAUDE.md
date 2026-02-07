@@ -18,6 +18,9 @@ cd $PATH_TO_YOUR_BENCH
 bench get-app $URL_OF_THIS_REPO --branch develop
 bench install-app memora_admin
 
+# our site
+x.conanacademy.com
+
 # Enable pre-commit hooks
 cd apps/memora_admin
 pre-commit install

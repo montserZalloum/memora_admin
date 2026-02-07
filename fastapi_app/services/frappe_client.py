@@ -2,24 +2,9 @@
 
 import httpx
 import structlog
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from fastapi_app.core.config import Settings
 
 logger = structlog.get_logger()
-
-
-class FrappeClientSettings(BaseSettings):
-    """Settings for Frappe API client."""
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    frappe_url: str = "http://localhost:8000"
-    frappe_site: str = "x.conanacademy.com"
-    frappe_api_key: str = ""
-    frappe_api_secret: str = ""
 
 
 class FrappeAPIError(Exception):
@@ -34,8 +19,8 @@ class FrappeAPIError(Exception):
 class FrappeClient:
     """Async client for Frappe whitelisted methods."""
 
-    def __init__(self, settings: FrappeClientSettings | None = None):
-        self.settings = settings or FrappeClientSettings()
+    def __init__(self, settings: Settings | None = None):
+        self.settings = settings or Settings()
         self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
