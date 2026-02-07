@@ -89,15 +89,16 @@ def sync_devices_from_redis(player_name: str) -> list[dict]:
 	device_list = []
 
 	for device_id, device_data in devices.items():
-		profile.append("authorized_devices", {
+		row = {
 			"device_id": device_data.get("device_id", ""),
 			"device_name": device_data.get("device_name", ""),
 			"platform": device_data.get("platform", "Web"),
 			"last_login": _parse_last_login(device_data.get("last_login", "")),
 			"user_agent": device_data.get("user_agent", ""),
 			"push_token": device_data.get("push_token", ""),
-		})
-		device_list.append(device_data)
+		}
+		profile.append("authorized_devices", row)
+		device_list.append(row)
 
 	profile.save(ignore_permissions=True)
 	frappe.logger().info(f"Synced {len(device_list)} devices from Redis for {user_id}")

@@ -30,10 +30,25 @@ function sync_devices(frm) {
 		args: {
 			player_name: frm.doc.name,
 		},
-		callback: function() {
-			// API saved child table server-side; reload to reflect changes
-			// reload_doc triggers refresh (adds buttons) but NOT onload (no re-sync)
-			frm.reload_doc();
+		callback: function(r) {
+			// Populate child table client-side from API response
+			// No reload_doc() — avoids infinite getdoc loop
+			let devices = r.message || [];
+			frm.doc.authorized_devices = [];
+			devices.forEach(function(device, idx) {
+				let child = frappe.model.add_child(frm.doc, "Memora Player Device", "authorized_devices");
+				child.device_id = device.device_id || "";
+				child.device_name = device.device_name || "";
+				child.platform = device.platform || "Web";
+				child.last_login = device.last_login || "";
+				child.user_agent = device.user_agent || "";
+				child.push_token = device.push_token || "";
+			});
+			frm.refresh_field("authorized_devices");
+			// Clear dirty indicator (child table modification marks form unsaved)
+			frm.doc.__unsaved = 0;
+			frm.page.clear_indicator();
+			add_remove_buttons(frm);
 		},
 		error: function() {
 			frappe.msgprint({
