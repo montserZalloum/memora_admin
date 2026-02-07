@@ -91,7 +91,13 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 
 ### Active
 
-(No active milestone — planning next)
+**v1.4 Product Store:**
+- [ ] FastAPI endpoint to list available Product Grants for player's plan (cached in Redis)
+- [ ] Product data assembled from Product Grant → Plan Subject (alias_title, notes) → Item Price (price_list_rate)
+- [ ] Exclude already-purchased products, show "pending" badge for pending transactions
+- [ ] Frappe API endpoint to submit purchase request (creates Subscription Transaction)
+- [ ] Auto-approve for payment gateway, manual approval for other payment methods
+- [ ] Redis cache for product catalog per plan, invalidated on Product Grant changes
 
 ### Out of Scope
 
@@ -185,4 +191,4 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 | Hearts bonus before streak multiplier | Rewards skill (hearts remaining) amplified by dedication (streak) | Good |
 
 ---
-*Last updated: 2026-02-07 after v1.3 milestone*
+*Last updated: 2026-02-07 after v1.4 milestone started*

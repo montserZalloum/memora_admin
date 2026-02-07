@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Planning next milestone
+**Current focus:** v1.4 Product Store — defining requirements
 
 ## Current Position
 
-Phase: 20 of 20 (all phases complete)
-Plan: N/A
-Status: Milestone v1.3 shipped
-Last activity: 2026-02-07 — v1.3 milestone complete
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-02-07 — Milestone v1.4 started
 
-Progress: [####################] 100% (64/64 plans)
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -31,6 +31,7 @@ Progress: [####################] 100% (64/64 plans)
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
 | v1.3 Profiles & Devices | 7 | 16 | Shipped 2026-02-07 |
+| v1.4 Product Store | — | — | Defining requirements |
 
 ## Accumulated Context
 
@@ -44,11 +45,11 @@ None.
 
 ### Blockers/Concerns
 
-None — milestone complete.
+None.
 
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: v1.3 milestone archived
+Stopped at: Milestone v1.4 requirements definition
 Resume file: None
-Next action: `/gsd:new-milestone` to start next milestone
+Next action: Complete requirements → roadmap → `/gsd:plan-phase`
