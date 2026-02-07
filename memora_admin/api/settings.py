@@ -21,4 +21,6 @@ def get_gamification_settings() -> dict:
 		"replay_xp": settings.replay_xp or 25,
 		"max_streak_multiplier_percent": settings.max_streak_multiplier_percent or 50,
 		"max_devices_per_player": settings.max_devices_per_player or 3,
+		"default_max_hearts": settings.default_max_hearts or 5,
+		"xp_per_heart": settings.xp_per_heart or 0,
 	}

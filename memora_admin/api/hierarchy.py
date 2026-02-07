@@ -30,7 +30,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
                                 "is_linear": true,
                                 "is_free": false,
                                 "lessons": [
-                                    {"lesson_id": "LESSON-001", "bit_index": 0, "xp": 10}
+                                    {"lesson_id": "LESSON-001", "bit_index": 0, "xp": 100, "max_hearts": 5}
                                 ]
                             }
                         ]
@@ -45,6 +45,11 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
         return None
 
     subject = frappe.get_doc("Memora Subject", subject_id)
+
+    # Load Memora Settings defaults for fallback
+    settings = frappe.get_single("Memora Settings")
+    default_base_xp = settings.base_lesson_xp or 100
+    default_max_hearts = settings.default_max_hearts or 5
 
     # Build hierarchy
     hierarchy = {
@@ -111,7 +116,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
                 lessons = frappe.get_all(
                     "Memora Lesson",
                     filters={"topic": topic.name},
-                    fields=["name", "base_xp"],
+                    fields=["name", "base_xp", "max_hearts"],
                     order_by="idx asc",
                 )
 
@@ -119,7 +124,8 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
                     lesson_info = {
                         "lesson_id": lesson.name,
                         "bit_index": bit_index,
-                        "xp": lesson.base_xp if lesson.base_xp else 10,  # Default 10 XP
+                        "xp": lesson.base_xp if lesson.base_xp else default_base_xp,
+                        "max_hearts": lesson.max_hearts if lesson.max_hearts else default_max_hearts,
                     }
                     topic_info["lessons"].append(lesson_info)
                     bit_index += 1
