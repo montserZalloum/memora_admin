@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 20 of 20 (Lesson Complete Pipeline Overhaul)
-Plan: 3 of 4 in current phase
-Status: In progress (Plans 20-01, 20-02, 20-03 complete)
-Last activity: 2026-02-07 — Completed 20-03-PLAN.md
+Plan: 4 of 4 in current phase (PHASE COMPLETE)
+Status: Phase 20 complete (all 4 plans done)
+Last activity: 2026-02-07 — Completed 20-04-PLAN.md
 
-Progress: [##################-] ~95% (61/64 plans)
+Progress: [###################] ~97% (62/64 plans)
 
-**In Progress:** 20 — Lesson Complete Pipeline Overhaul (3/4 plans complete)
+**Completed:** 20 — Lesson Complete Pipeline Overhaul (4/4 plans complete)
 **Also Pending:** 16 (Admin Device Management) — 2 plans remaining
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 61
+- Total plans completed: 62
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -33,13 +33,20 @@ Progress: [##################-] ~95% (61/64 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 8 | 16 | In Progress (13/16) |
+| v1.3 Profiles & Devices | 8 | 16 | In Progress (14/16) |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 20 Plan 04 decisions:**
+- FSRS processing in background task, not hot path (keeps completion under 10ms)
+- Read from Memora Interaction Log (already synced), not Redis buffer directly
+- Idempotency via 5min TTL Redis key per player:stage:creation
+- Subject resolved from Lesson.subject (direct field) with hierarchy chain fallback
+- Rating mapping: 0 fails=Good, 1 fail=Hard, 2+ fails=Again
 
 **Phase 20 Plan 03 decisions:**
 - Inline stats HINCRBY in pipeline instead of StatsService call (saves round-trip)
@@ -108,7 +115,7 @@ None.
 - Phase 17 completed: Progress API Optimization (Caching + Streaming for scalable progress tracking)
 - Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
 - Phase 19 completed: Stage Content Editor (Edit Content button + build generator stage_id fix)
-- Phase 20 in progress: Lesson Complete Pipeline Overhaul — 3/4 plans complete (hierarchy/settings + legacy removal + Lua hot path done)
+- Phase 20 completed: Lesson Complete Pipeline Overhaul — 4/4 plans complete (hierarchy/settings + legacy removal + Lua hot path + FSRS background processor)
 
 ### Blockers/Concerns
 
@@ -120,6 +127,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 20-03-PLAN.md (Lua session_complete script + pipeline hot path + hearts XP)
+Stopped at: Completed 20-04-PLAN.md (FSRS background processor + hooks registration)
 Resume file: None
-Next action: Execute 20-04-PLAN.md (integration testing of the full pipeline)
+Next action: Phase 20 complete. Remaining: Phase 16 (Admin Device Management, 2 plans)
