@@ -12,6 +12,7 @@ router = APIRouter(prefix="/wallet", tags=["wallet"])
 
 
 @router.get("/", response_model=WalletResponse)
+@router.get("", response_model=WalletResponse)
 async def get_my_wallet(
 	user: CurrentUser,
 	wallet_service: WalletServiceDep,
@@ -38,6 +39,7 @@ async def get_my_wallet(
 
 
 @router.get("/{player_id}", response_model=WalletResponse)
+@router.get("/{player_id}/", response_model=WalletResponse)
 async def get_player_wallet(
 	player_id: str,
 	user: CurrentUser,
