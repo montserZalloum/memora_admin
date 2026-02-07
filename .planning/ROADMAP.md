@@ -106,8 +106,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 16-01: Device Sync to Frappe (Redis -> authorized_devices child table)
-- [ ] 16-02: Device Removal UI (form script with removal dialog)
+- [ ] 16-01-PLAN.md — Backend device APIs (sync from Redis + remove device + fix device_sync.py bugs)
+- [ ] 16-02-PLAN.md — Frontend device management UI (form-load sync, read-only table, per-row Remove button)
 
 #### Phase 17: Progress API Optimization
 **Goal**: Scalable progress tracking with caching and streaming for next-gen UX
