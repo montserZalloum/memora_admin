@@ -10,19 +10,19 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 20 of 20 (Lesson Complete Pipeline Overhaul)
-Plan: 0 of 4 in current phase
-Status: Phase 20 planned (4 plans in 2 waves)
-Last activity: 2026-02-07 — Phase 20 planning complete
+Plan: 1 of 4 in current phase
+Status: In progress (Plan 20-01 complete)
+Last activity: 2026-02-07 — Completed 20-01-PLAN.md
 
-Progress: [##################] ~91% (58/64 plans)
+Progress: [##################-] ~92% (59/64 plans)
 
-**Planned Phase:** 20 — Lesson Complete Pipeline Overhaul (4 plans)
+**In Progress:** 20 — Lesson Complete Pipeline Overhaul (1/4 plans complete)
 **Also Pending:** 16 (Admin Device Management) — 2 plans remaining
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 58
+- Total plans completed: 59
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -33,13 +33,19 @@ Progress: [##################] ~91% (58/64 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 8 | 16 | In Progress (10/16) |
+| v1.3 Profiles & Devices | 8 | 16 | In Progress (11/16) |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 20 Plan 01 decisions:**
+- XP fallback from Memora Settings base_lesson_xp (not hardcoded 10)
+- max_hearts fallback from Memora Settings default_max_hearts
+- xp_per_heart defaults to 0 (hearts bonus opt-in)
+- fsrs_weights NOT exposed in settings API (FSRS task fetches directly)
 
 **Phase 19 Plan 02 decisions:**
 - Use stage.name (Frappe child table row identifier) for stage_id in JSON output
@@ -91,7 +97,7 @@ None.
 - Phase 17 completed: Progress API Optimization (Caching + Streaming for scalable progress tracking)
 - Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
 - Phase 19 completed: Stage Content Editor (Edit Content button + build generator stage_id fix)
-- Phase 20 planned: Lesson Complete Pipeline Overhaul — 4 plans in 2 waves (FSRS, Lua optimization, hearts XP, legacy removal)
+- Phase 20 in progress: Lesson Complete Pipeline Overhaul — 1/4 plans complete (hierarchy/settings enrichment done)
 
 ### Blockers/Concerns
 
@@ -103,6 +109,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Phase 20 planning complete (4 plans created)
+Stopped at: Completed 20-01-PLAN.md (hierarchy & settings enrichment)
 Resume file: None
-Next action: `/gsd:execute-phase 20` to execute Lesson Complete Pipeline Overhaul
+Next action: Execute 20-02-PLAN.md (StageResult time_spent + legacy endpoint removal)
