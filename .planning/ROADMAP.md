@@ -6,7 +6,7 @@
 - SHIPPED **v1.1 Feature Expansion** — Phases 8-11 (shipped 2026-02-03)
 - SHIPPED **v1.2 Plan System Enhancement** — Phase 12 (shipped 2026-02-03)
 - SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
-- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-18
+- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-19
 
 ## Phases
 
@@ -155,7 +155,7 @@ Plans:
 **Plans**: 1 plan
 
 Plans:
-- [ ] 19-01-PLAN.md — Add edit_content_btn to schema, fix JS field references
+- [x] 19-01: Stage Content Editor Wiring — completed 2026-02-07
 
 ## Progress
 
@@ -179,6 +179,6 @@ Plans:
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 | 17. Progress API Optimization | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 18. Lesson Completion Status API | v1.3 | 1/1 | Complete | 2026-02-06 |
-| 19. Stage Content Editor | v1.3 | 0/1 | Not started | - |
+| 19. Stage Content Editor | v1.3 | 1/1 | Complete | 2026-02-07 |
 
-**Total:** 19 phases, 56 plans completed, 3 plans pending (v1.3)
+**Total:** 19 phases, 57 plans completed, 2 plans pending (v1.3)

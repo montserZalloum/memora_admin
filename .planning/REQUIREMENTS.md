@@ -27,6 +27,10 @@ Requirements for milestone v1.3: Leaderboard Profiles & Admin Device Management.
 - [x] **JWT-02**: Remove timezone from access token (hardcode Asia/Amman)
 - [x] **JWT-03**: Remove role from access token (all API users are players)
 
+### Stage Content Editor
+
+- [x] **STAGE-EDIT-01**: Edit Content button opens type-specific dialogs for lesson stages
+
 ## Future Requirements
 
 Deferred to future milestones. Tracked but not in current roadmap.
@@ -74,12 +78,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ADMDEV-01 | Phase 16 | Pending |
 | ADMDEV-02 | Phase 16 | Pending |
 | ADMDEV-03 | Phase 16 | Pending |
+| STAGE-EDIT-01 | Phase 19 | Complete |
 
 **Coverage:**
-- v1.3 requirements: 11 total
-- Mapped to phases: 11
+- v1.3 requirements: 12 total
+- Mapped to phases: 12
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-05 after Phase 15 completion*
+*Last updated: 2026-02-07 after Phase 19 completion*
