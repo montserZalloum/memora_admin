@@ -35,8 +35,8 @@ class LocalStorageBackend(StorageBackend):
 		self.base_path = Path(base_path)
 		self.base_url = base_url.rstrip("/")
 
-		# Create base directory if not exists
-		self.base_path.mkdir(parents=True, exist_ok=True)
+		# Create base directory if not exists (world-readable for web server)
+		self.base_path.mkdir(parents=True, exist_ok=True, mode=0o755)
 
 	def upload(self, key: str, content: bytes, content_type: str = "application/json") -> str:
 		"""
@@ -54,8 +54,8 @@ class LocalStorageBackend(StorageBackend):
 		"""
 		target_path = self.base_path / key
 
-		# Create parent directories if needed
-		target_path.parent.mkdir(parents=True, exist_ok=True)
+		# Create parent directories if needed (world-readable for web server)
+		target_path.parent.mkdir(parents=True, exist_ok=True, mode=0o755)
 
 		# Atomic write: temp file -> fsync -> rename
 		fd = None
@@ -75,6 +75,9 @@ class LocalStorageBackend(StorageBackend):
 
 			# Atomic rename (os.replace is atomic on POSIX systems)
 			os.replace(temp_path, target_path)
+
+			# Make file world-readable (0644) for web server access
+			os.chmod(target_path, 0o644)
 
 			logger.debug(f"Uploaded {key} to {target_path}")
 			return f"{self.base_url}/{key}"
