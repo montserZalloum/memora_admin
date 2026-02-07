@@ -522,7 +522,7 @@ def _generate_lesson_json(lesson_name: str) -> dict | None:
 	stages = []
 	for stage in lesson_doc.stages or []:
 		stage_data = {
-			"stage_id": stage.stage_id,
+			"stage_id": stage.name,
 			"stage_type": stage.stage_type,
 			"is_skippable": bool(stage.is_skippable),
 			"config": _parse_stage_config(stage.config_json),
