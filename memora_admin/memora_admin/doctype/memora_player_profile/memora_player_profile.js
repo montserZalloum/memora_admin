@@ -61,7 +61,6 @@ function add_remove_buttons(frm) {
 
 	// Remove existing buttons to prevent duplicates on re-render
 	grid.wrapper.find(".btn-remove-device").remove();
-
 	grid.grid_rows.forEach(function(grid_row) {
 		if (!grid_row.doc || !grid_row.doc.device_id) {
 			return;
@@ -114,7 +113,7 @@ function add_remove_buttons(frm) {
 		});
 
 		// Append button to the row-index cell of the data row
-		let row_index_cell = grid_row.wrapper.find(".rows .data-row .row-index");
+		let row_index_cell = grid_row.wrapper;
 		if (row_index_cell.length) {
 			row_index_cell.append(btn);
 		}

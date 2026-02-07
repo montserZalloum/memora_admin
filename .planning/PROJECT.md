@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Memora is a gamified educational platform backend for Arabic-speaking students. It provides a high-performance FastAPI game API (sub-20ms responses) for content delivery, bitmap-based progress tracking, XP/streak gamification, game session lifecycle management, competitive leaderboards, device security, and subscription-based Double-Gate access control. The platform runs a FastAPI sidecar alongside Frappe for admin/content management, with Redis for hot data and background sync to MariaDB.
+Memora is a gamified educational platform backend for Arabic-speaking students. It provides a high-performance FastAPI game API (sub-10ms hot path) for content delivery, bitmap-based progress tracking, XP/streak gamification with hearts bonus, game session lifecycle management with Lua-optimized completion pipeline, competitive leaderboards with player profiles, FSRS spaced repetition, device security, stage content editing, and subscription-based Double-Gate access control. The platform runs a FastAPI sidecar alongside Frappe for admin/content management, with Redis for hot data and background sync to MariaDB.
 
 ## Core Value
 
@@ -71,15 +71,27 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - Plan cache invalidation wired to PlanService.invalidate() — v1.2.1
 - Complete end-to-end flow: Build → CDN → Cache invalidation — v1.2.1
 
+**v1.3 Leaderboard Profiles & Admin Device Management:**
+- ✓ Leaderboard responses include display_name and avatar from player profiles — v1.3
+- ✓ ProfileService with Redis-cached batch lookups (1hr TTL, <25ms for 100 entries) — v1.3
+- ✓ Profile cache invalidated on Memora Player Profile update via pub/sub — v1.3
+- ✓ JWT simplified: plan_id added, timezone/role removed, mobile login supported — v1.3
+- ✓ Login response enriched with profile data (display_name, avatar, gender, xp) — v1.3
+- ✓ Plan change invalidates session (re-login required) — v1.3
+- ✓ Admin device management: view/remove player devices from Frappe Desk — v1.3
+- ✓ Device data live-synced from Redis on form load — v1.3
+- ✓ Progress stats cached in Redis hash with O(1) atomic updates — v1.3
+- ✓ SSE streaming endpoint for progressive progress delivery (<10ms first chunk) — v1.3
+- ✓ Per-lesson completion status via pipeline GETBIT (<5ms) — v1.3
+- ✓ Stage content editor with type-specific dialogs (MATCHING, REVEAL, SENTENCE_BUILDER) — v1.3
+- ✓ Lesson completion Lua hot path (~4 Redis round-trips, <10ms) — v1.3
+- ✓ Hearts bonus XP (remaining_hearts * xp_per_heart) — v1.3
+- ✓ FSRS spaced repetition background task (1-minute processing cycle) — v1.3
+- ✓ Legacy POST /progress/complete endpoint removed — v1.3
+
 ### Active
 
-**Current Milestone: v1.3 Leaderboard Profiles & Admin Device Management**
-
-**Goal:** Enhance leaderboards with player display names and provide admin tooling for device management.
-
-**Target features:**
-- [ ] Profile display names in leaderboard responses (from Memora Player Profile)
-- [ ] Admin device management (view/remove player devices via Frappe Desk)
+(No active milestone — planning next)
 
 ### Out of Scope
 
@@ -89,43 +101,47 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - Push notifications (Firebase) — future roadmap
 - Analytics pipeline/dashboards — future roadmap (Q3 2026)
 - Anti-cheat system — future roadmap (Q4 2026)
-- FSRS spaced repetition integration — future roadmap
 - Monitoring (Grafana/Prometheus) — future roadmap
 - League-based leaderboards — complex cohort logic
 - Real-time leaderboard updates — WebSocket complexity
-- Streak leaderboard — deferred from v1.3 to future milestone
+- Streak leaderboard — deferred to future milestone
 - User-facing device management — admin-only for now
 
 ## Context
 
-**Current State (v1.2.1 shipped):**
-- FastAPI sidecar: ~6,200 lines Python
+**Current State (v1.3 shipped):**
+- FastAPI sidecar: ~9,500 lines Python
 - Frappe module: ~4,300 lines Python
-- 32 Frappe DocTypes (including Memora Grade Major child table)
-- 13 phases completed, 48 plans executed
-- 4 milestones shipped (v1.0, v1.1, v1.2, v1.2.1)
+- ~13,800 total Python LOC
+- 32 Frappe DocTypes
+- 20 phases completed, 64 plans executed
+- 5 milestones shipped (v1.0, v1.1, v1.2, v1.2.1, v1.3)
 
 **Technical Environment:**
 - Frappe v15 for admin panel and content management
 - FastAPI sidecar for high-performance game API
-- Redis for hot data (progress, wallets, sessions, devices, leaderboards)
+- Redis for hot data (progress, wallets, sessions, devices, leaderboards, profiles, stats)
 - MariaDB for cold data (via Frappe ORM)
 - Mock CDN layer (local filesystem, R2-swappable)
+- sse-starlette for SSE streaming
+- fsrs package for spaced repetition scheduling
 
 **Performance Achieved:**
 - Access check: O(1) Redis SISMEMBER
-- Progress fetch: <20ms with cached hierarchy
-- Lesson complete: Atomic SETBIT + HINCRBY + Lua streak
+- Progress fetch: <10ms with cached stats hash
+- Lesson complete hot path: <10ms with Lua script (~4 Redis round-trips)
 - Device check: Atomic Lua script with race prevention
 - Session operations: O(1) Redis hash operations
-- Leaderboard fetch: O(log N) ZRANGE operations
+- Leaderboard fetch: O(log N) ZRANGE + batch profile enrichment (<25ms)
+- Lesson status: <5ms via pipeline GETBIT
+- SSE first chunk: <10ms
 
 ## Constraints
 
 - **Tech stack**: Frappe v15 + FastAPI + Redis + MariaDB — as specified in PRD
 - **Performance**: Sub-20ms response times for game API — critical for user experience
 - **Scalability**: Design for 100K concurrent users — bitmap storage, batch writes
-- **Compatibility**: Must work with existing 31 DocTypes — no breaking changes to schemas
+- **Compatibility**: Must work with existing 32 DocTypes — no breaking changes to schemas
 - **CDN**: Mock layer that can be swapped for Cloudflare R2 — clean abstraction required
 
 ## Key Decisions
@@ -159,6 +175,14 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 | Plan Overrides loaded once per plan | O(1) lookup via dict, efficient generation | Good |
 | PlanService registration pattern | Consistent with HierarchyService for pubsub dispatch | Good |
 | elif dispatch for plan messages | Only one handler fires per message type | Good |
+| Pipeline MGET for profile cache | Individual keys with MGET for Redis <7.4 compatibility | Good |
+| plan_id in JWT token | Avoids Frappe roundtrip on refresh; session JSON stores {fid, plan} | Good |
+| frm.add_child for device sync | Avoids reload_doc infinite loop in Frappe form lifecycle | Good |
+| sse-starlette for SSE | Mature library; subject summary first event within 10ms | Good |
+| Pipeline GETBIT for lesson status | O(1) per-lesson without loading full bitmap | Good |
+| Lua session_complete script | Batches session end into ~4 Redis round-trips for <10ms | Good |
+| FSRS in background task | Keeps hot path <10ms; processes interactions asynchronously | Good |
+| Hearts bonus before streak multiplier | Rewards skill (hearts remaining) amplified by dedication (streak) | Good |
 
 ---
-*Last updated: 2026-02-03 after starting v1.3 milestone*
+*Last updated: 2026-02-07 after v1.3 milestone*

@@ -1,5 +1,32 @@
 # Project Milestones: Memora Platform
 
+## v1.3 Leaderboard Profiles & Admin Device Management (Shipped: 2026-02-07)
+
+**Delivered:** Enhanced leaderboards with player profiles, simplified JWT tokens with mobile login, admin device management, optimized progress APIs with caching/streaming, lesson completion status lookups, stage content editor, and overhauled lesson completion pipeline with FSRS spaced repetition.
+
+**Phases completed:** 14-20 (16 plans total)
+
+**Key accomplishments:**
+- Leaderboard profile enrichment with Redis-cached batch lookups (<25ms for 100 entries)
+- JWT simplification (plan_id added, timezone/role removed) + mobile number login + enriched login response
+- Admin device management UI with live Redis sync and per-device removal with session invalidation
+- Progress API optimization with Redis-cached stats + SSE streaming (first chunk <10ms)
+- Per-lesson completion status via pipeline GETBIT (<5ms regardless of lesson count)
+- Stage content editor with type-specific dialogs (MATCHING, REVEAL, SENTENCE_BUILDER)
+- Lesson completion pipeline overhaul: Lua hot path (~4 Redis round-trips), FSRS spaced repetition, hearts bonus XP
+
+**Stats:**
+- 59 files created/modified
+- +5,845 / -851 lines (13,800 total Python LOC)
+- 7 phases, 16 plans
+- 4 days (2026-02-03 → 2026-02-07)
+
+**Git range:** `docs(14)` → `test(16)` (~82 commits)
+
+**What's next:** Planning next milestone
+
+---
+
 ## v1.2.1 Gap Closure (Shipped: 2026-02-03)
 
 **Delivered:** Closed critical integration gap where Plan cache invalidation messages were not wired to PlanService.
