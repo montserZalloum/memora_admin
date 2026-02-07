@@ -141,6 +141,22 @@ Plans:
 Plans:
 - [x] 18-01: Lesson completion status endpoint (models + endpoint) — completed 2026-02-06
 
+#### Phase 19: Stage Content Editor
+**Goal**: Provide inline content editing dialogs for lesson stages based on stage type
+**Depends on**: None (Frappe-only feature, independent of FastAPI)
+**Requirements**: STAGE-EDIT-01
+**Success Criteria** (what must be TRUE):
+  1. "Edit Content" button appears in Memora Lesson Stage child table rows
+  2. Clicking button opens type-specific dialog based on stage_type Link value
+  3. Dialog pre-populates with existing config_json data (if any)
+  4. Save action serializes dialog values to JSON and stores in config_json field
+  5. Supported stage types: MATCHING, REVEAL, SENTENCE_BUILDER (extensible pattern)
+  6. Unsupported stage types show informative message
+**Plans**: 1 plan
+
+Plans:
+- [ ] 19-01-PLAN.md — Add edit_content_btn to schema, fix JS field references
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -163,5 +179,6 @@ Plans:
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 | 17. Progress API Optimization | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 18. Lesson Completion Status API | v1.3 | 1/1 | Complete | 2026-02-06 |
+| 19. Stage Content Editor | v1.3 | 0/1 | Not started | - |
 
-**Total:** 18 phases, 56 plans completed, 2 plans pending (v1.3)
+**Total:** 19 phases, 56 plans completed, 3 plans pending (v1.3)
