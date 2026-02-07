@@ -1,14 +1,11 @@
 // Copyright (c) 2026, corex and contributors
 // For license information, please see license.txt
 
+// Script-level guard: survives all Frappe form re-renders, onload/refresh cycles.
+// Prevents sync_devices from being called more than once per form open.
+let _device_synced = {};
+
 frappe.ui.form.on("Memora Player Profile", {
-	onload: function(frm) {
-		// Sync devices from Redis once per form open
-		// onload fires once (not on reload_doc), preventing infinite loop
-		if (!frm.is_new()) {
-			sync_devices(frm);
-		}
-	},
 	refresh: function(frm) {
 		if (!frm.is_new()) {
 			frm.add_custom_button(__("Grant Access"), function() {
@@ -18,8 +15,13 @@ frappe.ui.form.on("Memora Player Profile", {
 			// Make device child table read-only (data comes from Redis sync only)
 			frm.set_df_property("authorized_devices", "read_only", 1);
 
-			// Add remove buttons to existing rows
-			add_remove_buttons(frm);
+			// Sync once per form open; guard prevents re-entry from repeated refresh events
+			if (!_device_synced[frm.doc.name]) {
+				_device_synced[frm.doc.name] = true;
+				sync_devices(frm);
+			} else {
+				add_remove_buttons(frm);
+			}
 		}
 	},
 });
@@ -35,7 +37,7 @@ function sync_devices(frm) {
 			// No reload_doc() — avoids infinite getdoc loop
 			let devices = r.message || [];
 			frm.doc.authorized_devices = [];
-			devices.forEach(function(device, idx) {
+			devices.forEach(function(device) {
 				let child = frappe.model.add_child(frm.doc, "Memora Player Device", "authorized_devices");
 				child.device_id = device.device_id || "";
 				child.device_name = device.device_name || "";
