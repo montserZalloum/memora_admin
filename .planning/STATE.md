@@ -10,18 +10,19 @@ See: .planning/PROJECT.md (updated 2026-02-03)
 ## Current Position
 
 Phase: 19 of 19 (Stage Content Editor)
-Plan: 1 of 1 in current phase
-Status: Phase 19 complete, Phase 16 pending
-Last activity: 2026-02-07 — Completed 19-01-PLAN.md (Stage Content Editor Wiring)
+Plan: 2 of 2 in current phase
+Status: Phase 19 complete
+Last activity: 2026-02-07 — Completed 19-02-PLAN.md (Use Frappe name as stage_id)
 
-Progress: [##################] ~98% (57/59 plans)
+Progress: [##################] ~97% (58/60 plans)
 
+**Completed Phase:** 19 — Stage Content Editor (2 plans)
 **Next Phase:** 16 (Admin Device Management) — 2 plans remaining
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 57
+- Total plans completed: 58
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -32,13 +33,17 @@ Progress: [##################] ~98% (57/59 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 6 | 11 | In Progress (9/11) |
+| v1.3 Profiles & Devices | 6 | 12 | In Progress (10/12) |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 19 Plan 02 decisions:**
+- Use stage.name (Frappe child table row identifier) for stage_id in JSON output
+- JSON output structure unchanged - only value source changed
 
 **Phase 18 Plan 01 decisions:**
 - Pipeline GETBIT instead of full bitmap load for <5ms response
@@ -85,7 +90,7 @@ None.
 
 - Phase 17 completed: Progress API Optimization (Caching + Streaming for scalable progress tracking)
 - Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
-- Phase 19 completed: Stage Content Editor (Edit Content button for lesson stage dialogs)
+- Phase 19 completed: Stage Content Editor (Edit Content button + build generator stage_id fix)
 
 ### Blockers/Concerns
 
@@ -97,6 +102,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 19-01-PLAN.md (Stage Content Editor Wiring) - Phase 19 complete
+Stopped at: Completed 19-02-PLAN.md (Use Frappe name as stage_id)
 Resume file: None
-Next action: `/gsd:plan-phase 16` or `/gsd:execute-phase 16` (if planned)
+Next action: Resume Phase 16 (Admin Device Management) — 2 plans remaining
