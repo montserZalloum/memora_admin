@@ -5,24 +5,24 @@
 See: .planning/PROJECT.md (updated 2026-02-03)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Milestone v1.3 — Phase 20: Lesson Complete Pipeline Overhaul
+**Current focus:** Milestone v1.3 — Phase 16: Admin Device Management
 
 ## Current Position
 
-Phase: 20 of 20 (Lesson Complete Pipeline Overhaul)
-Plan: 4 of 4 in current phase (PHASE COMPLETE)
-Status: Phase 20 complete (all 4 plans done)
-Last activity: 2026-02-07 — Completed 20-04-PLAN.md
+Phase: 16 of 20 (Admin Device Management)
+Plan: 1 of 2 in current phase
+Status: In progress
+Last activity: 2026-02-07 — Completed 16-01-PLAN.md
 
-Progress: [###################] ~97% (62/64 plans)
+Progress: [####################] ~98% (63/64 plans)
 
-**Completed:** 20 — Lesson Complete Pipeline Overhaul (4/4 plans complete)
-**Also Pending:** 16 (Admin Device Management) — 2 plans remaining
+**Completed:** 16-01 — Device Management APIs (sync + removal + bug fixes)
+**Remaining:** 16-02 (Admin Device Management UI)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 62
+- Total plans completed: 63
 - Milestones shipped: 4
 
 **By Milestone:**
@@ -33,13 +33,19 @@ Progress: [###################] ~97% (62/64 plans)
 | v1.1 Feature Expansion | 4 | 13 | Shipped 2026-02-03 |
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
-| v1.3 Profiles & Devices | 8 | 16 | In Progress (14/16) |
+| v1.3 Profiles & Devices | 8 | 16 | In Progress (15/16) |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+
+**Phase 16 Plan 01 decisions:**
+- Both device APIs use get_fastapi_redis() from access_sync (not frappe.cache)
+- Session invalidation via r.delete() (no Frappe site prefix)
+- Redis errors: APIs use frappe.throw (surfaces to admin), hook uses frappe.log_error (silent)
+- device_sync.py hook kept as safety net for manual child table edits
 
 **Phase 20 Plan 04 decisions:**
 - FSRS processing in background task, not hot path (keeps completion under 10ms)
@@ -116,6 +122,7 @@ None.
 - Phase 18 completed: Lesson Completion Status API (fast per-lesson completion lookups for topic pages at 100K scale)
 - Phase 19 completed: Stage Content Editor (Edit Content button + build generator stage_id fix)
 - Phase 20 completed: Lesson Complete Pipeline Overhaul — 4/4 plans complete (hierarchy/settings + legacy removal + Lua hot path + FSRS background processor)
+- Phase 16 in progress: Admin Device Management — 1/2 plans complete (device APIs + sync bug fixes)
 
 ### Blockers/Concerns
 
@@ -127,6 +134,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-07
-Stopped at: Completed 20-04-PLAN.md (FSRS background processor + hooks registration)
+Stopped at: Completed 16-01-PLAN.md (device APIs + device_sync bug fixes)
 Resume file: None
-Next action: Phase 20 complete. Remaining: Phase 16 (Admin Device Management, 2 plans)
+Next action: Phase 16-02 (Admin Device Management UI)
