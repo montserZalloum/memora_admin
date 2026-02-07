@@ -7,10 +7,27 @@ IMPORTANT: Uses get_fastapi_redis() (NOT frappe.cache()) to access the correct
 Redis namespace shared with the FastAPI sidecar.
 """
 
+from datetime import datetime
+
 import frappe
 import redis
 
 from memora_admin.events.access_sync import get_fastapi_redis
+
+
+def _parse_last_login(value: str) -> str | None:
+	"""Convert ISO 8601 datetime from Redis to Frappe-compatible format.
+
+	Redis stores: '2026-02-05T19:12:30.519501+00:00'
+	Frappe expects: '2026-02-05 19:12:30'
+	"""
+	if not value:
+		return None
+	try:
+		dt = datetime.fromisoformat(value)
+		return dt.strftime("%Y-%m-%d %H:%M:%S")
+	except (ValueError, TypeError):
+		return None
 
 
 @frappe.whitelist()
@@ -76,7 +93,7 @@ def sync_devices_from_redis(player_name: str) -> list[dict]:
 			"device_id": device_data.get("device_id", ""),
 			"device_name": device_data.get("device_name", ""),
 			"platform": device_data.get("platform", "Web"),
-			"last_login": device_data.get("last_login", ""),
+			"last_login": _parse_last_login(device_data.get("last_login", "")),
 			"user_agent": device_data.get("user_agent", ""),
 			"push_token": device_data.get("push_token", ""),
 		})
