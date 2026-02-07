@@ -38,6 +38,7 @@ class LessonInfo(BaseModel):
     lesson_id: str
     bit_index: int  # Position in bitmap
     xp: int = 0  # XP awarded on completion
+    max_hearts: int = 5  # Max hearts for this lesson (0 = use default)
 
 
 class LessonPath(BaseModel):

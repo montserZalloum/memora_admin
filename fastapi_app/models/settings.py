@@ -16,3 +16,5 @@ class GamificationSettings(BaseModel):
 	replay_xp: int = 25
 	max_streak_multiplier_percent: int = 50
 	max_devices_per_player: int = 3
+	default_max_hearts: int = 5
+	xp_per_heart: int = 0
