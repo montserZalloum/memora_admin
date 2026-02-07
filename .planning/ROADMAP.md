@@ -152,10 +152,11 @@ Plans:
   4. Save action serializes dialog values to JSON and stores in config_json field
   5. Supported stage types: MATCHING, REVEAL, SENTENCE_BUILDER (extensible pattern)
   6. Unsupported stage types show informative message
-**Plans**: 1 plan
+**Plans**: 2 plans
 
 Plans:
 - [x] 19-01: Stage Content Editor Wiring — completed 2026-02-07
+- [x] 19-02: Use Frappe name field as stage_id in lesson.json — completed 2026-02-07
 
 ## Progress
 
@@ -179,6 +180,6 @@ Plans:
 | 16. Admin Device Management | v1.3 | 0/2 | Not started | - |
 | 17. Progress API Optimization | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 18. Lesson Completion Status API | v1.3 | 1/1 | Complete | 2026-02-06 |
-| 19. Stage Content Editor | v1.3 | 1/1 | Complete | 2026-02-07 |
+| 19. Stage Content Editor | v1.3 | 2/2 | Complete | 2026-02-07 |
 
-**Total:** 19 phases, 57 plans completed, 2 plans pending (v1.3)
+**Total:** 19 phases, 58 plans completed, 2 plans pending (v1.3)
