@@ -213,11 +213,12 @@ doc_events = {
 
 scheduler_events = {
 	"cron": {
-		# Every 1 minute: Sync dirty data from Redis to MariaDB
+		# Every 1 minute: Sync dirty data from Redis to MariaDB + FSRS processing
 		"* * * * *": [
 			"memora_admin.tasks.sync.sync_dirty_progress",
 			"memora_admin.tasks.sync.sync_dirty_wallets",
 			"memora_admin.tasks.sync.flush_interaction_buffer",
+			"memora_admin.tasks.fsrs_processor.process_fsrs_reviews",
 		],
 		# Every 2 minutes: Process pending content builds
 		# "*/2 * * * *": [
