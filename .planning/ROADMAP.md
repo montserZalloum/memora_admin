@@ -6,7 +6,7 @@
 - SHIPPED **v1.1 Feature Expansion** — Phases 8-11 (shipped 2026-02-03)
 - SHIPPED **v1.2 Plan System Enhancement** — Phase 12 (shipped 2026-02-03)
 - SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
-- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-19
+- IN PROGRESS **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-20
 
 ## Phases
 
@@ -158,6 +158,29 @@ Plans:
 - [x] 19-01: Stage Content Editor Wiring — completed 2026-02-07
 - [x] 19-02: Use Frappe name field as stage_id in lesson.json — completed 2026-02-07
 
+#### Phase 20: Lesson Complete Pipeline Overhaul
+**Goal**: Overhaul the lesson completion pipeline for 100k concurrent users: implement FSRS spaced repetition, fix XP calculation bugs, optimize Redis operations to ~4 round-trips via Lua scripts + pipelining, implement hearts bonus XP, and remove the legacy progress/complete endpoint.
+**Depends on**: Phase 19 (stage_id fix needed for FSRS stage tracking)
+**Success Criteria** (what must be TRUE):
+  1. Hierarchy API returns correct `base_xp` and `max_hearts` per lesson (not hardcoded 10)
+  2. When lesson `base_xp`/`max_hearts` is 0, falls back to Memora Settings defaults
+  3. Hearts bonus XP calculated: `remaining_hearts * xp_per_heart`, added before streak multiplier
+  4. `StageResult.time_spent` accepts milliseconds (not seconds)
+  5. Session/end hot path completes in <10ms with ~4 Redis round-trips (Lua + pipeline)
+  6. All stage data batched into single RPUSH (not N pushes per stage)
+  7. Legacy `POST /progress/complete` endpoint removed
+  8. FSRS background task processes non-skippable stages every minute
+  9. FSRS state (stability, difficulty, next_review) persisted in Redis + Memora Memory State DocType
+  10. Skippable stages (from Lesson Stage Settings `is_skippable`) excluded from FSRS processing
+  11. `fsrs` package installed and FSRS scheduler uses weights from Memora Settings
+**Plans**: 4 plans
+
+Plans:
+- [ ] 20-01-PLAN.md — Hierarchy & settings enrichment (base_xp, max_hearts, xp_per_heart + fsrs dep)
+- [ ] 20-02-PLAN.md — StageResult time_spent to milliseconds + legacy endpoint removal
+- [ ] 20-03-PLAN.md — Lua session_complete script + pipeline hot path rewrite + hearts XP
+- [ ] 20-04-PLAN.md — FSRS background task (scheduled processor + hooks registration)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -181,5 +204,6 @@ Plans:
 | 17. Progress API Optimization | v1.3 | 2/2 | Complete | 2026-02-05 |
 | 18. Lesson Completion Status API | v1.3 | 1/1 | Complete | 2026-02-06 |
 | 19. Stage Content Editor | v1.3 | 2/2 | Complete | 2026-02-07 |
+| 20. Lesson Complete Pipeline Overhaul | v1.3 | 0/4 | Not started | - |
 
-**Total:** 19 phases, 58 plans completed, 2 plans pending (v1.3)
+**Total:** 20 phases, 58 plans completed, 6 plans pending (v1.3)
