@@ -58,13 +58,14 @@ class GameSession(BaseModel):
 class StageResult(BaseModel):
 	"""Stage completion data submitted at lesson end.
 
-	Per CONTEXT.md:
+	Per Phase 20:
+	- time_spent is in milliseconds (changed from seconds)
 	- Submitted with lesson completion
 	- Contains timing and performance data for XP calculation
 	"""
 
 	stage_id: str
-	time_spent: int  # seconds
+	time_spent: int  # milliseconds
 	fail_count: int = 0
 	completed_at: str  # ISO timestamp
 	metadata: dict = {}  # client-provided extra data for analytics
