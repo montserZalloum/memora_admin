@@ -1,27 +1,24 @@
 // Copyright (c) 2026, corex and contributors
 // For license information, please see license.txt
 
-// Script-level guard: survives all Frappe form re-renders, onload/refresh cycles.
-// Prevents sync_devices from being called more than once per form open.
-let _device_synced = {};
-
 frappe.ui.form.on("Memora Player Profile", {
 	refresh: function(frm) {
-		if (!frm.is_new()) {
-			frm.add_custom_button(__("Grant Access"), function() {
-				show_grant_dialog(frm);
-			}, __("Actions"));
+		if (frm.is_new()) return;
 
-			// Make device child table read-only (data comes from Redis sync only)
-			frm.set_df_property("authorized_devices", "read_only", 1);
+		frm.add_custom_button(__("Grant Access"), function() {
+			show_grant_dialog(frm);
+		}, __("Actions"));
 
-			// Sync once per form open; guard prevents re-entry from repeated refresh events
-			if (!_device_synced[frm.doc.name]) {
-				_device_synced[frm.doc.name] = true;
-				sync_devices(frm);
-			} else {
-				add_remove_buttons(frm);
-			}
+		frm.set_df_property("authorized_devices", "read_only", 1);
+
+		// Sync devices from Redis once per form session.
+		// frm.__devices_fetched guards against repeated refresh events.
+		// No reload_doc() anywhere — child table updated via frm.add_child + refresh_field.
+		if (!frm.__devices_fetched) {
+			frm.__devices_fetched = true;
+			sync_devices(frm);
+		} else {
+			add_remove_buttons(frm);
 		}
 	},
 });
@@ -29,30 +26,27 @@ frappe.ui.form.on("Memora Player Profile", {
 function sync_devices(frm) {
 	frappe.call({
 		method: "memora_admin.api.devices.sync_devices_from_redis",
-		args: {
-			player_name: frm.doc.name,
-		},
+		args: { player_name: frm.doc.name },
 		callback: function(r) {
-			// Populate child table client-side from API response
-			// No reload_doc() — avoids infinite getdoc loop
-			let devices = r.message || [];
-			frm.doc.authorized_devices = [];
+			var devices = r.message || [];
+			// Clear and repopulate child table client-side (no reload_doc)
+			frm.clear_table("authorized_devices");
 			devices.forEach(function(device) {
-				let child = frappe.model.add_child(frm.doc, "Memora Player Device", "authorized_devices");
-				child.device_id = device.device_id || "";
-				child.device_name = device.device_name || "";
-				child.platform = device.platform || "Web";
-				child.last_login = device.last_login || "";
-				child.user_agent = device.user_agent || "";
-				child.push_token = device.push_token || "";
+				frm.add_child("authorized_devices", {
+					device_id: device.device_id || "",
+					device_name: device.device_name || "",
+					platform: device.platform || "Web",
+					last_login: device.last_login || "",
+					user_agent: device.user_agent || "",
+					push_token: device.push_token || "",
+				});
 			});
+			// refresh_field re-renders the grid only — does NOT trigger form refresh
 			frm.refresh_field("authorized_devices");
-			// Clear dirty indicator (child table modification marks form unsaved)
-			frm.doc.__unsaved = 0;
-			frm.page.clear_indicator();
 			add_remove_buttons(frm);
 		},
 		error: function() {
+			frm.__devices_fetched = false;
 			frappe.msgprint({
 				title: __("Device Sync Failed"),
 				message: __("Could not fetch live device data. Redis may be unavailable."),
