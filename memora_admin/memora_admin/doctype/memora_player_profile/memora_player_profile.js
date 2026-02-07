@@ -2,10 +2,15 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Memora Player Profile", {
-	refresh: function(frm) {
-		// Only operate on saved documents
+	onload: function(frm) {
+		// Sync devices from Redis once per form open
+		// onload fires once (not on reload_doc), preventing infinite loop
 		if (!frm.is_new()) {
-			// Existing "Grant Access" button
+			sync_devices(frm);
+		}
+	},
+	refresh: function(frm) {
+		if (!frm.is_new()) {
 			frm.add_custom_button(__("Grant Access"), function() {
 				show_grant_dialog(frm);
 			}, __("Actions"));
@@ -13,37 +18,32 @@ frappe.ui.form.on("Memora Player Profile", {
 			// Make device child table read-only (data comes from Redis sync only)
 			frm.set_df_property("authorized_devices", "read_only", 1);
 
-			// Sync devices from Redis on every form load
-			// Use flag to prevent infinite loop: reload_doc re-triggers refresh
-			if (frm.__device_sync_in_progress) {
-				// Second pass after reload_doc -- add remove buttons and clear flag
-				add_remove_buttons(frm);
-				frm.__device_sync_in_progress = false;
-				return;
-			}
-
-			frm.__device_sync_in_progress = true;
-			frappe.call({
-				method: "memora_admin.api.devices.sync_devices_from_redis",
-				args: {
-					player_name: frm.doc.name,
-				},
-				callback: function() {
-					// API saved child table server-side; reload to reflect changes
-					frm.reload_doc();
-				},
-				error: function() {
-					frm.__device_sync_in_progress = false;
-					frappe.msgprint({
-						title: __("Device Sync Failed"),
-						message: __("Could not fetch live device data. Redis may be unavailable."),
-						indicator: "red",
-					});
-				},
-			});
+			// Add remove buttons to existing rows
+			add_remove_buttons(frm);
 		}
 	},
 });
+
+function sync_devices(frm) {
+	frappe.call({
+		method: "memora_admin.api.devices.sync_devices_from_redis",
+		args: {
+			player_name: frm.doc.name,
+		},
+		callback: function() {
+			// API saved child table server-side; reload to reflect changes
+			// reload_doc triggers refresh (adds buttons) but NOT onload (no re-sync)
+			frm.reload_doc();
+		},
+		error: function() {
+			frappe.msgprint({
+				title: __("Device Sync Failed"),
+				message: __("Could not fetch live device data. Redis may be unavailable."),
+				indicator: "red",
+			});
+		},
+	});
+}
 
 function add_remove_buttons(frm) {
 	let grid = frm.fields_dict.authorized_devices.grid;
@@ -82,9 +82,8 @@ function add_remove_buttons(frm) {
 									message: __("Device removed successfully"),
 									indicator: "green",
 								});
-								// Reset flag so reload triggers a fresh sync
-								frm.__device_sync_in_progress = false;
-								frm.reload_doc();
+								// Re-sync child table from Redis (device is now gone)
+								sync_devices(frm);
 							} else {
 								frappe.show_alert({
 									message: __("Failed to remove device"),
