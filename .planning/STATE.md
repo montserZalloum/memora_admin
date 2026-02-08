@@ -58,7 +58,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-1. Add dedicated subscriptions endpoint (`GET /api/v1/subscriptions`) — see `.planning/todos/pending/2026-02-08-add-subscriptions-endpoint.md`
+None.
 
 ### Roadmap Evolution
 
