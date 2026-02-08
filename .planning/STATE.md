@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.5 Real-Time Notifications — Phase 24 (Real-Time Subscription Notifications)
+**Current focus:** v1.5 Real-Time Notifications — Phase 24 (Real-Time Subscription Notifications) COMPLETE
 
 ## Current Position
 
 Phase: 24 (Real-Time Subscription Notifications)
-Plan: 01 of 3 (Foundation Components)
-Status: In progress
-Last activity: 2026-02-08 — Completed 24-01-PLAN.md
+Plan: 02 of 2 (WebSocket endpoint + pub/sub integration)
+Status: Phase complete
+Last activity: 2026-02-08 — Completed 24-02-PLAN.md
 
-Progress: [███░░░░░░░] 33%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 70
-- Milestones shipped: 5
+- Total plans completed: 71
+- Milestones shipped: 6
 
 **By Milestone:**
 
@@ -32,7 +32,7 @@ Progress: [███░░░░░░░] 33%
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
 | v1.3 Profiles & Devices | 7 | 16 | Shipped 2026-02-07 |
 | v1.4 Product Store | 3 | 4 | Shipped 2026-02-08 |
-| v1.5 Real-Time Notifications | 1 | 1 | In Progress |
+| v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 
 ## Accumulated Context
 
@@ -52,6 +52,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - No catalog cache invalidation on approval/rejection (filtering is live against Redis sets)
 - ConnectionManager returns first/last connection booleans for pub/sub subscribe/unsubscribe lifecycle
 - Notification publish never blocks approval/rejection flow (fire-and-forget with try/except)
+- Separate notification pub/sub listener from cache invalidation listener (dynamic per-user channels vs static)
+- JWT auth before WebSocket accept; Starlette rejects at HTTP layer for invalid tokens
+- notify_pubsub object on app.state for dynamic subscribe/unsubscribe from WebSocket endpoint
 
 ### Pending Todos
 
@@ -59,8 +62,8 @@ None.
 
 ### Roadmap Evolution
 
-- Phase 24 added: Real-Time Subscription Notifications (WebSockets + Redis Pub/Sub)
-  - Replaces deprecated SSE with WebSocket notification system
+- Phase 24 complete: Real-Time Subscription Notifications (WebSockets + Redis Pub/Sub)
+  - Deprecated SSE removed, replaced by WebSocket notification system
   - Scales to 100K+ concurrent users, <20ms propagation
   - Leverages existing Redis pub/sub infrastructure
 
@@ -72,6 +75,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 24-01-PLAN.md (Foundation Components)
+Stopped at: Completed 24-02-PLAN.md (WebSocket endpoint + pub/sub integration) — Phase 24 complete
 Resume file: None
-Next action: Execute 24-02-PLAN.md (WebSocket endpoint + notification listener)
+Next action: None — all planned phases complete
