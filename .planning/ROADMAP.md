@@ -8,7 +8,7 @@
 - SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
 - SHIPPED **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-20 (shipped 2026-02-07)
 - SHIPPED **v1.4 Product Store** — Phases 21-23 (shipped 2026-02-08)
-- **v1.5 Real-Time Notifications** — Phase 24
+- SHIPPED **v1.5 Real-Time Notifications** — Phase 24 (shipped 2026-02-08)
 
 ## Phases
 
@@ -129,7 +129,7 @@ Plans:
 
 **Milestone Goal:** Players receive real-time subscription updates via WebSockets when admin approves purchases, replacing deprecated SSE with a scalable notification system for 100K+ concurrent users.
 
-- [ ] **Phase 24: Real-Time Subscription Notifications** — WebSocket notification system with Redis pub/sub for instant subscription updates at scale
+- [x] **Phase 24: Real-Time Subscription Notifications** — WebSocket notification system with Redis pub/sub for instant subscription updates at scale
 
 ## Phase Details — v1.5
 
@@ -146,8 +146,8 @@ Plans:
   7. Client receives structured message with subscription details (subject_ids, product_name, status) for immediate UI update
 **Plans:** 2 plans
 Plans:
-- [ ] 24-01-PLAN.md — ConnectionManager, notification models, and Frappe-side Redis pub/sub publish
-- [ ] 24-02-PLAN.md — WebSocket endpoint, pub/sub listener integration, SSE removal
+- [x] 24-01-PLAN.md — ConnectionManager, notification models, and Frappe-side Redis pub/sub publish
+- [x] 24-02-PLAN.md — WebSocket endpoint, pub/sub listener integration, SSE removal
 
 ## Progress
 
@@ -176,6 +176,6 @@ Plans:
 | 21. Product Catalog API | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 22. Purchase Request Flow | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 23. Approval and Access Grant | v1.4 | 1/1 | Complete | 2026-02-08 |
-| 24. Real-Time Subscription Notifications | v1.5 | 0/2 | Planned | — |
+| 24. Real-Time Subscription Notifications | v1.5 | 2/2 | Complete | 2026-02-08 |
 
-**Total:** 23 phases complete (69 plans), 1 phase pending
+**Total:** 24 phases complete (71 plans)
