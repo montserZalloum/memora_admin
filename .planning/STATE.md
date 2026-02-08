@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.4 Product Store — Phase 23 (Approval and Access Grant) COMPLETE
+**Current focus:** v1.5 Real-Time Notifications — Phase 24 (Real-Time Subscription Notifications)
 
 ## Current Position
 
-Phase: 23 of 23 (Approval and Access Grant)
-Plan: 01 of 01 in phase (COMPLETE)
-Status: Milestone complete
-Last activity: 2026-02-08 — Completed 23-01-PLAN.md (Approval and Rejection Handler)
+Phase: 24 (Real-Time Subscription Notifications)
+Plan: 01 of 3 (Foundation Components)
+Status: In progress
+Last activity: 2026-02-08 — Completed 24-01-PLAN.md
 
-Progress: [██████████] 100%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 69
+- Total plans completed: 70
 - Milestones shipped: 5
 
 **By Milestone:**
@@ -32,6 +32,7 @@ Progress: [██████████] 100%
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
 | v1.3 Profiles & Devices | 7 | 16 | Shipped 2026-02-07 |
 | v1.4 Product Store | 3 | 4 | Shipped 2026-02-08 |
+| v1.5 Real-Time Notifications | 1 | 1 | In Progress |
 
 ## Accumulated Context
 
@@ -49,10 +50,19 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Pending products: hidden from catalog (not shown with badge) to prevent duplicates
 - Approval uses season end_date for expires_at with 2099-12-31 fallback
 - No catalog cache invalidation on approval/rejection (filtering is live against Redis sets)
+- ConnectionManager returns first/last connection booleans for pub/sub subscribe/unsubscribe lifecycle
+- Notification publish never blocks approval/rejection flow (fire-and-forget with try/except)
 
 ### Pending Todos
 
 None.
+
+### Roadmap Evolution
+
+- Phase 24 added: Real-Time Subscription Notifications (WebSockets + Redis Pub/Sub)
+  - Replaces deprecated SSE with WebSocket notification system
+  - Scales to 100K+ concurrent users, <20ms propagation
+  - Leverages existing Redis pub/sub infrastructure
 
 ### Blockers/Concerns
 
@@ -62,6 +72,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 23-01-PLAN.md (Approval and Rejection Handler) — Phase 23 complete, v1.4 Product Store milestone shipped
+Stopped at: Completed 24-01-PLAN.md (Foundation Components)
 Resume file: None
-Next action: Audit v1.4 milestone completion
+Next action: Execute 24-02-PLAN.md (WebSocket endpoint + notification listener)
