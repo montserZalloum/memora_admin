@@ -163,15 +163,30 @@ def _flatten_files(files: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def _cleanup_temp_files(storage: Any, temp_keys: list[str]) -> None:
 	"""
-	Clean up temporary files (best effort).
+	Clean up temporary files and directories (best effort).
 
 	Args:
 	    storage: StorageBackend instance
-	    temp_keys: List of temp file keys to delete
+	    temp_keys: List of temp file keys to delete (e.g., ["_temp_123/file1.json", ...])
 	"""
+	# Delete individual files
 	for key in temp_keys:
 		try:
 			storage.delete(key)
 		except Exception as e:
 			# Best effort - don't fail if cleanup fails
 			logger.debug(f"Failed to cleanup temp file {key}: {e}")
+
+	# Delete temp directory if all files are from same temp prefix
+	if temp_keys:
+		# Extract temp directory prefix (e.g., "_temp_123/" from "_temp_123/file.json")
+		first_key = temp_keys[0]
+		if "/" in first_key:
+			temp_dir = first_key.split("/")[0]
+			# Check if this is a temp directory
+			if temp_dir.startswith("_temp_"):
+				try:
+					storage.delete_directory(temp_dir)
+					logger.debug(f"Cleaned up temp directory: {temp_dir}")
+				except Exception as e:
+					logger.debug(f"Failed to cleanup temp directory {temp_dir}: {e}")

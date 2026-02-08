@@ -54,8 +54,8 @@ class LocalStorageBackend(StorageBackend):
 		"""
 		target_path = self.base_path / key
 
-		# Create parent directories if needed
-		target_path.parent.mkdir(parents=True, exist_ok=True)
+		# Create parent directories if needed with proper permissions
+		self._ensure_directory(target_path.parent)
 
 		# Atomic write: temp file -> fsync -> rename
 		fd = None
@@ -152,3 +152,54 @@ class LocalStorageBackend(StorageBackend):
 		except OSError as e:
 			logger.error(f"Failed to read {key}: {e}")
 			return None
+
+	def delete_directory(self, key: str) -> bool:
+		"""
+		Delete a directory and all its contents from storage.
+
+		Args:
+		    key: Relative path within storage (directory)
+
+		Returns:
+		    True if deleted, False if not found or error
+		"""
+		target_path = self.base_path / key
+
+		try:
+			if target_path.exists() and target_path.is_dir():
+				import shutil
+
+				shutil.rmtree(target_path)
+				logger.debug(f"Deleted directory {key}")
+				return True
+			return False
+		except OSError as e:
+			logger.error(f"Failed to delete directory {key}: {e}")
+			return False
+
+	def _ensure_directory(self, path: Path) -> None:
+		"""
+		Create directory with proper permissions for web server access.
+
+		Creates parent directories as needed and sets permissions to 0o2775
+		(setgid + rwxrwxr-x) so new files/dirs inherit the www-data group
+		and allow group write access for the web server.
+
+		Args:
+		    path: Directory path to create
+		"""
+		if path.exists():
+			return
+
+		# Create directory with parents
+		path.mkdir(parents=True, exist_ok=True)
+
+		# Fix permissions on all created directories (walk up to base_path)
+		current = path
+		while current != self.base_path and current.exists():
+			try:
+				# Set to setgid + rwxrwxr-x (group writable + inherit group for web server)
+				os.chmod(current, 0o2775)
+			except OSError as e:
+				logger.warning(f"Failed to set permissions on {current}: {e}")
+			current = current.parent

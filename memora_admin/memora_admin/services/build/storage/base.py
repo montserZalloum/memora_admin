@@ -65,3 +65,16 @@ class StorageBackend(ABC):
 		    File content as bytes, or None if not found
 		"""
 		pass
+
+	@abstractmethod
+	def delete_directory(self, key: str) -> bool:
+		"""
+		Delete a directory and all its contents from storage.
+
+		Args:
+		    key: The directory path/key to delete
+
+		Returns:
+		    True if deleted successfully, False otherwise
+		"""
+		pass
