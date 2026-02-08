@@ -14,7 +14,7 @@ Plan: 02 of 02 in phase (COMPLETE)
 Status: Phase complete
 Last activity: 2026-02-08 — Completed 22-02-PLAN.md (FastAPI Purchase Endpoint)
 
-Progress: [████░░░░░░] 42%
+Progress: [████████░░] 80%
 
 ## Performance Metrics
 
@@ -45,6 +45,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Two-pronged invalidation: direct Redis delete + pubsub notification for reliability
 - Unpublished products return DoesNotExistError (don't reveal existence)
 - Purchase endpoint returns 201 Created on success
+- Purchase flow: manual payment only (payment gateway auto-approval deferred)
+- Pending products: hidden from catalog (not shown with badge) to prevent duplicates
 
 ### Pending Todos
 
@@ -54,10 +56,11 @@ None.
 
 - PRCHS-05 (access grant on approval) may already work via existing hooks in access_sync.py — verify during Phase 23 planning
 - Phase 23 must handle SREM from pending set on rejection/approval
+- Payment gateway integration (PRCHS-03) deferred to future work — all transactions currently manual approval
 
 ## Session Continuity
 
 Last session: 2026-02-08
 Stopped at: Completed 22-02-PLAN.md (FastAPI Purchase Endpoint) — Phase 22 complete
 Resume file: None
-Next action: Begin Phase 23 planning (Purchase Approval Flow)
+Next action: Plan Phase 23 (Approval and Access Grant)

@@ -76,7 +76,7 @@ See: `.planning/milestones/v1.3-ROADMAP.md` for full details
 **Milestone Goal:** Players can discover available products for their plan and submit purchase requests, with admin approval flow granting content access.
 
 - [x] **Phase 21: Product Catalog API** — Players can browse available products for their plan with fast cached responses
-- [ ] **Phase 22: Purchase Request Flow** — Players can submit purchase requests that create trackable transactions
+- [x] **Phase 22: Purchase Request Flow** — Players can submit purchase requests that create trackable transactions
 - [ ] **Phase 23: Approval and Access Grant** — Approved transactions automatically create subscriptions and grant content access
 
 ## Phase Details
@@ -98,13 +98,15 @@ Plans:
 ### Phase 22: Purchase Request Flow
 **Goal**: Players can submit a purchase request for a product, creating a trackable Subscription Transaction with appropriate approval routing
 **Depends on**: Phase 21 (catalog must exist so players know what to buy; pending status feeds back into catalog)
-**Requirements**: CTLG-04, PRCHS-01, PRCHS-02, PRCHS-03, PRCHS-04
+**Requirements**: CTLG-04, PRCHS-01, PRCHS-02, PRCHS-04
 **Success Criteria** (what must be TRUE):
   1. Player can submit a purchase request for a specific Product Grant and receive confirmation that the request was created
   2. The purchase request creates a Memora Subscription Transaction DocType record with status "Pending Approval"
-  3. A purchase submitted via payment gateway is auto-approved (transaction status moves to "Approved" without admin intervention)
-  4. A purchase submitted via manual payment method stays in "Pending Approval" until an admin approves it in Frappe Desk
-  5. After submitting a purchase, the product shows "pending approval" in the catalog (no duplicate purchases) [CTLG-04]
+  3. Manual payment transactions stay in "Pending Approval" until an admin approves them in Frappe Desk
+  4. After submitting a purchase, the product is hidden from the catalog (prevents duplicate purchases) [CTLG-04]
+  5. Admin users receive email notification when a new purchase request is created
+
+Note: Payment gateway auto-approval deferred to Phase 23 or future work
 **Plans:** 2 plans
 Plans:
 - [ ] 22-01-PLAN.md — Frappe DocType update, whitelisted API, and admin notification hook
@@ -145,7 +147,7 @@ Plans:
 | 19. Stage Content Editor | v1.3 | 2/2 | Complete | 2026-02-07 |
 | 20. Lesson Complete Pipeline Overhaul | v1.3 | 4/4 | Complete | 2026-02-07 |
 | 21. Product Catalog API | v1.4 | 2/2 | Complete | 2026-02-08 |
-| 22. Purchase Request Flow | v1.4 | 0/2 | Not started | - |
+| 22. Purchase Request Flow | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 23. Approval and Access Grant | v1.4 | 0/TBD | Not started | - |
 
-**Total:** 20 phases complete (64 plans), 3 phases planned for v1.4
+**Total:** 21 phases complete (68 plans), 2 phases remaining in v1.4
