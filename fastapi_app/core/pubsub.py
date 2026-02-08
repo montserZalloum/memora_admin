@@ -138,6 +138,20 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 					"profile_service_not_available",
 					player_id=player_id,
 				)
+		elif msg_type == "catalog" and plan_id:
+			catalog_service = getattr(app_state, "catalog_service", None)
+			if catalog_service:
+				await catalog_service.invalidate(plan_id)
+				logger.info(
+					"catalog_cache_invalidated",
+					plan_id=plan_id,
+					timestamp=timestamp,
+				)
+			else:
+				logger.warning(
+					"catalog_service_not_available",
+					plan_id=plan_id,
+				)
 		else:
 			logger.debug(
 				"unknown_invalidation_message",
