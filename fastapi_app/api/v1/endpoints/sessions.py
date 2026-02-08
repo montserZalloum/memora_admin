@@ -153,14 +153,17 @@ async def start_session(
 			detail={"code": "LESSON_NOT_FOUND", "message": "Lesson not found"},
 		)
 
-	# Check content access (Gate 2) - check both explicit grants AND plan membership
-	content_key = f"SUB-{request.subject_id}"
-	has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
-	if not has_access:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail={"code": "NO_ACCESS", "message": "Content access required"},
-		)
+	# Check content access (Gate 2) - free lessons bypass, paid lessons require grant
+	# Per Phase 3: Free content (is_free at Unit/Topic level) bypasses Gate 2
+	if not hierarchy.is_lesson_free(request.lesson_id):
+		# Lesson is NOT free - require explicit subject access or plan membership
+		content_key = f"SUB-{request.subject_id}"
+		has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+		if not has_access:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail={"code": "NO_ACCESS", "message": "Content access required"},
+			)
 
 	# Start session (force-closes any existing)
 	session_id = await game_session_service.start_session(
