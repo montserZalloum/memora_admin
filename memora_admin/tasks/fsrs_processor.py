@@ -121,30 +121,22 @@ def process_fsrs_reviews():
 
 	# Get active season (needed for Memory State records)
 	active_season = _get_active_season()
-	print(f"[FSRS DEBUG] Active season = {active_season}")
 	logger.info(f"FSRS: Active season = {active_season}")
 	if not active_season:
-		print("[FSRS DEBUG] No active season found!")
 		logger.warning("No active season found, skipping FSRS processing")
 		return
 
 	# Get skippable stages to exclude
-	print("[FSRS DEBUG] Getting skippable stages...")
 	skippable = _get_skippable_stages()
-	print(f"[FSRS DEBUG] Found {len(skippable)} skippable stages")
 
 	# Get FSRS scheduler
-	print("[FSRS DEBUG] Getting FSRS scheduler...")
 	scheduler = _get_fsrs_scheduler()
-	print("[FSRS DEBUG] FSRS scheduler created")
 
-	# Query recent interactions (last 2 minutes for overlap safety)
+	# Query recent interactions (last 10 minutes to account for scheduler delays and processing time)
 	# Use frappe.utils.now_datetime() to get timezone-aware datetime matching Frappe's system timezone
 	from frappe.utils import now_datetime
 
-	print("[FSRS DEBUG] Calculating cutoff time...")
-	cutoff = now_datetime() - timedelta(minutes=2)
-	print(f"[FSRS DEBUG] Cutoff calculated: {cutoff}")
+	cutoff = now_datetime() - timedelta(minutes=10)
 	interactions = frappe.get_all(
 		"Memora Interaction Log",
 		filters={
@@ -156,17 +148,10 @@ def process_fsrs_reviews():
 		limit_page_length=500,
 	)
 
-	print(f"[FSRS DEBUG] Cutoff time: {cutoff}")
-	print(f"[FSRS DEBUG] Found {len(interactions)} interactions")
-	if interactions:
-		print(f"[FSRS DEBUG] Sample interaction: {interactions[0]}")
 	logger.info(f"FSRS: Found {len(interactions)} recent interactions (cutoff: {cutoff})")
 	if not interactions:
-		print("[FSRS DEBUG] No recent interactions - returning early")
 		logger.debug("No recent interactions for FSRS processing")
 		return
-
-	print(f"[FSRS DEBUG] Proceeding to process {len(interactions)} interactions...")
 
 	processed = 0
 	skipped = 0
@@ -174,15 +159,11 @@ def process_fsrs_reviews():
 
 	from fsrs import Card
 
-	print(f"[FSRS DEBUG] About to iterate over {type(interactions)} with {len(interactions)} items")
-	for i, interaction in enumerate(interactions, 1):
-		print(f"[FSRS DEBUG] Inside loop iteration {i}")
-		print(f"[FSRS DEBUG] Processing interaction {i}/{len(interactions)}: {interaction.player} - {interaction.lesson}")
+	for interaction in interactions:
 		stage_id = interaction.stage_id
 
 		# Skip if stage is skippable
 		if stage_id in skippable:
-			print(f"[FSRS DEBUG]   Stage {stage_id} is skippable, skipping")
 			skipped += 1
 			continue
 
@@ -190,9 +171,7 @@ def process_fsrs_reviews():
 		lesson = interaction.lesson
 
 		# Resolve subject from lesson (direct field on Memora Lesson)
-		print(f"[FSRS DEBUG]   Resolving subject for lesson {lesson}...")
 		subject = frappe.db.get_value("Memora Lesson", lesson, "subject")
-		print(f"[FSRS DEBUG]   Subject: {subject}")
 
 		if not subject:
 			# Safety net: resolve via hierarchy chain
