@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 21 of 23 (Product Catalog API)
-Plan: Not yet planned
-Status: Ready to plan
-Last activity: 2026-02-07 — Roadmap created for v1.4
+Plan: 01 of 02 in phase
+Status: In progress
+Last activity: 2026-02-08 — Completed 21-01-PLAN.md (Product Catalog API)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 64
+- Total plans completed: 65
 - Milestones shipped: 5
 
 **By Milestone:**
@@ -39,6 +39,10 @@ Progress: [░░░░░░░░░░] 0%
 
 All decisions logged in PROJECT.md Key Decisions table.
 
+- Catalog cache: no TTL, event-driven invalidation only
+- Purchased detection: use existing access set (all subjects in set = purchased)
+- Pending detection: read from memora:pending:{player_id} set (Phase 22 populates)
+
 ### Pending Todos
 
 None.
@@ -46,10 +50,12 @@ None.
 ### Blockers/Concerns
 
 - PRCHS-05 (access grant on approval) may already work via existing hooks in access_sync.py — verify during Phase 23 planning
+- Phase 22 must populate memora:pending:{player_id} Redis set for pending transaction filtering
+- Phase 22 must implement catalog cache invalidation hooks (pubsub + Frappe doc_events)
 
 ## Session Continuity
 
-Last session: 2026-02-07
-Stopped at: v1.4 roadmap created, ready to plan Phase 21
+Last session: 2026-02-08
+Stopped at: Completed 21-01-PLAN.md (Product Catalog API)
 Resume file: None
-Next action: `/gsd:plan-phase 21`
+Next action: Execute 21-02-PLAN.md (Cache Invalidation)
