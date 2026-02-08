@@ -105,7 +105,10 @@ Plans:
   3. A purchase submitted via payment gateway is auto-approved (transaction status moves to "Approved" without admin intervention)
   4. A purchase submitted via manual payment method stays in "Pending Approval" until an admin approves it in Frappe Desk
   5. After submitting a purchase, the product shows "pending approval" in the catalog (no duplicate purchases) [CTLG-04]
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 22-01-PLAN.md — Frappe DocType update, whitelisted API, and admin notification hook
+- [ ] 22-02-PLAN.md — FastAPI endpoint, PurchaseService, models, and router wiring
 
 ### Phase 23: Approval and Access Grant
 **Goal**: When a transaction is approved, the player automatically receives content access through subscription records and Redis access sync
@@ -142,7 +145,7 @@ Plans:
 | 19. Stage Content Editor | v1.3 | 2/2 | Complete | 2026-02-07 |
 | 20. Lesson Complete Pipeline Overhaul | v1.3 | 4/4 | Complete | 2026-02-07 |
 | 21. Product Catalog API | v1.4 | 2/2 | Complete | 2026-02-08 |
-| 22. Purchase Request Flow | v1.4 | 0/TBD | Not started | - |
+| 22. Purchase Request Flow | v1.4 | 0/2 | Not started | - |
 | 23. Approval and Access Grant | v1.4 | 0/TBD | Not started | - |
 
 **Total:** 20 phases complete (64 plans), 3 phases planned for v1.4
