@@ -14,9 +14,11 @@ The store page allows players to:
 
 ## API Endpoints
 
-### 1. GET `/api/v1/catalog`
+### 1. GET `/api/v1/catalog/`
 
 **Purpose**: Fetch available products for the player's plan
+
+**Note**: Include trailing slash to avoid 307 redirect
 
 **Headers Required**:
 ```
@@ -77,9 +79,11 @@ Content-Type: application/json
 
 ---
 
-### 2. POST `/api/v1/purchase`
+### 2. POST `/api/v1/purchase/`
 
 **Purpose**: Submit purchase request for a product
+
+**Note**: Include trailing slash to avoid 307 redirect
 
 **Headers Required**:
 ```
@@ -344,7 +348,7 @@ export function StorePage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch(`/api/v1/catalog`, {
+      const response = await fetch(`/api/v1/catalog/`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -374,7 +378,7 @@ export function StorePage() {
       setPurchasing(true);
       setError(null);
 
-      const response = await fetch('/api/v1/purchase', {
+      const response = await fetch('/api/v1/purchase/', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -486,7 +490,7 @@ curl http://localhost:5173/api/v1/health/live
 # Fetch catalog
 TOKEN="your-access-token"
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:5173/api/v1/catalog
+  http://localhost:5173/api/v1/catalog/
 
 # Submit purchase
 TOKEN="your-access-token"
@@ -494,7 +498,7 @@ curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"product_grant_id": "GRNT-00001"}' \
-  http://localhost:5173/api/v1/purchase
+  http://localhost:5173/api/v1/purchase/
 ```
 
 ### Production (Direct to x.conanacademy.com)
@@ -505,7 +509,7 @@ For production builds or direct API testing:
 # Fetch catalog
 TOKEN="your-access-token"
 curl -H "Authorization: Bearer $TOKEN" \
-  https://x.conanacademy.com/api/v1/catalog
+  https://x.conanacademy.com/api/v1/catalog/
 
 # Submit purchase
 TOKEN="your-access-token"
@@ -513,25 +517,42 @@ curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"product_grant_id": "GRNT-00001"}' \
-  https://x.conanacademy.com/api/v1/purchase
+  https://x.conanacademy.com/api/v1/purchase/
 ```
 
 ---
 
 ## Fixing 307 Redirect Issues
 
-If you're getting `307 Temporary Redirect`, check:
+If you're getting `307 Temporary Redirect`, the issue is **missing trailing slash**:
 
-1. **Use correct endpoint**: `/api/v1/catalog` (not `/catalog`)
-2. **Include headers**: Always include `Content-Type: application/json`
-3. **Vite proxy running**: Make sure `npm run dev` is running
-4. **Token format**: `Authorization: Bearer {token}` (not just token)
-5. **Base URL**: During dev, requests go through Vite proxy (localhost:5173)
+### ✅ Correct
+```typescript
+fetch('/api/v1/catalog/', { ... })
+fetch('/api/v1/purchase/', { ... })
+```
 
-**Debug example:**
+### ❌ Wrong (causes 307)
+```typescript
+fetch('/api/v1/catalog', { ... })   // 307 redirect
+fetch('/api/v1/purchase', { ... })  // 307 redirect
+```
+
+**Other things to check:**
+
+1. **Include headers**: Always include `Content-Type: application/json`
+2. **Vite proxy running**: Make sure `npm run dev` is running
+3. **Token format**: `Authorization: Bearer {token}` (with space)
+4. **Base URL**: During dev, requests go through Vite proxy (localhost:5173)
+
+**Remember: Always include the trailing slash!**
 ```bash
-# This will show where the 307 is redirecting to
-curl -v -H "Authorization: Bearer YOUR_TOKEN" \
+# ✅ Correct (with trailing slash)
+curl -H "Authorization: Bearer YOUR_TOKEN" \
+  http://localhost:5173/api/v1/catalog/
+
+# ❌ Wrong (307 redirect without trailing slash)
+curl -H "Authorization: Bearer YOUR_TOKEN" \
   http://localhost:5173/api/v1/catalog
 ```
 
