@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.4 Product Store — Phase 22 (Purchase Submission)
+**Current focus:** v1.4 Product Store — Phase 23 (Approval and Access Grant) COMPLETE
 
 ## Current Position
 
-Phase: 22 of 23 (Purchase Request Flow)
-Plan: 02 of 02 in phase (COMPLETE)
+Phase: 23 of 23 (Approval and Access Grant)
+Plan: 01 of 01 in phase (COMPLETE)
 Status: Phase complete
-Last activity: 2026-02-08 — Completed 22-02-PLAN.md (FastAPI Purchase Endpoint)
+Last activity: 2026-02-08 — Completed 23-01-PLAN.md (Approval and Rejection Handler)
 
-Progress: [████████░░] 80%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 68
+- Total plans completed: 69
 - Milestones shipped: 5
 
 **By Milestone:**
@@ -31,7 +31,7 @@ Progress: [████████░░] 80%
 | v1.2 Plan System Enhancement | 1 | 4 | Shipped 2026-02-03 |
 | v1.2.1 Gap Closure | 1 | 1 | Shipped 2026-02-03 |
 | v1.3 Profiles & Devices | 7 | 16 | Shipped 2026-02-07 |
-| v1.4 Product Store | 3 | TBD | In progress |
+| v1.4 Product Store | 3 | 4 | Shipped 2026-02-08 |
 
 ## Accumulated Context
 
@@ -47,6 +47,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Purchase endpoint returns 201 Created on success
 - Purchase flow: manual payment only (payment gateway auto-approval deferred)
 - Pending products: hidden from catalog (not shown with badge) to prevent duplicates
+- Approval uses season end_date for expires_at with 2099-12-31 fallback
+- No catalog cache invalidation on approval/rejection (filtering is live against Redis sets)
 
 ### Pending Todos
 
@@ -54,13 +56,12 @@ None.
 
 ### Blockers/Concerns
 
-- PRCHS-05 (access grant on approval) may already work via existing hooks in access_sync.py — verify during Phase 23 planning
-- Phase 23 must handle SREM from pending set on rejection/approval
 - Payment gateway integration (PRCHS-03) deferred to future work — all transactions currently manual approval
+- No end-to-end test data available for Phase 23 verification (no pending transactions existed during implementation)
 
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 22-02-PLAN.md (FastAPI Purchase Endpoint) — Phase 22 complete
+Stopped at: Completed 23-01-PLAN.md (Approval and Rejection Handler) — Phase 23 complete, v1.4 Product Store milestone shipped
 Resume file: None
-Next action: Plan Phase 23 (Approval and Access Grant)
+Next action: All planned phases complete
