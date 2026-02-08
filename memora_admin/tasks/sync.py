@@ -122,6 +122,10 @@ def sync_dirty_progress():
 			bitmap_bytes = r.get(bitmap_key)
 
 			# Convert to hex string (empty string if no bitmap)
+			# IMPORTANT: Redis bit ordering convention
+			# - Bit 0 = leftmost bit of first byte (0x80 = 0b10000000)
+			# - Bit 7 = rightmost bit of first byte (0x01 = 0b00000001)
+			# Example: hex "80" means bit 0 is set (lesson at index 0 completed)
 			hex_string = bitmap_bytes.hex() if bitmap_bytes else ""
 
 			# Calculate completion stats
