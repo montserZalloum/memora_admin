@@ -57,7 +57,7 @@ class CatalogService:
 
 		# Cache miss: fetch from Frappe whitelisted API
 		result = await self.frappe.call(
-			"memora_admin.api.catalog.get_plan_catalog",
+			"memora_admin.memora_admin.api.catalog.get_plan_catalog",
 			{"plan_id": plan_id},
 		)
 
