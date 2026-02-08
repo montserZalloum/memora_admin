@@ -68,11 +68,18 @@ def _get_fsrs_scheduler():
 def _get_active_season() -> str | None:
 	"""Get the currently active season ID.
 
-	Returns the first season with status='Active'.
+	Returns the first published season where current date is within [start_date, end_date].
 	"""
+	from datetime import date
+
+	today = date.today()
 	season = frappe.db.get_value(
 		"Memora Season",
-		{"status": "Active"},
+		{
+			"is_published": 1,
+			"start_date": ["<=", today],
+			"end_date": [">=", today],
+		},
 		"name",
 	)
 	return season
@@ -114,18 +121,30 @@ def process_fsrs_reviews():
 
 	# Get active season (needed for Memory State records)
 	active_season = _get_active_season()
+	print(f"[FSRS DEBUG] Active season = {active_season}")
+	logger.info(f"FSRS: Active season = {active_season}")
 	if not active_season:
-		logger.debug("No active season, skipping FSRS processing")
+		print("[FSRS DEBUG] No active season found!")
+		logger.warning("No active season found, skipping FSRS processing")
 		return
 
 	# Get skippable stages to exclude
+	print("[FSRS DEBUG] Getting skippable stages...")
 	skippable = _get_skippable_stages()
+	print(f"[FSRS DEBUG] Found {len(skippable)} skippable stages")
 
 	# Get FSRS scheduler
+	print("[FSRS DEBUG] Getting FSRS scheduler...")
 	scheduler = _get_fsrs_scheduler()
+	print("[FSRS DEBUG] FSRS scheduler created")
 
 	# Query recent interactions (last 2 minutes for overlap safety)
-	cutoff = datetime.now() - timedelta(minutes=2)
+	# Use frappe.utils.now_datetime() to get timezone-aware datetime matching Frappe's system timezone
+	from frappe.utils import now_datetime
+
+	print("[FSRS DEBUG] Calculating cutoff time...")
+	cutoff = now_datetime() - timedelta(minutes=2)
+	print(f"[FSRS DEBUG] Cutoff calculated: {cutoff}")
 	interactions = frappe.get_all(
 		"Memora Interaction Log",
 		filters={
@@ -137,9 +156,17 @@ def process_fsrs_reviews():
 		limit_page_length=500,
 	)
 
+	print(f"[FSRS DEBUG] Cutoff time: {cutoff}")
+	print(f"[FSRS DEBUG] Found {len(interactions)} interactions")
+	if interactions:
+		print(f"[FSRS DEBUG] Sample interaction: {interactions[0]}")
+	logger.info(f"FSRS: Found {len(interactions)} recent interactions (cutoff: {cutoff})")
 	if not interactions:
+		print("[FSRS DEBUG] No recent interactions - returning early")
 		logger.debug("No recent interactions for FSRS processing")
 		return
+
+	print(f"[FSRS DEBUG] Proceeding to process {len(interactions)} interactions...")
 
 	processed = 0
 	skipped = 0
@@ -147,11 +174,15 @@ def process_fsrs_reviews():
 
 	from fsrs import Card
 
-	for interaction in interactions:
+	print(f"[FSRS DEBUG] About to iterate over {type(interactions)} with {len(interactions)} items")
+	for i, interaction in enumerate(interactions, 1):
+		print(f"[FSRS DEBUG] Inside loop iteration {i}")
+		print(f"[FSRS DEBUG] Processing interaction {i}/{len(interactions)}: {interaction.player} - {interaction.lesson}")
 		stage_id = interaction.stage_id
 
 		# Skip if stage is skippable
 		if stage_id in skippable:
+			print(f"[FSRS DEBUG]   Stage {stage_id} is skippable, skipping")
 			skipped += 1
 			continue
 
@@ -159,7 +190,9 @@ def process_fsrs_reviews():
 		lesson = interaction.lesson
 
 		# Resolve subject from lesson (direct field on Memora Lesson)
+		print(f"[FSRS DEBUG]   Resolving subject for lesson {lesson}...")
 		subject = frappe.db.get_value("Memora Lesson", lesson, "subject")
+		print(f"[FSRS DEBUG]   Subject: {subject}")
 
 		if not subject:
 			# Safety net: resolve via hierarchy chain
@@ -194,6 +227,7 @@ def process_fsrs_reviews():
 			# Map fail_count to FSRS rating
 			rating = _map_rating(interaction.errors_count or 0)
 
+			# Use UTC-aware datetime for FSRS calculations
 			now = datetime.now(timezone.utc)
 
 			if existing and existing.stability and existing.stability > 0:
@@ -212,6 +246,10 @@ def process_fsrs_reviews():
 				card = Card()
 				card, _review_log = scheduler.review_card(card, rating, now)
 
+			# Convert card.due from UTC-aware to naive datetime for Frappe/MariaDB
+			# Frappe expects naive datetimes in the system timezone
+			next_review_naive = card.due.replace(tzinfo=None) if card.due else None
+
 			# Persist to Memora Memory State DocType
 			if frappe.db.exists("Memora Memory State", memory_state_name):
 				frappe.db.set_value(
@@ -220,7 +258,7 @@ def process_fsrs_reviews():
 					{
 						"stability": card.stability,
 						"difficulty": card.difficulty,
-						"next_review": card.due,
+						"next_review": next_review_naive,
 					},
 					update_modified=True,
 				)
@@ -236,7 +274,7 @@ def process_fsrs_reviews():
 						"lesson": lesson,
 						"stability": card.stability,
 						"difficulty": card.difficulty,
-						"next_review": card.due,
+						"next_review": next_review_naive,
 					}
 				).insert(ignore_permissions=True)
 
