@@ -153,12 +153,13 @@ async def start_session(
 			detail={"code": "LESSON_NOT_FOUND", "message": "Lesson not found"},
 		)
 
-	# Check content access (Gate 2) - free lessons bypass, paid lessons require grant
+	# Check content access (Gate 2) - free lessons bypass, paid lessons require explicit grant
 	# Per Phase 3: Free content (is_free at Unit/Topic level) bypasses Gate 2
+	# Paid lessons require EXPLICIT GRANT - plan membership covers only free content
 	if not hierarchy.is_lesson_free(request.lesson_id):
-		# Lesson is NOT free - require explicit subject access or plan membership
+		# Lesson is NOT free - require explicit subject grant (plan membership doesn't cover paid content)
 		content_key = f"SUB-{request.subject_id}"
-		has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+		has_access = await access_service.check_access(user.sub, content_key)
 		if not has_access:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
