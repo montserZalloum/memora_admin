@@ -9,12 +9,12 @@ Requirements for Product Store milestone. Players can discover and purchase avai
 
 ### Catalog (Discovery)
 
-- [ ] **CTLG-01**: Player can view list of available Product Grants for their plan
-- [ ] **CTLG-02**: Already-purchased products are excluded from the catalog
-- [ ] **CTLG-03**: Each product displays bundle name, subject titles (from Plan Subject alias_title), descriptions (from notes), and price (from Item Price price_list_rate)
+- [x] **CTLG-01**: Player can view list of available Product Grants for their plan
+- [x] **CTLG-02**: Already-purchased products are excluded from the catalog
+- [x] **CTLG-03**: Each product displays bundle name, subject titles (from Plan Subject alias_title), descriptions (from notes), and price (from Item Price price_list_rate)
 - [ ] **CTLG-04**: Products with pending transactions show a "pending approval" status badge
-- [ ] **CTLG-05**: Product catalog is cached in Redis per plan with sub-100ms response times
-- [ ] **CTLG-06**: Cache is invalidated when Product Grant is created, updated, or deleted
+- [x] **CTLG-05**: Product catalog is cached in Redis per plan with sub-100ms response times
+- [x] **CTLG-06**: Cache is invalidated when Product Grant is created, updated, or deleted
 
 ### Purchase
 
@@ -54,12 +54,12 @@ Requirements for Product Store milestone. Players can discover and purchase avai
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CTLG-01 | Phase 21 | Pending |
-| CTLG-02 | Phase 21 | Pending |
-| CTLG-03 | Phase 21 | Pending |
-| CTLG-04 | Phase 21 | Pending |
-| CTLG-05 | Phase 21 | Pending |
-| CTLG-06 | Phase 21 | Pending |
+| CTLG-01 | Phase 21 | Complete |
+| CTLG-02 | Phase 21 | Complete |
+| CTLG-03 | Phase 21 | Complete |
+| CTLG-04 | Phase 22 | Pending |
+| CTLG-05 | Phase 21 | Complete |
+| CTLG-06 | Phase 21 | Complete |
 | PRCHS-01 | Phase 22 | Pending |
 | PRCHS-02 | Phase 22 | Pending |
 | PRCHS-03 | Phase 22 | Pending |
@@ -73,4 +73,4 @@ Requirements for Product Store milestone. Players can discover and purchase avai
 
 ---
 *Requirements defined: 2026-02-07*
-*Last updated: 2026-02-07 after roadmap creation*
+*Last updated: 2026-02-08 after Phase 21 completion*

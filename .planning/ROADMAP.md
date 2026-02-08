@@ -75,7 +75,7 @@ See: `.planning/milestones/v1.3-ROADMAP.md` for full details
 
 **Milestone Goal:** Players can discover available products for their plan and submit purchase requests, with admin approval flow granting content access.
 
-- [ ] **Phase 21: Product Catalog API** — Players can browse available products for their plan with fast cached responses
+- [x] **Phase 21: Product Catalog API** — Players can browse available products for their plan with fast cached responses
 - [ ] **Phase 22: Purchase Request Flow** — Players can submit purchase requests that create trackable transactions
 - [ ] **Phase 23: Approval and Access Grant** — Approved transactions automatically create subscriptions and grant content access
 
@@ -84,28 +84,27 @@ See: `.planning/milestones/v1.3-ROADMAP.md` for full details
 ### Phase 21: Product Catalog API
 **Goal**: Players can discover available products for their plan with rich product details and sub-100ms cached responses
 **Depends on**: Nothing (first phase of v1.4; builds on existing plan infrastructure from v1.2)
-**Requirements**: CTLG-01, CTLG-02, CTLG-03, CTLG-04, CTLG-05, CTLG-06
+**Requirements**: CTLG-01, CTLG-02, CTLG-03, CTLG-05, CTLG-06
 **Success Criteria** (what must be TRUE):
   1. Player hits the catalog endpoint and receives a list of Product Grants available for their plan, excluding any products they have already purchased
   2. Each product in the response includes bundle name, subject titles (alias_title), descriptions (notes), and price (price_list_rate)
-  3. Products with pending purchase transactions display a "pending approval" status instead of a buy action
-  4. Catalog response returns in under 100ms on subsequent requests (Redis cache hit)
-  5. When a Product Grant is created, updated, or deleted in Frappe, the cached catalog for that plan refreshes on the next request
+  3. Catalog response returns in under 100ms on subsequent requests (Redis cache hit)
+  4. When a Product Grant is created, updated, or deleted in Frappe, the cached catalog for that plan refreshes on the next request
 **Plans:** 2 plans
 Plans:
-- [ ] 21-01-PLAN.md — Catalog endpoint, service, models, and Frappe data API
-- [ ] 21-02-PLAN.md — Cache invalidation wiring (Frappe hooks + pubsub + lifespan)
+- [x] 21-01-PLAN.md — Catalog endpoint, service, models, and Frappe data API
+- [x] 21-02-PLAN.md — Cache invalidation wiring (Frappe hooks + pubsub + lifespan)
 
 ### Phase 22: Purchase Request Flow
 **Goal**: Players can submit a purchase request for a product, creating a trackable Subscription Transaction with appropriate approval routing
 **Depends on**: Phase 21 (catalog must exist so players know what to buy; pending status feeds back into catalog)
-**Requirements**: PRCHS-01, PRCHS-02, PRCHS-03, PRCHS-04
+**Requirements**: CTLG-04, PRCHS-01, PRCHS-02, PRCHS-03, PRCHS-04
 **Success Criteria** (what must be TRUE):
   1. Player can submit a purchase request for a specific Product Grant and receive confirmation that the request was created
   2. The purchase request creates a Memora Subscription Transaction DocType record with status "Pending Approval"
   3. A purchase submitted via payment gateway is auto-approved (transaction status moves to "Approved" without admin intervention)
   4. A purchase submitted via manual payment method stays in "Pending Approval" until an admin approves it in Frappe Desk
-  5. After submitting a purchase, the product shows "pending approval" in the catalog (no duplicate purchases)
+  5. After submitting a purchase, the product shows "pending approval" in the catalog (no duplicate purchases) [CTLG-04]
 **Plans**: TBD
 
 ### Phase 23: Approval and Access Grant
@@ -142,7 +141,7 @@ Plans:
 | 18. Lesson Completion Status API | v1.3 | 1/1 | Complete | 2026-02-06 |
 | 19. Stage Content Editor | v1.3 | 2/2 | Complete | 2026-02-07 |
 | 20. Lesson Complete Pipeline Overhaul | v1.3 | 4/4 | Complete | 2026-02-07 |
-| 21. Product Catalog API | v1.4 | 0/2 | Not started | - |
+| 21. Product Catalog API | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 22. Purchase Request Flow | v1.4 | 0/TBD | Not started | - |
 | 23. Approval and Access Grant | v1.4 | 0/TBD | Not started | - |
 
