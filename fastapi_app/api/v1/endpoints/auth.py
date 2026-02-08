@@ -148,6 +148,20 @@ async def login(
     wallet_service = WalletService(redis, key_prefix=settings.redis_key_prefix)
     wallet = await wallet_service.get_wallet(user.user_id)
 
+    # Fetch subscriptions from Redis (explicit grants + plan subjects)
+    from fastapi_app.services.access import AccessService
+    access_service = AccessService(redis, key_prefix=settings.redis_key_prefix)
+
+    # Get explicit grants
+    grants = await access_service.get_player_grants(user.user_id)
+
+    # Get plan's free subjects
+    plan_subjects = await access_service.get_plan_free_subjects(profile_data["plan"])
+    plan_subject_keys = [f"SUB-{s}" for s in plan_subjects]
+
+    # Combine all subscriptions
+    all_subscriptions = list(grants | set(plan_subject_keys))
+
     # Create new session with plan_id (invalidates any existing session)
     session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
     family_id = await session_service.create_session(
@@ -172,7 +186,7 @@ async def login(
         expires_delta=timedelta(days=settings.jwt_refresh_token_expire_days),
     )
 
-    # Return enriched response with profile data
+    # Return enriched response with profile data and subscriptions
     return EnrichedTokenResponse(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -181,6 +195,7 @@ async def login(
             avatar=profile_data.get("avatar") or "default_avatar",
             gender=profile_data.get("gender"),  # May be None
             xp=wallet.get("xp", 0),
+            subscriptions=all_subscriptions,
         ),
     )
 
