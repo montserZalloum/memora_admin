@@ -2,7 +2,21 @@
 
 from fastapi import APIRouter
 
-from fastapi_app.api.v1.endpoints import access, auth, catalog, health, leaderboard, plans, progress, purchase, sessions, settings, wallet, webhooks
+from fastapi_app.api.v1.endpoints import (
+    access,
+    auth,
+    catalog,
+    health,
+    leaderboard,
+    notifications,
+    plans,
+    progress,
+    purchase,
+    sessions,
+    settings,
+    wallet,
+    webhooks,
+)
 
 router = APIRouter(prefix="/api/v1")
 
@@ -18,3 +32,4 @@ router.include_router(sessions.router)
 router.include_router(settings.router)
 router.include_router(wallet.router)
 router.include_router(webhooks.router)
+router.include_router(notifications.router)

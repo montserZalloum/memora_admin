@@ -1,8 +1,10 @@
-"""Redis pub/sub listener for cache invalidation.
+"""Redis pub/sub listeners for cache invalidation and real-time notifications.
 
-Listens on memora:cache:invalidate channel for hierarchy cache invalidation
-messages from the Frappe build worker. When a message is received, invalidates
-the corresponding subject's hierarchy cache in HierarchyService.
+Contains two independent listeners:
+1. Cache invalidation listener: Static channel (memora:cache:invalidate) for
+   hierarchy/plan/profile/catalog cache invalidation from Frappe build worker.
+2. Notification listener: Dynamic per-user channels (memora:notify:{user_id})
+   for forwarding subscription notifications to WebSocket clients.
 """
 
 import asyncio
@@ -165,3 +167,83 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 	except Exception as e:
 		# Log error but don't crash the listener
 		logger.error("invalidation_handler_error", error=str(e))
+
+
+# --- Notification Pub/Sub Listener ---
+
+
+async def start_notification_listener(redis_pool: Any, app_state: Any) -> None:
+	"""Start dedicated pub/sub listener for per-user notification channels.
+
+	Unlike the cache invalidation listener (static channel), this listener
+	dynamically subscribes/unsubscribes to per-user channels as WebSocket
+	clients connect and disconnect.
+
+	The pubsub object is stored on app_state.notify_pubsub so the WebSocket
+	endpoint can call subscribe/unsubscribe on it.
+
+	Args:
+		redis_pool: Redis connection pool from app.state.redis_pool
+		app_state: FastAPI app.state for accessing ws_manager
+	"""
+	import redis.asyncio as redis
+
+	client = redis.Redis(connection_pool=redis_pool)
+
+	try:
+		pubsub = client.pubsub()
+		app_state.notify_pubsub = pubsub
+
+		logger.info("notification_listener_started")
+
+		async for message in pubsub.listen():
+			if message["type"] == "message":
+				await _handle_notification(message, app_state)
+
+	except asyncio.CancelledError:
+		logger.info("notification_listener_cancelled")
+		raise
+	except Exception as e:
+		logger.error("notification_listener_error", error=str(e))
+		raise
+	finally:
+		try:
+			await client.aclose()
+		except Exception as e:
+			logger.debug("notification_cleanup_error", error=str(e))
+
+
+async def _handle_notification(message: dict, app_state: Any) -> None:
+	"""Handle notification pub/sub message and forward to WebSocket clients.
+
+	Extracts user_id from channel name and sends payload via ConnectionManager.
+
+	Args:
+		message: Raw pub/sub message dict with 'channel' and 'data' keys.
+		app_state: FastAPI app.state containing ws_manager.
+	"""
+	try:
+		channel = message.get("channel", b"")
+		if isinstance(channel, bytes):
+			channel = channel.decode("utf-8")
+
+		# Extract user_id from channel: "memora:notify:{user_id}"
+		if not channel.startswith("memora:notify:"):
+			return
+
+		user_id = channel[len("memora:notify:"):]
+
+		data = message.get("data", b"")
+		if isinstance(data, bytes):
+			data = data.decode("utf-8")
+
+		# Forward raw JSON to all user's WebSocket connections
+		ws_manager = getattr(app_state, "ws_manager", None)
+		if ws_manager:
+			sent = await ws_manager.send_to_user(user_id, data)
+			logger.info("notification_forwarded", user_id=user_id, sent_count=sent)
+		else:
+			logger.warning("ws_manager_not_available")
+
+	except Exception as e:
+		logger.error("notification_handler_error", error=str(e))
