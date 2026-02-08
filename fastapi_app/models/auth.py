@@ -57,7 +57,6 @@ class LoginProfile(BaseModel):
     avatar: str
     gender: str | None = None  # Optional - may not be set
     xp: int
-    subscriptions: list[str] = []  # Content keys player has access to (SUB-*, TRK-*)
 
 
 class EnrichedTokenResponse(BaseModel):
