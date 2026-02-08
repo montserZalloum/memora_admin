@@ -7,7 +7,7 @@
 - SHIPPED **v1.2 Plan System Enhancement** — Phase 12 (shipped 2026-02-03)
 - SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
 - SHIPPED **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-20 (shipped 2026-02-07)
-- ACTIVE **v1.4 Product Store** — Phases 21-23
+- SHIPPED **v1.4 Product Store** — Phases 21-23 (shipped 2026-02-08)
 
 ## Phases
 
@@ -77,7 +77,7 @@ See: `.planning/milestones/v1.3-ROADMAP.md` for full details
 
 - [x] **Phase 21: Product Catalog API** — Players can browse available products for their plan with fast cached responses
 - [x] **Phase 22: Purchase Request Flow** — Players can submit purchase requests that create trackable transactions
-- [ ] **Phase 23: Approval and Access Grant** — Approved transactions automatically create subscriptions and grant content access
+- [x] **Phase 23: Approval and Access Grant** — Approved transactions automatically create subscriptions and grant content access
 
 ## Phase Details
 
@@ -122,7 +122,7 @@ Plans:
   3. The approved product no longer appears in the player's catalog (excluded as already purchased)
 **Plans:** 1 plan
 Plans:
-- [ ] 23-01-PLAN.md — Subscription Transaction on_update handler for approval/rejection with subscription creation and Redis pending cleanup
+- [x] 23-01-PLAN.md — Subscription Transaction on_update handler for approval/rejection with subscription creation and Redis pending cleanup
 
 ## Progress
 
@@ -150,6 +150,6 @@ Plans:
 | 20. Lesson Complete Pipeline Overhaul | v1.3 | 4/4 | Complete | 2026-02-07 |
 | 21. Product Catalog API | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 22. Purchase Request Flow | v1.4 | 2/2 | Complete | 2026-02-08 |
-| 23. Approval and Access Grant | v1.4 | 0/1 | Not started | - |
+| 23. Approval and Access Grant | v1.4 | 1/1 | Complete | 2026-02-08 |
 
-**Total:** 22 phases complete (68 plans), 1 phase remaining in v1.4
+**Total:** 23 phases complete (69 plans)

@@ -22,7 +22,7 @@ Requirements for Product Store milestone. Players can discover and purchase avai
 - [ ] **PRCHS-02**: Purchase request creates a Memora Subscription Transaction with status "Pending Approval"
 - [ ] **PRCHS-03**: Payment gateway transactions are auto-approved and access is granted immediately
 - [ ] **PRCHS-04**: Manual payment transactions require admin approval in Frappe Desk before access is granted
-- [ ] **PRCHS-05**: On approval, Memora Player Subscription records are created and access is synced to Redis
+- [x] **PRCHS-05**: On approval, Memora Player Subscription records are created and access is synced to Redis
 
 ## Future Requirements
 
@@ -64,7 +64,7 @@ Requirements for Product Store milestone. Players can discover and purchase avai
 | PRCHS-02 | Phase 22 | Pending |
 | PRCHS-03 | Phase 22 | Pending |
 | PRCHS-04 | Phase 22 | Pending |
-| PRCHS-05 | Phase 23 | Pending |
+| PRCHS-05 | Phase 23 | Complete |
 
 **Coverage:**
 - v1.4 requirements: 11 total
