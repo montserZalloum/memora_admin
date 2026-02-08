@@ -159,6 +159,12 @@ doc_events = {
             "memora_admin.events.plan_change_sync.on_player_profile_plan_changed",
         ],
     },
+    # Product catalog cache invalidation
+    "Memora Product Grant": {
+        "after_insert": "memora_admin.events.catalog_sync.on_product_grant_changed",
+        "on_update": "memora_admin.events.catalog_sync.on_product_grant_changed",
+        "on_trash": "memora_admin.events.catalog_sync.on_product_grant_changed",
+    },
     # Build trigger events for content DocTypes (debounced)
     "Memora Subject": {
         "on_update": "memora_admin.events.build_trigger.on_content_updated",
