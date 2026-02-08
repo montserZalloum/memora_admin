@@ -8,6 +8,7 @@
 - SHIPPED **v1.2.1 Gap Closure** — Phase 13 (shipped 2026-02-03)
 - SHIPPED **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-20 (shipped 2026-02-07)
 - SHIPPED **v1.4 Product Store** — Phases 21-23 (shipped 2026-02-08)
+- **v1.5 Real-Time Notifications** — Phase 24
 
 ## Phases
 
@@ -124,6 +125,30 @@ Plans:
 Plans:
 - [x] 23-01-PLAN.md — Subscription Transaction on_update handler for approval/rejection with subscription creation and Redis pending cleanup
 
+### v1.5 Real-Time Notifications (Phase 24)
+
+**Milestone Goal:** Players receive real-time subscription updates via WebSockets when admin approves purchases, replacing deprecated SSE with a scalable notification system for 100K+ concurrent users.
+
+- [ ] **Phase 24: Real-Time Subscription Notifications** — WebSocket notification system with Redis pub/sub for instant subscription updates at scale
+
+## Phase Details — v1.5
+
+### Phase 24: Real-Time Subscription Notifications
+**Goal**: Players receive instant notification when their subscription status changes (approval/rejection), enabling the client to update the UI without polling. Replace deprecated SSE with WebSockets. Scale to 100K+ concurrent users with <20ms propagation.
+**Depends on**: Phase 23 (subscription approval flow must exist to trigger notifications)
+**Success Criteria** (what must be TRUE):
+  1. When an admin approves a Subscription Transaction, all connected clients of that player receive a WebSocket message within 20ms
+  2. WebSocket connections are authenticated via JWT and scoped per-user
+  3. The deprecated SSE endpoint (`/progress/stream/{subject}`) and `sse-starlette` dependency are removed
+  4. Redis pub/sub channel (`memora:notify:{user_id}`) broadcasts subscription changes across all FastAPI instances (stateless, load-balanceable)
+  5. Connection manager handles 100K+ concurrent WebSocket connections (~200MB memory) with graceful disconnect cleanup
+  6. Frappe approval hook publishes notification to Redis pub/sub, which all FastAPI instances forward to connected clients
+  7. Client receives structured message with subscription details (subject_ids, product_name, status) for immediate UI update
+**Plans:** 2 plans
+Plans:
+- [ ] 24-01-PLAN.md — ConnectionManager, notification models, and Frappe-side Redis pub/sub publish
+- [ ] 24-02-PLAN.md — WebSocket endpoint, pub/sub listener integration, SSE removal
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -151,5 +176,6 @@ Plans:
 | 21. Product Catalog API | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 22. Purchase Request Flow | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 23. Approval and Access Grant | v1.4 | 1/1 | Complete | 2026-02-08 |
+| 24. Real-Time Subscription Notifications | v1.5 | 0/2 | Planned | — |
 
-**Total:** 23 phases complete (69 plans)
+**Total:** 23 phases complete (69 plans), 1 phase pending
