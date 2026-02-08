@@ -14,6 +14,7 @@ from fastapi_app.api.v1.endpoints import (
     purchase,
     sessions,
     settings,
+    subscriptions,
     wallet,
     webhooks,
 )
@@ -30,6 +31,7 @@ router.include_router(plans.router)
 router.include_router(progress.router)
 router.include_router(sessions.router)
 router.include_router(settings.router)
+router.include_router(subscriptions.router)
 router.include_router(wallet.router)
 router.include_router(webhooks.router)
 router.include_router(notifications.router)
