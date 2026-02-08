@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.4 Product Store — Phase 21 (Product Catalog API)
+**Current focus:** v1.4 Product Store — Phase 22 (Purchase Submission)
 
 ## Current Position
 
 Phase: 21 of 23 (Product Catalog API)
-Plan: 01 of 02 in phase
-Status: In progress
-Last activity: 2026-02-08 — Completed 21-01-PLAN.md (Product Catalog API)
+Plan: 02 of 02 in phase (COMPLETE)
+Status: Phase complete
+Last activity: 2026-02-08 — Completed 21-02-PLAN.md (Cache Invalidation)
 
-Progress: [███░░░░░░░] 33%
+Progress: [████░░░░░░] 40%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 65
+- Total plans completed: 66
 - Milestones shipped: 5
 
 **By Milestone:**
@@ -42,6 +42,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Catalog cache: no TTL, event-driven invalidation only
 - Purchased detection: use existing access set (all subjects in set = purchased)
 - Pending detection: read from memora:pending:{player_id} set (Phase 22 populates)
+- Two-pronged invalidation: direct Redis delete + pubsub notification for reliability
 
 ### Pending Todos
 
@@ -51,11 +52,10 @@ None.
 
 - PRCHS-05 (access grant on approval) may already work via existing hooks in access_sync.py — verify during Phase 23 planning
 - Phase 22 must populate memora:pending:{player_id} Redis set for pending transaction filtering
-- Phase 22 must implement catalog cache invalidation hooks (pubsub + Frappe doc_events)
 
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 21-01-PLAN.md (Product Catalog API)
+Stopped at: Completed 21-02-PLAN.md (Cache Invalidation) — Phase 21 complete
 Resume file: None
-Next action: Execute 21-02-PLAN.md (Cache Invalidation)
+Next action: Begin Phase 22 planning (Purchase Submission)
