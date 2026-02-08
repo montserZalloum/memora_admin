@@ -109,8 +109,8 @@ Plans:
 Note: Payment gateway auto-approval deferred to Phase 23 or future work
 **Plans:** 2 plans
 Plans:
-- [ ] 22-01-PLAN.md — Frappe DocType update, whitelisted API, and admin notification hook
-- [ ] 22-02-PLAN.md — FastAPI endpoint, PurchaseService, models, and router wiring
+- [x] 22-01-PLAN.md — Frappe DocType update, whitelisted API, and admin notification hook
+- [x] 22-02-PLAN.md — FastAPI endpoint, PurchaseService, models, and router wiring
 
 ### Phase 23: Approval and Access Grant
 **Goal**: When a transaction is approved, the player automatically receives content access through subscription records and Redis access sync
@@ -120,7 +120,9 @@ Plans:
   1. When an admin approves a Subscription Transaction (or it is auto-approved), Memora Player Subscription records are created for each subject in the Product Grant
   2. On subscription creation, the player's access set in Redis is updated (subjects become accessible without re-login)
   3. The approved product no longer appears in the player's catalog (excluded as already purchased)
-**Plans**: TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 23-01-PLAN.md — Subscription Transaction on_update handler for approval/rejection with subscription creation and Redis pending cleanup
 
 ## Progress
 
@@ -148,6 +150,6 @@ Plans:
 | 20. Lesson Complete Pipeline Overhaul | v1.3 | 4/4 | Complete | 2026-02-07 |
 | 21. Product Catalog API | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 22. Purchase Request Flow | v1.4 | 2/2 | Complete | 2026-02-08 |
-| 23. Approval and Access Grant | v1.4 | 0/TBD | Not started | - |
+| 23. Approval and Access Grant | v1.4 | 0/1 | Not started | - |
 
-**Total:** 21 phases complete (68 plans), 2 phases remaining in v1.4
+**Total:** 22 phases complete (68 plans), 1 phase remaining in v1.4
