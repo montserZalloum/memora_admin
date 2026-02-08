@@ -114,7 +114,6 @@ def _queue_plan_builds_for_subject(subject_id: str, doc):
 		was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
 
 		if not was_set:
-			frappe.logger().debug(f"Build already pending for plan {plan_id}")
 			continue
 
 		try:
@@ -203,7 +202,6 @@ def on_plan_updated(doc, method):
 	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
 
 	if not was_set:
-		frappe.logger().debug(f"Build already pending for plan {plan_id}")
 		return
 
 	# Create Build Queue entry
@@ -220,10 +218,6 @@ def on_plan_updated(doc, method):
 		)
 		build_queue.insert(ignore_permissions=True)
 
-		frappe.logger().info(
-			f"Build queued: {build_queue.name} for plan {plan_id} "
-			f"(triggered by {doc.doctype} {doc.name})"
-		)
 	except Exception as e:
 		cache.delete_value(debounce_key)
 		frappe.log_error(
@@ -241,10 +235,6 @@ def on_plan_subject_changed(doc, method):
 	plan_id = doc.parent
 
 	if not plan_id:
-		frappe.log_error(
-			f"Plan Subject {doc.name} has no parent plan",
-			"Build Trigger Error",
-		)
 		return
 
 	# Reuse plan debounce logic
@@ -271,10 +261,6 @@ def on_plan_subject_changed(doc, method):
 		)
 		build_queue.insert(ignore_permissions=True)
 
-		frappe.logger().info(
-			f"Build queued: {build_queue.name} for plan {plan_id} "
-			f"(triggered by Plan Subject change)"
-		)
 	except Exception as e:
 		cache.delete_value(debounce_key)
 		frappe.log_error(
@@ -320,11 +306,7 @@ def on_plan_overrider_changed(doc, method):
 			}
 		)
 		build_queue.insert(ignore_permissions=True)
-
-		frappe.logger().info(
-			f"Build queued: {build_queue.name} for plan {plan_id} "
-			f"(triggered by Plan Overrider {doc.name})"
-		)
+		
 	except Exception as e:
 		cache.delete_value(debounce_key)
 		frappe.log_error(
