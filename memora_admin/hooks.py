@@ -165,6 +165,10 @@ doc_events = {
         "on_update": "memora_admin.events.catalog_sync.on_product_grant_changed",
         "on_trash": "memora_admin.events.catalog_sync.on_product_grant_changed",
     },
+    # Purchase request admin notification
+    "Memora Subscription Transaction": {
+        "after_insert": "memora_admin.events.purchase_sync.on_purchase_request_created",
+    },
     # Build trigger events for content DocTypes (debounced)
     "Memora Subject": {
         "on_update": "memora_admin.events.build_trigger.on_content_updated",
