@@ -344,8 +344,11 @@ export function StorePage() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/v1/catalog', {
-        headers: { Authorization: `Bearer ${token}` }
+      const response = await fetch(`/api/v1/catalog`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
       });
 
       if (!response.ok) {
@@ -472,41 +475,76 @@ export function StorePage() {
 
 ## Testing the Store API
 
-### Health Check
-```bash
-curl http://127.0.0.1:8002/api/v1/health/live
-```
+### Development (via Vite Proxy)
 
-### Fetch Catalog
+When running your React app with `npm run dev`, use the Vite proxy:
+
 ```bash
+# Health check
+curl http://localhost:5173/api/v1/health/live
+
+# Fetch catalog
 TOKEN="your-access-token"
 curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8002/api/v1/catalog
-```
+  http://localhost:5173/api/v1/catalog
 
-### Submit Purchase
-```bash
+# Submit purchase
 TOKEN="your-access-token"
 curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"product_grant_id": "GRNT-00001"}' \
-  http://127.0.0.1:8002/api/v1/purchase
+  http://localhost:5173/api/v1/purchase
+```
+
+### Production (Direct to x.conanacademy.com)
+
+For production builds or direct API testing:
+
+```bash
+# Fetch catalog
+TOKEN="your-access-token"
+curl -H "Authorization: Bearer $TOKEN" \
+  https://x.conanacademy.com/api/v1/catalog
+
+# Submit purchase
+TOKEN="your-access-token"
+curl -X POST \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"product_grant_id": "GRNT-00001"}' \
+  https://x.conanacademy.com/api/v1/purchase
+```
+
+---
+
+## Fixing 307 Redirect Issues
+
+If you're getting `307 Temporary Redirect`, check:
+
+1. **Use correct endpoint**: `/api/v1/catalog` (not `/catalog`)
+2. **Include headers**: Always include `Content-Type: application/json`
+3. **Vite proxy running**: Make sure `npm run dev` is running
+4. **Token format**: `Authorization: Bearer {token}` (not just token)
+5. **Base URL**: During dev, requests go through Vite proxy (localhost:5173)
+
+**Debug example:**
+```bash
+# This will show where the 307 is redirecting to
+curl -v -H "Authorization: Bearer YOUR_TOKEN" \
+  http://localhost:5173/api/v1/catalog
 ```
 
 ---
 
 ## Key Points to Remember
 
-1. **Caching**: First request takes ~200ms, subsequent requests <100ms
-2. **Filtering**: API already filters purchased & pending items
-3. **Single-Purchase**: Cannot submit 2 purchases for same product
-4. **Pending Items**: Hidden until admin approves/rejects
-5. **No Plan**: Player with no plan gets empty catalog (HTTP 200)
-6. **Token Required**: All requests need `Authorization: Bearer {token}` header
-7. **Error Handling**: Always check response status and handle errors
+1. **Vite Proxy**: In development, all `/api/*` requests proxy to `https://x.conanacademy.com`
+2. **Caching**: First request takes ~200ms, subsequent requests <100ms
+3. **Filtering**: API already filters purchased & pending items
+4. **Single-Purchase**: Cannot submit 2 purchases for same product
+5. **Pending Items**: Hidden until admin approves/rejects
+6. **No Plan**: Player with no plan gets empty catalog (HTTP 200)
+7. **Token Required**: All requests need `Authorization: Bearer {token}` header
+8. **Error Handling**: Always check response status and handle errors
 
----
-
-**Last Updated**: 2026-02-08
-**API Version**: v1.4
