@@ -9,17 +9,17 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 
 ## Current Position
 
-Phase: 21 of 23 (Product Catalog API)
-Plan: 02 of 02 in phase (COMPLETE)
-Status: Phase complete
-Last activity: 2026-02-08 — Completed 21-02-PLAN.md (Cache Invalidation)
+Phase: 22 of 23 (Purchase Request Flow)
+Plan: 01 of 02 in phase
+Status: In progress
+Last activity: 2026-02-08 — Completed 22-01-PLAN.md (Frappe Infrastructure)
 
-Progress: [████░░░░░░] 40%
+Progress: [████░░░░░░] 41%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 66
+- Total plans completed: 67
 - Milestones shipped: 5
 
 **By Milestone:**
@@ -43,6 +43,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Purchased detection: use existing access set (all subjects in set = purchased)
 - Pending detection: read from memora:pending:{player_id} set (Phase 22 populates)
 - Two-pronged invalidation: direct Redis delete + pubsub notification for reliability
+- Unpublished products return DoesNotExistError (don't reveal existence)
 
 ### Pending Todos
 
@@ -51,11 +52,11 @@ None.
 ### Blockers/Concerns
 
 - PRCHS-05 (access grant on approval) may already work via existing hooks in access_sync.py — verify during Phase 23 planning
-- Phase 22 must populate memora:pending:{player_id} Redis set for pending transaction filtering
+- Phase 22-02 must populate memora:pending:{player_id} Redis set for pending transaction filtering
 
 ## Session Continuity
 
 Last session: 2026-02-08
-Stopped at: Completed 21-02-PLAN.md (Cache Invalidation) — Phase 21 complete
+Stopped at: Completed 22-01-PLAN.md (Frappe Infrastructure)
 Resume file: None
-Next action: Begin Phase 22 planning (Purchase Submission)
+Next action: Execute 22-02-PLAN.md (FastAPI purchase endpoint + Redis pending set)
