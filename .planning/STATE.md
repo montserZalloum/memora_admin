@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.5 Real-Time Notifications — Phase 24 (Real-Time Subscription Notifications) COMPLETE
+**Current focus:** v1.6 FSRS Review System — Phase 25 (FSRS Review System) In Progress
 
 ## Current Position
 
-Phase: 24 (Real-Time Subscription Notifications)
-Plan: 02 of 2 (WebSocket endpoint + pub/sub integration)
-Status: Phase complete
-Last activity: 2026-02-08 — Completed 24-02-PLAN.md
+Phase: 25 (FSRS Review System)
+Plan: 1 of 3
+Status: In progress
+Last activity: 2026-02-09 — Completed 25-01-PLAN.md
 
-Progress: [██████████] 100%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 71
+- Total plans completed: 72
 - Milestones shipped: 6
 
 **By Milestone:**
@@ -33,6 +33,7 @@ Progress: [██████████] 100%
 | v1.3 Profiles & Devices | 7 | 16 | Shipped 2026-02-07 |
 | v1.4 Product Store | 3 | 4 | Shipped 2026-02-08 |
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
+| v1.6 FSRS Review System | 1 | 1 | In progress |
 
 ## Accumulated Context
 
@@ -55,6 +56,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Separate notification pub/sub listener from cache invalidation listener (dynamic per-user channels vs static)
 - JWT auth before WebSocket accept; Starlette rejects at HTTP layer for invalid tokens
 - notify_pubsub object on app.state for dynamic subscribe/unsubscribe from WebSocket endpoint
+- after_migrate hook for composite index persistence (Frappe only creates Property Setters for single-column indexes)
+- Per-stage is_skippable override takes priority over global stage type setting
+- next_review clamped to midnight with minimum tomorrow to prevent same-day reviews
 
 ### Pending Todos
 
@@ -66,6 +70,13 @@ None.
   - Deprecated SSE removed, replaced by WebSocket notification system
   - Scales to 100K+ concurrent users, <20ms propagation
   - Leverages existing Redis pub/sub infrastructure
+- Phase 25 in progress: FSRS Review System
+  - Plan 01 complete: Fix FSRS bugs (skippable filter, is_reviewable enforcement, date clamping) + composite index
+  - Plan 02 pending: Review API endpoints (GET /reviews, GET /reviews/{subject}, POST /reviews/{subject}/submit)
+  - Plan 03 pending: XP rewards and remaining integration
+  - MariaDB composite index for 200K+ users, no Redis sorted sets
+  - 3 XP per review session, no streak contribution
+  - Content: Option B (client handles via local cache/CDN)
 
 ### Blockers/Concerns
 
@@ -74,7 +85,7 @@ None.
 
 ## Session Continuity
 
-Last session: 2026-02-08
-Stopped at: Completed 24-02-PLAN.md (WebSocket endpoint + pub/sub integration) — Phase 24 complete
+Last session: 2026-02-09
+Stopped at: Completed 25-01-PLAN.md
 Resume file: None
-Next action: None — all planned phases complete
+Next action: Execute 25-02-PLAN.md (Review API endpoints)
