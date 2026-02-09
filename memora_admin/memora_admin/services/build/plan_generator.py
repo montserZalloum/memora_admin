@@ -66,10 +66,12 @@ def generate_plan_json(plan_id: str) -> list[dict]:
 
 	# Generate manifest
 	manifest_data = _generate_manifest(plan_doc, subject_ids, overrides, plan_subject_meta)
-	files.append({
-		"filename": f"plans/{plan_id}/manifest.json",
-		"content": _to_json(manifest_data),
-	})
+	files.append(
+		{
+			"filename": f"plans/{plan_id}/manifest.json",
+			"content": _to_json(manifest_data),
+		}
+	)
 
 	# Generate per-subject files
 	for subject_id in subject_ids:
@@ -175,17 +177,19 @@ def _generate_manifest(
 		# Get is_premium and alias_title from Plan Subject (not from Subject itself)
 		ps_meta = plan_subject_meta.get(subject_id, {})
 
-		subjects.append({
-			"id": subject_id,
-			"title": subject_doc.subject_title,
-			"alias_title": ps_meta.get("alias_title"),
-			"image": _relative_path(subject_doc.image),
-			"total_lessons": stats["total_lessons"],
-			"total_tracks": stats["total_tracks"],
-			"is_premium": ps_meta.get("is_premium", True),
-			"is_free_preview": stats["is_free_preview"],
-			"hierarchy_url": f"/files/cdn/plans/{plan_doc.name}/subjects/{subject_id}/_h.json",
-		})
+		subjects.append(
+			{
+				"id": subject_id,
+				"title": subject_doc.subject_title,
+				"alias_title": ps_meta.get("alias_title"),
+				"image": _relative_path(subject_doc.image),
+				"total_lessons": stats["total_lessons"],
+				"total_tracks": stats["total_tracks"],
+				"is_premium": ps_meta.get("is_premium", True),
+				"is_free_preview": stats["is_free_preview"],
+				"hierarchy_url": f"/files/cdn/plans/{plan_doc.name}/subjects/{subject_id}/_h.json?v={version}",
+			}
+		)
 
 	return {
 		"schema_version": SCHEMA_VERSION,
@@ -286,10 +290,12 @@ def _generate_subject_files(plan_id: str, subject_id: str, overrides: dict) -> l
 
 	# Generate _h.json (hierarchy with Plan Overrides applied)
 	hierarchy_data, free_content = _generate_hierarchy(plan_id, subject_doc, overrides)
-	files.append({
-		"filename": f"plans/{plan_id}/subjects/{subject_id}/_h.json",
-		"content": _to_json(hierarchy_data),
-	})
+	files.append(
+		{
+			"filename": f"plans/{plan_id}/subjects/{subject_id}/_h.json",
+			"content": _to_json(hierarchy_data),
+		}
+	)
 
 	# Update Plan Subject meta_data with free content index
 	_update_plan_subject_metadata(plan_id, subject_id, free_content)
@@ -316,10 +322,12 @@ def _generate_subject_files(plan_id: str, subject_id: str, overrides: dict) -> l
 				continue
 
 			unit_content = _generate_unit_content(unit["name"], overrides)
-			files.append({
-				"filename": f"plans/{plan_id}/subjects/{subject_id}/units/{unit['name']}_c.json",
-				"content": _to_json(unit_content),
-			})
+			files.append(
+				{
+					"filename": f"plans/{plan_id}/subjects/{subject_id}/units/{unit['name']}_c.json",
+					"content": _to_json(unit_content),
+				}
+			)
 
 			# Generate lesson files (shared, check if exists first is done by publisher)
 			topics = frappe.get_all(
@@ -408,23 +416,27 @@ def _generate_hierarchy(plan_id: str, subject_doc: Any, overrides: dict) -> tupl
 						unit_is_free = True
 						free_topics.append(topic["name"])
 
-			units_data.append({
-				"id": unit["name"],
-				"title": unit["unit_title"],
-				"sort_order": unit["sort_order"] or 0,
-				"is_linear": bool(unit.get("is_linear")),
-				"is_free": unit_is_free,
-				"content_url": f"/files/cdn/plans/{plan_id}/subjects/{subject_doc.name}/units/{unit['name']}_c.json",
-			})
+			units_data.append(
+				{
+					"id": unit["name"],
+					"title": unit["unit_title"],
+					"sort_order": unit["sort_order"] or 0,
+					"is_linear": bool(unit.get("is_linear")),
+					"is_free": unit_is_free,
+					"content_url": f"/files/cdn/plans/{plan_id}/subjects/{subject_doc.name}/units/{unit['name']}_c.json?v={version}",
+				}
+			)
 
-		tracks_data.append({
-			"id": track["name"],
-			"title": track["track_title"],
-			"sort_order": track["sort_order"] or 0,
-			"is_linear": bool(track.get("is_linear")),
-			"image": _relative_path(track.get("image")),
-			"units": units_data,
-		})
+		tracks_data.append(
+			{
+				"id": track["name"],
+				"title": track["track_title"],
+				"sort_order": track["sort_order"] or 0,
+				"is_linear": bool(track.get("is_linear")),
+				"image": _relative_path(track.get("image")),
+				"units": units_data,
+			}
+		)
 
 	hierarchy_data = {
 		"schema_version": SCHEMA_VERSION,
@@ -486,19 +498,21 @@ def _generate_unit_content(unit_id: str, overrides: dict) -> dict:
 				"id": lesson["name"],
 				"title": lesson["lesson_title"],
 				"bit_index": lesson.get("bit_index") or 0,
-				"content_url": f"/files/cdn/lessons/{lesson['name']}.json",
+				"content_url": f"/files/cdn/lessons/{lesson['name']}.json?v={version}",
 			}
 			for lesson in lessons
 		]
 
-		topics_data.append({
-			"id": topic["name"],
-			"title": topic["topic_title"],
-			"sort_order": topic["sort_order"] or 0,
-			"is_linear": bool(topic.get("is_linear")),
-			"is_free": topic_is_free,
-			"lessons": lessons_data,
-		})
+		topics_data.append(
+			{
+				"id": topic["name"],
+				"title": topic["topic_title"],
+				"sort_order": topic["sort_order"] or 0,
+				"is_linear": bool(topic.get("is_linear")),
+				"is_free": topic_is_free,
+				"lessons": lessons_data,
+			}
+		)
 
 	return {
 		"schema_version": SCHEMA_VERSION,
