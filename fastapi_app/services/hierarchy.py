@@ -72,6 +72,10 @@ class HierarchyService:
             ex=self.CACHE_TTL,
         )
 
+        # Auto-repair subjects_with_free_content set on cache miss
+        if hierarchy.has_any_free_content():
+            await self.redis.sadd(self._free_content_subjects_key(), subject_id)
+
         return hierarchy
 
     async def invalidate(self, subject_id: str) -> None:

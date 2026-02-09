@@ -1,6 +1,32 @@
 """Frappe API for subject hierarchy operations."""
 
+import json
+
 import frappe
+
+
+def _get_free_content_from_plan(subject_id: str) -> tuple[list[str], list[str]]:
+    """Read free_units/free_topics from Plan Subject meta_data JSON field.
+
+    The meta_data is pre-computed during plan build and stored as:
+    {"free_units": [...], "free_topics": [...]}
+
+    Returns:
+        Tuple of (free_units, free_topics) lists. Empty lists if no metadata found.
+    """
+    meta_data = frappe.db.get_value(
+        "Memora Plan Subject",
+        {"subject": subject_id},
+        "meta_data",
+    )
+    if not meta_data:
+        return [], []
+
+    try:
+        data = json.loads(meta_data) if isinstance(meta_data, str) else meta_data
+        return data.get("free_units", []), data.get("free_topics", [])
+    except (json.JSONDecodeError, AttributeError):
+        return [], []
 
 
 @frappe.whitelist(allow_guest=False)
@@ -51,7 +77,9 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
     default_base_xp = settings.base_lesson_xp or 100
     default_max_hearts = settings.default_max_hearts or 5
 
-    # Build hierarchy
+    # Read free content index from Plan Subject meta_data (avoids looping units/topics)
+    free_units, free_topics = _get_free_content_from_plan(subject_id)
+
     hierarchy = {
         "subject_id": subject.name,
         "version": getattr(subject, "version", 1),
@@ -137,5 +165,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
         hierarchy["tracks"].append(track_info)
 
     hierarchy["bit_range"] = bit_index
+    hierarchy["free_units"] = free_units
+    hierarchy["free_topics"] = free_topics
 
     return hierarchy

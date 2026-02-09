@@ -1,8 +1,18 @@
 """Progress tracking service for Redis bitmap operations."""
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import redis.asyncio as redis
+import structlog
 
 from fastapi_app.core.constants import DIRTY_PROGRESS_KEY
+
+if TYPE_CHECKING:
+	from fastapi_app.services.frappe_client import FrappeClient
+
+logger = structlog.get_logger()
 
 
 class ProgressService:
@@ -20,11 +30,21 @@ class ProgressService:
     - is_complete: GETBIT O(1) - checks single lesson status
     - get_completed_count: BITCOUNT O(N) on bitmap size
     - get_completed_bits: Pipeline GETBIT for unlock calculation
+
+    Hydration: After a Redis flush, progress bitmaps are lost. The ensure_hydrated()
+    method restores them from MariaDB via the Frappe API, following the same
+    pattern as AccessService.ensure_hydrated().
     """
 
-    def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:"):
+    def __init__(
+        self,
+        redis_client: redis.Redis,
+        key_prefix: str = "memora:",
+        frappe_client: FrappeClient | None = None,
+    ):
         self.redis = redis_client
         self.prefix = key_prefix
+        self.frappe = frappe_client
 
     def _progress_key(self, user_id: str, subject_id: str, version: int = 1) -> str:
         """Generate Redis key for player's progress bitmap.
@@ -38,6 +58,80 @@ class ProgressService:
             Redis key string
         """
         return f"{self.prefix}progress:{user_id}:{subject_id}:v{version}"
+
+    async def ensure_hydrated(self, user_id: str, subject_id: str, version: int = 1) -> None:
+        """Ensure progress bitmap exists in Redis, hydrating from MariaDB if missing.
+
+        After a Redis flush (bench clear-cache, FLUSHDB, restart, etc.), progress
+        bitmaps in Redis are lost. Without hydration, all progress appears as 0%
+        and users lose their lesson completion history.
+
+        This method checks if the bitmap exists and, if not, loads the hex bitset
+        from MariaDB (Memora Structure Progress) and restores it to Redis.
+
+        Follows the same pattern as AccessService.ensure_hydrated().
+
+        Args:
+            user_id: Player's user ID
+            subject_id: Subject identifier
+            version: Bitmap version
+        """
+        key = self._progress_key(user_id, subject_id, version)
+
+        # Fast path: bitmap already exists in Redis
+        exists = await self.redis.exists(key)
+        if exists:
+            return
+
+        # Bitmap missing from Redis -- hydrate from MariaDB
+        if not self.frappe:
+            logger.warning(
+                "progress_hydration_skipped",
+                user_id=user_id,
+                subject_id=subject_id,
+                reason="no_frappe_client",
+            )
+            return
+
+        try:
+            result = await self.frappe.call(
+                "memora_admin.api.subscriptions.get_player_progress",
+                {"player_id": user_id, "subject_id": subject_id},
+            )
+
+            if not result or not result.get("passed_lessons_bitset"):
+                # No progress record in MariaDB - this is fine for new players
+                logger.debug(
+                    "progress_hydration_skipped",
+                    user_id=user_id,
+                    subject_id=subject_id,
+                    reason="no_progress_record",
+                )
+                return
+
+            # Convert hex bitset to bytes and restore to Redis
+            hex_bitset = result["passed_lessons_bitset"]
+            if hex_bitset:
+                # Convert hex string to bytes
+                bitset_bytes = bytes.fromhex(hex_bitset)
+                # Write bytes to Redis bitmap using SETRANGE (positions bytes at offset 0)
+                await self.redis.setrange(key, 0, bitset_bytes)
+
+                logger.info(
+                    "progress_hydrated",
+                    user_id=user_id,
+                    subject_id=subject_id,
+                    completion_pct=result.get("completion_percentage", 0),
+                    bitset_length=len(hex_bitset),
+                )
+
+        except Exception as e:
+            logger.error(
+                "progress_hydration_failed",
+                user_id=user_id,
+                subject_id=subject_id,
+                error=str(e),
+            )
 
     async def complete_lesson(
         self,
@@ -91,6 +185,7 @@ class ProgressService:
         Returns:
             True if lesson is complete, False otherwise
         """
+        await self.ensure_hydrated(user_id, subject_id, version)
         key = self._progress_key(user_id, subject_id, version)
         return bool(await self.redis.getbit(key, bit_index))
 
@@ -112,6 +207,7 @@ class ProgressService:
         Returns:
             Number of completed lessons (set bits)
         """
+        await self.ensure_hydrated(user_id, subject_id, version)
         key = self._progress_key(user_id, subject_id, version)
         return await self.redis.bitcount(key)
 
@@ -136,6 +232,7 @@ class ProgressService:
         Returns:
             Set of bit indexes that are set (completed lessons)
         """
+        await self.ensure_hydrated(user_id, subject_id, version)
         key = self._progress_key(user_id, subject_id, version)
         completed = set()
 

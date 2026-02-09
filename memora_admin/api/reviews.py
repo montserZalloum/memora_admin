@@ -18,17 +18,22 @@ import frappe
 def get_review_overview(player_id: str) -> list[dict]:
 	"""Get count of due reviews per subject for a player.
 
-	Uses composite index on (player, subject, next_review).
+	Only counts Memory State records whose stage still exists in the parent lesson
+	(JOIN with Memora Lesson Stage). This ensures the overview count is consistent
+	with what get_due_stages would actually return.
+
 	Returns: [{"subject": "SUBJ-00001", "due_count": 15}, ...]
 	"""
 	today = frappe.utils.today()  # Returns 'YYYY-MM-DD' string
 	return frappe.db.sql(
 		"""
-		SELECT subject, COUNT(*) as due_count
-		FROM `tabMemora Memory State`
-		WHERE player = %(player)s
-		  AND next_review <= %(today)s
-		GROUP BY subject
+		SELECT ms.subject, COUNT(*) as due_count
+		FROM `tabMemora Memory State` ms
+		INNER JOIN `tabMemora Lesson Stage` ls
+			ON ls.name = ms.stage_id AND ls.parent = ms.lesson
+		WHERE ms.player = %(player)s
+		  AND ms.next_review <= %(today)s
+		GROUP BY ms.subject
 		""",
 		{"player": player_id, "today": today},
 		as_dict=True,
@@ -39,20 +44,28 @@ def get_review_overview(player_id: str) -> list[dict]:
 def get_due_stages(player_id: str, subject_id: str, limit: int = 10) -> dict:
 	"""Get up to N due stages for a subject, oldest first (FIFO).
 
-	Validates that each stage still exists in its parent lesson
-	(gracefully skips removed stages). Returns stage_type for client rendering.
+	Uses a JOIN with Memora Lesson Stage to only return stages that still exist
+	in their parent lesson (skips removed/renamed stages). Returns stage_type
+	for client rendering.
+
+	has_more is computed from the total validated count, not raw Memory State count,
+	ensuring consistency with the overview endpoint.
 
 	Returns: {"stages": [...], "has_more": bool}
 	"""
 	limit = int(limit)
 	today = frappe.utils.today()
 
-	# Fetch a few extra rows to account for removed stages being filtered out
+	# JOIN ensures we only get stages that still exist in their lesson.
+	# Fetch limit+1 to detect has_more without needing a separate COUNT query.
 	rows = frappe.db.sql(
 		"""
 		SELECT ms.name as memory_state_name, ms.stage_id, ms.lesson,
-		       ms.stability, ms.difficulty, ms.next_review
+		       ms.stability, ms.difficulty, ms.next_review,
+		       ls.stage_type
 		FROM `tabMemora Memory State` ms
+		INNER JOIN `tabMemora Lesson Stage` ls
+			ON ls.name = ms.stage_id AND ls.parent = ms.lesson
 		WHERE ms.player = %(player)s
 		  AND ms.subject = %(subject)s
 		  AND ms.next_review <= %(today)s
@@ -63,46 +76,26 @@ def get_due_stages(player_id: str, subject_id: str, limit: int = 10) -> dict:
 			"player": player_id,
 			"subject": subject_id,
 			"today": today,
-			"fetch_limit": limit + 5,
+			"fetch_limit": limit + 1,
 		},
 		as_dict=True,
 	)
 
-	result = []
-	for row in rows:
-		if len(result) >= limit:
-			break
+	# If we got more than limit rows, there are more stages available
+	has_more = len(rows) > limit
 
-		# Validate stage still exists in its lesson (gracefully skip removed stages)
-		stage_info = frappe.db.get_value(
-			"Memora Lesson Stage",
-			{"parent": row.lesson, "stage_title": row.stage_id},
-			["stage_type"],
-			as_dict=True,
-		)
-
-		if stage_info:
-			result.append(
-				{
-					"stage_id": row.stage_id,
-					"lesson_id": row.lesson,
-					"stage_type": stage_info.stage_type,
-					"memory_state_name": row.memory_state_name,
-					"stability": row.stability,
-					"difficulty": row.difficulty,
-				}
-			)
-
-	# Count total due for has_more indicator
-	total_due = frappe.db.count(
-		"Memora Memory State",
+	# Return only up to limit stages
+	result = [
 		{
-			"player": player_id,
-			"subject": subject_id,
-			"next_review": ["<=", today],
-		},
-	)
-	has_more = total_due > len(result)
+			"stage_id": row.stage_id,
+			"lesson_id": row.lesson,
+			"stage_type": row.stage_type,
+			"memory_state_name": row.memory_state_name,
+			"stability": row.stability,
+			"difficulty": row.difficulty,
+		}
+		for row in rows[:limit]
+	]
 
 	return {"stages": result, "has_more": has_more}
 
@@ -198,16 +191,21 @@ def submit_reviews(player_id: str, subject_id: str, stages: str) -> dict:
 	if processed > 0:
 		frappe.db.commit()
 
-	# Return remaining due count for client
+	# Return remaining due count (only stages that still exist in their lesson)
 	today = frappe.utils.today()
-	remaining_due = frappe.db.count(
-		"Memora Memory State",
-		{
-			"player": player_id,
-			"subject": subject_id,
-			"next_review": ["<=", today],
-		},
+	remaining_result = frappe.db.sql(
+		"""
+		SELECT COUNT(*) as cnt
+		FROM `tabMemora Memory State` ms
+		INNER JOIN `tabMemora Lesson Stage` ls
+			ON ls.name = ms.stage_id AND ls.parent = ms.lesson
+		WHERE ms.player = %(player)s
+		  AND ms.subject = %(subject)s
+		  AND ms.next_review <= %(today)s
+		""",
+		{"player": player_id, "subject": subject_id, "today": today},
 	)
+	remaining_due = remaining_result[0][0] if remaining_result else 0
 
 	return {
 		"processed": processed,

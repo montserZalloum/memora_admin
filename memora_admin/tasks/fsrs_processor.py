@@ -160,9 +160,10 @@ def process_fsrs_reviews():
 		lesson = interaction.lesson
 
 		# Look up stage_type from the lesson's child table (Memora Lesson Stage)
+		# stage_id is the child table row name, not stage_title
 		stage_row = frappe.db.get_value(
 			"Memora Lesson Stage",
-			{"parent": lesson, "stage_title": stage_id},
+			{"name": stage_id, "parent": lesson},
 			["stage_type", "is_skippable"],
 			as_dict=True,
 		)

@@ -134,6 +134,26 @@ Events in `memora_admin/events/access_sync.py`:
 - `on_season_updated`: Syncs season metadata to Redis
 - `on_subscription_change`: Manages access grants (SADD/SREM)
 
+## Redis Resilience (Cache-Miss Self-Healing)
+
+Redis is a **hot cache**, MariaDB is source of truth. After FLUSHDB/restart/eviction, all services auto-hydrate:
+
+| Redis Key | Source of Truth | Self-heals? |
+|-----------|----------------|-------------|
+| `memora:access:{player}` | `Memora Player Subscription` | Yes - `AccessService.ensure_hydrated()` on API call |
+| `memora:progress:{user}:{subj}:v{ver}` | `Memora Structure Progress` | Yes - `ProgressService.ensure_hydrated()` on API call |
+| `memora:hierarchy:{subject}` | Frappe hierarchy API | Yes - fetched on cache miss (1h TTL) |
+| `memora:subjects_with_free_content` | Hierarchy fetch | Yes - auto-repaired when hierarchy fetched from Frappe |
+| `memora:plan:{plan}:free_subjects` | `Memora Plan Subject` | Periodic - `plan_sync.py` every 6h + event hooks |
+| `memora:wallet:{player}` | `Memora Player Profile` | Yes - `WalletService` on API call |
+| `memora:stats:{user}:{subj}:v{ver}` | Computed from bitmap | Yes - cold-start recompute |
+
+**Key rules when adding new Redis-cached data:**
+1. Always implement `ensure_hydrated()` pattern - fetch from MariaDB on cache miss
+2. Ensure `FrappeClient` is injected via `deps.py` (hydration silently skips without it)
+3. When adding denormalized fields (e.g., `free_units`), verify ALL producer code paths populate them
+4. The hierarchy API (`memora_admin/api/hierarchy.py`) must populate `free_units`/`free_topics` arrays
+
 ## Performance Targets
 
 - Access check: <2ms

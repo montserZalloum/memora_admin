@@ -578,6 +578,9 @@ async def get_topic_lessons(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
+	# Ensure progress bitmap is hydrated from MariaDB if missing (after Redis flush)
+	await progress_service.ensure_hydrated(user.sub, subject, hierarchy.version)
+
 	# Get completion status for all lessons via pipeline GETBIT
 	lessons_status = []
 	completed_count = 0
