@@ -9,6 +9,7 @@
 - SHIPPED **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-20 (shipped 2026-02-07)
 - SHIPPED **v1.4 Product Store** — Phases 21-23 (shipped 2026-02-08)
 - SHIPPED **v1.5 Real-Time Notifications** — Phase 24 (shipped 2026-02-08)
+- **v1.6 FSRS Review System** — Phase 25
 
 ## Phases
 
@@ -149,6 +150,44 @@ Plans:
 - [x] 24-01-PLAN.md — ConnectionManager, notification models, and Frappe-side Redis pub/sub publish
 - [x] 24-02-PLAN.md — WebSocket endpoint, pub/sub listener integration, SSE removal
 
+### v1.6 FSRS Review System (Phase 25)
+
+**Milestone Goal:** Players can review previously-learned content through FSRS spaced repetition, with daily review sessions per subject, batched in groups of 10 stages, keeping knowledge retention high while fixing existing FSRS bugs.
+
+- [ ] **Phase 25: FSRS Review System** — Fix FSRS bugs, add review API endpoints, and implement daily spaced repetition review flow
+
+## Phase Details — v1.6
+
+### Phase 25: FSRS Review System
+**Goal**: Players can fetch due review stages per subject and submit review results, with FSRS computing the next review date. Fix existing FSRS bugs (skippable filter, is_reviewable enforcement) and add review API endpoints with proper MariaDB indexing for 200K+ concurrent users.
+**Depends on**: Phase 20 (lesson completion pipeline must exist to create Memory States)
+**Success Criteria** (what must be TRUE):
+  1. FSRS processor only creates Memory States for stages in lessons where `is_reviewable=true` (currently ignored)
+  2. FSRS processor correctly filters skippable stages by looking up `stage_type` from the lesson's child table (fix: currently compares stage_id against stage_title — never matches)
+  3. `next_review` is clamped to date-only (midnight) with minimum of tomorrow — no same-day reviews
+  4. Composite index on `Memora Memory State (player, subject, next_review)` enables <5ms queries at 120M+ rows
+  5. `GET /api/v1/reviews` returns list of subjects with due review counts for the authenticated player
+  6. `GET /api/v1/reviews/{subject}` returns up to 10 due stages (FIFO — oldest due first) with `stage_id`, `lesson_id`, and `stage_type` only (client handles content via local cache/CDN)
+  7. `POST /api/v1/reviews/{subject}/submit` accepts batch of reviewed stages with fail_count, runs inline FSRS to update Memory State immediately, awards 3 XP per review session, and returns `remaining_due` + `has_more` boolean
+  8. Each subject is treated independently — reviews for one subject don't affect another
+  9. Review overview cached in Redis (`memora:reviews_overview:{player}`) with 5-min TTL, invalidated on review submit
+  10. Stages that are no longer in the lesson (removed by rebuild) are gracefully skipped in review results
+**Plans:** 3 plans
+Plans:
+- [ ] 25-01-PLAN.md — Fix FSRS processor bugs (is_reviewable, skippable filter, date clamping) + composite index
+- [ ] 25-02-PLAN.md — Frappe whitelisted review API (overview, due stages, submit with inline FSRS)
+- [ ] 25-03-PLAN.md — FastAPI review endpoints, ReviewService, models, and router wiring
+
+**Design Decisions (agreed during brainstorming):**
+- **Content serving**: Option B — API returns stage_id + lesson_id only, client fetches content from its local cache or CDN
+- **Due date tracking**: MariaDB query via Frappe whitelisted API (not Redis sorted sets — memory cost too high at 200K users × 200 stages)
+- **XP**: 3 per review session (batch of up to 10 stages), not per stage
+- **Streak**: Reviews do NOT contribute to daily streak (lesson completions only)
+- **"Do it tomorrow"**: No rescheduling — stages stay due today, client just closes the review UI
+- **FSRS on submit**: Inline (not background queue) — safe at 200K users (~14 req/s peak). Designed for easy migration to queue at 500K+
+- **Partitioning**: Composite index only, no MariaDB partitioning now. Queries are partition-friendly by design for future RANGE partitioning by season if needed at 500M+ rows
+- **`is_time_calculated`**: Deferred — not wired in this phase
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -178,4 +217,6 @@ Plans:
 | 23. Approval and Access Grant | v1.4 | 1/1 | Complete | 2026-02-08 |
 | 24. Real-Time Subscription Notifications | v1.5 | 2/2 | Complete | 2026-02-08 |
 
-**Total:** 24 phases complete (71 plans)
+| 25. FSRS Review System | v1.6 | 0/3 | Planned | - |
+
+**Total:** 24 phases complete (71 plans), 1 phase planned (3 plans)
