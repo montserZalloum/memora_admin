@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import frappe
 import redis
@@ -31,15 +31,12 @@ def get_redis():
 	return redis.from_url(frappe.conf.redis_cache)
 
 
-def _get_skippable_stages() -> set[str]:
-	"""Get set of stage_title values where is_skippable=1.
-
-	Cached for the duration of this task run.
-	"""
+def _get_skippable_stage_types() -> set[str]:
+	"""Get set of stage type names (from Memora Lesson Stage Settings) where is_skippable=1."""
 	stages = frappe.get_all(
 		"Memora Lesson Stage Settings",
 		filters={"is_skippable": 1},
-		fields=["stage_title"],
+		fields=["stage_title"],  # stage_title is the name/primary key of Settings
 	)
 	return {s.stage_title for s in stages}
 
@@ -70,8 +67,6 @@ def _get_active_season() -> str | None:
 
 	Returns the first published season where current date is within [start_date, end_date].
 	"""
-	from datetime import date
-
 	today = date.today()
 	season = frappe.db.get_value(
 		"Memora Season",
@@ -126,8 +121,8 @@ def process_fsrs_reviews():
 		logger.warning("No active season found, skipping FSRS processing")
 		return
 
-	# Get skippable stages to exclude
-	skippable = _get_skippable_stages()
+	# Get skippable stage types to exclude
+	skippable_types = _get_skippable_stage_types()
 
 	# Get FSRS scheduler
 	scheduler = _get_fsrs_scheduler()
@@ -161,14 +156,26 @@ def process_fsrs_reviews():
 
 	for interaction in interactions:
 		stage_id = interaction.stage_id
-
-		# Skip if stage is skippable
-		if stage_id in skippable:
-			skipped += 1
-			continue
-
 		player = interaction.player
 		lesson = interaction.lesson
+
+		# Look up stage_type from the lesson's child table (Memora Lesson Stage)
+		stage_row = frappe.db.get_value(
+			"Memora Lesson Stage",
+			{"parent": lesson, "stage_title": stage_id},
+			["stage_type", "is_skippable"],
+			as_dict=True,
+		)
+
+		if stage_row:
+			# Per-stage override takes priority over global setting
+			if stage_row.is_skippable:
+				skipped += 1
+				continue
+			# Fall back to global setting from stage type
+			if stage_row.stage_type in skippable_types:
+				skipped += 1
+				continue
 
 		# Resolve subject from lesson (direct field on Memora Lesson)
 		subject = frappe.db.get_value("Memora Lesson", lesson, "subject")
@@ -185,6 +192,12 @@ def process_fsrs_reviews():
 
 		if not subject:
 			logger.warning(f"Could not determine subject for lesson {lesson}")
+			continue
+
+		# Check if lesson is reviewable before creating Memory State
+		is_reviewable = frappe.db.get_value("Memora Lesson", lesson, "is_reviewable")
+		if not is_reviewable:
+			skipped += 1
 			continue
 
 		try:
@@ -225,9 +238,12 @@ def process_fsrs_reviews():
 				card = Card()
 				card, _review_log = scheduler.review_card(card, rating, now)
 
-			# Convert card.due from UTC-aware to naive datetime for Frappe/MariaDB
-			# Frappe expects naive datetimes in the system timezone
-			next_review_naive = card.due.replace(tzinfo=None) if card.due else None
+			# Clamp next_review to date-only (midnight), minimum tomorrow
+			next_date = card.due.date()
+			tomorrow = date.today() + timedelta(days=1)
+			if next_date < tomorrow:
+				next_date = tomorrow
+			next_review_naive = datetime.combine(next_date, time.min)
 
 			# Persist to Memora Memory State DocType
 			if frappe.db.exists("Memora Memory State", memory_state_name):
