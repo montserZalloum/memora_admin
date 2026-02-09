@@ -12,20 +12,20 @@ from fastapi_app.core.security import decode_token
 from fastapi_app.models.access import ContentAccessRequest, SeasonMeta
 from fastapi_app.models.auth import TokenPayload
 from fastapi_app.services.access import AccessService
-from fastapi_app.services.frappe_client import FrappeClient
-from fastapi_app.services.hierarchy import HierarchyService
-from fastapi_app.services.plan import PlanService
 from fastapi_app.services.catalog import CatalogService
-from fastapi_app.services.purchase import PurchaseService
+from fastapi_app.services.device import DeviceService
+from fastapi_app.services.frappe_client import FrappeClient
+from fastapi_app.services.game_session import GameSessionService
+from fastapi_app.services.hierarchy import HierarchyService
+from fastapi_app.services.leaderboard import LeaderboardService
+from fastapi_app.services.plan import PlanService
 from fastapi_app.services.profile import ProfileService
-from fastapi_app.services.review import ReviewService
 from fastapi_app.services.progress import ProgressService
+from fastapi_app.services.purchase import PurchaseService
+from fastapi_app.services.review import ReviewService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.stats import StatsService
-from fastapi_app.services.device import DeviceService
-from fastapi_app.services.game_session import GameSessionService
-from fastapi_app.services.leaderboard import LeaderboardService
 from fastapi_app.services.wallet import WalletService
 
 # Common dependencies
@@ -115,9 +115,10 @@ ProgressServiceDep = Annotated[ProgressService, Depends(get_progress_service)]
 
 
 async def get_wallet_service(request: Request) -> WalletService:
-    """Get WalletService with Redis from app state."""
+    """Get WalletService with Redis and FrappeClient from app state."""
     redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
-    return WalletService(redis_client)
+    frappe_client = await get_frappe_client()
+    return WalletService(redis_client, frappe_client=frappe_client)
 
 
 WalletServiceDep = Annotated[WalletService, Depends(get_wallet_service)]

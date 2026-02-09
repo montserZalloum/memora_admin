@@ -304,6 +304,10 @@ async def end_session(
 		xp_per_heart=settings.xp_per_heart,
 	)
 
+	# Ensure wallet is hydrated from MariaDB before pipeline HINCRBY.
+	# Without this, a Redis flush causes HINCRBY to start from 0, resetting XP.
+	await wallet_service.ensure_hydrated(user.sub)
+
 	# RT6: Pipeline for XP + dirty + stats
 	pipe = redis_client.pipeline()
 

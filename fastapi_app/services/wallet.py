@@ -1,12 +1,18 @@
 """Wallet service for Redis-backed XP and streak tracking."""
 
+from __future__ import annotations
+
 from datetime import datetime, timedelta
+from typing import TYPE_CHECKING
 from zoneinfo import ZoneInfo
 
 import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
+
+if TYPE_CHECKING:
+	from fastapi_app.services.frappe_client import FrappeClient
 
 logger = structlog.get_logger()
 
@@ -80,9 +86,15 @@ class WalletService:
 	- update_streak: Lua script O(1) - atomic streak update with date check
 	"""
 
-	def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:"):
+	def __init__(
+		self,
+		redis_client: redis.Redis,
+		key_prefix: str = "memora:",
+		frappe_client: FrappeClient | None = None,
+	):
 		self.redis = redis_client
 		self.prefix = key_prefix
+		self.frappe = frappe_client
 		self._streak_script = None
 
 	def _wallet_key(self, player_id: str) -> str:
@@ -96,10 +108,78 @@ class WalletService:
 		"""
 		return f"{self.prefix}wallet:{player_id}"
 
+	async def ensure_hydrated(self, player_id: str) -> None:
+		"""Ensure wallet hash exists in Redis, hydrating from MariaDB if missing.
+
+		After a Redis flush (bench clear-cache, restart, etc.), wallet data in Redis
+		is lost. Without hydration, the next HINCRBY creates a new hash starting from 0,
+		effectively resetting the player's XP.
+
+		This method checks if the wallet hash exists and, if not, loads the persisted
+		values from MariaDB via the Frappe API and seeds Redis.
+
+		Args:
+			player_id: Player's user ID
+		"""
+		key = self._wallet_key(player_id)
+
+		# Fast path: wallet hash already exists in Redis
+		exists = await self.redis.exists(key)
+		if exists:
+			return
+
+		# Wallet missing from Redis -- hydrate from MariaDB
+		if not self.frappe:
+			logger.warning(
+				"wallet_hydration_skipped",
+				player_id=player_id,
+				reason="no_frappe_client",
+			)
+			return
+
+		try:
+			result = await self.frappe.call(
+				"memora_admin.api.wallet.get_player_wallet",
+				{"player_id": player_id},
+			)
+
+			if result and isinstance(result, dict):
+				total_xp = int(result.get("total_xp", 0))
+				current_streak = int(result.get("current_streak", 0))
+
+				if total_xp > 0 or current_streak > 0:
+					# Seed Redis with MariaDB values using HSET
+					# This restores the wallet state before any HINCRBY operations
+					mapping = {"xp": total_xp, "streak": current_streak}
+					await self.redis.hset(key, mapping=mapping)
+
+					logger.info(
+						"wallet_hydrated_from_mariadb",
+						player_id=player_id,
+						xp=total_xp,
+						streak=current_streak,
+					)
+				else:
+					logger.debug(
+						"wallet_hydration_empty",
+						player_id=player_id,
+					)
+
+		except Exception as e:
+			# Don't fail the XP award if hydration fails -- log and continue.
+			# The HINCRBY will create a new hash starting from 0, which is
+			# the pre-existing behavior. At least the new XP won't be lost.
+			logger.error(
+				"wallet_hydration_failed",
+				player_id=player_id,
+				error=str(e),
+			)
+
 	async def get_wallet(self, player_id: str) -> dict:
 		"""Get wallet data (xp, streak).
 
-		Returns defaults for new players (no wallet hash yet).
+		Hydrates from MariaDB if wallet is missing from Redis (e.g., after cache flush).
+		Returns defaults for new players (no wallet record in either store).
 
 		Args:
 			player_id: Player's user ID
@@ -109,6 +189,11 @@ class WalletService:
 		"""
 		key = self._wallet_key(player_id)
 		data = await self.redis.hgetall(key)
+
+		# If wallet is missing from Redis, try to hydrate from MariaDB
+		if not data:
+			await self.ensure_hydrated(player_id)
+			data = await self.redis.hgetall(key)
 
 		# Handle bytes/str response from Redis
 		# (redis-py returns bytes by default unless decode_responses=True)
@@ -123,6 +208,9 @@ class WalletService:
 	async def award_xp(self, player_id: str, amount: int) -> int:
 		"""Atomically add XP and return new total.
 
+		Ensures wallet is hydrated from MariaDB before incrementing,
+		preventing XP reset after Redis cache flush.
+
 		Uses HINCRBY for atomic increment - never GET+add+SET.
 		Per RESEARCH.md: Prevents race conditions on concurrent completions.
 
@@ -134,6 +222,11 @@ class WalletService:
 			New total XP after increment
 		"""
 		key = self._wallet_key(player_id)
+
+		# Ensure wallet exists in Redis before incrementing.
+		# Without this, HINCRBY on a missing key starts from 0, resetting XP.
+		await self.ensure_hydrated(player_id)
+
 		new_total = await self.redis.hincrby(key, "xp", amount)
 
 		# Mark dirty for background sync to MariaDB
@@ -160,6 +253,9 @@ class WalletService:
 	async def update_streak(self, player_id: str, is_replay: bool) -> tuple[int, bool]:
 		"""Update streak atomically using Lua script.
 
+		Ensures wallet is hydrated before streak update to prevent
+		losing streak data after Redis cache flush.
+
 		Per CONTEXT.md:
 		- Daily requirement: 1 lesson completion maintains streak
 		- Missed day: Streak resets to 0 immediately
@@ -174,6 +270,11 @@ class WalletService:
 			- current_streak: Streak count after operation
 			- was_updated: True if streak_date was changed
 		"""
+		# Ensure wallet exists in Redis before streak update.
+		# The Lua script reads streak/streak_date from the hash;
+		# if missing after cache flush, it would incorrectly reset to 1.
+		await self.ensure_hydrated(player_id)
+
 		script = await self._get_streak_script()
 		key = self._wallet_key(player_id)
 
