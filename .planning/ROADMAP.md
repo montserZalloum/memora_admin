@@ -9,7 +9,7 @@
 - SHIPPED **v1.3 Leaderboard Profiles & Admin Device Management** — Phases 14-20 (shipped 2026-02-07)
 - SHIPPED **v1.4 Product Store** — Phases 21-23 (shipped 2026-02-08)
 - SHIPPED **v1.5 Real-Time Notifications** — Phase 24 (shipped 2026-02-08)
-- **v1.6 FSRS Review System** — Phase 25
+- SHIPPED **v1.6 FSRS Review System** — Phase 25 (shipped 2026-02-09)
 
 ## Phases
 
@@ -154,7 +154,7 @@ Plans:
 
 **Milestone Goal:** Players can review previously-learned content through FSRS spaced repetition, with daily review sessions per subject, batched in groups of 10 stages, keeping knowledge retention high while fixing existing FSRS bugs.
 
-- [ ] **Phase 25: FSRS Review System** — Fix FSRS bugs, add review API endpoints, and implement daily spaced repetition review flow
+- [x] **Phase 25: FSRS Review System** — Fix FSRS bugs, add review API endpoints, and implement daily spaced repetition review flow
 
 ## Phase Details — v1.6
 
@@ -174,9 +174,9 @@ Plans:
   10. Stages that are no longer in the lesson (removed by rebuild) are gracefully skipped in review results
 **Plans:** 3 plans
 Plans:
-- [ ] 25-01-PLAN.md — Fix FSRS processor bugs (is_reviewable, skippable filter, date clamping) + composite index
-- [ ] 25-02-PLAN.md — Frappe whitelisted review API (overview, due stages, submit with inline FSRS)
-- [ ] 25-03-PLAN.md — FastAPI review endpoints, ReviewService, models, and router wiring
+- [x] 25-01-PLAN.md — Fix FSRS processor bugs (is_reviewable, skippable filter, date clamping) + composite index
+- [x] 25-02-PLAN.md — Frappe whitelisted review API (overview, due stages, submit with inline FSRS)
+- [x] 25-03-PLAN.md — FastAPI review endpoints, ReviewService, models, and router wiring
 
 **Design Decisions (agreed during brainstorming):**
 - **Content serving**: Option B — API returns stage_id + lesson_id only, client fetches content from its local cache or CDN
@@ -217,6 +217,6 @@ Plans:
 | 23. Approval and Access Grant | v1.4 | 1/1 | Complete | 2026-02-08 |
 | 24. Real-Time Subscription Notifications | v1.5 | 2/2 | Complete | 2026-02-08 |
 
-| 25. FSRS Review System | v1.6 | 0/3 | Planned | - |
+| 25. FSRS Review System | v1.6 | 3/3 | Complete | 2026-02-09 |
 
-**Total:** 24 phases complete (71 plans), 1 phase planned (3 plans)
+**Total:** 25 phases complete (74 plans)
