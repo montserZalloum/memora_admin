@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 25 (FSRS Review System)
-Plan: 1 of 3
+Plan: 2 of 3
 Status: In progress
-Last activity: 2026-02-09 — Completed 25-01-PLAN.md
+Last activity: 2026-02-09 — Completed 25-02-PLAN.md
 
-Progress: [███░░░░░░░] 33%
+Progress: [██████░░░░] 67%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 72
+- Total plans completed: 73
 - Milestones shipped: 6
 
 **By Milestone:**
@@ -33,7 +33,7 @@ Progress: [███░░░░░░░] 33%
 | v1.3 Profiles & Devices | 7 | 16 | Shipped 2026-02-07 |
 | v1.4 Product Store | 3 | 4 | Shipped 2026-02-08 |
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
-| v1.6 FSRS Review System | 1 | 1 | In progress |
+| v1.6 FSRS Review System | 1 | 2 | In progress |
 
 ## Accumulated Context
 
@@ -59,6 +59,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - after_migrate hook for composite index persistence (Frappe only creates Property Setters for single-column indexes)
 - Per-stage is_skippable override takes priority over global stage type setting
 - next_review clamped to midnight with minimum tomorrow to prevent same-day reviews
+- Inline FSRS computation in review submit API (no import from fsrs_processor.py to avoid coupling)
+- Fetch limit+5 rows in get_due_stages to compensate for removed stages filtered out
 
 ### Pending Todos
 
@@ -72,7 +74,7 @@ None.
   - Leverages existing Redis pub/sub infrastructure
 - Phase 25 in progress: FSRS Review System
   - Plan 01 complete: Fix FSRS bugs (skippable filter, is_reviewable enforcement, date clamping) + composite index
-  - Plan 02 pending: Review API endpoints (GET /reviews, GET /reviews/{subject}, POST /reviews/{subject}/submit)
+  - Plan 02 complete: Frappe whitelisted review API (get_review_overview, get_due_stages, submit_reviews)
   - Plan 03 pending: XP rewards and remaining integration
   - MariaDB composite index for 200K+ users, no Redis sorted sets
   - 3 XP per review session, no streak contribution
@@ -86,6 +88,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-09
-Stopped at: Completed 25-01-PLAN.md
+Stopped at: Completed 25-02-PLAN.md
 Resume file: None
-Next action: Execute 25-02-PLAN.md (Review API endpoints)
+Next action: Execute 25-03-PLAN.md (XP rewards and FastAPI integration)
