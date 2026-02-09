@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.6 FSRS Review System — Phase 25 (FSRS Review System) In Progress
+**Current focus:** v1.6 FSRS Review System — Phase 25 (FSRS Review System) Complete
 
 ## Current Position
 
 Phase: 25 (FSRS Review System)
-Plan: 2 of 3
-Status: In progress
-Last activity: 2026-02-09 — Completed 25-02-PLAN.md
+Plan: 3 of 3
+Status: Phase complete
+Last activity: 2026-02-09 — Completed 25-03-PLAN.md
 
-Progress: [██████░░░░] 67%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 73
+- Total plans completed: 74
 - Milestones shipped: 6
 
 **By Milestone:**
@@ -33,7 +33,7 @@ Progress: [██████░░░░] 67%
 | v1.3 Profiles & Devices | 7 | 16 | Shipped 2026-02-07 |
 | v1.4 Product Store | 3 | 4 | Shipped 2026-02-08 |
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
-| v1.6 FSRS Review System | 1 | 2 | In progress |
+| v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
 
 ## Accumulated Context
 
@@ -61,6 +61,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - next_review clamped to midnight with minimum tomorrow to prevent same-day reviews
 - Inline FSRS computation in review submit API (no import from fsrs_processor.py to avoid coupling)
 - Fetch limit+5 rows in get_due_stages to compensate for removed stages filtered out
+- 3 XP per review session (not per stage) - reviews reward participation not volume
+- No cache on get_due_stages (must be fresh); overview cache 5-min TTL with invalidation on submit
 
 ### Pending Todos
 
@@ -72,10 +74,10 @@ None.
   - Deprecated SSE removed, replaced by WebSocket notification system
   - Scales to 100K+ concurrent users, <20ms propagation
   - Leverages existing Redis pub/sub infrastructure
-- Phase 25 in progress: FSRS Review System
-  - Plan 01 complete: Fix FSRS bugs (skippable filter, is_reviewable enforcement, date clamping) + composite index
-  - Plan 02 complete: Frappe whitelisted review API (get_review_overview, get_due_stages, submit_reviews)
-  - Plan 03 pending: XP rewards and remaining integration
+- Phase 25 complete: FSRS Review System
+  - Plan 01: Fix FSRS bugs (skippable filter, is_reviewable enforcement, date clamping) + composite index
+  - Plan 02: Frappe whitelisted review API (get_review_overview, get_due_stages, submit_reviews)
+  - Plan 03: FastAPI review endpoints with ReviewService (Redis cache, XP award via WalletService)
   - MariaDB composite index for 200K+ users, no Redis sorted sets
   - 3 XP per review session, no streak contribution
   - Content: Option B (client handles via local cache/CDN)
@@ -88,6 +90,6 @@ None.
 ## Session Continuity
 
 Last session: 2026-02-09
-Stopped at: Completed 25-02-PLAN.md
+Stopped at: Completed 25-03-PLAN.md (Phase 25 complete)
 Resume file: None
-Next action: Execute 25-03-PLAN.md (XP rewards and FastAPI integration)
+Next action: Plan next milestone/phase
