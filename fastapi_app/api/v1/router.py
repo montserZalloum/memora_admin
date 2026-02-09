@@ -12,6 +12,7 @@ from fastapi_app.api.v1.endpoints import (
     plans,
     progress,
     purchase,
+    reviews,
     sessions,
     settings,
     subscriptions,
@@ -35,3 +36,4 @@ router.include_router(subscriptions.router)
 router.include_router(wallet.router)
 router.include_router(webhooks.router)
 router.include_router(notifications.router)
+router.include_router(reviews.router)

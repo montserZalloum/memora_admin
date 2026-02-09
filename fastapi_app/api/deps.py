@@ -18,6 +18,7 @@ from fastapi_app.services.plan import PlanService
 from fastapi_app.services.catalog import CatalogService
 from fastapi_app.services.purchase import PurchaseService
 from fastapi_app.services.profile import ProfileService
+from fastapi_app.services.review import ReviewService
 from fastapi_app.services.progress import ProgressService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
@@ -228,6 +229,16 @@ async def get_purchase_service(request: Request) -> PurchaseService:
 
 
 PurchaseServiceDep = Annotated[PurchaseService, Depends(get_purchase_service)]
+
+
+async def get_review_service(request: Request) -> ReviewService:
+	"""Get ReviewService with Redis and FrappeClient."""
+	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+	frappe_client = await get_frappe_client()
+	return ReviewService(redis_client, frappe_client)
+
+
+ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 
 
 # --- Double-Gate Dependencies ---
