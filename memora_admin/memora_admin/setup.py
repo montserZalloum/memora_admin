@@ -31,3 +31,24 @@ def create_task_admin_role():
 	role.insert(ignore_permissions=True)
 	frappe.db.commit()
 	print("Created Task Admin role")
+
+
+def after_migrate():
+	"""Ensure custom composite indexes exist after migration.
+
+	Frappe's migrate only preserves single-column indexes via Property Setters.
+	Multi-column indexes must be re-created explicitly.
+	"""
+	_ensure_memory_state_composite_index()
+
+
+def _ensure_memory_state_composite_index():
+	"""Create composite index (player, subject, next_review) on Memora Memory State.
+
+	Enables <5ms review queries: WHERE player=? AND subject=? AND next_review<=?
+	"""
+	frappe.db.add_index(
+		"Memora Memory State",
+		["player", "subject", "next_review"],
+		index_name="player_subject_next_review_index",
+	)
