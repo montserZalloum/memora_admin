@@ -66,7 +66,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ### Pending Todos
 
-None.
+1 todo(s) in `.planning/todos/pending/`:
+- **Implement track-level access enforcement and CDN flag** (api) — backend `TRK-*` grant check + `is_sold_separately` in `_h.json`
 
 ### Roadmap Evolution
 
