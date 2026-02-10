@@ -20,6 +20,7 @@ from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.leaderboard import LeaderboardService
 from fastapi_app.services.plan import PlanService
 from fastapi_app.services.profile import ProfileService
+from fastapi_app.services.profile_page import ProfilePageService
 from fastapi_app.services.progress import ProgressService
 from fastapi_app.services.purchase import PurchaseService
 from fastapi_app.services.review import ReviewService
@@ -212,6 +213,16 @@ async def get_profile_service(request: Request) -> ProfileService:
 
 
 ProfileServiceDep = Annotated[ProfileService, Depends(get_profile_service)]
+
+
+async def get_profile_page_service(request: Request) -> ProfilePageService:
+	"""Get ProfilePageService with Redis and FrappeClient."""
+	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
+	frappe_client = await get_frappe_client()
+	return ProfilePageService(redis_client, frappe_client)
+
+
+ProfilePageServiceDep = Annotated[ProfilePageService, Depends(get_profile_page_service)]
 
 
 async def get_catalog_service(request: Request) -> CatalogService:
