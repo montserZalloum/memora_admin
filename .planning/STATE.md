@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.7 Profile Page API — Phase 26 (Profile Page API) In progress
+**Current focus:** v1.7 Profile Page API — Phase 26 (Profile Page API) Complete
 
 ## Current Position
 
 Phase: 26 (Profile Page API)
-Plan: 1 of 2
-Status: In progress
-Last activity: 2026-02-10 — Completed 26-01-PLAN.md (Level system, models, Frappe APIs)
+Plan: 2 of 2
+Status: Phase complete
+Last activity: 2026-02-10 — Completed 26-02-PLAN.md (ProfilePageService + FastAPI endpoints)
 
-Progress: [█████░░░░░] 50%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 75
-- Milestones shipped: 6
+- Total plans completed: 76
+- Milestones shipped: 7
 
 **By Milestone:**
 
@@ -34,7 +34,7 @@ Progress: [█████░░░░░] 50%
 | v1.4 Product Store | 3 | 4 | Shipped 2026-02-08 |
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
-| v1.7 Profile Page API | 1 | 2 | In progress (1/2) |
+| v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
 
 ## Accumulated Context
 
@@ -67,6 +67,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Level thresholds as static constants (15 levels, expandable) -- not admin-configurable
 - FSRS maturity threshold = 21.0 days stability (standard convention)
 - Avatar validation reads from DocType field options, not hardcoded
+- ProfilePageService composes existing services (no logic duplication)
+- Weekly activity uses Redis pipeline (7 ZSCORE in 1 round-trip)
+- Profile endpoints are thin; all logic delegated to service layer
 
 ### Pending Todos
 
@@ -86,13 +89,11 @@ All decisions logged in PROJECT.md Key Decisions table.
   - MariaDB composite index for 200K+ users, no Redis sorted sets
   - 3 XP per review session, no streak contribution
   - Content: Option B (client handles via local cache/CDN)
-- Phase 26 added: Profile Page API (v1.7)
-  - Hero section (avatar, username, level, XP progress)
-  - Subject-filtered stats (streak, items learned, XP)
-  - Memory mastery breakdown (mature/learning/new from FSRS)
-  - Weekly activity chart (XP per day)
-  - Avatar selection from predefined options
-  - Logout endpoint
+- Phase 26 complete: Profile Page API (v1.7)
+  - Plan 01: Level system constants, Pydantic models, Frappe whitelisted APIs
+  - Plan 02: ProfilePageService aggregation + 7 FastAPI endpoints
+  - Hero section, subject-filtered stats/mastery/activity, avatar selection, logout
+  - Redis pipeline for weekly activity, mastery cache with 5-min TTL
 
 ### Blockers/Concerns
 
@@ -102,6 +103,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-10
-Stopped at: Completed 26-01-PLAN.md (Level system, models, Frappe APIs)
+Stopped at: Completed 26-02-PLAN.md (ProfilePageService + FastAPI endpoints)
 Resume file: None
-Next action: Execute 26-02-PLAN.md (ProfilePageService + FastAPI endpoints)
+Next action: Phase 26 complete. Awaiting next phase.
