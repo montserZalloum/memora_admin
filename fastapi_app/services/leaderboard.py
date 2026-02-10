@@ -219,13 +219,13 @@ class LeaderboardService:
 		key = self._get_key(lb_type, subject_id)
 
 		# Get player's position and score (None if not in leaderboard)
-		result = await self.redis.zrevrank(key, player_id, withscore=True)
+		position = await self.redis.zrevrank(key, player_id)
 
 		# Get total players for context
 		total = await self.redis.zcard(key)
 
 		# Handle unranked users (never earned XP in this period)
-		if result is None:
+		if position is None:
 			logger.debug(
 				"leaderboard_unranked_user",
 				player_id=player_id,
@@ -240,8 +240,9 @@ class LeaderboardService:
 				"total_players": total,
 			}
 
-		position, score = result
-		xp = int(score)
+		# Get score for XP calculation
+		score = await self.redis.zscore(key, player_id)
+		xp = int(score) if score is not None else 0
 
 		# Calculate dense rank: count scores strictly greater than mine
 		# ZCOUNT with exclusive lower bound "(score" counts scores > mine

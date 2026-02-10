@@ -1,6 +1,5 @@
 {
  "actions": [],
- "allow_rename": 1,
  "autoname": "format:PLAN-{#####}",
  "creation": "2026-02-01 10:38:40.524226",
  "doctype": "DocType",
@@ -114,10 +113,11 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 17:34:21.609616",
- "modified_by": "Administrator",
+ "modified": "2026-02-10 16:50:04.468872",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Academic Plan",
+ "naming_rule": "Expression",
  "owner": "Administrator",
  "permissions": [
   {
