@@ -19,7 +19,7 @@ import redis
 from memora_admin.tasks.fsrs_processor import (
 	_get_active_season,
 	_get_fsrs_scheduler,
-	_get_skippable_stages,
+	_get_skippable_stage_types,
 	_map_rating,
 	get_redis,
 )
@@ -44,7 +44,7 @@ def backfill_memory_states(hours: int = 24, player_filter: str | None = None):
 		return
 
 	# Get skippable stages
-	skippable = _get_skippable_stages()
+	skippable = _get_skippable_stage_types()
 	print(f"[BACKFILL] Found {len(skippable)} skippable stages")
 
 	# Get FSRS scheduler

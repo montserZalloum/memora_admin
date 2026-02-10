@@ -224,17 +224,13 @@ doc_events = {
 
 scheduler_events = {
 	"cron": {
-		# Every 1 minute: Sync dirty data from Redis to MariaDB + FSRS processing
+		# Every 1 minute: Sync dirty data from Redis to MariaDB + FSRS + builds
 		"* * * * *": [
 			"memora_admin.tasks.sync.sync_dirty_progress",
 			"memora_admin.tasks.sync.sync_dirty_wallets",
 			"memora_admin.tasks.sync.flush_interaction_buffer",
 			"memora_admin.tasks.fsrs_processor.process_fsrs_reviews",
-		],
-		# Every 2 minutes: Process pending content builds
-		# "*/2 * * * *": [
-		"* * * * *": [
-			"memora_admin.tasks.build_worker.process_pending_builds"
+			"memora_admin.tasks.build_worker.process_pending_builds",
 		],
 		# Daily at 00:05: Streak reset (after midnight Asia/Amman)
 		"5 0 * * *": [
