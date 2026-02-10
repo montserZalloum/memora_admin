@@ -1,7 +1,5 @@
 # Profile Page API Documentation
 
-**Version:** v1.7
-**Base URL:** `http://127.0.0.1:8002/api/v1` (development) | `https://api.memora.app/api/v1` (production)
 **Authentication:** JWT Bearer token required for all endpoints
 
 ## Overview
@@ -10,7 +8,7 @@ The Profile Page API provides all backend functionality needed to build a rich p
 - **Hero Section**: Avatar, username, level progression, and XP tracking
 - **Stats Grid**: Streak, items learned, and total XP (filterable by subject)
 - **Memory Mastery**: FSRS-based breakdown of learning progress (mature/learning/new items)
-- **Weekly Activity**: XP earned per day for the current week with visualization data
+- **Weekly Activity**: XP earned per day for the last 7 days ending today with visualization data
 - **Avatar Selection**: Predefined avatar options with update functionality
 - **Logout**: Session and device cleanup
 
@@ -136,7 +134,7 @@ interface HeroSection {
 }
 
 async function fetchHeroSection(token: string): Promise<HeroSection> {
-  const response = await fetch('http://127.0.0.1:8002/api/v1/profile', {
+  const response = await fetch('/api/v1/profile', {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return response.json();
@@ -207,7 +205,7 @@ interface StatsGrid {
 }
 
 async function fetchStats(token: string, subjectId?: string): Promise<StatsGrid> {
-  const url = new URL('http://127.0.0.1:8002/api/v1/profile/stats');
+  const url = new URL('/api/v1/profile/stats');
   if (subjectId) url.searchParams.set('subject', subjectId);
 
   const response = await fetch(url.toString(), {
@@ -272,7 +270,7 @@ interface MemoryMastery {
 }
 
 async function fetchMastery(token: string, subjectId?: string): Promise<MemoryMastery> {
-  const url = new URL('http://127.0.0.1:8002/api/v1/profile/mastery');
+  const url = new URL('/api/v1/profile/mastery');
   if (subjectId) url.searchParams.set('subject', subjectId);
 
   const response = await fetch(url.toString(), {
@@ -294,7 +292,7 @@ function renderMasteryChart(mastery: MemoryMastery) {
 
 ### GET /profile/activity
 
-**Purpose:** Retrieve XP earned per day for the current week (Monday-Sunday) for activity chart visualization.
+**Purpose:** Retrieve XP earned per day for the last 7 days ending today for activity chart visualization.
 
 **Request:**
 ```http
@@ -357,18 +355,18 @@ Authorization: Bearer <jwt_token>
 | Field | Type | Description |
 |-------|------|-------------|
 | `subject` | string \| null | Subject ID if filtered, null for global activity |
-| `week_start` | string | Monday's date in YYYY-MM-DD format (week start) |
-| `days` | array | Array of 7 days (Mon-Sun) with XP data |
+| `week_start` | string | Start date of the 7-day period in YYYY-MM-DD format (6 days ago) |
+| `days` | array | Array of 7 days ending today with XP data |
 | `days[].date` | string | Date in YYYY-MM-DD format |
 | `days[].day_name` | string | Short day name (Mon, Tue, Wed, Thu, Fri, Sat, Sun) |
 | `days[].xp` | integer | XP earned on that day (0 if no activity) |
 | `total_xp` | integer | Sum of XP across all 7 days |
 
 **Important Notes:**
-- Week always starts on Monday (Asia/Amman timezone)
-- Always returns exactly 7 days (current week)
-- Future days (today+) return `xp: 0`
-- Days array is ordered chronologically (Monday first)
+- Always returns the last 7 days ending with today (Asia/Amman timezone)
+- Always returns exactly 7 days
+- Today is always the last day in the array
+- Days array is ordered chronologically (oldest first, today last)
 
 **UI Implementation:**
 ```typescript
@@ -386,7 +384,7 @@ interface WeeklyActivity {
 }
 
 async function fetchWeeklyActivity(token: string, subjectId?: string): Promise<WeeklyActivity> {
-  const url = new URL('http://127.0.0.1:8002/api/v1/profile/activity');
+  const url = new URL('/api/v1/profile/activity');
   if (subjectId) url.searchParams.set('subject', subjectId);
 
   const response = await fetch(url.toString(), {
@@ -452,7 +450,7 @@ interface AvatarOptions {
 }
 
 async function fetchAvatarOptions(token: string): Promise<AvatarOptions> {
-  const response = await fetch('http://127.0.0.1:8002/api/v1/profile/avatars', {
+  const response = await fetch('/api/v1/profile/avatars', {
     headers: { 'Authorization': `Bearer ${token}` }
   });
   return response.json();
@@ -521,7 +519,7 @@ interface AvatarUpdateResponse {
 }
 
 async function updateAvatar(token: string, avatar: string): Promise<AvatarUpdateResponse> {
-  const response = await fetch('http://127.0.0.1:8002/api/v1/profile/avatar', {
+  const response = await fetch('/api/v1/profile/avatar', {
     method: 'PUT',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -589,7 +587,7 @@ async function logout(token: string, deviceId?: string): Promise<LogoutResponse>
     headers['X-Device-ID'] = deviceId;
   }
 
-  const response = await fetch('http://127.0.0.1:8002/api/v1/profile/logout', {
+  const response = await fetch('/api/v1/profile/logout', {
     method: 'POST',
     headers
   });
@@ -1229,40 +1227,40 @@ TOKEN="your_jwt_token_here"
 
 # Test hero section
 curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8002/api/v1/profile
+  /api/v1/profile
 
 # Test stats (global)
 curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8002/api/v1/profile/stats
+  /api/v1/profile/stats
 
 # Test stats (filtered by subject)
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://127.0.0.1:8002/api/v1/profile/stats?subject=arabic-grammar"
+  "/api/v1/profile/stats?subject=arabic-grammar"
 
 # Test mastery
 curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8002/api/v1/profile/mastery
+  /api/v1/profile/mastery
 
 # Test weekly activity
 curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8002/api/v1/profile/activity
+  /api/v1/profile/activity
 
 # Test avatar options
 curl -H "Authorization: Bearer $TOKEN" \
-  http://127.0.0.1:8002/api/v1/profile/avatars
+  /api/v1/profile/avatars
 
 # Test avatar update
 curl -X PUT \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"avatar":"avatar_02.png"}' \
-  http://127.0.0.1:8002/api/v1/profile/avatar
+  /api/v1/profile/avatar
 
 # Test logout
 curl -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-Device-ID: device_123" \
-  http://127.0.0.1:8002/api/v1/profile/logout
+  /api/v1/profile/logout
 ```
 
 ---
@@ -1286,7 +1284,7 @@ A:
 A: No, the API only supports single-subject filtering or global stats. For multi-subject aggregation, fetch each subject separately and sum on the client side.
 
 **Q: What timezone is used for weekly activity?**
-A: Asia/Amman (GMT+3). Week starts on Monday at 00:00:00 in that timezone.
+A: Asia/Amman (GMT+3). The 7-day period always ends with today (at 00:00:00 in that timezone) and goes back 6 days.
 
 **Q: How do I handle avatar images?**
 A: Avatar values are identifiers (e.g., "avatar_01.png"). Prepend your CDN base URL or relative path to construct the full image URL.
@@ -1302,6 +1300,3 @@ For questions or issues:
 - Backend API issues: Contact backend team or file an issue
 - Client implementation help: Refer to code examples above
 - Performance concerns: Check caching strategy and network conditions
-
-**API Version:** v1.7
-**Last Updated:** 2026-02-10

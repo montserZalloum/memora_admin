@@ -139,7 +139,7 @@ class ProfilePageService:
 		}
 
 	async def get_weekly_activity(self, player_id: str, subject_id: str | None = None) -> dict:
-		"""Get weekly activity: XP per day for Mon-Sun of the current week.
+		"""Get weekly activity: XP per day for the last 7 days ending today.
 
 		Uses Redis pipeline with 7 ZSCORE calls (single round-trip).
 
@@ -150,15 +150,18 @@ class ProfilePageService:
 		Returns:
 			Dict with subject, week_start, days (list of {date, day_name, xp}), total_xp.
 		"""
+		# Get today at midnight in Amman timezone
 		now = datetime.now(AMMAN_TZ)
-		monday = now - timedelta(days=now.weekday())
-		monday = monday.replace(hour=0, minute=0, second=0, microsecond=0)
+		today = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-		# Build 7 Redis keys for Mon-Sun
+		# Calculate the start of the 7-day period (6 days ago)
+		week_start = today - timedelta(days=6)
+
+		# Build 7 Redis keys for the last 7 days (ending today)
 		days = []
 		pipe = self.redis.pipeline()
 		for i in range(7):
-			day = monday + timedelta(days=i)
+			day = week_start + timedelta(days=i)
 			date_str = day.strftime("%Y-%m-%d")
 			if subject_id:
 				key = f"{self.prefix}lb:daily:{date_str}:subject:{subject_id}"
@@ -183,7 +186,7 @@ class ProfilePageService:
 
 		return {
 			"subject": subject_id,
-			"week_start": monday.strftime("%Y-%m-%d"),
+			"week_start": week_start.strftime("%Y-%m-%d"),
 			"days": days,
 			"total_xp": total_xp,
 		}

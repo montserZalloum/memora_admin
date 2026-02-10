@@ -68,7 +68,7 @@ async def get_weekly_activity(
 	profile_page_service: ProfilePageServiceDep,
 	subject: str | None = Query(None, description="Subject ID filter"),
 ):
-	"""Get weekly activity: XP per day for current week (Mon-Sun).
+	"""Get weekly activity: XP per day for the last 7 days ending today.
 
 	Optionally filtered by subject.
 	"""
