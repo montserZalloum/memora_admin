@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.6 FSRS Review System — Phase 25 (FSRS Review System) Complete
+**Current focus:** v1.7 Profile Page API — Phase 26 (Profile Page API) In progress
 
 ## Current Position
 
-Phase: 25 (FSRS Review System)
-Plan: 3 of 3
-Status: Phase complete
-Last activity: 2026-02-09 — Completed 25-03-PLAN.md
+Phase: 26 (Profile Page API)
+Plan: 1 of 2
+Status: In progress
+Last activity: 2026-02-10 — Completed 26-01-PLAN.md (Level system, models, Frappe APIs)
 
-Progress: [██████████] 100%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 74
+- Total plans completed: 75
 - Milestones shipped: 6
 
 **By Milestone:**
@@ -34,6 +34,7 @@ Progress: [██████████] 100%
 | v1.4 Product Store | 3 | 4 | Shipped 2026-02-08 |
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
+| v1.7 Profile Page API | 1 | 2 | In progress (1/2) |
 
 ## Accumulated Context
 
@@ -63,6 +64,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Fetch limit+5 rows in get_due_stages to compensate for removed stages filtered out
 - 3 XP per review session (not per stage) - reviews reward participation not volume
 - No cache on get_due_stages (must be fresh); overview cache 5-min TTL with invalidation on submit
+- Level thresholds as static constants (15 levels, expandable) -- not admin-configurable
+- FSRS maturity threshold = 21.0 days stability (standard convention)
+- Avatar validation reads from DocType field options, not hardcoded
 
 ### Pending Todos
 
@@ -82,6 +86,13 @@ All decisions logged in PROJECT.md Key Decisions table.
   - MariaDB composite index for 200K+ users, no Redis sorted sets
   - 3 XP per review session, no streak contribution
   - Content: Option B (client handles via local cache/CDN)
+- Phase 26 added: Profile Page API (v1.7)
+  - Hero section (avatar, username, level, XP progress)
+  - Subject-filtered stats (streak, items learned, XP)
+  - Memory mastery breakdown (mature/learning/new from FSRS)
+  - Weekly activity chart (XP per day)
+  - Avatar selection from predefined options
+  - Logout endpoint
 
 ### Blockers/Concerns
 
@@ -90,7 +101,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-02-09
-Stopped at: Completed 25-03-PLAN.md (Phase 25 complete)
+Last session: 2026-02-10
+Stopped at: Completed 26-01-PLAN.md (Level system, models, Frappe APIs)
 Resume file: None
-Next action: Plan next milestone/phase
+Next action: Execute 26-02-PLAN.md (ProfilePageService + FastAPI endpoints)
