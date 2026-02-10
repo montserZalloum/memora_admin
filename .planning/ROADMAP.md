@@ -10,7 +10,7 @@
 - SHIPPED **v1.4 Product Store** — Phases 21-23 (shipped 2026-02-08)
 - SHIPPED **v1.5 Real-Time Notifications** — Phase 24 (shipped 2026-02-08)
 - SHIPPED **v1.6 FSRS Review System** — Phase 25 (shipped 2026-02-09)
-- **v1.7 Profile Page API** — Phase 26
+- SHIPPED **v1.7 Profile Page API** — Phase 26 (shipped 2026-02-10)
 
 ## Phases
 
@@ -193,7 +193,7 @@ Plans:
 
 **Milestone Goal:** Players can view a rich profile page with avatar selection, subject-filtered stats (XP, streak, items learned), memory mastery breakdown, weekly activity chart, and logout — all powered by backend API endpoints.
 
-- [ ] **Phase 26: Profile Page API** — Backend endpoints for profile hero section, subject-filtered stats, memory mastery, weekly activity, and avatar management
+- [x] **Phase 26: Profile Page API** — Backend endpoints for profile hero section, subject-filtered stats, memory mastery, weekly activity, and avatar management
 
 ## Phase Details — v1.7
 
@@ -212,8 +212,8 @@ Plans:
   9. **Performance**: All cached endpoints respond in <50ms on cache hit
 **Plans:** 2 plans
 Plans:
-- [ ] 26-01-PLAN.md — Level system constants, Pydantic models, and Frappe whitelisted APIs (mastery, avatar)
-- [ ] 26-02-PLAN.md — ProfilePageService aggregation layer, all 7 profile endpoints, deps wiring, router registration
+- [x] 26-01-PLAN.md — Level system constants, Pydantic models, and Frappe whitelisted APIs (mastery, avatar)
+- [x] 26-02-PLAN.md — ProfilePageService aggregation layer, all 7 profile endpoints, deps wiring, router registration
 
 **Design Decisions:**
 - **Level system**: Static constants (not DB-configurable), 15 levels with increasing XP gaps
@@ -253,6 +253,6 @@ Plans:
 | 23. Approval and Access Grant | v1.4 | 1/1 | Complete | 2026-02-08 |
 | 24. Real-Time Subscription Notifications | v1.5 | 2/2 | Complete | 2026-02-08 |
 | 25. FSRS Review System | v1.6 | 3/3 | Complete | 2026-02-09 |
-| 26. Profile Page API | v1.7 | 0/2 | In progress | — |
+| 26. Profile Page API | v1.7 | 2/2 | Complete | 2026-02-10 |
 
-**Total:** 25 phases complete (74 plans)
+**Total:** 26 phases complete (76 plans)
