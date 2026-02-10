@@ -10,6 +10,7 @@
 - SHIPPED **v1.4 Product Store** — Phases 21-23 (shipped 2026-02-08)
 - SHIPPED **v1.5 Real-Time Notifications** — Phase 24 (shipped 2026-02-08)
 - SHIPPED **v1.6 FSRS Review System** — Phase 25 (shipped 2026-02-09)
+- **v1.7 Profile Page API** — Phase 26
 
 ## Phases
 
@@ -188,6 +189,41 @@ Plans:
 - **Partitioning**: Composite index only, no MariaDB partitioning now. Queries are partition-friendly by design for future RANGE partitioning by season if needed at 500M+ rows
 - **`is_time_calculated`**: Deferred — not wired in this phase
 
+### v1.7 Profile Page API (Phase 26)
+
+**Milestone Goal:** Players can view a rich profile page with avatar selection, subject-filtered stats (XP, streak, items learned), memory mastery breakdown, weekly activity chart, and logout — all powered by backend API endpoints.
+
+- [ ] **Phase 26: Profile Page API** — Backend endpoints for profile hero section, subject-filtered stats, memory mastery, weekly activity, and avatar management
+
+## Phase Details — v1.7
+
+### Phase 26: Profile Page API
+**Goal**: Provide all backend API endpoints needed for the client profile page: hero section (avatar, username, level, XP progress), subject-filtered stats (streak, items learned, XP), memory mastery breakdown (mature/learning/new), weekly activity (XP per day), avatar selection from predefined options, and logout.
+**Depends on**: Phase 25 (FSRS review system provides memory state data for mastery breakdown)
+**Success Criteria** (what must be TRUE):
+  1. **Hero Section**: API returns player's avatar URL, username, level title, current XP, and XP needed for next level
+  2. **Avatar Selection**: Player can choose from predefined avatar options; selected avatar is persisted and returned in profile
+  3. **Subject Filter**: All stats endpoints accept an optional `subject` parameter — when omitted, returns combined stats across all subjects
+  4. **XP Progress**: Returns level progress (current XP within level, XP to next level) filtered by subject or total
+  5. **Stats Grid**: Returns streak (consecutive days), total items learned, and total XP — all filterable by subject
+  6. **Memory Mastery**: Returns breakdown of mature/learning/new memory states for a subject (or all subjects combined)
+  7. **Weekly Activity**: Returns XP earned per day for the current week (Mon-Sun), with subject filter support
+  8. **Logout**: Endpoint to invalidate session/device token
+  9. **Performance**: All cached endpoints respond in <50ms on cache hit
+**Plans:** 2 plans
+Plans:
+- [ ] 26-01-PLAN.md — Level system constants, Pydantic models, and Frappe whitelisted APIs (mastery, avatar)
+- [ ] 26-02-PLAN.md — ProfilePageService aggregation layer, all 7 profile endpoints, deps wiring, router registration
+
+**Design Decisions:**
+- **Level system**: Static constants (not DB-configurable), 15 levels with increasing XP gaps
+- **Per-subject XP**: From leaderboard all-time ZSETs, use `int(score)` to strip composite timestamp
+- **Memory mastery cache**: Redis 5-min TTL, invalidated on review submit
+- **Items learned**: Stats hash `completed` field, sum across subjects for global
+- **Streak**: Global only (not per-subject), reviews don't count
+- **Logout**: Invalidates session AND removes device (frees device slot)
+- **Avatar validation**: Read valid options from DocType meta (not hardcoded)
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -216,7 +252,7 @@ Plans:
 | 22. Purchase Request Flow | v1.4 | 2/2 | Complete | 2026-02-08 |
 | 23. Approval and Access Grant | v1.4 | 1/1 | Complete | 2026-02-08 |
 | 24. Real-Time Subscription Notifications | v1.5 | 2/2 | Complete | 2026-02-08 |
-
 | 25. FSRS Review System | v1.6 | 3/3 | Complete | 2026-02-09 |
+| 26. Profile Page API | v1.7 | 0/2 | In progress | — |
 
 **Total:** 25 phases complete (74 plans)
