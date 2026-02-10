@@ -157,9 +157,13 @@ async def start_session(
 	# Per Phase 3: Free content (is_free at Unit/Topic level) bypasses Gate 2
 	# Paid lessons require EXPLICIT GRANT - plan membership covers only free content
 	if not hierarchy.is_lesson_free(request.lesson_id):
-		# Lesson is NOT free - require explicit subject grant (plan membership doesn't cover paid content)
-		content_key = f"SUB-{request.subject_id}"
-		has_access = await access_service.check_access(user.sub, content_key)
+		# Lesson is NOT free - check subject grant first, then track grant
+		has_access = await access_service.check_access(user.sub, f"SUB-{request.subject_id}")
+		if not has_access:
+			# Fallback: check track-level grant
+			lesson_path = hierarchy.find_lesson_path(request.lesson_id)
+			if lesson_path:
+				has_access = await access_service.check_access(user.sub, f"TRK-{lesson_path.track_id}")
 		if not has_access:
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,

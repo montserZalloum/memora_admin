@@ -6,27 +6,36 @@ import frappe
 
 
 def _get_free_content_from_plan(subject_id: str) -> tuple[list[str], list[str]]:
-	"""Read free_units/free_topics from Plan Subject meta_data JSON field.
+	"""Read free_units/free_topics from ALL Plan Subject records.
 
-	The meta_data is pre-computed during plan build and stored as:
-	{"free_units": [...], "free_topics": [...]}
+	Collects free content metadata from all plans containing this subject,
+	regardless of is_premium status. A premium subject can still have
+	individual free topics/units as samples.
 
 	Returns:
-	    Tuple of (free_units, free_topics) lists. Empty lists if no metadata found.
+	    Tuple of (free_units, free_topics) lists. Merged across all plans.
 	"""
-	meta_data = frappe.db.get_value(
-		"Memora Plan Subject",
-		{"subject": subject_id},
-		"meta_data",
-	)
-	if not meta_data:
-		return [], []
+	free_units_set = set()
+	free_topics_set = set()
 
-	try:
-		data = json.loads(meta_data) if isinstance(meta_data, str) else meta_data
-		return data.get("free_units", []), data.get("free_topics", [])
-	except (json.JSONDecodeError, AttributeError):
-		return [], []
+	# Query ALL Plan Subject records (premium subjects can have free topics/units)
+	plan_subjects = frappe.get_all(
+		"Memora Plan Subject",
+		filters={"subject": subject_id},
+		fields=["meta_data"],
+	)
+
+	for ps in plan_subjects:
+		if not ps.meta_data:
+			continue
+		try:
+			data = json.loads(ps.meta_data) if isinstance(ps.meta_data, str) else ps.meta_data
+			free_units_set.update(data.get("free_units", []))
+			free_topics_set.update(data.get("free_topics", []))
+		except (json.JSONDecodeError, AttributeError):
+			continue
+
+	return list(free_units_set), list(free_topics_set)
 
 
 @frappe.whitelist(allow_guest=False)
@@ -93,7 +102,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 	tracks = frappe.get_all(
 		"Memora Track",
 		filters={"subject": subject_id},
-		fields=["name", "is_linear"],
+		fields=["name", "is_linear", "is_sold_separately"],
 		order_by="idx asc",
 	)
 
@@ -103,6 +112,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 		track_info = {
 			"track_id": track.name,
 			"is_linear": track.is_linear if track.is_linear is not None else True,
+			"is_sold_separately": bool(track.get("is_sold_separately")),
 			"units": [],
 		}
 

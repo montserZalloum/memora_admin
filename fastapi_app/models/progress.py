@@ -79,6 +79,7 @@ class TrackInfo(BaseModel):
 
 	track_id: str
 	is_linear: bool = True  # If true, units must complete in order
+	is_sold_separately: bool = False  # If true, track can be purchased individually
 	units: list[UnitInfo]
 
 

@@ -230,12 +230,22 @@ def on_plan_subject_changed(doc, method):
 	"""
 	Queue a build when Plan Subject is added/modified/removed.
 
-	Triggers rebuild of the parent plan.
+	Triggers rebuild of the parent plan AND invalidates the hierarchy cache
+	for the affected subject. Hierarchy cache contains free_units/free_topics
+	which are derived from Plan Subject meta_data, so it must be invalidated
+	when Plan Subject changes (e.g., is_premium or free content metadata).
 	"""
 	plan_id = doc.parent
+	subject_id = doc.subject
 
 	if not plan_id:
 		return
+
+	# Invalidate hierarchy cache for the affected subject immediately.
+	# free_units/free_topics in hierarchy are populated from Plan Subject meta_data,
+	# so hierarchy cache must be refreshed when Plan Subject changes.
+	if subject_id:
+		_invalidate_hierarchy_cache(subject_id)
 
 	# Reuse plan debounce logic
 	cache = frappe.cache
@@ -266,6 +276,41 @@ def on_plan_subject_changed(doc, method):
 		frappe.log_error(
 			f"Failed to queue build for plan {plan_id}: {e}",
 			"Build Trigger Error",
+		)
+
+
+def _invalidate_hierarchy_cache(subject_id: str):
+	"""Invalidate hierarchy cache for a subject via direct delete + pubsub.
+
+	Two-pronged approach (same pattern as catalog_sync.py):
+	1. Direct Redis DEL for immediate effect
+	2. Pubsub publish so FastAPI sidecar's in-process HierarchyService also invalidates
+	"""
+	import json
+
+	from memora_admin.events.access_sync import get_fastapi_redis
+
+	try:
+		r = get_fastapi_redis()
+
+		# 1. Direct cache delete
+		r.delete(f"memora:hierarchy:{subject_id}")
+
+		# 2. Pubsub notification for FastAPI sidecar
+		r.publish(
+			"memora:cache:invalidate",
+			json.dumps({
+				"type": "hierarchy",
+				"subject_id": subject_id,
+				"timestamp": str(frappe.utils.now()),
+			}),
+		)
+
+		frappe.logger().info(f"Hierarchy cache invalidated for subject {subject_id}")
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to invalidate hierarchy cache for {subject_id}: {e}",
+			"Hierarchy Cache Invalidation Error",
 		)
 
 

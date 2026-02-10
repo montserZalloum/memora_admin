@@ -370,7 +370,7 @@ def _generate_hierarchy(plan_id: str, subject_doc: Any, overrides: dict) -> tupl
 	tracks = frappe.get_all(
 		"Memora Track",
 		filters={"subject": subject_doc.name, "is_published": 1},
-		fields=["name", "track_title", "sort_order", "is_linear", "image"],
+		fields=["name", "track_title", "sort_order", "is_linear", "image", "is_sold_separately"],
 		order_by="sort_order asc",
 	)
 
@@ -433,6 +433,7 @@ def _generate_hierarchy(plan_id: str, subject_doc: Any, overrides: dict) -> tupl
 				"title": track["track_title"],
 				"sort_order": track["sort_order"] or 0,
 				"is_linear": bool(track.get("is_linear")),
+				"is_sold_separately": bool(track.get("is_sold_separately")),
 				"image": _relative_path(track.get("image")),
 				"units": units_data,
 			}

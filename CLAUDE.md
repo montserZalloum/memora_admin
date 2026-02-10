@@ -153,6 +153,21 @@ Redis is a **hot cache**, MariaDB is source of truth. After FLUSHDB/restart/evic
 2. Ensure `FrappeClient` is injected via `deps.py` (hydration silently skips without it)
 3. When adding denormalized fields (e.g., `free_units`), verify ALL producer code paths populate them
 4. The hierarchy API (`memora_admin/api/hierarchy.py`) must populate `free_units`/`free_topics` arrays
+5. **Cross-cache dependencies**: When data from one DocType feeds into another cache (e.g., Plan Subject `meta_data` → hierarchy cache `free_units`/`free_topics`), ensure the event hook invalidates ALL affected caches, not just the "obvious" one
+
+### Cache Invalidation Events (`build_trigger.py`)
+
+| Event | Invalidates | Notes |
+|-------|------------|-------|
+| Content update (Subject/Track/Unit/Topic/Lesson) | Hierarchy cache + plan builds | `on_content_updated` |
+| Plan Subject changed (is_premium, meta_data, etc.) | Plan cache + **hierarchy cache** | `on_plan_subject_changed` - hierarchy invalidated because `free_units`/`free_topics` are derived from Plan Subject `meta_data` |
+| Plan updated | Plan cache | `on_plan_updated` |
+| Plan Overrider changed | Plan cache | `on_plan_overrider_changed` |
+| Product Grant changed | Catalog cache | `catalog_sync.py` |
+
+### Free Content Access Model
+
+A **premium subject** (`is_premium=1`) can contain **individual free topics/units** as samples. The hierarchy API reads `free_units`/`free_topics` from Plan Subject `meta_data` across ALL Plan Subject records (regardless of `is_premium` flag). The progress endpoint allows access if `hierarchy.has_any_free_content()` is true, even without explicit grants.
 
 ## Performance Targets
 
