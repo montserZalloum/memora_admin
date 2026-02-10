@@ -48,7 +48,7 @@
    "fieldname": "avatar",
    "fieldtype": "Select",
    "label": "Avatar",
-   "options": "avatar 1\navatar 2",
+   "options": "pre\nblonde\nCaleb\nJad\nSadie\nValentina",
    "reqd": 1
   },
   {
@@ -103,7 +103,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-05 13:10:05.572436",
+ "modified": "2026-02-10 15:49:05.400540",
  "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Player Profile",

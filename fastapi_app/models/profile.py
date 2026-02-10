@@ -86,12 +86,6 @@ class AvatarUpdateResponse(BaseModel):
 	success: bool
 
 
-class AvatarOptionsResponse(BaseModel):
-	"""Available avatar options."""
-
-	avatars: list[str]
-
-
 class LogoutResponse(BaseModel):
 	"""Response after logout."""
 

@@ -137,23 +137,10 @@ def update_player_avatar(player_id: str, avatar: str) -> dict:
 	return {"avatar": avatar, "success": True}
 
 
-@frappe.whitelist(allow_guest=False)
-def get_avatar_options() -> list[str]:
-	"""Get available avatar options from DocType metadata.
-
-	Reads the Select field options from Memora Player Profile.avatar,
-	so the list stays in sync with admin-configured options.
-
-	Returns:
-		List of valid avatar identifier strings.
-	"""
-	return _get_avatar_options_from_meta()
-
-
 def _get_avatar_options_from_meta() -> list[str]:
 	"""Read valid avatar options from DocType field definition.
 
-	Internal helper shared by update_player_avatar and get_avatar_options.
+	Internal helper used by update_player_avatar.
 	"""
 	meta = frappe.get_meta("Memora Player Profile")
 	avatar_field = meta.get_field("avatar")

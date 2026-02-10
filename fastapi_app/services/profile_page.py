@@ -257,19 +257,6 @@ class ProfilePageService:
 
 		return result if isinstance(result, dict) else {"avatar": avatar, "success": True}
 
-	async def get_avatar_options(self) -> list[str]:
-		"""Get available avatar options from Frappe DocType metadata.
-
-		Returns:
-			List of valid avatar identifier strings.
-		"""
-		result = await self.frappe.call(
-			"memora_admin.api.profile.get_avatar_options",
-			{},
-		)
-
-		return result if isinstance(result, list) else []
-
 	async def logout(self, player_id: str, device_id: str | None = None) -> dict:
 		"""Invalidate session and optionally remove device.
 

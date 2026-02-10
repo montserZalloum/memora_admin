@@ -8,7 +8,6 @@ from fastapi_app.api.deps import (
 	ProfilePageServiceDep,
 )
 from fastapi_app.models.profile import (
-	AvatarOptionsResponse,
 	AvatarUpdateRequest,
 	AvatarUpdateResponse,
 	HeroResponse,
@@ -95,16 +94,6 @@ async def update_avatar(
 			detail="Invalid avatar option",
 		)
 	return AvatarUpdateResponse(**result)
-
-
-@router.get("/avatars", response_model=AvatarOptionsResponse)
-async def get_avatar_options(
-	user: CurrentUser,
-	profile_page_service: ProfilePageServiceDep,
-):
-	"""Get available avatar options from DocType metadata."""
-	result = await profile_page_service.get_avatar_options()
-	return AvatarOptionsResponse(avatars=result)
 
 
 @router.post("/logout", response_model=LogoutResponse)
