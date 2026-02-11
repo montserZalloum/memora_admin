@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.8 Memory State Redesign — Phase 27 (Memory State Redesign) planned, not started
+**Current focus:** v1.8 Memory State Redesign — Phase 27, Plan 01 complete (schema foundation)
 
 ## Current Position
 
 Phase: 27 (Memory State Redesign — Item-Level FSRS)
-Plan: 0 of 4
-Status: Phase planned, not started
-Last activity: 2026-02-11 — Added Phase 27 to roadmap
+Plan: 1 of 4
+Status: In progress
+Last activity: 2026-02-11 — Completed 27-01-PLAN.md (Schema Foundation)
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [██░░░░░░░░] 25%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 76
+- Total plans completed: 77
 - Milestones shipped: 7
 
 **By Milestone:**
@@ -35,7 +35,7 @@ Progress: [░░░░░░░░░░] 0%
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
-| v1.8 Memory State Redesign | 1 | 4 | Planned |
+| v1.8 Memory State Redesign | 1 | 4 | In Progress (1/4) |
 
 ## Accumulated Context
 
@@ -71,6 +71,10 @@ All decisions logged in PROJECT.md Key Decisions table.
 - ProfilePageService composes existing services (no logic duplication)
 - Weekly activity uses Redis pipeline (7 ZSCORE in 1 round-trip)
 - Profile endpoints are thin; all logic delegated to service layer
+- Frappe autoincrement requires explicit BIGINT override in after_migrate for existing tables (only creates BIGINT on new table creation)
+- UUID polyfill stored functions for MariaDB 10.6 (no native UUID_TO_BIN/BIN_TO_UUID)
+- RANGE partitioning managed via after_migrate with REMOVE PARTITIONING -> re-partition cycle for column type changes
+- next_review changed from Datetime to Date on Memory State (already clamped to midnight)
 
 ### Pending Todos
 
@@ -111,6 +115,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Added Phase 27 (Memory State Redesign) to roadmap
+Stopped at: Completed 27-01-PLAN.md (Schema Foundation)
 Resume file: None
-Next action: Plan Phase 27 (`/gsd:plan-phase 27`)
+Next action: Execute 27-02-PLAN.md (Content Pipeline)
