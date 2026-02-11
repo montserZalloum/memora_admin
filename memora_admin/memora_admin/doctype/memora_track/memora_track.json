@@ -7,6 +7,9 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "filter_section",
+  "academic_plan",
+  "main_section",
   "track_title",
   "subject",
   "sort_order",
@@ -20,6 +23,24 @@
   "total_lessons"
  ],
  "fields": [
+  {
+   "collapsible": 1,
+   "fieldname": "filter_section",
+   "fieldtype": "Section Break",
+   "label": "Filter Helper"
+  },
+  {
+   "description": "Pick a plan to filter the Subject dropdown below",
+   "fieldname": "academic_plan",
+   "fieldtype": "Link",
+   "is_virtual": 1,
+   "label": "Academic Plan",
+   "options": "Memora Academic Plan"
+  },
+  {
+   "fieldname": "main_section",
+   "fieldtype": "Section Break"
+  },
   {
    "fieldname": "track_title",
    "fieldtype": "Data",

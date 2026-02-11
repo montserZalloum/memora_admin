@@ -4,6 +4,10 @@ Provides whitelisted APIs for FastAPI:
 - Batch profile fetch (cache miss hydration)
 - Memory mastery breakdown (FSRS stability classification)
 - Avatar update and options (DocType meta-driven validation)
+
+NOTE: get_memory_mastery queries tabMemora Memory State which is a RANGE-partitioned
+table designed for 10+ billion rows. It uses raw SQL only (Frappe ORM is forbidden).
+All queries include season_seq for partition pruning. See setup.py for details.
 """
 
 import frappe

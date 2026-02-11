@@ -44,8 +44,8 @@ app_license = "mit"
 
 # include js in doctype views
 doctype_js = {
-    "Memora Player Profile": "memora_admin/doctype/memora_player_profile/memora_player_profile.js",
-    "Memora Lesson": "public/js/game_lesson.js"
+	"Memora Player Profile": "memora_admin/doctype/memora_player_profile/memora_player_profile.js",
+	"Memora Lesson": "public/js/game_lesson.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -87,6 +87,7 @@ doctype_js = {
 
 # before_install = "memora_admin.install.before_install"
 after_install = "memora_admin.memora_admin.setup.after_install"
+before_migrate = "memora_admin.memora_admin.setup.before_migrate"
 after_migrate = "memora_admin.memora_admin.setup.after_migrate"
 
 # Uninstallation
@@ -142,81 +143,81 @@ after_migrate = "memora_admin.memora_admin.setup.after_migrate"
 # Hook on document methods and events
 
 doc_events = {
-    "Memora Season": {
-        "after_insert": "memora_admin.events.access_sync.on_season_updated",
-        "on_update": "memora_admin.events.access_sync.on_season_updated",
-        "on_trash": "memora_admin.events.access_sync.on_season_deleted",
-    },
-    "Memora Player Subscription": {
-        "after_insert": "memora_admin.events.access_sync.on_subscription_change",
-        "on_update": "memora_admin.events.access_sync.on_subscription_change",
-        "on_trash": "memora_admin.events.access_sync.on_subscription_deleted",
-    },
-    "Memora Player Profile": {
-        "after_insert": "memora_admin.events.profile_sync.on_player_profile_updated",
-        "on_update": [
-            "memora_admin.events.device_sync.on_player_profile_update",
-            "memora_admin.events.profile_sync.on_player_profile_updated",
-            "memora_admin.events.plan_change_sync.on_player_profile_plan_changed",
-        ],
-    },
-    # Product catalog cache invalidation
-    "Memora Product Grant": {
-        "after_insert": "memora_admin.events.catalog_sync.on_product_grant_changed",
-        "on_update": "memora_admin.events.catalog_sync.on_product_grant_changed",
-        "on_trash": "memora_admin.events.catalog_sync.on_product_grant_changed",
-    },
-    # Purchase request admin notification
-    "Memora Subscription Transaction": {
-        "after_insert": "memora_admin.events.purchase_sync.on_purchase_request_created",
-    },
-    # Build trigger events for content DocTypes (debounced)
-    "Memora Subject": {
-        "on_update": "memora_admin.events.build_trigger.on_content_updated",
-    },
-    "Memora Track": {
-        "on_update": "memora_admin.events.build_trigger.on_content_updated",
-    },
-    "Memora Unit": {
-        "on_update": [
-            "memora_admin.events.build_trigger.on_content_updated",
-            "memora_admin.events.access_sync.on_unit_free_changed",
-        ],
-        "on_trash": "memora_admin.events.access_sync.on_unit_free_changed",
-    },
-    "Memora Topic": {
-        "on_update": [
-            "memora_admin.events.build_trigger.on_content_updated",
-            "memora_admin.events.access_sync.on_topic_free_changed",
-        ],
-        "on_trash": "memora_admin.events.access_sync.on_topic_free_changed",
-    },
-    "Memora Lesson": {
-        "on_update": "memora_admin.events.build_trigger.on_content_updated",
-    },
-    # Plan build trigger events (debounced)
-    "Memora Academic Plan": {
-        "on_update": "memora_admin.events.build_trigger.on_plan_updated",
-    },
-    "Memora Plan Subject": {
-        "after_insert": [
-            "memora_admin.events.build_trigger.on_plan_subject_changed",
-            "memora_admin.events.access_sync.on_plan_subject_changed",
-        ],
-        "on_update": [
-            "memora_admin.events.build_trigger.on_plan_subject_changed",
-            "memora_admin.events.access_sync.on_plan_subject_changed",
-        ],
-        "on_trash": [
-            "memora_admin.events.build_trigger.on_plan_subject_changed",
-            "memora_admin.events.access_sync.on_plan_subject_changed",
-        ],
-    },
-    "Memora Plan Overrider": {
-        "after_insert": "memora_admin.events.build_trigger.on_plan_overrider_changed",
-        "on_update": "memora_admin.events.build_trigger.on_plan_overrider_changed",
-        "on_trash": "memora_admin.events.build_trigger.on_plan_overrider_changed",
-    },
+	"Memora Season": {
+		"after_insert": "memora_admin.events.access_sync.on_season_updated",
+		"on_update": "memora_admin.events.access_sync.on_season_updated",
+		"on_trash": "memora_admin.events.access_sync.on_season_deleted",
+	},
+	"Memora Player Subscription": {
+		"after_insert": "memora_admin.events.access_sync.on_subscription_change",
+		"on_update": "memora_admin.events.access_sync.on_subscription_change",
+		"on_trash": "memora_admin.events.access_sync.on_subscription_deleted",
+	},
+	"Memora Player Profile": {
+		"after_insert": "memora_admin.events.profile_sync.on_player_profile_updated",
+		"on_update": [
+			"memora_admin.events.device_sync.on_player_profile_update",
+			"memora_admin.events.profile_sync.on_player_profile_updated",
+			"memora_admin.events.plan_change_sync.on_player_profile_plan_changed",
+		],
+	},
+	# Product catalog cache invalidation
+	"Memora Product Grant": {
+		"after_insert": "memora_admin.events.catalog_sync.on_product_grant_changed",
+		"on_update": "memora_admin.events.catalog_sync.on_product_grant_changed",
+		"on_trash": "memora_admin.events.catalog_sync.on_product_grant_changed",
+	},
+	# Purchase request admin notification
+	"Memora Subscription Transaction": {
+		"after_insert": "memora_admin.events.purchase_sync.on_purchase_request_created",
+	},
+	# Build trigger events for content DocTypes (debounced)
+	"Memora Subject": {
+		"on_update": "memora_admin.events.build_trigger.on_content_updated",
+	},
+	"Memora Track": {
+		"on_update": "memora_admin.events.build_trigger.on_content_updated",
+	},
+	"Memora Unit": {
+		"on_update": [
+			"memora_admin.events.build_trigger.on_content_updated",
+			"memora_admin.events.access_sync.on_unit_free_changed",
+		],
+		"on_trash": "memora_admin.events.access_sync.on_unit_free_changed",
+	},
+	"Memora Topic": {
+		"on_update": [
+			"memora_admin.events.build_trigger.on_content_updated",
+			"memora_admin.events.access_sync.on_topic_free_changed",
+		],
+		"on_trash": "memora_admin.events.access_sync.on_topic_free_changed",
+	},
+	"Memora Lesson": {
+		"on_update": "memora_admin.events.build_trigger.on_content_updated",
+	},
+	# Plan build trigger events (debounced)
+	"Memora Academic Plan": {
+		"on_update": "memora_admin.events.build_trigger.on_plan_updated",
+	},
+	"Memora Plan Subject": {
+		"after_insert": [
+			"memora_admin.events.build_trigger.on_plan_subject_changed",
+			"memora_admin.events.access_sync.on_plan_subject_changed",
+		],
+		"on_update": [
+			"memora_admin.events.build_trigger.on_plan_subject_changed",
+			"memora_admin.events.access_sync.on_plan_subject_changed",
+		],
+		"on_trash": [
+			"memora_admin.events.build_trigger.on_plan_subject_changed",
+			"memora_admin.events.access_sync.on_plan_subject_changed",
+		],
+	},
+	"Memora Plan Overrider": {
+		"after_insert": "memora_admin.events.build_trigger.on_plan_overrider_changed",
+		"on_update": "memora_admin.events.build_trigger.on_plan_overrider_changed",
+		"on_trash": "memora_admin.events.build_trigger.on_plan_overrider_changed",
+	},
 }
 
 # Scheduled Tasks
@@ -233,29 +234,17 @@ scheduler_events = {
 			"memora_admin.tasks.build_worker.process_pending_builds",
 		],
 		# Daily at 00:05: Streak reset (after midnight Asia/Amman)
-		"5 0 * * *": [
-			"memora_admin.tasks.streak_reset.reset_broken_streaks"
-		],
+		"5 0 * * *": ["memora_admin.tasks.streak_reset.reset_broken_streaks"],
 		# Hourly at :15: Session cleanup (safety net for orphaned keys)
-		"15 * * * *": [
-			"memora_admin.tasks.session_cleanup.cleanup_expired_sessions"
-		],
+		"15 * * * *": ["memora_admin.tasks.session_cleanup.cleanup_expired_sessions"],
 		# Daily at 00:10: Daily leaderboard archive
-		"10 0 * * *": [
-			"memora_admin.tasks.leaderboard_reset.archive_daily_leaderboard"
-		],
+		"10 0 * * *": ["memora_admin.tasks.leaderboard_reset.archive_daily_leaderboard"],
 		# Friday at 00:15: Weekly leaderboard archive (Islamic week ends Thursday)
-		"15 0 * * 5": [
-			"memora_admin.tasks.leaderboard_reset.archive_weekly_leaderboard"
-		],
+		"15 0 * * 5": ["memora_admin.tasks.leaderboard_reset.archive_weekly_leaderboard"],
 		# Hourly at :30: Pre-warm profile cache for active leaderboard players
-		"30 * * * *": [
-			"memora_admin.tasks.profile_cache.warm_profile_cache"
-		],
+		"30 * * * *": ["memora_admin.tasks.profile_cache.warm_profile_cache"],
 		# Every 6 hours: Sync all plan subjects to Redis (safety net)
-		"0 */6 * * *": [
-			"memora_admin.tasks.plan_sync.sync_all_plan_subjects_to_redis"
-		],
+		"0 */6 * * *": ["memora_admin.tasks.plan_sync.sync_all_plan_subjects_to_redis"],
 	}
 }
 
@@ -358,4 +347,3 @@ scheduler_events = {
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

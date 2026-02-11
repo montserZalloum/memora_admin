@@ -1,6 +1,7 @@
 """Setup module for Memora Admin app.
 
 Runs after bench install-app to create required roles.
+before_migrate blocks dangerous ALTER TABLE on the partitioned Memory State table.
 after_migrate ensures database schema extensions (UUID polyfills, BINARY column
 overrides, RANGE partitioning, composite indexes) survive Frappe migrations.
 """
@@ -24,15 +25,104 @@ def create_task_admin_role():
 	if frappe.db.exists("Role", "Task Admin"):
 		return  # Already exists
 
-	role = frappe.get_doc({
-		"doctype": "Role",
-		"role_name": "Task Admin",
-		"desk_access": 1,
-		"is_custom": 1,
-	})
+	role = frappe.get_doc(
+		{
+			"doctype": "Role",
+			"role_name": "Task Admin",
+			"desk_access": 1,
+			"is_custom": 1,
+		}
+	)
 	role.insert(ignore_permissions=True)
 	frappe.db.commit()
 	print("Created Task Admin role")
+
+
+def before_migrate():
+	"""Block Frappe schema sync from running ALTER TABLE on Memora Memory State.
+
+	This hook runs BEFORE Frappe's model sync (which calls updatedb -> MariaDBTable.alter()).
+	It monkey-patches frappe.db.updatedb to skip Memora Memory State entirely, preventing
+	Frappe from adding/modifying/dropping columns on this RANGE-partitioned table.
+
+	WHY: Memora Memory State is designed for 10+ billion rows with:
+	- BIGINT PK (not Frappe's default varchar)
+	- BINARY(16) item_id (managed via is_virtual + setup.py)
+	- Composite PK (name, season_seq) for RANGE partitioning
+	- Custom indexes (dedup + review query) managed by _ensure_memory_state_indexes()
+
+	Any ALTER TABLE on a 10B-row partitioned table could lock it for hours.
+	All schema changes MUST go through setup.py with proper safety checks.
+	"""
+	_guard_memory_state_schema()
+
+
+def _guard_memory_state_schema():
+	"""Monkey-patch frappe.db.updatedb to block schema sync on Memory State.
+
+	Compares the current DB columns against the DocType JSON fields to detect
+	if Frappe would attempt any column additions or modifications. If so,
+	raises a loud error BEFORE any ALTER TABLE runs.
+
+	Also patches updatedb to skip this table entirely during the sync phase.
+	"""
+	PROTECTED_TABLE = "Memora Memory State"
+
+	# Check if the table exists yet (skip guard on fresh installs)
+	tables = frappe.db.get_tables()
+	if f"tab{PROTECTED_TABLE}" not in tables:
+		return
+
+	# Snapshot the original updatedb function
+	original_updatedb = frappe.db.updatedb
+
+	def guarded_updatedb(doctype, meta=None):
+		if doctype == PROTECTED_TABLE:
+			# Verify no unexpected schema changes are pending
+			_verify_no_schema_drift(PROTECTED_TABLE)
+			# Skip Frappe's ALTER TABLE entirely -- our after_migrate handles schema
+			return
+		return original_updatedb(doctype, meta)
+
+	# Apply the monkey-patch
+	frappe.db.updatedb = guarded_updatedb
+
+
+def _verify_no_schema_drift(doctype: str):
+	"""Check if the DocType JSON has fields that would cause Frappe to ALTER the table.
+
+	Compares JSON-defined fields (excluding is_virtual) against actual DB columns.
+	If a NEW non-virtual field is found that doesn't exist in the DB, it means
+	someone added a field to the JSON without updating setup.py -- raise an error.
+	"""
+	meta = frappe.get_meta(doctype, cached=False)
+
+	# Get fields Frappe would try to sync (excludes is_virtual)
+	json_fields = {
+		f.fieldname
+		for f in meta.fields
+		if not getattr(f, "is_virtual", False) and f.fieldtype not in frappe.model.no_value_fields
+	}
+
+	# Get actual DB columns
+	db_columns = {col.name.lower() for col in frappe.db.get_table_columns_description(f"tab{doctype}")}
+
+	# Standard Frappe columns that always exist
+	standard_cols = {"name", "creation", "modified", "modified_by", "owner", "docstatus", "idx"}
+	# Optional Frappe columns
+	optional_cols = {"_user_tags", "_comments", "_assign", "_liked_by"}
+
+	# Fields in JSON but not in DB = would trigger ADD COLUMN
+	new_fields = json_fields - db_columns - standard_cols - optional_cols
+	if new_fields:
+		frappe.throw(
+			f"BLOCKED: Memora Memory State is a 10B-row RANGE-partitioned table.\n"
+			f"The following fields exist in the DocType JSON but not in the database: {new_fields}\n"
+			f"Schema changes MUST be done manually via setup.py with proper safety checks.\n"
+			f"Do NOT add fields to memora_memory_state.json without updating setup.py.\n"
+			f"Remove the new fields from the JSON or add the columns via setup.py first.",
+			title="Partitioned Table Protection",
+		)
 
 
 def after_migrate():
@@ -141,9 +231,7 @@ def _ensure_name_bigint_column():
 		return
 
 	# Table must be empty for varchar->bigint conversion (we truncate during partitioning)
-	row_count = frappe.db.sql(
-		"SELECT COUNT(*) FROM `tabMemora Memory State`"
-	)[0][0]
+	row_count = frappe.db.sql("SELECT COUNT(*) FROM `tabMemora Memory State`")[0][0]
 	if row_count > 0:
 		print("[after_migrate] WARNING: Cannot convert name to BIGINT - table has data. Skipping.")
 		return
@@ -188,11 +276,57 @@ def _ensure_name_bigint_column():
 
 
 def _ensure_item_id_binary_column():
-	"""Override item_id column from varchar (Frappe default for Data) to BINARY(16).
+	"""Ensure item_id BINARY(16) column exists. Never ALTER if it already exists.
 
-	Frappe's DocType JSON does not support BINARY column type, so item_id is
-	defined as fieldtype Data. This function overrides the actual column type
-	after Frappe creates/modifies it.
+	SCHEMA REFERENCE -- tabMemora Memory State:
+	=============================================
+	This is a RANGE-partitioned table designed for 10+ billion rows.
+	ALL schema changes MUST go through this file (setup.py), never via JSON + bench migrate.
+
+	Columns (actual DB, not JSON):
+	  name          BIGINT NOT NULL          -- PK, auto-generated via Frappe sequence
+	  season_seq    INT(11) NOT NULL         -- Partition key (RANGE partitioned)
+	  subject       VARCHAR(140)             -- Link to Memora Subject
+	  player        VARCHAR(140)             -- Link to Memora Player Profile
+	  item_id       BINARY(16) NOT NULL      -- UUID stored as binary (is_virtual in JSON)
+	  stage_id      VARCHAR(140)             -- Lesson stage identifier
+	  lesson        VARCHAR(140)             -- Link to Memora Lesson
+	  stability     DECIMAL(21,9) DEFAULT 0  -- FSRS stability score
+	  difficulty    DECIMAL(21,9) DEFAULT 0  -- FSRS difficulty score
+	  next_review   DATE                     -- Next scheduled review date
+	  creation      DATETIME(6)              -- Frappe standard
+	  modified      DATETIME(6)              -- Frappe standard
+	  modified_by   VARCHAR(140)             -- Frappe standard
+	  owner         VARCHAR(140)             -- Frappe standard
+	  docstatus     INT(1) DEFAULT 0         -- Frappe standard
+	  idx           INT(8) DEFAULT 0         -- Frappe standard
+
+	Primary Key: (name, season_seq)  -- composite PK required for RANGE partitioning
+
+	Indexes:
+	  PRIMARY KEY                          (name, season_seq)
+	  UNIQUE idx_player_item_season        (player, item_id, season_seq)  -- dedup
+	  INDEX  idx_review_query              (player, subject, next_review, season_seq)  -- review queries
+
+	Partitioning: RANGE(season_seq)
+	  p_season_1   VALUES LESS THAN (2)
+	  p_season_N   VALUES LESS THAN (N+1)   -- created dynamically by MemoraSeason.after_insert
+	  p_future     VALUES LESS THAN MAXVALUE
+
+	SAFETY RULES:
+	  1. NEVER use Frappe ORM on this table. Always use frappe.db.sql().
+	  2. EVERY query MUST include season_seq in WHERE for partition pruning.
+	  3. EVERY query touching item_id MUST use UUID_TO_BIN() / BIN_TO_UUID().
+	  4. NEVER add fields to memora_memory_state.json without updating this file.
+	  5. NEVER run ALTER TABLE directly in production.
+	  6. New indexes must be added here with IF NOT EXISTS / idempotent checks.
+
+	item_id is marked is_virtual in the DocType JSON so Frappe skips all DB
+	operations for it (no CREATE, no ALTER, no MODIFY). We manage the actual
+	column ourselves:
+	- Missing -> CREATE as BINARY(16) (fresh install / new server)
+	- Exists as BINARY(16) -> do nothing
+	- Exists as wrong type -> warn loudly, never ALTER (unsafe on large tables)
 	"""
 	result = frappe.db.sql("""
 		SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
@@ -200,18 +334,25 @@ def _ensure_item_id_binary_column():
 		AND TABLE_NAME = 'tabMemora Memory State'
 		AND COLUMN_NAME = 'item_id'
 	""")
-	if not result:
-		return  # Column doesn't exist yet (first migrate may not have created it)
 
-	column_type = result[0][0]
-	if column_type == b"binary(16)" or column_type == "binary(16)":
+	if not result:
+		# Column doesn't exist — fresh install or new server
+		frappe.db.sql_ddl("""
+			ALTER TABLE `tabMemora Memory State`
+			ADD COLUMN `item_id` BINARY(16) NOT NULL
+		""")
+		print("[after_migrate] Created item_id BINARY(16) column")
+		return
+
+	column_type = str(result[0][0]).lower()
+	if "binary" in column_type:
 		return  # Already correct
 
-	frappe.db.sql_ddl("""
-		ALTER TABLE `tabMemora Memory State`
-		MODIFY COLUMN `item_id` BINARY(16) NOT NULL
-	""")
-	print(f"[after_migrate] Changed item_id column from {column_type} to BINARY(16)")
+	# Column exists but wrong type — NEVER alter, warn for manual fix
+	print(
+		f"[after_migrate] WARNING: item_id is {column_type}, expected binary(16)."
+		" Manual intervention required. DO NOT alter on large partitioned tables."
+	)
 
 
 def _ensure_memory_state_partitioning():
@@ -241,9 +382,7 @@ def _ensure_memory_state_partitioning():
 
 	# Drop old composite index if it exists (from Phase 25)
 	try:
-		frappe.db.sql_ddl(
-			"DROP INDEX `player_subject_next_review_index` ON `tabMemora Memory State`"
-		)
+		frappe.db.sql_ddl("DROP INDEX `player_subject_next_review_index` ON `tabMemora Memory State`")
 		print("[after_migrate] Dropped old player_subject_next_review_index")
 	except Exception:
 		pass  # Index may not exist
@@ -276,6 +415,21 @@ def _ensure_memory_state_indexes():
 	Indexes:
 	- idx_player_item_season: UNIQUE(player, item_id, season_seq) -- prevents duplicates
 	- idx_review_query: INDEX(player, subject, next_review, season_seq) -- review queries
+
+	Query-to-index mapping:
+	  _lookup_memory_state       -> idx_player_item_season (exact match)
+	  get_review_overview        -> idx_review_query (player, season_seq prefix + range on next_review)
+	  get_due_items              -> idx_review_query (player, subject, next_review range, season_seq)
+	  submit_reviews (lookup)    -> idx_player_item_season (exact match)
+	  submit_reviews (remaining) -> idx_review_query (count query)
+	  _update_memory_state       -> PRIMARY KEY (name, season_seq)
+	  get_memory_mastery         -> idx_player_item_season (player prefix + partition pruning on season_seq)
+
+	NOTE: No dedicated mastery index. At 10B rows, an index including the high-churn
+	`stability` column would cause write amplification on every review. The mastery query
+	uses partition pruning (season_seq) + idx_player_item_season (player prefix) to scan
+	a player's items within a single partition (<25K rows typical), which is fast enough.
+	If mastery reads become a bottleneck, use Redis counters (memora:stats:*) instead.
 	"""
 	# Check which indexes already exist
 	existing = frappe.db.sql("""
@@ -299,3 +453,15 @@ def _ensure_memory_state_indexes():
 			ADD INDEX idx_review_query (player, subject, next_review, season_seq)
 		""")
 		print("[after_migrate] Created INDEX idx_review_query")
+
+	# Cleanup: drop idx_mastery if it exists from a previous migration.
+	# A covering index on high-churn `stability` causes write amplification at scale.
+	_existing_all = frappe.db.sql("""
+		SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+		WHERE TABLE_SCHEMA = DATABASE()
+		AND TABLE_NAME = 'tabMemora Memory State'
+		AND INDEX_NAME = 'idx_mastery'
+	""")
+	if _existing_all:
+		frappe.db.sql_ddl("ALTER TABLE `tabMemora Memory State` DROP INDEX idx_mastery")
+		print("[after_migrate] Dropped idx_mastery (write amplification risk at scale)")

@@ -17,6 +17,17 @@ Memory State storage:
 - item_id: BINARY(16) via UUID_TO_BIN polyfill
 - season_seq: INT for RANGE partition routing
 - Lookup: (player, item_id, season_seq) unique index
+
+IMPORTANT -- RAW SQL ONLY:
+  Memora Memory State is a RANGE-partitioned table designed for 10+ billion rows.
+  Frappe ORM (get_doc, get_all, get_list, db.get_value, etc.) is FORBIDDEN because:
+  1. Frappe ORM cannot handle BINARY(16) columns (item_id).
+  2. Frappe ORM does not include season_seq in WHERE, breaking partition pruning.
+  3. ORM-generated queries may cause full table scans on a 10B-row table.
+  All queries MUST use frappe.db.sql() with:
+  - season_seq in every WHERE clause (partition pruning)
+  - UUID_TO_BIN() for item_id writes, BIN_TO_UUID() for reads
+  See setup.py for full schema reference and safety rules.
 """
 
 from __future__ import annotations

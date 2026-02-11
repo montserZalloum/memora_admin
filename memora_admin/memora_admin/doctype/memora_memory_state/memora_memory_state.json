@@ -3,6 +3,7 @@
  "allow_rename": 0,
  "autoname": "autoincrement",
  "creation": "2026-02-01 11:11:56.352614",
+ "description": "RANGE-partitioned table designed for 10+ billion rows. PK is BIGINT (not varchar). item_id is BINARY(16) managed via is_virtual + setup.py. Partitioned by season_seq. ALL queries MUST use raw SQL (frappe.db.sql), include season_seq in WHERE for partition pruning, and use UUID_TO_BIN/BIN_TO_UUID for item_id. NEVER add fields here without updating setup.py. Schema changes are blocked by before_migrate hook. See setup.py for full schema reference.",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
@@ -45,6 +46,7 @@
    "fieldname": "item_id",
    "fieldtype": "Data",
    "in_list_view": 1,
+   "is_virtual": 1,
    "label": "Item ID",
    "reqd": 1
   },
@@ -91,16 +93,13 @@
  "owner": "Administrator",
  "permissions": [
   {
-   "create": 1,
-   "delete": 1,
    "email": 1,
    "export": 1,
    "print": 1,
    "read": 1,
    "report": 1,
    "role": "System Manager",
-   "share": 1,
-   "write": 1
+   "share": 1
   }
  ],
  "row_format": "Dynamic",
