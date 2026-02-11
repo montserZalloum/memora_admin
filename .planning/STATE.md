@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 28 (Tech Debt & Reliability Fixes)
-Plan: 2 of 4
+Plan: 3 of 4
 Status: In progress
-Last activity: 2026-02-11 — Completed 28-02-PLAN.md (DRY deps.py & Dead Code Removal)
+Last activity: 2026-02-11 — Completed 28-03-PLAN.md (Wallet Service Cleanup)
 
-Progress: [█████████████████████████░░░░░░░░░░░░░░░] ~84/86 plans (Phase 28: 2/4)
+Progress: [██████████████████████████░░░░░░░░░░░░░░] ~85/86 plans (Phase 28: 3/4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 83
+- Total plans completed: 84
 - Milestones shipped: 8
 
 **By Milestone:**
@@ -88,6 +88,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Cross-module constant sharing: Frappe sync tasks import from fastapi_app.core.constants (single source of truth)
 - RedisClient sub-dependency pattern: service factories use `redis_client: RedisClient` parameter, not Request+manual construction
 - services/__init__.py simplified to bare docstring; deps.py uses direct imports from service modules
+- calculate_xp_award as module-level function in services/wallet.py (not class method) for direct import from any endpoint
+- Lua HGET safety: two-step (raw and tonumber(raw)) or 0 pattern for missing/corrupt fields
 
 ### Pending Todos
 
@@ -132,6 +134,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 28-02-PLAN.md (DRY deps.py & Dead Code Removal)
+Stopped at: Completed 28-03-PLAN.md (Wallet Service Cleanup)
 Resume file: None
-Next action: Execute 28-03-PLAN.md
+Next action: Execute 28-04-PLAN.md
