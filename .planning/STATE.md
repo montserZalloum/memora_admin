@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 28 (Tech Debt & Reliability Fixes)
-Plan: 1 of 4
+Plan: 2 of 4
 Status: In progress
-Last activity: 2026-02-11 — Completed 28-01-PLAN.md (LTRIM Race Condition Fix & Constant Unification)
+Last activity: 2026-02-11 — Completed 28-02-PLAN.md (DRY deps.py & Dead Code Removal)
 
-Progress: [████████████████████████░░░░░░░░░░░░░░░░] ~83/85 plans (Phase 28: 1/4)
+Progress: [█████████████████████████░░░░░░░░░░░░░░░] ~84/86 plans (Phase 28: 2/4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 82
+- Total plans completed: 83
 - Milestones shipped: 8
 
 **By Milestone:**
@@ -86,6 +86,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Editor uses frappe.db.get_value for client-side is_skippable check (not frappe.call with whitelisted method)
 - Skippable stage item_id keys omitted entirely (not set to null) to keep config clean
 - Cross-module constant sharing: Frappe sync tasks import from fastapi_app.core.constants (single source of truth)
+- RedisClient sub-dependency pattern: service factories use `redis_client: RedisClient` parameter, not Request+manual construction
+- services/__init__.py simplified to bare docstring; deps.py uses direct imports from service modules
 
 ### Pending Todos
 
@@ -130,6 +132,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 28-01-PLAN.md (LTRIM Race Condition Fix & Constant Unification)
+Stopped at: Completed 28-02-PLAN.md (DRY deps.py & Dead Code Removal)
 Resume file: None
-Next action: Execute 28-02-PLAN.md
+Next action: Execute 28-03-PLAN.md
