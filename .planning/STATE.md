@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.8 Memory State Redesign — Phase 27, Plan 02 complete (content pipeline)
+**Current focus:** v1.8 Memory State Redesign — Phase 27, Plan 03 complete (FSRS rewrite)
 
 ## Current Position
 
 Phase: 27 (Memory State Redesign — Item-Level FSRS)
-Plan: 2 of 4
+Plan: 3 of 4
 Status: In progress
-Last activity: 2026-02-11 — Completed 27-02-PLAN.md (Content Pipeline)
+Last activity: 2026-02-11 — Completed 27-03-PLAN.md (FSRS Rewrite)
 
-Progress: [█████░░░░░] 50%
+Progress: [███████░░░] 75%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 78
+- Total plans completed: 79
 - Milestones shipped: 7
 
 **By Milestone:**
@@ -35,7 +35,7 @@ Progress: [█████░░░░░] 50%
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
-| v1.8 Memory State Redesign | 1 | 4 | In Progress (2/4) |
+| v1.8 Memory State Redesign | 1 | 4 | In Progress (3/4) |
 
 ## Accumulated Context
 
@@ -78,6 +78,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - SENTENCE_BUILDER words format changed from string array to object array with item_id (backward compat preserved)
 - Per-item interactions share stage time_spent (item-level time breakdown not tracked)
 - Hearts calculation unchanged (uses stage-level fail_count, not item-level)
+- Raw SQL for BINARY column CRUD: ORM cannot handle UUID_TO_BIN, use frappe.db.sql() with dedicated helpers
+- Sequence-based PK: frappe.db.get_next_sequence_val for BIGINT autoincrement on Memory State
+- Deterministic UUID fallback for legacy interactions: uuid5(NAMESPACE_OID, stage_id)
 
 ### Pending Todos
 
@@ -118,6 +121,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 27-02-PLAN.md (Content Pipeline)
+Stopped at: Completed 27-03-PLAN.md (FSRS Rewrite)
 Resume file: None
-Next action: Execute 27-03-PLAN.md (FSRS Rewrite)
+Next action: Execute 27-04-PLAN.md (Review/Profile Update)
