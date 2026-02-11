@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.8 Memory State Redesign — Phase 27 complete (all 4 plans)
+**Current focus:** v1.8 Memory State Redesign — Phase 27 complete (all 4 plans + gap closure)
 
 ## Current Position
 
 Phase: 27 (Memory State Redesign — Item-Level FSRS)
-Plan: 4 of 4
-Status: Phase complete
-Last activity: 2026-02-11 — Completed 27-04-PLAN.md (Review/Profile Update)
+Plan: 5 of 5 (gap closure)
+Status: Phase complete (including gap closure)
+Last activity: 2026-02-11 — Completed 27-05-PLAN.md (Skippable Stage item_id Fix)
 
 Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 80
+- Total plans completed: 81
 - Milestones shipped: 8
 
 **By Milestone:**
@@ -35,7 +35,7 @@ Progress: [██████████] 100%
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
-| v1.8 Memory State Redesign | 1 | 4 | Shipped 2026-02-11 |
+| v1.8 Memory State Redesign | 1 | 5 | Shipped 2026-02-11 |
 
 ## Accumulated Context
 
@@ -83,6 +83,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Deterministic UUID fallback for legacy interactions: uuid5(NAMESPACE_OID, stage_id)
 - submit_reviews uses raw SQL UPDATE with season_seq in WHERE clause for partition-aware updates
 - next_review stored as date (not datetime) in review submit matching 27-03 schema change
+- Editor uses frappe.db.get_value for client-side is_skippable check (not frappe.call with whitelisted method)
+- Skippable stage item_id keys omitted entirely (not set to null) to keep config clean
 
 ### Pending Todos
 
@@ -112,6 +114,7 @@ All decisions logged in PROJECT.md Key Decisions table.
   - Plan 02: Content pipeline (item_id generation for all interactive stage types)
   - Plan 03: FSRS rewrite (item-level Memory State CRUD in stage_complete/lesson_complete)
   - Plan 04: Review/profile update (item-level review APIs, season_seq partition pruning, mastery counts items)
+  - Plan 05: Gap closure - skippable stage item_id fix (editor + build generators)
   - All layers updated: schema -> content -> FSRS computation -> review/profile APIs
 
 ### Blockers/Concerns
@@ -122,6 +125,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 27-04-PLAN.md (Review/Profile Update) — Phase 27 complete
+Stopped at: Completed 27-05-PLAN.md (Skippable Stage item_id Fix) — Phase 27 gap closure complete
 Resume file: None
-Next action: None — v1.8 Memory State Redesign fully shipped
+Next action: None — v1.8 Memory State Redesign fully shipped (including gap closure)
