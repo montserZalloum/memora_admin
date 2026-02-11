@@ -18,41 +18,55 @@ function save_filter(doctype, field, value) {
 	localStorage.setItem(STORAGE_KEY, JSON.stringify(filters));
 }
 
+function apply_plan_filter(frm, plan) {
+	save_filter("Memora Track", "academic_plan", plan || "");
+
+	if (!plan && frm.doc.subject) {
+		frm.set_value("subject", "");
+	}
+
+	frm.set_query("subject", function () {
+		if (plan) {
+			return {
+				query: "memora_admin.memora_admin.doctype.memora_track.memora_track.get_subjects_for_plan",
+				filters: { plan: plan },
+			};
+		}
+		return {};
+	});
+
+	frm.refresh_field("subject");
+}
+
 frappe.ui.form.on("Memora Track", {
 	refresh(frm) {
-		if (frm.is_new()) {
-			// Restore last used plan from localStorage
-			const saved = load_filters()["Memora Track"];
-			if (saved?.academic_plan) {
-				frm.set_value("academic_plan", saved.academic_plan);
-			}
-		}
-	},
+		if (frm._plan_control) return;
 
-	academic_plan(frm) {
-		const plan = frm.doc.academic_plan;
+		const wrapper = frm.fields_dict.academic_plan_html.$wrapper;
+		wrapper.empty();
 
-		// Save to localStorage
-		save_filter("Memora Track", "academic_plan", plan || "");
-
-		// Clear subject when plan changes (to avoid stale selection)
-		if (frm.doc.subject) {
-			frm.set_value("subject", "");
-		}
-
-		// Apply filter on subject field
-		frm.set_query("subject", function () {
-			if (plan) {
-				return {
-					query: "memora_admin.memora_admin.doctype.memora_track.memora_track.get_subjects_for_plan",
-					filters: { plan: plan },
-				};
-			}
-			// No plan selected — show all subjects (no filter)
-			return {};
+		const control = frappe.ui.form.make_control({
+			df: {
+				fieldtype: "Link",
+				fieldname: "academic_plan",
+				label: __("Academic Plan"),
+				options: "Memora Academic Plan",
+				description: __("Pick a plan to filter the Subject dropdown below"),
+				change() {
+					apply_plan_filter(frm, control.get_value());
+				},
+			},
+			parent: wrapper,
+			render_input: true,
 		});
 
-		// Re-trigger the subject field so the dropdown refreshes
-		frm.refresh_field("subject");
+		// Restore last used plan from localStorage
+		const saved = load_filters()["Memora Track"];
+		if (saved?.academic_plan) {
+			control.set_value(saved.academic_plan);
+			apply_plan_filter(frm, saved.academic_plan);
+		}
+
+		frm._plan_control = control;
 	},
 });

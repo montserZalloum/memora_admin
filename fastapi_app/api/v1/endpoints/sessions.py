@@ -24,45 +24,11 @@ from fastapi_app.models.game_session import (
 	StartSessionRequest,
 	StartSessionResponse,
 )
+from fastapi_app.services.wallet import calculate_xp_award
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
-
-
-def _calculate_xp_award(
-	base_xp: int,
-	lesson_xp: int,
-	current_streak: int,
-	max_multiplier_percent: int,
-	is_replay: bool,
-	replay_xp: int,
-	hearts_remaining: int = 0,
-	xp_per_heart: int = 0,
-) -> int:
-	"""Calculate XP to award for completion.
-
-	Per Phase 20:
-	- Fresh completion: (lesson_xp or base_xp) + hearts_bonus
-	- Hearts bonus: remaining_hearts * xp_per_heart (added before streak multiplier)
-	- Replay: fixed replay_xp amount (no hearts bonus)
-	- Streak multiplier: +1% per day, capped at max_multiplier_percent
-	- Streak multiplier applies to BOTH fresh and replay
-	"""
-	if is_replay:
-		base = replay_xp
-	else:
-		base = lesson_xp if lesson_xp > 0 else base_xp
-		# Hearts bonus: remaining hearts * xp_per_heart
-		hearts_bonus = hearts_remaining * xp_per_heart
-		base += hearts_bonus
-
-	# Apply streak multiplier (linear +1% per day, capped)
-	capped_streak = min(current_streak, max_multiplier_percent)
-	multiplier = 1.0 + (capped_streak * 0.01)
-
-	# Floor the result per RESEARCH.md recommendation
-	return int(base * multiplier)
 
 
 @router.get("/current", response_model=CurrentSessionResponse)
@@ -316,7 +282,7 @@ async def end_session(
 	hearts_remaining = max(0, lesson_info.max_hearts - total_fails)
 
 	# Calculate XP with hearts bonus
-	xp_awarded = _calculate_xp_award(
+	xp_awarded = calculate_xp_award(
 		base_xp=settings.base_lesson_xp,
 		lesson_xp=lesson_info.xp,
 		current_streak=streak,

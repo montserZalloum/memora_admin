@@ -81,25 +81,30 @@ def _get_fsrs_scheduler():
 	return Scheduler()
 
 
-def _get_active_season() -> tuple[str, int] | None:
-	"""Get the currently active season ID and seq number.
+def _resolve_player_seasons(players: list[str]) -> dict[str, tuple[str, int]]:
+	"""Batch-resolve season (name, season_seq) for a list of players.
 
-	Returns (season_name, season_seq) or None if no active season.
+	Joins Player Profile -> Season to get the correct season for each player's plan.
+	Returns {player_id: (season_name, season_seq)} for players with a valid season.
+
+	Single query regardless of player count (IN clause).
 	"""
-	today = date.today()
-	result = frappe.db.get_value(
-		"Memora Season",
-		{
-			"is_published": 1,
-			"start_date": ["<=", today],
-			"end_date": [">=", today],
-		},
-		["name", "season_seq"],
+	if not players:
+		return {}
+
+	rows = frappe.db.sql(
+		"""
+		SELECT pp.user AS player, s.name AS season, s.season_seq
+		FROM `tabMemora Player Profile` pp
+		INNER JOIN `tabMemora Academic Plan` ap ON ap.name = pp.plan
+		INNER JOIN `tabMemora Season` s ON s.name = ap.season
+		WHERE pp.user IN %(players)s
+		""",
+		{"players": players},
 		as_dict=True,
 	)
-	if result and result.season_seq is not None:
-		return (result.name, result.season_seq)
-	return None
+
+	return {row.player: (row.season, int(row.season_seq)) for row in rows if row.season_seq is not None}
 
 
 def _map_rating(fail_count: int):
@@ -170,6 +175,7 @@ def _update_memory_state(
 
 
 def _insert_memory_state(
+	season: str,
 	season_seq: int,
 	subject: str,
 	player: str,
@@ -182,23 +188,29 @@ def _insert_memory_state(
 ) -> int:
 	"""Insert new Memory State via raw SQL with BIGINT sequence PK and UUID_TO_BIN.
 
+	Args:
+		season: Season document name (e.g., 'SEAS-00027') -- FK to Memora Season.
+		season_seq: Season sequence number for partition routing.
+		... (other fields as before)
+
 	Returns the new record name (BIGINT).
 	"""
 	next_name = frappe.db.get_next_sequence_val("Memora Memory State")
 	frappe.db.sql(
 		"""
 		INSERT INTO `tabMemora Memory State`
-		(name, season_seq, subject, player, item_id, stage_id, lesson,
+		(name, season, season_seq, subject, player, item_id, stage_id, lesson,
 		 stability, difficulty, next_review,
 		 creation, modified, owner, modified_by, docstatus, idx)
 		VALUES
-		(%(name)s, %(season_seq)s, %(subject)s, %(player)s,
+		(%(name)s, %(season)s, %(season_seq)s, %(subject)s, %(player)s,
 		 UUID_TO_BIN(%(item_id)s), %(stage_id)s, %(lesson)s,
 		 %(stability)s, %(difficulty)s, %(next_review)s,
 		 NOW(6), NOW(6), 'Administrator', 'Administrator', 0, 0)
 		""",
 		{
 			"name": next_name,
+			"season": season,
 			"season_seq": season_seq,
 			"subject": subject,
 			"player": player,
@@ -230,15 +242,6 @@ def process_fsrs_reviews():
 	"""
 	r = get_redis()
 
-	# Get active season (needed for Memory State records)
-	season_info = _get_active_season()
-	if not season_info:
-		logger.warning("No active season found, skipping FSRS processing")
-		return
-
-	active_season, active_season_seq = season_info
-	logger.info(f"FSRS: Active season = {active_season} (seq={active_season_seq})")
-
 	# Get skippable stage types to exclude
 	skippable_types = _get_skippable_stage_types()
 
@@ -265,6 +268,11 @@ def process_fsrs_reviews():
 		logger.debug("No recent interactions for FSRS processing")
 		return
 
+	# Batch-resolve season info for all players in this batch (single JOIN query)
+	unique_players = list({i.player for i in interactions})
+	player_seasons = _resolve_player_seasons(unique_players)
+	logger.info(f"FSRS: Resolved seasons for {len(player_seasons)}/{len(unique_players)} players")
+
 	processed = 0
 	skipped = 0
 	errors_list = []
@@ -275,6 +283,14 @@ def process_fsrs_reviews():
 		stage_id = interaction.stage_id
 		player = interaction.player
 		lesson = interaction.lesson
+
+		# Resolve this player's season (from Player Profile -> Plan -> Season)
+		season_info = player_seasons.get(player)
+		if not season_info:
+			logger.warning(f"No season found for player {player}, skipping interaction")
+			skipped += 1
+			continue
+		player_season, player_season_seq = season_info
 
 		# Look up stage_type from the lesson's child table (Memora Lesson Stage)
 		# stage_id is the child table row name, not stage_title
@@ -334,7 +350,7 @@ def process_fsrs_reviews():
 				continue
 
 			# Look up existing Memory State via raw SQL (BINARY item_id requires UUID_TO_BIN)
-			existing = _lookup_memory_state(player, item_id, active_season_seq)
+			existing = _lookup_memory_state(player, item_id, player_season_seq)
 
 			# Map fail_count to FSRS rating
 			rating = _map_rating(interaction.errors_count or 0)
@@ -375,14 +391,15 @@ def process_fsrs_reviews():
 			if existing:
 				_update_memory_state(
 					name=existing.name,
-					season_seq=active_season_seq,
+					season_seq=player_season_seq,
 					stability=card.stability,
 					difficulty=card.difficulty,
 					next_review=next_review_date,
 				)
 			else:
 				_insert_memory_state(
-					season_seq=active_season_seq,
+					season=player_season,
+					season_seq=player_season_seq,
 					subject=subject,
 					player=player,
 					item_id=item_id,

@@ -8,7 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "filter_section",
-  "academic_plan",
+  "academic_plan_html",
   "main_section",
   "track_title",
   "subject",
@@ -24,18 +24,13 @@
  ],
  "fields": [
   {
-   "collapsible": 1,
    "fieldname": "filter_section",
    "fieldtype": "Section Break",
    "label": "Filter Helper"
   },
   {
-   "description": "Pick a plan to filter the Subject dropdown below",
-   "fieldname": "academic_plan",
-   "fieldtype": "Link",
-   "is_virtual": 1,
-   "label": "Academic Plan",
-   "options": "Memora Academic Plan"
+   "fieldname": "academic_plan_html",
+   "fieldtype": "HTML"
   },
   {
    "fieldname": "main_section",

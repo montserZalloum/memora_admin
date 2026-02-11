@@ -55,6 +55,7 @@ def on_season_updated(doc, method):
             "is_published": "1" if doc.is_published else "0",
             "start_date": str(doc.start_date),
             "end_date": str(doc.end_date),
+            "season_seq": str(doc.season_seq),
         },
     )
 

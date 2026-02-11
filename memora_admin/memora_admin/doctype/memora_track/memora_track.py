@@ -6,10 +6,7 @@ from frappe.model.document import Document
 
 
 class MemoraTrack(Document):
-	@property
-	def academic_plan(self):
-		"""Virtual UI-only filter helper — not stored, not computed server-side."""
-		return None
+	pass
 
 
 @frappe.whitelist()

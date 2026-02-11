@@ -27,15 +27,24 @@ from datetime import date, datetime, timedelta, timezone
 import frappe
 
 
-def _get_active_season_seq() -> int:
-	"""Get the active season's sequence number for partition pruning."""
-	today = date.today()
-	result = frappe.db.get_value(
-		"Memora Season",
-		{"is_published": 1, "start_date": ["<=", today], "end_date": [">=", today]},
-		"season_seq",
+def _get_player_season_seq(player_id: str) -> int:
+	"""Get the season_seq for a player's plan.
+
+	Resolves: Player Profile -> Academic Plan -> Season -> season_seq.
+	Single JOIN query. Falls back to 1 if player has no plan/season assigned.
+	"""
+	result = frappe.db.sql(
+		"""
+		SELECT s.season_seq
+		FROM `tabMemora Player Profile` pp
+		INNER JOIN `tabMemora Academic Plan` ap ON ap.name = pp.plan
+		INNER JOIN `tabMemora Season` s ON s.name = ap.season
+		WHERE pp.user = %(player)s
+		LIMIT 1
+		""",
+		{"player": player_id},
 	)
-	return int(result) if result else 1
+	return int(result[0][0]) if result else 1
 
 
 @frappe.whitelist(allow_guest=False)
@@ -49,7 +58,7 @@ def get_review_overview(player_id: str) -> list[dict]:
 	Returns: [{"subject": "SUBJ-00001", "due_count": 15}, ...]
 	"""
 	today = frappe.utils.today()  # Returns 'YYYY-MM-DD' string
-	season_seq = _get_active_season_seq()
+	season_seq = _get_player_season_seq(player_id)
 	return frappe.db.sql(
 		"""
 		SELECT ms.subject, COUNT(*) as due_count
@@ -78,7 +87,7 @@ def get_due_items(player_id: str, subject_id: str, limit: int = 10) -> dict:
 	"""
 	limit = int(limit)
 	today = frappe.utils.today()
-	season_seq = _get_active_season_seq()
+	season_seq = _get_player_season_seq(player_id)
 
 	rows = frappe.db.sql(
 		"""
@@ -147,7 +156,7 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 	scheduler = _get_fsrs_scheduler()
 	processed = 0
 	now = datetime.now(timezone.utc)
-	season_seq = _get_active_season_seq()
+	season_seq = _get_player_season_seq(player_id)
 
 	for item_data in items_list:
 		item_id = item_data["item_id"]

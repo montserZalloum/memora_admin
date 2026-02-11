@@ -32,6 +32,41 @@ def get_amman_yesterday() -> str:
 	return yesterday.strftime("%Y-%m-%d")
 
 
+def calculate_xp_award(
+	base_xp: int,
+	lesson_xp: int,
+	current_streak: int,
+	max_multiplier_percent: int,
+	is_replay: bool,
+	replay_xp: int,
+	hearts_remaining: int = 0,
+	xp_per_heart: int = 0,
+) -> int:
+	"""Calculate XP to award for lesson completion.
+
+	Per Phase 20:
+	- Fresh completion: (lesson_xp or base_xp) + hearts_bonus
+	- Hearts bonus: remaining_hearts * xp_per_heart (added before streak multiplier)
+	- Replay: fixed replay_xp amount (no hearts bonus)
+	- Streak multiplier: +1% per day, capped at max_multiplier_percent
+	- Streak multiplier applies to BOTH fresh and replay
+	"""
+	if is_replay:
+		base = replay_xp
+	else:
+		base = lesson_xp if lesson_xp > 0 else base_xp
+		# Hearts bonus: remaining hearts * xp_per_heart
+		hearts_bonus = hearts_remaining * xp_per_heart
+		base += hearts_bonus
+
+	# Apply streak multiplier (linear +1% per day, capped)
+	capped_streak = min(current_streak, max_multiplier_percent)
+	multiplier = 1.0 + (capped_streak * 0.01)
+
+	# Floor the result per RESEARCH.md recommendation
+	return int(base * multiplier)
+
+
 # Lua script for atomic streak update with date comparison
 # Per RESEARCH.md: Use Lua for read-check-write atomicity
 STREAK_UPDATE_SCRIPT = """
@@ -40,9 +75,11 @@ local today = ARGV[1]
 local yesterday = ARGV[2]
 local is_replay = tonumber(ARGV[3])
 
--- Get current values
-local current_streak = tonumber(redis.call('HGET', key, 'streak') or 0)
-local streak_date = redis.call('HGET', key, 'streak_date') or ''
+-- Get current values (safe: HGET returns false when field missing)
+local raw_streak = redis.call('HGET', key, 'streak')
+local current_streak = (raw_streak and tonumber(raw_streak)) or 0
+local raw_date = redis.call('HGET', key, 'streak_date')
+local streak_date = raw_date or ''
 
 -- Replays don't update streak per CONTEXT.md
 if is_replay == 1 then
@@ -195,10 +232,9 @@ class WalletService:
 			await self.ensure_hydrated(player_id)
 			data = await self.redis.hgetall(key)
 
-		# Handle bytes/str response from Redis
-		# (redis-py returns bytes by default unless decode_responses=True)
-		xp_raw = data.get(b"xp") or data.get("xp")
-		streak_raw = data.get(b"streak") or data.get("streak")
+		# decode_responses=True on the connection pool ensures string keys
+		xp_raw = data.get("xp")
+		streak_raw = data.get("streak")
 
 		return {
 			"xp": int(xp_raw) if xp_raw else 0,
