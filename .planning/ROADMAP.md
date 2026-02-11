@@ -11,6 +11,7 @@
 - SHIPPED **v1.5 Real-Time Notifications** — Phase 24 (shipped 2026-02-08)
 - SHIPPED **v1.6 FSRS Review System** — Phase 25 (shipped 2026-02-09)
 - SHIPPED **v1.7 Profile Page API** — Phase 26 (shipped 2026-02-10)
+- **v1.8 Memory State Redesign** — Phase 27
 
 ## Phases
 
@@ -224,6 +225,61 @@ Plans:
 - **Logout**: Invalidates session AND removes device (frees device slot)
 - **Avatar validation**: Read valid options from DocType meta (not hardcoded)
 
+### v1.8 Memory State Redesign (Phase 27)
+
+**Milestone Goal:** Replace composite-string PK with BIGINT AUTO_INCREMENT, add item-level FSRS tracking (1 memory state per sub-element within a stage), and implement RANGE partitioning by season for scalability to 25B+ rows.
+
+- [ ] **Phase 27: Memory State Redesign (Item-Level FSRS)** — Schema redesign, item UUID generation, FSRS processor rewrite, review system update
+
+## Phase Details — v1.8
+
+### Phase 27: Memory State Redesign (Item-Level FSRS)
+**Goal**: Replace the composite-string PK with BIGINT AUTO_INCREMENT, add item-level FSRS tracking (1 memory state per sub-element within a stage), and implement RANGE partitioning by season for scalability to 25B+ rows.
+**Depends on**: Phase 25 (FSRS review system must exist), Phase 26 (profile mastery)
+**Success Criteria** (what must be TRUE):
+  1. `Memora Memory State` uses BIGINT AUTO_INCREMENT as primary key (not composite string)
+  2. Each item within a stage gets its own Memory State record with individual stability/difficulty/next_review
+  3. Items are identified by UUID (`item_id`), generated during content creation/editing
+  4. Table is RANGE-partitioned by `season_seq` (INT) — each season in its own partition
+  5. UNIQUE constraint on `(player, item_id, season_seq)` prevents duplicate records
+  6. Composite index `(player, subject, next_review, season_seq)` enables <5ms review queries at 2.5B rows/season
+  7. Session end API accepts per-item results (item_id + fail_count per item)
+  8. Interaction Log includes `item_id` for item-level event tracking
+  9. FSRS processor creates/updates Memory States per item (not per stage)
+  10. Review APIs return due items (with stage context) and accept item-level review results
+  11. Memory mastery counts items (mature/learning/new) instead of stages
+  12. Old season partitions can be dropped instantly via `ALTER TABLE DROP PARTITION`
+  13. Memory states reset per season (fresh FSRS curves)
+**Plans:** 4 plans
+Plans:
+- [ ] 27-01-PLAN.md — Schema foundation: DocType changes (BIGINT PK, item_id, season_seq), after_migrate partitioning + indexes, Interaction Log item_id
+- [ ] 27-02-PLAN.md — Content pipeline & session API: item UUID generation in stage config, JSON generator update, per-item StageResult/session endpoint
+- [ ] 27-03-PLAN.md — FSRS processor rewrite: item-level processing, lookup by (player, item_id, season_seq), Redis cache key update
+- [ ] 27-04-PLAN.md — Review system & profile update: Frappe review APIs at item level, FastAPI review endpoints, mastery item-level counting
+
+**Design Decisions (agreed during brainstorming):**
+- **PK**: BIGINT AUTO_INCREMENT (8 bytes vs ~80 bytes composite string)
+- **Item granularity**: 1 item = 1 sub-element (matching pair, question, fill-blank = individual items)
+- **Item ID**: UUID per item, generated during content creation in stage config editor, stored in config_json
+  - **Storage**: Use `BINARY(16)` instead of `CHAR(36)` — saves 20 bytes per row (16 vs 36 bytes). At 2.5B rows/season = ~50GB saved on this column alone
+  - Internal storage/queries: `UUID_TO_BIN()` for writes, `BIN_TO_UUID()` for reads
+  - API responses and display: always convert to string UUID via `BIN_TO_UUID()` before returning to client
+- **Season scope**: Reset per season — UNIQUE on (player, item_id, season_seq)
+- **Partitioning requirement** (standalone rule for clarity):
+  - MariaDB enforces that ALL unique indexes (including PK) on a partitioned table MUST include the partition column
+  - PK = `(name, season_seq)`
+  - UNIQUE = `(player, item_id, season_seq)`
+  - Composite review index = `(player, subject, next_review, season_seq)`
+  - Any future unique index MUST also include `season_seq` — this is non-negotiable with RANGE partitioning
+- **Partitioning**: RANGE by `season_seq` INT column — automatic pruning, instant archival of old seasons
+- **Index strategy**: (player, subject, next_review, season_seq) for review queries; all indexes include partition key
+- **Buffer pool sizing**: Hot partition (~2.5B rows/season) requires 32-64GB InnoDB buffer pool
+  - Estimated active index working set: ~50-100GB (composite index + UNIQUE index on hot partition)
+  - Without adequate buffer pool, index pages spill to disk and review latency degrades from <5ms to 50-200ms
+  - Team should plan infra accordingly before scaling past 1B rows/season
+- **Frappe compatibility**: Partitioning managed via `after_migrate` hook (raw SQL), same pattern as existing composite index
+- **No data migration needed**: System is new, no existing production data
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -254,5 +310,6 @@ Plans:
 | 24. Real-Time Subscription Notifications | v1.5 | 2/2 | Complete | 2026-02-08 |
 | 25. FSRS Review System | v1.6 | 3/3 | Complete | 2026-02-09 |
 | 26. Profile Page API | v1.7 | 2/2 | Complete | 2026-02-10 |
+| 27. Memory State Redesign | v1.8 | 0/4 | Not started | — |
 
-**Total:** 26 phases complete (76 plans)
+**Total:** 26 phases complete (76 plans), 1 phase planned

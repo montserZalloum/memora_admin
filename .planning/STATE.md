@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.7 Profile Page API — Phase 26 (Profile Page API) Complete
+**Current focus:** v1.8 Memory State Redesign — Phase 27 (Memory State Redesign) planned, not started
 
 ## Current Position
 
-Phase: 26 (Profile Page API)
-Plan: 2 of 2
-Status: Phase complete
-Last activity: 2026-02-10 — Completed 26-02-PLAN.md (ProfilePageService + FastAPI endpoints)
+Phase: 27 (Memory State Redesign — Item-Level FSRS)
+Plan: 0 of 4
+Status: Phase planned, not started
+Last activity: 2026-02-11 — Added Phase 27 to roadmap
 
-Progress: [██████████] 100%
+Progress: [░░░░░░░░░░] 0%
 
 ## Performance Metrics
 
@@ -35,6 +35,7 @@ Progress: [██████████] 100%
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
+| v1.8 Memory State Redesign | 1 | 4 | Planned |
 
 ## Accumulated Context
 
@@ -94,6 +95,13 @@ All decisions logged in PROJECT.md Key Decisions table.
   - Plan 02: ProfilePageService aggregation + 7 FastAPI endpoints
   - Hero section, subject-filtered stats/mastery/activity, avatar selection, logout
   - Redis pipeline for weekly activity, mastery cache with 5-min TTL
+- Phase 27 added: Memory State Redesign (v1.8)
+  - BIGINT AUTO_INCREMENT PK replaces ~80-byte composite string PK
+  - Item-level FSRS: 1 memory state per sub-element (question, matching pair, etc.) instead of per stage
+  - Item IDs: UUID stored as BINARY(16), generated during content creation
+  - RANGE partitioning by season_seq (INT) — instant archival via DROP PARTITION
+  - 4 plans: schema foundation → content pipeline → FSRS rewrite → review/profile update
+  - Depends on Phase 25 (FSRS) and Phase 26 (profile mastery)
 
 ### Blockers/Concerns
 
@@ -102,7 +110,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 
 ## Session Continuity
 
-Last session: 2026-02-10
-Stopped at: Completed 26-02-PLAN.md (ProfilePageService + FastAPI endpoints)
+Last session: 2026-02-11
+Stopped at: Added Phase 27 (Memory State Redesign) to roadmap
 Resume file: None
-Next action: Phase 26 complete. Awaiting next phase.
+Next action: Plan Phase 27 (`/gsd:plan-phase 27`)
