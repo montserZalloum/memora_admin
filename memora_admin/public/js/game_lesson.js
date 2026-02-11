@@ -28,6 +28,8 @@ frappe.ui.form.on('Memora Lesson Stage', {
             open_reveal_dialog(frm, cdt, cdn, row, config_json);
         } else if (row.stage_type === 'SENTENCE_BUILDER') {
             open_sentence_builder_dialog(frm, cdt, cdn, row, config_json);
+        } else if (row.stage_type === 'MINDMAP') {
+            open_mindmap_dialog(frm, cdt, cdn, row, config_json);
         } else {
             frappe.msgprint("لا يوجد محرر لهذا النوع بعد");
         }
@@ -237,4 +239,162 @@ function open_sentence_builder_dialog(frm, cdt, cdn, row, data) {
     });
 
     d.show();
+}
+
+// =================================================
+// 🧠 4. نافذة الخريطة الذهنية (Mind Map)
+// =================================================
+function open_mindmap_dialog(frm, cdt, cdn, row, data) {
+    let root_label = data.label || '';
+    let root_description = data.description || '';
+
+    // تحويل الشجرة المحفوظة إلى قائمة مسطحة مرتبة
+    let existing_data = [];
+    if (data.children && Array.isArray(data.children)) {
+        data.children.forEach(branch => {
+            existing_data.push({
+                node_type: 'فرع',
+                label: branch.label,
+                description: branch.description || ''
+            });
+            if (branch.children && Array.isArray(branch.children)) {
+                branch.children.forEach(item => {
+                    existing_data.push({
+                        node_type: 'عنصر',
+                        label: item.label,
+                        description: item.description || ''
+                    });
+                });
+            }
+        });
+    }
+
+    let d = new frappe.ui.Dialog({
+        title: 'إعدادات الخريطة الذهنية (Mind Map)',
+        fields: [
+            {
+                label: 'عنوان الخريطة (العنوان الرئيسي)',
+                fieldname: 'root_label',
+                fieldtype: 'Data',
+                reqd: 1,
+                default: root_label
+            },
+            {
+                label: 'وصف الخريطة',
+                fieldname: 'root_description',
+                fieldtype: 'Small Text',
+                default: root_description
+            },
+            {
+                fieldtype: 'Section Break',
+                label: 'محتوى الخريطة'
+            },
+            {
+                label: '',
+                fieldname: 'nodes_table',
+                fieldtype: 'Table',
+                cannot_add_rows: false,
+                description: 'أضف "فرع" للفروع الرئيسية، و"عنصر" للتفاصيل تحت كل فرع. كل عنصر ينتمي للفرع الذي يسبقه في القائمة.',
+                fields: [
+                    {
+                        label: 'النوع',
+                        fieldname: 'node_type',
+                        fieldtype: 'Select',
+                        options: 'فرع\nعنصر',
+                        in_list_view: 1,
+                        reqd: 1,
+                        columns: 2
+                    },
+                    {
+                        label: 'العنوان',
+                        fieldname: 'label',
+                        fieldtype: 'Data',
+                        in_list_view: 1,
+                        reqd: 1,
+                        columns: 4
+                    },
+                    {
+                        label: 'الوصف',
+                        fieldname: 'description',
+                        fieldtype: 'Data',
+                        in_list_view: 1,
+                        columns: 4
+                    }
+                ],
+                data: existing_data,
+                get_data: () => existing_data
+            }
+        ],
+        size: 'extra-large',
+        primary_action_label: 'حفظ (Save)',
+        primary_action: function(values) {
+            let children = [];
+            let current_branch = null;
+            let used_ids = new Set();
+
+            // التحقق: أول صف يجب أن يكون "فرع"
+            if (values.nodes_table.length > 0 && values.nodes_table[0].node_type !== 'فرع') {
+                frappe.msgprint('يجب أن يكون الصف الأول من نوع "فرع". لا يمكن إضافة عنصر بدون فرع يسبقه.');
+                return;
+            }
+
+            for (let node of values.nodes_table) {
+                let id = _generate_mindmap_id(used_ids);
+                used_ids.add(id);
+
+                if (node.node_type === 'فرع') {
+                    current_branch = {
+                        id: id,
+                        label: node.label,
+                        children: []
+                    };
+                    if (node.description) current_branch.description = node.description;
+                    children.push(current_branch);
+                } else {
+                    // عنصر فرعي — ينتمي للفرع الحالي
+                    if (!current_branch) {
+                        frappe.msgprint('لا يمكن إضافة عنصر بدون فرع يسبقه.');
+                        return;
+                    }
+                    let item = {
+                        id: id,
+                        label: node.label
+                    };
+                    if (node.description) item.description = node.description;
+                    current_branch.children.push(item);
+                }
+            }
+
+            if (children.length === 0) {
+                frappe.msgprint('يجب إضافة فرع واحد على الأقل.');
+                return;
+            }
+
+            let config_payload = {
+                label: values.root_label,
+                children: children
+            };
+            if (values.root_description) {
+                config_payload.description = values.root_description;
+            }
+
+            frappe.model.set_value(cdt, cdn, 'config_json', JSON.stringify(config_payload, null, 2));
+            d.hide();
+            frappe.show_alert({message: 'تم حفظ الخريطة الذهنية', indicator: 'green'});
+        }
+    });
+
+    d.show();
+}
+
+function _generate_mindmap_id(used_ids) {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let id;
+    do {
+        id = '';
+        for (let i = 0; i < 3; i++) {
+            id += chars.charAt(Math.floor(Math.random() * chars.length));
+        }
+    } while (used_ids.has(id));
+    return id;
 }
