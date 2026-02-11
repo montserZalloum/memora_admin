@@ -12,6 +12,7 @@
 - SHIPPED **v1.6 FSRS Review System** — Phase 25 (shipped 2026-02-09)
 - SHIPPED **v1.7 Profile Page API** — Phase 26 (shipped 2026-02-10)
 - SHIPPED **v1.8 Memory State Redesign** — Phase 27 (shipped 2026-02-11)
+- **v1.9 Tech Debt & Reliability Fixes** — Phase 28
 
 ## Phases
 
@@ -283,6 +284,35 @@ Plans:
 - **Frappe compatibility**: Partitioning managed via `after_migrate` hook (raw SQL), same pattern as existing composite index
 - **No data migration needed**: System is new, no existing production data
 
+### v1.9 Tech Debt & Reliability Fixes (Phase 28)
+
+**Milestone Goal:** Fix data reliability issues, eliminate code duplication across FastAPI/Frappe runtimes, and clean up dead code — hardening the codebase for production scale.
+
+- [ ] **Phase 28: Tech Debt & Reliability Fixes** — Interaction buffer race condition fix, shared Redis constants, deps.py DRY cleanup, dead code removal, and code quality improvements
+
+## Phase Details — v1.9
+
+### Phase 28: Tech Debt & Reliability Fixes
+**Goal**: Fix the interaction buffer data loss race condition, unify duplicated Redis key constants between FastAPI and Frappe, consolidate per-request Redis client creation in deps.py, and clean up dead code (unused decorators, deprecated models, bytes-handling dead paths, magic strings).
+**Depends on**: Phase 27 (all functional work complete; this is pure hardening)
+**Success Criteria** (what must be TRUE):
+  1. `flush_interaction_buffer` uses `inserted` count (not `count`) for LTRIM, preventing data loss when individual inserts fail
+  2. Redis key constants (`DIRTY_PROGRESS_KEY`, `DIRTY_WALLETS_KEY`, `INTERACTION_BUFFER_KEY`) defined in ONE shared location importable by both FastAPI and Frappe sync tasks
+  3. `deps.py` service factories use a shared `get_redis` dependency (already defined but unused) instead of 16 copy-pasted `redis.Redis(connection_pool=...)` calls
+  4. Dead code removed: `log_slow_redis` decorator, `CompleteRequest`/`CompleteResponse` deprecated models, bytes-handling paths in `WalletService.get_wallet`
+  5. `"System Manager"` magic string extracted to a constant and used via reusable `require_admin` dependency
+  6. `_calculate_xp_award` moved from endpoint file to service layer for testability and reuse
+  7. Lua script `tonumber(redis.call('HGET', ...) or 0)` rewritten to safe `raw and tonumber(raw) or 0` pattern
+  8. `player_id` path parameters have Pydantic `Path` validation with regex constraint
+  9. `services/__init__.py` exports updated to include all current services (or removed entirely)
+  10. Dual route decorators replaced with `redirect_slashes` configuration
+**Plans:** 4 plans
+Plans:
+- [ ] 28-01-PLAN.md — Critical LTRIM data-loss fix + shared Redis key constants
+- [ ] 28-02-PLAN.md — deps.py DRY consolidation (shared get_redis) + dead code removal
+- [ ] 28-03-PLAN.md — Service-layer improvements (xp move, Lua safety, bytes cleanup)
+- [ ] 28-04-PLAN.md — Admin dependency, Path validation, redirect_slashes cleanup
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -314,5 +344,6 @@ Plans:
 | 25. FSRS Review System | v1.6 | 3/3 | Complete | 2026-02-09 |
 | 26. Profile Page API | v1.7 | 2/2 | Complete | 2026-02-10 |
 | 27. Memory State Redesign | v1.8 | 5/5 | Complete | 2026-02-11 |
+| 28. Tech Debt & Reliability Fixes | v1.9 | 0/4 | Not Started | — |
 
-**Total:** 27 phases (81 plans, 81 complete)
+**Total:** 28 phases (85 plans, 81 complete)
