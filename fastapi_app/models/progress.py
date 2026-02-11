@@ -2,36 +2,6 @@
 
 from pydantic import BaseModel, computed_field
 
-# DEPRECATED: These models were used by the legacy POST /progress/complete endpoint
-# which was removed in Phase 20. Use POST /sessions/end with EndSessionRequest/EndSessionResponse instead.
-# Kept for backward compatibility with tests and external references.
-
-
-class CompleteRequest(BaseModel):
-	"""DEPRECATED: Request body for legacy lesson completion endpoint.
-
-	Removed in Phase 20. Use POST /sessions/end with EndSessionRequest instead.
-	Per CONTEXT.md: subject + lesson identifier
-	"""
-
-	subject: str  # e.g., "MATH-G5"
-	lesson: str  # e.g., "LESSON-001"
-
-
-class CompleteResponse(BaseModel):
-	"""DEPRECATED: Response for legacy lesson completion endpoint.
-
-	Removed in Phase 20. Use POST /sessions/end with EndSessionResponse instead.
-	Per CONTEXT.md: Returns completion status plus reward info.
-	Per Phase 5: Include XP awarded and replay status.
-	"""
-
-	success: bool = True
-	xp_awarded: int = 0  # XP awarded this completion
-	is_replay: bool = False  # Whether this was a replay
-	streak: int = 0  # Current streak after update
-
-
 # Hierarchy models for unlock calculation
 
 
@@ -286,53 +256,6 @@ class SubjectSummary(BaseModel):
 	percentage: float
 	completed: int
 	total: int
-
-
-# --- SSE Streaming Models (for documentation) ---
-
-
-class SSESubjectEvent(BaseModel):
-	"""Subject summary event payload for SSE streaming.
-
-	First event sent, arrives within 10ms of request.
-	"""
-
-	subject_id: str
-	completed: int
-	total: int
-	percentage: float
-
-
-class SSETopicData(BaseModel):
-	"""Topic data within SSE track event."""
-
-	topic_id: str
-	completed: int
-	total: int
-	percentage: float
-
-
-class SSEUnitData(BaseModel):
-	"""Unit data within SSE track event."""
-
-	unit_id: str
-	completed: int
-	total: int
-	percentage: float
-	topics: list[SSETopicData]
-
-
-class SSETrackEvent(BaseModel):
-	"""Track event payload for SSE streaming.
-
-	Sent progressively for each track in subject.
-	"""
-
-	track_id: str
-	completed: int
-	total: int
-	percentage: float
-	units: list[SSEUnitData]
 
 
 # --- Granular Endpoint Models (Phase 17.2) ---

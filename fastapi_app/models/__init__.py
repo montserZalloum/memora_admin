@@ -10,8 +10,6 @@ from fastapi_app.models.auth import (
 )
 from fastapi_app.models.plan import PlanManifest, PlanSubject
 from fastapi_app.models.progress import (
-    CompleteRequest,
-    CompleteResponse,
     LessonInfo,
     SubjectHierarchy,
     SubjectProgress,
@@ -25,24 +23,18 @@ from fastapi_app.models.progress import (
 )
 
 __all__ = [
-    # Access control models
-    "SeasonMeta",
-    # Auth models
     "FrappeUser",
+    "LessonInfo",
     "LoginRequest",
-    "RefreshRequest",
-    "TokenPayload",
-    "TokenResponse",
-    # Plan models
     "PlanManifest",
     "PlanSubject",
-    # Progress models
-    "CompleteRequest",
-    "CompleteResponse",
-    "LessonInfo",
+    "RefreshRequest",
+    "SeasonMeta",
     "SubjectHierarchy",
     "SubjectProgress",
     "SubjectSummary",
+    "TokenPayload",
+    "TokenResponse",
     "TopicInfo",
     "TopicProgress",
     "TrackInfo",
