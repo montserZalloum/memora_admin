@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.8 Memory State Redesign — Phase 27 complete (all 4 plans + gap closure)
+**Current focus:** v1.9 Tech Debt & Reliability Fixes — Phase 28
 
 ## Current Position
 
-Phase: 27 (Memory State Redesign — Item-Level FSRS)
-Plan: 5 of 5 (gap closure)
-Status: Phase complete (including gap closure)
-Last activity: 2026-02-11 — Completed 27-05-PLAN.md (Skippable Stage item_id Fix)
+Phase: 28 (Tech Debt & Reliability Fixes)
+Plan: 1 of 4
+Status: In progress
+Last activity: 2026-02-11 — Completed 28-01-PLAN.md (LTRIM Race Condition Fix & Constant Unification)
 
-Progress: [██████████] 100%
+Progress: [████████████████████████░░░░░░░░░░░░░░░░] ~83/85 plans (Phase 28: 1/4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 81
+- Total plans completed: 82
 - Milestones shipped: 8
 
 **By Milestone:**
@@ -85,6 +85,7 @@ All decisions logged in PROJECT.md Key Decisions table.
 - next_review stored as date (not datetime) in review submit matching 27-03 schema change
 - Editor uses frappe.db.get_value for client-side is_skippable check (not frappe.call with whitelisted method)
 - Skippable stage item_id keys omitted entirely (not set to null) to keep config clean
+- Cross-module constant sharing: Frappe sync tasks import from fastapi_app.core.constants (single source of truth)
 
 ### Pending Todos
 
@@ -116,6 +117,10 @@ All decisions logged in PROJECT.md Key Decisions table.
   - Plan 04: Review/profile update (item-level review APIs, season_seq partition pruning, mastery counts items)
   - Plan 05: Gap closure - skippable stage item_id fix (editor + build generators)
   - All layers updated: schema -> content -> FSRS computation -> review/profile APIs
+- Phase 28 added: Tech Debt & Reliability Fixes (v1.9)
+  - Critical: interaction buffer LTRIM data loss fix
+  - High: shared Redis constants, deps.py DRY consolidation
+  - Medium: dead code cleanup, magic strings, Lua script safety, input validation
 
 ### Blockers/Concerns
 
@@ -125,6 +130,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 27-05-PLAN.md (Skippable Stage item_id Fix) — Phase 27 gap closure complete
+Stopped at: Completed 28-01-PLAN.md (LTRIM Race Condition Fix & Constant Unification)
 Resume file: None
-Next action: None — v1.8 Memory State Redesign fully shipped (including gap closure)
+Next action: Execute 28-02-PLAN.md
