@@ -63,6 +63,8 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None) -> dict:
 	- Learning: 0 < stability < 21.0 days (reviewed but not yet mature)
 	- New: stability == 0 (initial FSRS state, first review)
 
+	Counts items (each Memory State row = 1 item) with season_seq for partition pruning.
+
 	Args:
 		player_id: User identifier (email).
 		subject_id: Optional subject filter. None or JSON "null" returns all subjects.
@@ -74,6 +76,17 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None) -> dict:
 	if subject_id in (None, "null", ""):
 		subject_id = None
 
+	# Get active season seq for partition pruning
+	from datetime import date as date_type
+
+	today = date_type.today()
+	season_seq = frappe.db.get_value(
+		"Memora Season",
+		{"is_published": 1, "start_date": ["<=", today], "end_date": [">=", today]},
+		"season_seq",
+	)
+	season_seq = int(season_seq) if season_seq else 1
+
 	subject_filter = "AND subject = %(subject)s" if subject_id else ""
 
 	result = frappe.db.sql(
@@ -84,9 +97,10 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None) -> dict:
 			COALESCE(SUM(CASE WHEN stability = 0 THEN 1 ELSE 0 END), 0) as new_items
 		FROM `tabMemora Memory State`
 		WHERE player = %(player)s
+		  AND season_seq = %(season_seq)s
 		{subject_filter}
 	""",
-		{"player": player_id, "subject": subject_id},
+		{"player": player_id, "season_seq": season_seq, "subject": subject_id},
 		as_dict=True,
 	)
 

@@ -1,30 +1,44 @@
 """Frappe whitelisted API for FSRS review operations.
 
 Provides three endpoints:
-1. get_review_overview - Due review counts per subject for a player
-2. get_due_stages - Due stages for a specific subject (FIFO order)
-3. submit_reviews - Batch submit review results with inline FSRS computation
+1. get_review_overview - Due review counts per subject for a player (item-level)
+2. get_due_items - Due items for a specific subject (FIFO order)
+3. submit_reviews - Batch submit review results with inline FSRS computation (item-level)
+
+All queries include season_seq for partition pruning on the Memory State table.
 """
 
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import frappe
+
+
+def _get_active_season_seq() -> int:
+	"""Get the active season's sequence number for partition pruning."""
+	today = date.today()
+	result = frappe.db.get_value(
+		"Memora Season",
+		{"is_published": 1, "start_date": ["<=", today], "end_date": [">=", today]},
+		"season_seq",
+	)
+	return int(result) if result else 1
 
 
 @frappe.whitelist(allow_guest=False)
 def get_review_overview(player_id: str) -> list[dict]:
 	"""Get count of due reviews per subject for a player.
 
-	Only counts Memory State records whose stage still exists in the parent lesson
-	(JOIN with Memora Lesson Stage). This ensures the overview count is consistent
-	with what get_due_stages would actually return.
+	Counts items (each Memory State row = 1 item) with season_seq for partition pruning.
+	Only counts items whose stage still exists in the parent lesson
+	(INNER JOIN with Memora Lesson Stage).
 
 	Returns: [{"subject": "SUBJ-00001", "due_count": 15}, ...]
 	"""
 	today = frappe.utils.today()  # Returns 'YYYY-MM-DD' string
+	season_seq = _get_active_season_seq()
 	return frappe.db.sql(
 		"""
 		SELECT ms.subject, COUNT(*) as due_count
@@ -33,34 +47,33 @@ def get_review_overview(player_id: str) -> list[dict]:
 			ON ls.name = ms.stage_id AND ls.parent = ms.lesson
 		WHERE ms.player = %(player)s
 		  AND ms.next_review <= %(today)s
+		  AND ms.season_seq = %(season_seq)s
 		GROUP BY ms.subject
 		""",
-		{"player": player_id, "today": today},
+		{"player": player_id, "today": today, "season_seq": season_seq},
 		as_dict=True,
 	)
 
 
 @frappe.whitelist(allow_guest=False)
-def get_due_stages(player_id: str, subject_id: str, limit: int = 10) -> dict:
-	"""Get up to N due stages for a subject, oldest first (FIFO).
+def get_due_items(player_id: str, subject_id: str, limit: int = 10) -> dict:
+	"""Get up to N due items for a subject, oldest first (FIFO).
 
-	Uses a JOIN with Memora Lesson Stage to only return stages that still exist
-	in their parent lesson (skips removed/renamed stages). Returns stage_type
-	for client rendering.
+	Returns items with their stage context (stage_id, lesson, stage_type).
+	Uses BIN_TO_UUID polyfill to convert BINARY(16) item_id to string UUID.
+	Includes season_seq for partition pruning.
 
-	has_more is computed from the total validated count, not raw Memory State count,
-	ensuring consistency with the overview endpoint.
-
-	Returns: {"stages": [...], "has_more": bool}
+	Returns: {"items": [...], "has_more": bool}
 	"""
 	limit = int(limit)
 	today = frappe.utils.today()
+	season_seq = _get_active_season_seq()
 
-	# JOIN ensures we only get stages that still exist in their lesson.
-	# Fetch limit+1 to detect has_more without needing a separate COUNT query.
 	rows = frappe.db.sql(
 		"""
-		SELECT ms.name as memory_state_name, ms.stage_id, ms.lesson,
+		SELECT ms.name as memory_state_name,
+		       BIN_TO_UUID(ms.item_id) as item_id,
+		       ms.stage_id, ms.lesson,
 		       ms.stability, ms.difficulty, ms.next_review,
 		       ls.stage_type
 		FROM `tabMemora Memory State` ms
@@ -69,6 +82,7 @@ def get_due_stages(player_id: str, subject_id: str, limit: int = 10) -> dict:
 		WHERE ms.player = %(player)s
 		  AND ms.subject = %(subject)s
 		  AND ms.next_review <= %(today)s
+		  AND ms.season_seq = %(season_seq)s
 		ORDER BY ms.next_review ASC
 		LIMIT %(fetch_limit)s
 		""",
@@ -76,72 +90,72 @@ def get_due_stages(player_id: str, subject_id: str, limit: int = 10) -> dict:
 			"player": player_id,
 			"subject": subject_id,
 			"today": today,
+			"season_seq": season_seq,
 			"fetch_limit": limit + 1,
 		},
 		as_dict=True,
 	)
 
-	# If we got more than limit rows, there are more stages available
 	has_more = len(rows) > limit
 
-	# Return only up to limit stages
 	result = [
 		{
+			"item_id": row.item_id,
 			"stage_id": row.stage_id,
 			"lesson_id": row.lesson,
 			"stage_type": row.stage_type,
-			"memory_state_name": row.memory_state_name,
 			"stability": row.stability,
 			"difficulty": row.difficulty,
 		}
 		for row in rows[:limit]
 	]
 
-	return {"stages": result, "has_more": has_more}
+	return {"items": result, "has_more": has_more}
 
 
 @frappe.whitelist(allow_guest=False)
-def submit_reviews(player_id: str, subject_id: str, stages: str) -> dict:
-	"""Accept batch review results and update Memory State with FSRS computation.
+def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
+	"""Accept batch review results at item level and update Memory State with FSRS.
 
 	Args:
 		player_id: Player identifier
 		subject_id: Subject identifier
-		stages: JSON string of reviewed stages, each with:
-			- stage_id (str): Stage identifier
+		items: JSON string of reviewed items, each with:
+			- item_id (str): UUID string
 			- fail_count (int): Number of errors (0=Good, 1=Hard, 2+=Again)
 
 	Returns: {"processed": int, "remaining_due": int, "has_more": bool}
 	"""
 	from fsrs import Card, Rating
 
-	if isinstance(stages, str):
-		stages_list = json.loads(stages)
+	if isinstance(items, str):
+		items_list = json.loads(items)
 	else:
-		stages_list = stages
+		items_list = items
 
 	scheduler = _get_fsrs_scheduler()
 	processed = 0
 	now = datetime.now(timezone.utc)
+	season_seq = _get_active_season_seq()
 
-	for stage_data in stages_list:
-		stage_id = stage_data["stage_id"]
-		fail_count = stage_data.get("fail_count", 0)
+	for item_data in items_list:
+		item_id = item_data["item_id"]
+		fail_count = item_data.get("fail_count", 0)
 
-		# Look up existing Memory State
+		# Look up existing Memory State by (player, item_id, season_seq)
 		memory_state = frappe.db.sql(
 			"""
 			SELECT name, stability, difficulty, next_review
 			FROM `tabMemora Memory State`
 			WHERE player = %(player)s
-			  AND subject = %(subject)s
-			  AND stage_id = %(stage_id)s
+			  AND item_id = UUID_TO_BIN(%(item_id)s)
+			  AND season_seq = %(season_seq)s
 			LIMIT 1
 			""",
 			{
 				"player": player_id,
-				"subject": subject_id,
-				"stage_id": stage_id,
+				"item_id": item_id,
+				"season_seq": season_seq,
 			},
 			as_dict=True,
 		)
@@ -172,18 +186,26 @@ def submit_reviews(player_id: str, subject_id: str, stages: str) -> dict:
 		tomorrow = date.today() + timedelta(days=1)
 		if next_date < tomorrow:
 			next_date = tomorrow
-		next_review_naive = datetime.combine(next_date, time.min)
+		next_review_date = next_date
 
-		# Update Memory State record
-		frappe.db.set_value(
-			"Memora Memory State",
-			ms.name,
+		# Update via raw SQL (partition-aware)
+		frappe.db.sql(
+			"""
+			UPDATE `tabMemora Memory State`
+			SET stability = %(stability)s,
+			    difficulty = %(difficulty)s,
+			    next_review = %(next_review)s,
+			    modified = NOW(6)
+			WHERE name = %(name)s
+			  AND season_seq = %(season_seq)s
+			""",
 			{
+				"name": ms.name,
+				"season_seq": season_seq,
 				"stability": card.stability,
 				"difficulty": card.difficulty,
-				"next_review": next_review_naive,
+				"next_review": next_review_date,
 			},
-			update_modified=True,
 		)
 
 		processed += 1
@@ -191,7 +213,7 @@ def submit_reviews(player_id: str, subject_id: str, stages: str) -> dict:
 	if processed > 0:
 		frappe.db.commit()
 
-	# Return remaining due count (only stages that still exist in their lesson)
+	# Remaining due count (items whose stage still exists)
 	today = frappe.utils.today()
 	remaining_result = frappe.db.sql(
 		"""
@@ -202,8 +224,9 @@ def submit_reviews(player_id: str, subject_id: str, stages: str) -> dict:
 		WHERE ms.player = %(player)s
 		  AND ms.subject = %(subject)s
 		  AND ms.next_review <= %(today)s
+		  AND ms.season_seq = %(season_seq)s
 		""",
-		{"player": player_id, "subject": subject_id, "today": today},
+		{"player": player_id, "subject": subject_id, "today": today, "season_seq": season_seq},
 	)
 	remaining_due = remaining_result[0][0] if remaining_result else 0
 
