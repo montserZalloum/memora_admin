@@ -12,7 +12,7 @@
 - SHIPPED **v1.6 FSRS Review System** — Phase 25 (shipped 2026-02-09)
 - SHIPPED **v1.7 Profile Page API** — Phase 26 (shipped 2026-02-10)
 - SHIPPED **v1.8 Memory State Redesign** — Phase 27 (shipped 2026-02-11)
-- **v1.9 Tech Debt & Reliability Fixes** — Phase 28
+- SHIPPED **v1.9 Tech Debt & Reliability Fixes** — Phase 28 (shipped 2026-02-11)
 
 ## Phases
 
@@ -288,7 +288,7 @@ Plans:
 
 **Milestone Goal:** Fix data reliability issues, eliminate code duplication across FastAPI/Frappe runtimes, and clean up dead code — hardening the codebase for production scale.
 
-- [ ] **Phase 28: Tech Debt & Reliability Fixes** — Interaction buffer race condition fix, shared Redis constants, deps.py DRY cleanup, dead code removal, and code quality improvements
+- [x] **Phase 28: Tech Debt & Reliability Fixes** — Interaction buffer race condition fix, shared Redis constants, deps.py DRY cleanup, dead code removal, and code quality improvements
 
 ## Phase Details — v1.9
 
@@ -308,10 +308,10 @@ Plans:
   10. Dual route decorators replaced with `redirect_slashes` configuration
 **Plans:** 4 plans
 Plans:
-- [ ] 28-01-PLAN.md — Critical LTRIM data-loss fix + shared Redis key constants
-- [ ] 28-02-PLAN.md — deps.py DRY consolidation (shared get_redis) + dead code removal
-- [ ] 28-03-PLAN.md — Service-layer improvements (xp move, Lua safety, bytes cleanup)
-- [ ] 28-04-PLAN.md — Admin dependency, Path validation, redirect_slashes cleanup
+- [x] 28-01-PLAN.md — Critical LTRIM data-loss fix + shared Redis key constants
+- [x] 28-02-PLAN.md — deps.py DRY consolidation (shared get_redis) + dead code removal
+- [x] 28-03-PLAN.md — Service-layer improvements (xp move, Lua safety, bytes cleanup)
+- [x] 28-04-PLAN.md — Admin dependency, Path validation, redirect_slashes cleanup
 
 ## Progress
 
@@ -344,6 +344,6 @@ Plans:
 | 25. FSRS Review System | v1.6 | 3/3 | Complete | 2026-02-09 |
 | 26. Profile Page API | v1.7 | 2/2 | Complete | 2026-02-10 |
 | 27. Memory State Redesign | v1.8 | 5/5 | Complete | 2026-02-11 |
-| 28. Tech Debt & Reliability Fixes | v1.9 | 0/4 | Not Started | — |
+| 28. Tech Debt & Reliability Fixes | v1.9 | 4/4 | Complete | 2026-02-11 |
 
-**Total:** 28 phases (85 plans, 81 complete)
+**Total:** 28 phases (85 plans, 85 complete)
