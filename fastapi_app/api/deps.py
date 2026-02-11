@@ -88,18 +88,16 @@ CurrentUser = Annotated[TokenPayload, Depends(get_current_user)]
 # --- Service Dependencies ---
 
 
-async def get_season_service(request: Request) -> SeasonService:
+async def get_season_service(redis_client: RedisClient) -> SeasonService:
 	"""Get SeasonService with Redis from app state."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	return SeasonService(redis_client)
 
 
 SeasonServiceDep = Annotated[SeasonService, Depends(get_season_service)]
 
 
-async def get_access_service(request: Request) -> AccessService:
+async def get_access_service(redis_client: RedisClient) -> AccessService:
 	"""Get AccessService with Redis and FrappeClient from app state."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return AccessService(redis_client, frappe_client=frappe_client)
 
@@ -107,9 +105,8 @@ async def get_access_service(request: Request) -> AccessService:
 AccessServiceDep = Annotated[AccessService, Depends(get_access_service)]
 
 
-async def get_progress_service(request: Request) -> ProgressService:
+async def get_progress_service(redis_client: RedisClient) -> ProgressService:
 	"""Get ProgressService with Redis and FrappeClient from app state."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return ProgressService(redis_client, frappe_client=frappe_client)
 
@@ -117,9 +114,8 @@ async def get_progress_service(request: Request) -> ProgressService:
 ProgressServiceDep = Annotated[ProgressService, Depends(get_progress_service)]
 
 
-async def get_wallet_service(request: Request) -> WalletService:
+async def get_wallet_service(redis_client: RedisClient) -> WalletService:
 	"""Get WalletService with Redis and FrappeClient from app state."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return WalletService(redis_client, frappe_client=frappe_client)
 
@@ -127,36 +123,32 @@ async def get_wallet_service(request: Request) -> WalletService:
 WalletServiceDep = Annotated[WalletService, Depends(get_wallet_service)]
 
 
-async def get_device_service(request: Request) -> DeviceService:
+async def get_device_service(redis_client: RedisClient) -> DeviceService:
 	"""Get DeviceService with Redis from app state."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	return DeviceService(redis_client)
 
 
 DeviceServiceDep = Annotated[DeviceService, Depends(get_device_service)]
 
 
-async def get_game_session_service(request: Request) -> GameSessionService:
+async def get_game_session_service(redis_client: RedisClient) -> GameSessionService:
 	"""Get GameSessionService with Redis from app state."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	return GameSessionService(redis_client)
 
 
 GameSessionServiceDep = Annotated[GameSessionService, Depends(get_game_session_service)]
 
 
-async def get_leaderboard_service(request: Request) -> LeaderboardService:
+async def get_leaderboard_service(redis_client: RedisClient) -> LeaderboardService:
 	"""Get LeaderboardService with Redis from app state."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	return LeaderboardService(redis_client)
 
 
 LeaderboardServiceDep = Annotated[LeaderboardService, Depends(get_leaderboard_service)]
 
 
-async def get_stats_service(request: Request) -> StatsService:
+async def get_stats_service(redis_client: RedisClient) -> StatsService:
 	"""Get StatsService with Redis from app state."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	return StatsService(redis_client)
 
 
@@ -175,9 +167,8 @@ async def get_frappe_client() -> FrappeClient:
 	return _frappe_client
 
 
-async def get_settings_service(request: Request) -> SettingsService:
+async def get_settings_service(redis_client: RedisClient) -> SettingsService:
 	"""Get SettingsService with Redis and FrappeClient."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return SettingsService(redis_client, frappe_client)
 
@@ -185,9 +176,8 @@ async def get_settings_service(request: Request) -> SettingsService:
 SettingsServiceDep = Annotated[SettingsService, Depends(get_settings_service)]
 
 
-async def get_hierarchy_service(request: Request) -> HierarchyService:
+async def get_hierarchy_service(redis_client: RedisClient) -> HierarchyService:
 	"""Get HierarchyService with Redis and FrappeClient."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return HierarchyService(redis_client, frappe_client)
 
@@ -195,9 +185,8 @@ async def get_hierarchy_service(request: Request) -> HierarchyService:
 HierarchyServiceDep = Annotated[HierarchyService, Depends(get_hierarchy_service)]
 
 
-async def get_plan_service(request: Request) -> PlanService:
+async def get_plan_service(redis_client: RedisClient) -> PlanService:
 	"""Get PlanService with Redis and FrappeClient."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return PlanService(redis_client, frappe_client)
 
@@ -205,9 +194,8 @@ async def get_plan_service(request: Request) -> PlanService:
 PlanServiceDep = Annotated[PlanService, Depends(get_plan_service)]
 
 
-async def get_profile_service(request: Request) -> ProfileService:
+async def get_profile_service(redis_client: RedisClient) -> ProfileService:
 	"""Get ProfileService with Redis and FrappeClient."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return ProfileService(redis_client, frappe_client)
 
@@ -215,9 +203,8 @@ async def get_profile_service(request: Request) -> ProfileService:
 ProfileServiceDep = Annotated[ProfileService, Depends(get_profile_service)]
 
 
-async def get_profile_page_service(request: Request) -> ProfilePageService:
+async def get_profile_page_service(redis_client: RedisClient) -> ProfilePageService:
 	"""Get ProfilePageService with Redis and FrappeClient."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return ProfilePageService(redis_client, frappe_client)
 
@@ -225,9 +212,8 @@ async def get_profile_page_service(request: Request) -> ProfilePageService:
 ProfilePageServiceDep = Annotated[ProfilePageService, Depends(get_profile_page_service)]
 
 
-async def get_catalog_service(request: Request) -> CatalogService:
+async def get_catalog_service(redis_client: RedisClient) -> CatalogService:
 	"""Get CatalogService with Redis and FrappeClient."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return CatalogService(redis_client, frappe_client)
 
@@ -235,9 +221,8 @@ async def get_catalog_service(request: Request) -> CatalogService:
 CatalogServiceDep = Annotated[CatalogService, Depends(get_catalog_service)]
 
 
-async def get_purchase_service(request: Request) -> PurchaseService:
+async def get_purchase_service(redis_client: RedisClient) -> PurchaseService:
 	"""Get PurchaseService with Redis and FrappeClient."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return PurchaseService(redis_client, frappe_client)
 
@@ -245,9 +230,8 @@ async def get_purchase_service(request: Request) -> PurchaseService:
 PurchaseServiceDep = Annotated[PurchaseService, Depends(get_purchase_service)]
 
 
-async def get_review_service(request: Request) -> ReviewService:
+async def get_review_service(redis_client: RedisClient) -> ReviewService:
 	"""Get ReviewService with Redis and FrappeClient."""
-	redis_client = redis.Redis(connection_pool=request.app.state.redis_pool)
 	frappe_client = await get_frappe_client()
 	return ReviewService(redis_client, frappe_client)
 
