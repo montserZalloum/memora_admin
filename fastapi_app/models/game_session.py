@@ -55,6 +55,18 @@ class GameSession(BaseModel):
 		)
 
 
+class ItemResult(BaseModel):
+	"""Per-item result within a stage completion.
+
+	Each sub-element (matching pair, word, highlight, mindmap node)
+	reports individually. item_id is the UUID assigned during content
+	creation in the stage config editor.
+	"""
+
+	item_id: str  # UUID string from stage config (e.g., "550e8400-e29b-41d4-a716-446655440000")
+	fail_count: int = 0
+
+
 class StageResult(BaseModel):
 	"""Stage completion data submitted at lesson end.
 
@@ -62,6 +74,10 @@ class StageResult(BaseModel):
 	- time_spent is in milliseconds (changed from seconds)
 	- Submitted with lesson completion
 	- Contains timing and performance data for XP calculation
+
+	Per Phase 27-02:
+	- items list carries per-item results (item_id + fail_count)
+	- Empty items list = legacy stage-level only (backward compatible)
 	"""
 
 	stage_id: str
@@ -69,6 +85,7 @@ class StageResult(BaseModel):
 	fail_count: int = 0
 	completed_at: str  # ISO timestamp
 	metadata: dict = {}  # client-provided extra data for analytics
+	items: list[ItemResult] = []  # Per-item results (empty = legacy stage-level only)
 
 
 class StartSessionRequest(BaseModel):

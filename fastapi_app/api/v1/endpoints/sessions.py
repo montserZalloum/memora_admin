@@ -255,19 +255,38 @@ async def end_session(
 		)
 
 	# Prepare interaction JSONs (batch, not N individual pushes)
+	# Per Phase 27-02: when stage.items is populated, produce one interaction per item
+	# with item_id for FSRS item-level tracking. Legacy stage-level when items is empty.
 	interaction_jsons = []
 	for stage in request.stages:
-		interaction = {
-			"player": user.sub,
-			"lesson": session.lesson_id,
-			"stage_id": stage.stage_id,
-			"event_type": "Completed",
-			"time_spent": stage.time_spent,
-			"errors_count": stage.fail_count,
-			"timestamp": stage.completed_at,
-			"metadata": stage.metadata,
-		}
-		interaction_jsons.append(json.dumps(interaction))
+		if stage.items:
+			# Per-item results: one interaction per item
+			for item in stage.items:
+				interaction = {
+					"player": user.sub,
+					"lesson": session.lesson_id,
+					"stage_id": stage.stage_id,
+					"item_id": item.item_id,
+					"event_type": "Completed",
+					"time_spent": stage.time_spent,
+					"errors_count": item.fail_count,
+					"timestamp": stage.completed_at,
+					"metadata": stage.metadata,
+				}
+				interaction_jsons.append(json.dumps(interaction))
+		else:
+			# Legacy stage-level result (backward compat)
+			interaction = {
+				"player": user.sub,
+				"lesson": session.lesson_id,
+				"stage_id": stage.stage_id,
+				"event_type": "Completed",
+				"time_spent": stage.time_spent,
+				"errors_count": stage.fail_count,
+				"timestamp": stage.completed_at,
+				"metadata": stage.metadata,
+			}
+			interaction_jsons.append(json.dumps(interaction))
 
 	# RT3: Lua script -- atomic session delete + SETBIT + SADD + batch RPUSH
 	lua_success, is_replay, _ = await game_session_service.complete_session(

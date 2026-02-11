@@ -316,6 +316,7 @@ def flush_interaction_buffer():
 					"player": item["player"],
 					"lesson": item["lesson"],
 					"stage_id": str(item.get("stage_id", "")),
+					"item_id": item.get("item_id", ""),  # Per Phase 27-02: item-level tracking
 					"event_type": item.get("event_type", "Completed"),
 					"time_spent": item.get("time_spent", 0),
 					"errors_count": item.get("errors_count", 0),
