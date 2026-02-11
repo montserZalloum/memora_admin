@@ -122,6 +122,7 @@ app = FastAPI(
     title="Memora Game API",
     version="1.0.0",
     lifespan=lifespan,
+    redirect_slashes=True,
 )
 
 # Middleware

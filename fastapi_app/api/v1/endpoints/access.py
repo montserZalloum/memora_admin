@@ -1,9 +1,9 @@
 """Admin access control endpoints."""
 
 import structlog
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Path, status
 
-from fastapi_app.api.deps import AccessServiceDep, CurrentUser
+from fastapi_app.api.deps import AccessServiceDep, RequireAdmin
 from fastapi_app.models.access import (
     GrantRequest,
     GrantResponse,
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/access", tags=["access"])
 @router.post("/grants", response_model=GrantResponse)
 async def create_grant(
     request: GrantRequest,
-    user: CurrentUser,
+    user: RequireAdmin,
     access_service: AccessServiceDep,
 ) -> GrantResponse:
     """
@@ -32,13 +32,6 @@ async def create_grant(
 
     Requires admin role.
     """
-    # Check admin role
-    if user.role != "System Manager":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "ADMIN_REQUIRED", "message": "Admin role required"},
-        )
-
     if not request.content_keys:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -67,7 +60,7 @@ async def create_grant(
 @router.delete("/grants", response_model=RevokeResponse)
 async def revoke_grant(
     request: RevokeRequest,
-    user: CurrentUser,
+    user: RequireAdmin,
     access_service: AccessServiceDep,
 ) -> RevokeResponse:
     """
@@ -75,13 +68,6 @@ async def revoke_grant(
 
     Requires admin role.
     """
-    # Check admin role
-    if user.role != "System Manager":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "ADMIN_REQUIRED", "message": "Admin role required"},
-        )
-
     if not request.content_keys:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -109,22 +95,15 @@ async def revoke_grant(
 
 @router.get("/grants/{player_id}")
 async def get_player_grants(
-    player_id: str,
-    user: CurrentUser,
+    user: RequireAdmin,
     access_service: AccessServiceDep,
+    player_id: str = Path(pattern=r"^[a-zA-Z0-9._@-]+$"),
 ) -> dict:
     """
     Get all grants for a player.
 
     Requires admin role.
     """
-    # Check admin role
-    if user.role != "System Manager":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"code": "ADMIN_REQUIRED", "message": "Admin role required"},
-        )
-
     grants = await access_service.get_player_grants(player_id)
 
     return {
