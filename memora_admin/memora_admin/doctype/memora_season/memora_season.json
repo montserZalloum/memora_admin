@@ -27,6 +27,7 @@
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Season Seq",
+   "read_only": 1,
    "reqd": 1,
    "unique": 1
   },
@@ -54,8 +55,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-11 09:35:48.000000",
- "modified_by": "Administrator",
+ "modified": "2026-02-11 13:39:39.371897",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Season",
  "owner": "Administrator",
