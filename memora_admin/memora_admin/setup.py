@@ -165,10 +165,10 @@ def _ensure_uuid_polyfill_functions():
 	result = frappe.db.sql("""
 		SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES
 		WHERE ROUTINE_SCHEMA = DATABASE()
-		AND ROUTINE_NAME = 'UUID_TO_BIN'
+		AND ROUTINE_NAME IN ('UUID_TO_BIN', 'BIN_TO_UUID')
 	""")
-	if result:
-		return  # Already exists
+	if len(result) == 2:
+		return  # Both exist
 
 	# UUID_TO_BIN: single-expression function
 	frappe.db.sql_ddl("DROP FUNCTION IF EXISTS UUID_TO_BIN")
