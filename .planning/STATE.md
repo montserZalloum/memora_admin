@@ -10,17 +10,17 @@ See: .planning/PROJECT.md (updated 2026-02-07)
 ## Current Position
 
 Phase: 28 (Tech Debt & Reliability Fixes)
-Plan: 3 of 4
-Status: In progress
-Last activity: 2026-02-11 — Completed 28-03-PLAN.md (Wallet Service Cleanup)
+Plan: 4 of 4
+Status: Phase complete
+Last activity: 2026-02-11 — Completed 28-04-PLAN.md (Admin Auth Dependency & Input Validation)
 
-Progress: [██████████████████████████░░░░░░░░░░░░░░] ~85/86 plans (Phase 28: 3/4)
+Progress: [████████████████████████████████████████] 86/86 plans (Phase 28: 4/4)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 84
-- Milestones shipped: 8
+- Total plans completed: 86
+- Milestones shipped: 9
 
 **By Milestone:**
 
@@ -36,6 +36,7 @@ Progress: [███████████████████████
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
 | v1.8 Memory State Redesign | 1 | 5 | Shipped 2026-02-11 |
+| v1.9 Tech Debt & Reliability | 1 | 4 | Shipped 2026-02-11 |
 
 ## Accumulated Context
 
@@ -90,6 +91,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - services/__init__.py simplified to bare docstring; deps.py uses direct imports from service modules
 - calculate_xp_award as module-level function in services/wallet.py (not class method) for direct import from any endpoint
 - Lua HGET safety: two-step (raw and tonumber(raw)) or 0 pattern for missing/corrupt fields
+- ADMIN_ROLE constant + require_admin dependency in deps.py as single source of truth for admin auth
+- getattr(user, 'role', None) in require_admin for backward compat with tokens lacking role claim
+- redirect_slashes=True on FastAPI app replaces dual route decorators
 
 ### Pending Todos
 
@@ -121,10 +125,11 @@ All decisions logged in PROJECT.md Key Decisions table.
   - Plan 04: Review/profile update (item-level review APIs, season_seq partition pruning, mastery counts items)
   - Plan 05: Gap closure - skippable stage item_id fix (editor + build generators)
   - All layers updated: schema -> content -> FSRS computation -> review/profile APIs
-- Phase 28 added: Tech Debt & Reliability Fixes (v1.9)
-  - Critical: interaction buffer LTRIM data loss fix
-  - High: shared Redis constants, deps.py DRY consolidation
-  - Medium: dead code cleanup, magic strings, Lua script safety, input validation
+- Phase 28 complete: Tech Debt & Reliability Fixes (v1.9)
+  - Plan 01: interaction buffer LTRIM data loss fix
+  - Plan 02: shared Redis constants, deps.py DRY consolidation
+  - Plan 03: wallet service cleanup (dead code, calculate_xp_award extraction, Lua safety)
+  - Plan 04: admin auth dependency, input validation, routing cleanup
 
 ### Blockers/Concerns
 
@@ -134,6 +139,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 28-03-PLAN.md (Wallet Service Cleanup)
+Stopped at: Completed 28-04-PLAN.md (Admin Auth Dependency & Input Validation)
 Resume file: None
-Next action: Execute 28-04-PLAN.md
+Next action: Phase 28 complete. Ready for next milestone.
