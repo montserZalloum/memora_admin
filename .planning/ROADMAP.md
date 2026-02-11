@@ -11,7 +11,7 @@
 - SHIPPED **v1.5 Real-Time Notifications** — Phase 24 (shipped 2026-02-08)
 - SHIPPED **v1.6 FSRS Review System** — Phase 25 (shipped 2026-02-09)
 - SHIPPED **v1.7 Profile Page API** — Phase 26 (shipped 2026-02-10)
-- **v1.8 Memory State Redesign** — Phase 27
+- SHIPPED **v1.8 Memory State Redesign** — Phase 27 (shipped 2026-02-11)
 
 ## Phases
 
@@ -229,7 +229,7 @@ Plans:
 
 **Milestone Goal:** Replace composite-string PK with BIGINT AUTO_INCREMENT, add item-level FSRS tracking (1 memory state per sub-element within a stage), and implement RANGE partitioning by season for scalability to 25B+ rows.
 
-- [ ] **Phase 27: Memory State Redesign (Item-Level FSRS)** — Schema redesign, item UUID generation, FSRS processor rewrite, review system update
+- [x] **Phase 27: Memory State Redesign (Item-Level FSRS)** — Schema redesign, item UUID generation, FSRS processor rewrite, review system update
 
 ## Phase Details — v1.8
 
@@ -252,10 +252,10 @@ Plans:
   13. Memory states reset per season (fresh FSRS curves)
 **Plans:** 4 plans
 Plans:
-- [ ] 27-01-PLAN.md — Schema foundation: DocType changes (BIGINT PK, item_id, season_seq), after_migrate partitioning + indexes, Interaction Log item_id
-- [ ] 27-02-PLAN.md — Content pipeline & session API: item UUID generation in stage config, JSON generator update, per-item StageResult/session endpoint
-- [ ] 27-03-PLAN.md — FSRS processor rewrite: item-level processing, lookup by (player, item_id, season_seq), Redis cache key update
-- [ ] 27-04-PLAN.md — Review system & profile update: Frappe review APIs at item level, FastAPI review endpoints, mastery item-level counting
+- [x] 27-01-PLAN.md — Schema foundation: DocType changes (BIGINT PK, item_id, season_seq), after_migrate partitioning + indexes, Interaction Log item_id
+- [x] 27-02-PLAN.md — Content pipeline & session API: item UUID generation in stage config, JSON generator update, per-item StageResult/session endpoint
+- [x] 27-03-PLAN.md — FSRS processor rewrite: item-level processing, lookup by (player, item_id, season_seq), Redis cache key update
+- [x] 27-04-PLAN.md — Review system & profile update: Frappe review APIs at item level, FastAPI review endpoints, mastery item-level counting
 
 **Design Decisions (agreed during brainstorming):**
 - **PK**: BIGINT AUTO_INCREMENT (8 bytes vs ~80 bytes composite string)
@@ -310,6 +310,6 @@ Plans:
 | 24. Real-Time Subscription Notifications | v1.5 | 2/2 | Complete | 2026-02-08 |
 | 25. FSRS Review System | v1.6 | 3/3 | Complete | 2026-02-09 |
 | 26. Profile Page API | v1.7 | 2/2 | Complete | 2026-02-10 |
-| 27. Memory State Redesign | v1.8 | 0/4 | Not started | — |
+| 27. Memory State Redesign | v1.8 | 4/4 | Complete | 2026-02-11 |
 
-**Total:** 26 phases complete (76 plans), 1 phase planned
+**Total:** 27 phases complete (80 plans)
