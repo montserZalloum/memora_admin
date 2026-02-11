@@ -5,22 +5,22 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.8 Memory State Redesign — Phase 27, Plan 03 complete (FSRS rewrite)
+**Current focus:** v1.8 Memory State Redesign — Phase 27 complete (all 4 plans)
 
 ## Current Position
 
 Phase: 27 (Memory State Redesign — Item-Level FSRS)
-Plan: 3 of 4
-Status: In progress
-Last activity: 2026-02-11 — Completed 27-03-PLAN.md (FSRS Rewrite)
+Plan: 4 of 4
+Status: Phase complete
+Last activity: 2026-02-11 — Completed 27-04-PLAN.md (Review/Profile Update)
 
-Progress: [███████░░░] 75%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 79
-- Milestones shipped: 7
+- Total plans completed: 80
+- Milestones shipped: 8
 
 **By Milestone:**
 
@@ -35,7 +35,7 @@ Progress: [███████░░░] 75%
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
-| v1.8 Memory State Redesign | 1 | 4 | In Progress (3/4) |
+| v1.8 Memory State Redesign | 1 | 4 | Shipped 2026-02-11 |
 
 ## Accumulated Context
 
@@ -81,6 +81,8 @@ All decisions logged in PROJECT.md Key Decisions table.
 - Raw SQL for BINARY column CRUD: ORM cannot handle UUID_TO_BIN, use frappe.db.sql() with dedicated helpers
 - Sequence-based PK: frappe.db.get_next_sequence_val for BIGINT autoincrement on Memory State
 - Deterministic UUID fallback for legacy interactions: uuid5(NAMESPACE_OID, stage_id)
+- submit_reviews uses raw SQL UPDATE with season_seq in WHERE clause for partition-aware updates
+- next_review stored as date (not datetime) in review submit matching 27-03 schema change
 
 ### Pending Todos
 
@@ -105,13 +107,12 @@ All decisions logged in PROJECT.md Key Decisions table.
   - Plan 02: ProfilePageService aggregation + 7 FastAPI endpoints
   - Hero section, subject-filtered stats/mastery/activity, avatar selection, logout
   - Redis pipeline for weekly activity, mastery cache with 5-min TTL
-- Phase 27 added: Memory State Redesign (v1.8)
-  - BIGINT AUTO_INCREMENT PK replaces ~80-byte composite string PK
-  - Item-level FSRS: 1 memory state per sub-element (question, matching pair, etc.) instead of per stage
-  - Item IDs: UUID stored as BINARY(16), generated during content creation
-  - RANGE partitioning by season_seq (INT) — instant archival via DROP PARTITION
-  - 4 plans: schema foundation → content pipeline → FSRS rewrite → review/profile update
-  - Depends on Phase 25 (FSRS) and Phase 26 (profile mastery)
+- Phase 27 complete: Memory State Redesign (v1.8)
+  - Plan 01: Schema foundation (BIGINT PK, item_id BINARY(16), season_seq, RANGE partitioning)
+  - Plan 02: Content pipeline (item_id generation for all interactive stage types)
+  - Plan 03: FSRS rewrite (item-level Memory State CRUD in stage_complete/lesson_complete)
+  - Plan 04: Review/profile update (item-level review APIs, season_seq partition pruning, mastery counts items)
+  - All layers updated: schema -> content -> FSRS computation -> review/profile APIs
 
 ### Blockers/Concerns
 
@@ -121,6 +122,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 27-03-PLAN.md (FSRS Rewrite)
+Stopped at: Completed 27-04-PLAN.md (Review/Profile Update) — Phase 27 complete
 Resume file: None
-Next action: Execute 27-04-PLAN.md (Review/Profile Update)
+Next action: None — v1.8 Memory State Redesign fully shipped
