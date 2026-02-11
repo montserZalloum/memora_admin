@@ -1,4 +1,4 @@
-"""Pydantic models for the FSRS review API."""
+"""Pydantic models for the FSRS review API (item-level)."""
 
 from pydantic import BaseModel, Field
 
@@ -16,33 +16,34 @@ class ReviewOverviewResponse(BaseModel):
 	subjects: list[SubjectReviewCount]
 
 
-class DueStage(BaseModel):
-	"""A single stage due for review."""
+class DueItem(BaseModel):
+	"""A single item due for review, with stage context."""
 
+	item_id: str  # UUID string
 	stage_id: str
 	lesson_id: str
 	stage_type: str
 
 
-class DueStagesResponse(BaseModel):
-	"""Due stages for a specific subject."""
+class DueItemsResponse(BaseModel):
+	"""Due items for a specific subject."""
 
 	subject_id: str
-	stages: list[DueStage]
+	items: list[DueItem]
 	has_more: bool
 
 
-class StageReviewResult(BaseModel):
-	"""Result of reviewing a single stage."""
+class ItemReviewResult(BaseModel):
+	"""Result of reviewing a single item."""
 
-	stage_id: str
+	item_id: str  # UUID string
 	fail_count: int = Field(default=0, ge=0)
 
 
 class ReviewSubmitRequest(BaseModel):
 	"""Batch review submission request."""
 
-	stages: list[StageReviewResult] = Field(..., min_length=1, max_length=10)
+	items: list[ItemReviewResult] = Field(..., min_length=1, max_length=10)
 
 
 class ReviewSubmitResponse(BaseModel):

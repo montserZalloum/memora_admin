@@ -1,4 +1,4 @@
-"""Review service for FSRS spaced repetition review operations."""
+"""Review service for FSRS spaced repetition review operations (item-level)."""
 
 import json
 
@@ -17,7 +17,7 @@ class ReviewService:
 	"""Service for review operations with Redis caching and Frappe API.
 
 	Caches the review overview (due counts per subject) in Redis with 5-min TTL.
-	Due stages and submit are always fresh (no cache).
+	Due items and submit are always fresh (no cache).
 	All data operations delegate to Frappe whitelisted methods.
 	"""
 
@@ -49,24 +49,24 @@ class ReviewService:
 		await self.redis.set(key, json.dumps(subjects), ex=REVIEW_OVERVIEW_TTL)
 		return subjects
 
-	async def get_due_stages(self, player_id: str, subject_id: str) -> dict:
-		"""Get due stages for a subject (no cache -- always fresh).
+	async def get_due_items(self, player_id: str, subject_id: str) -> dict:
+		"""Get due items for a subject (no cache -- always fresh).
 
-		Returns dict with stages list and has_more boolean.
+		Returns dict with items list and has_more boolean.
 		"""
 		result = await self.frappe.call(
-			"memora_admin.api.reviews.get_due_stages",
+			"memora_admin.api.reviews.get_due_items",
 			{"player_id": player_id, "subject_id": subject_id},
 		)
 
 		if isinstance(result, dict):
 			return result
-		return {"stages": [], "has_more": False}
+		return {"items": [], "has_more": False}
 
-	async def submit_reviews(self, player_id: str, subject_id: str, stages: list[dict]) -> dict:
+	async def submit_reviews(self, player_id: str, subject_id: str, items: list[dict]) -> dict:
 		"""Submit review results via Frappe API.
 
-		Stages must be JSON-serialized before passing to Frappe.
+		Items must be JSON-serialized before passing to Frappe.
 		Cache invalidation happens AFTER the Frappe call completes.
 		"""
 		result = await self.frappe.call(
@@ -74,7 +74,7 @@ class ReviewService:
 			{
 				"player_id": player_id,
 				"subject_id": subject_id,
-				"stages": json.dumps(stages),
+				"items": json.dumps(items),
 			},
 		)
 

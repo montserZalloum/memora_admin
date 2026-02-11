@@ -1,12 +1,12 @@
-"""Review endpoints for FSRS spaced repetition."""
+"""Review endpoints for FSRS spaced repetition (item-level)."""
 
 from fastapi import APIRouter
 import structlog
 
 from fastapi_app.api.deps import CurrentUser, ReviewServiceDep, WalletServiceDep
 from fastapi_app.models.review import (
-	DueStage,
-	DueStagesResponse,
+	DueItem,
+	DueItemsResponse,
 	ReviewOverviewResponse,
 	ReviewSubmitRequest,
 	ReviewSubmitResponse,
@@ -25,8 +25,8 @@ async def get_review_overview(
 ):
 	"""Get overview of due reviews per subject for the authenticated player.
 
-	Returns subjects that have at least one stage due for review,
-	with the count of due stages per subject. Cached in Redis for 5 minutes.
+	Returns subjects that have at least one item due for review,
+	with the count of due items per subject. Cached in Redis for 5 minutes.
 	"""
 	subjects_data = await review_service.get_overview(user.sub)
 
@@ -42,31 +42,32 @@ async def get_review_overview(
 	return ReviewOverviewResponse(subjects=subjects)
 
 
-@router.get("/{subject}", response_model=DueStagesResponse)
-async def get_due_stages(
+@router.get("/{subject}", response_model=DueItemsResponse)
+async def get_due_items(
 	subject: str,
 	user: CurrentUser,
 	review_service: ReviewServiceDep,
 ):
-	"""Get up to 10 due stages for a specific subject, oldest first (FIFO).
+	"""Get up to 10 due items for a specific subject, oldest first (FIFO).
 
-	Each stage includes stage_id, lesson_id, and stage_type for client rendering.
+	Each item includes item_id, stage_id, lesson_id, and stage_type.
 	Always returns fresh data (no cache).
 	"""
-	result = await review_service.get_due_stages(user.sub, subject)
+	result = await review_service.get_due_items(user.sub, subject)
 
-	stages = [
-		DueStage(
-			stage_id=s.get("stage_id", ""),
-			lesson_id=s.get("lesson_id", ""),
-			stage_type=s.get("stage_type", ""),
+	items = [
+		DueItem(
+			item_id=i.get("item_id", ""),
+			stage_id=i.get("stage_id", ""),
+			lesson_id=i.get("lesson_id", ""),
+			stage_type=i.get("stage_type", ""),
 		)
-		for s in result.get("stages", [])
+		for i in result.get("items", [])
 	]
 
-	return DueStagesResponse(
+	return DueItemsResponse(
 		subject_id=subject,
-		stages=stages,
+		items=items,
 		has_more=result.get("has_more", False),
 	)
 
@@ -79,14 +80,14 @@ async def submit_reviews(
 	review_service: ReviewServiceDep,
 	wallet_service: WalletServiceDep,
 ):
-	"""Submit batch of reviewed stages for a subject.
+	"""Submit batch of reviewed items for a subject.
 
-	Awards 3 XP per review session (not per stage). Reviews do NOT update streak.
+	Awards 3 XP per review session (not per item). Reviews do NOT update streak.
 	Invalidates the cached review overview for this player.
 	"""
-	stages_data = [{"stage_id": s.stage_id, "fail_count": s.fail_count} for s in body.stages]
+	items_data = [{"item_id": i.item_id, "fail_count": i.fail_count} for i in body.items]
 
-	result = await review_service.submit_reviews(user.sub, subject, stages_data)
+	result = await review_service.submit_reviews(user.sub, subject, items_data)
 
 	processed = result.get("processed", 0)
 	xp_awarded = 0
