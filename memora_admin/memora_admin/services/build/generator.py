@@ -47,11 +47,13 @@ def generate_subject_json(subject_id: str) -> list[dict]:
 
 	# Generate _subjects.json (subject level index)
 	subjects_data = _generate_subjects_index(subject_doc)
-	files.append({
-		"filename": "_subjects.json",
-		"content": _to_json(subjects_data),
-		"subject_id": subject_id,
-	})
+	files.append(
+		{
+			"filename": "_subjects.json",
+			"content": _to_json(subjects_data),
+			"subject_id": subject_id,
+		}
+	)
 
 	# Get tracks for this subject
 	tracks = frappe.get_all(
@@ -76,11 +78,13 @@ def generate_subject_json(subject_id: str) -> list[dict]:
 
 	# Generate bitmap metadata
 	bitmap_data = _generate_bitmap_json(subject_id, subject_doc)
-	files.append({
-		"filename": f"{subject_id}_b.json",
-		"content": _to_json(bitmap_data),
-		"subject_id": subject_id,
-	})
+	files.append(
+		{
+			"filename": f"{subject_id}_b.json",
+			"content": _to_json(bitmap_data),
+			"subject_id": subject_id,
+		}
+	)
 
 	return files
 
@@ -130,11 +134,13 @@ def _generate_track_json(track: dict) -> list[dict]:
 		"unit_ids": unit_ids,
 	}
 
-	files.append({
-		"filename": f"track_{track_id}.json",
-		"content": _to_json(track_data),
-		"subject_id": None,
-	})
+	files.append(
+		{
+			"filename": f"track_{track_id}.json",
+			"content": _to_json(track_data),
+			"subject_id": None,
+		}
+	)
 
 	# Generate unit files and their descendants
 	for unit in units:
@@ -214,11 +220,13 @@ def _generate_unit_json(unit: dict) -> list[dict]:
 		"topics": topics_with_lessons,
 	}
 
-	files.append({
-		"filename": f"unit_{unit_id}.json",
-		"content": _to_json(unit_data),
-		"subject_id": None,
-	})
+	files.append(
+		{
+			"filename": f"unit_{unit_id}.json",
+			"content": _to_json(unit_data),
+			"subject_id": None,
+		}
+	)
 
 	return files
 
@@ -250,6 +258,30 @@ def _generate_topic_json(topic: dict, lessons: list[dict]) -> list[dict]:
 	]
 
 
+def _get_skippable_stage_types() -> set[str]:
+	"""Get set of stage type names where is_skippable=1 globally."""
+	stages = frappe.get_all(
+		"Memora Lesson Stage Settings",
+		filters={"is_skippable": 1},
+		fields=["stage_title"],
+	)
+	return {s.stage_title for s in stages}
+
+
+def _strip_item_ids(config: dict) -> None:
+	"""Remove item_id keys from config when stage is skippable."""
+	for _key, value in config.items():
+		if isinstance(value, list):
+			for item in value:
+				if isinstance(item, dict):
+					item.pop("item_id", None)
+					# Recurse for nested children (MINDMAP)
+					if "children" in item and isinstance(item["children"], list):
+						for child in item["children"]:
+							if isinstance(child, dict):
+								child.pop("item_id", None)
+
+
 def _generate_lesson_json(lesson_name: str) -> dict | None:
 	"""
 	Generate lesson_{id}.json with stages array and configurations.
@@ -265,14 +297,24 @@ def _generate_lesson_json(lesson_name: str) -> dict | None:
 		logger.warning(f"Lesson {lesson_name} not found, skipping")
 		return None
 
+	# Fetch global skippable types once per lesson
+	skippable_types = _get_skippable_stage_types()
+
 	# Build stages array from child table
 	stages = []
 	for stage in lesson_doc.stages or []:
+		# Two-tier resolution: per-stage override then global stage type setting
+		effective_skippable = bool(stage.is_skippable) or (stage.stage_type in skippable_types)
+
+		config = _parse_stage_config(stage.config_json)
+		if effective_skippable:
+			_strip_item_ids(config)
+
 		stage_data = {
 			"stage_id": stage.name,
 			"stage_type": stage.stage_type,
-			"is_skippable": bool(stage.is_skippable),
-			"config": _parse_stage_config(stage.config_json),
+			"is_skippable": effective_skippable,
+			"config": config,
 		}
 		stages.append(stage_data)
 

@@ -526,6 +526,30 @@ def _generate_unit_content(unit_id: str, overrides: dict) -> dict:
 	}
 
 
+def _get_skippable_stage_types() -> set[str]:
+	"""Get set of stage type names where is_skippable=1 globally."""
+	stages = frappe.get_all(
+		"Memora Lesson Stage Settings",
+		filters={"is_skippable": 1},
+		fields=["stage_title"],
+	)
+	return {s.stage_title for s in stages}
+
+
+def _strip_item_ids(config: dict) -> None:
+	"""Remove item_id keys from config when stage is skippable."""
+	for _key, value in config.items():
+		if isinstance(value, list):
+			for item in value:
+				if isinstance(item, dict):
+					item.pop("item_id", None)
+					# Recurse for nested children (MINDMAP)
+					if "children" in item and isinstance(item["children"], list):
+						for child in item["children"]:
+							if isinstance(child, dict):
+								child.pop("item_id", None)
+
+
 def _generate_lesson_json(lesson_name: str) -> dict | None:
 	"""Generate lesson JSON (shared across plans)."""
 	try:
@@ -534,13 +558,23 @@ def _generate_lesson_json(lesson_name: str) -> dict | None:
 		logger.warning(f"Lesson {lesson_name} not found, skipping")
 		return None
 
+	# Fetch global skippable types once per lesson
+	skippable_types = _get_skippable_stage_types()
+
 	stages = []
 	for stage in lesson_doc.stages or []:
+		# Two-tier resolution: per-stage override then global stage type setting
+		effective_skippable = bool(stage.is_skippable) or (stage.stage_type in skippable_types)
+
+		config = _parse_stage_config(stage.config_json)
+		if effective_skippable:
+			_strip_item_ids(config)
+
 		stage_data = {
 			"stage_id": stage.name,
 			"stage_type": stage.stage_type,
-			"is_skippable": bool(stage.is_skippable),
-			"config": _parse_stage_config(stage.config_json),
+			"is_skippable": effective_skippable,
+			"config": config,
 		}
 		stages.append(stage_data)
 
