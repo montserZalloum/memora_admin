@@ -250,12 +250,15 @@ Plans:
   11. Memory mastery counts items (mature/learning/new) instead of stages
   12. Old season partitions can be dropped instantly via `ALTER TABLE DROP PARTITION`
   13. Memory states reset per season (fresh FSRS curves)
-**Plans:** 4 plans
+  14. Skippable stage types do NOT get item_id UUIDs (excluded from FSRS tracking)
+  15. Build generators output correct effective is_skippable (two-tier: per-stage override then global Lesson Stage Settings fallback)
+**Plans:** 5 plans
 Plans:
 - [x] 27-01-PLAN.md — Schema foundation: DocType changes (BIGINT PK, item_id, season_seq), after_migrate partitioning + indexes, Interaction Log item_id
 - [x] 27-02-PLAN.md — Content pipeline & session API: item UUID generation in stage config, JSON generator update, per-item StageResult/session endpoint
 - [x] 27-03-PLAN.md — FSRS processor rewrite: item-level processing, lookup by (player, item_id, season_seq), Redis cache key update
 - [x] 27-04-PLAN.md — Review system & profile update: Frappe review APIs at item level, FastAPI review endpoints, mastery item-level counting
+- [ ] 27-05-PLAN.md — Gap closure: skip item_id for skippable stages in editor + fix build generator two-tier is_skippable resolution
 
 **Design Decisions (agreed during brainstorming):**
 - **PK**: BIGINT AUTO_INCREMENT (8 bytes vs ~80 bytes composite string)
@@ -310,6 +313,6 @@ Plans:
 | 24. Real-Time Subscription Notifications | v1.5 | 2/2 | Complete | 2026-02-08 |
 | 25. FSRS Review System | v1.6 | 3/3 | Complete | 2026-02-09 |
 | 26. Profile Page API | v1.7 | 2/2 | Complete | 2026-02-10 |
-| 27. Memory State Redesign | v1.8 | 4/4 | Complete | 2026-02-11 |
+| 27. Memory State Redesign | v1.8 | 4/5 | Gap closure | 2026-02-11 |
 
-**Total:** 27 phases complete (80 plans)
+**Total:** 27 phases (81 plans, 80 complete)
