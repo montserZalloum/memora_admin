@@ -15,6 +15,7 @@ def create_access_token(
     plan_id: str,
     display_name: str,
     family_id: str,
+    role: str | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
     """
@@ -26,6 +27,7 @@ def create_access_token(
         plan_id: Player's plan document name (e.g., 'PLAN-00001')
         display_name: User's display name
         family_id: Family identifier for session management
+        role: Optional user role (e.g., "System Manager" for admin users)
         expires_delta: Optional custom expiration time
 
     Returns:
@@ -33,7 +35,7 @@ def create_access_token(
 
     Note:
         Timezone is hardcoded to Asia/Amman for all players.
-        Role field removed - all FastAPI users are players (admins use Frappe Desk).
+        Role is included only for admin users to keep player tokens lean.
     """
     settings = get_settings()
 
@@ -54,6 +56,10 @@ def create_access_token(
         "exp": expire,
         "jti": str(uuid4()),
     }
+
+    # Include role only for admin users (keeps player tokens lean)
+    if role:
+        payload["role"] = role
 
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 

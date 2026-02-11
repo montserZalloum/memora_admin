@@ -85,6 +85,24 @@ async def get_current_user(
 CurrentUser = Annotated[TokenPayload, Depends(get_current_user)]
 
 
+# --- Admin Dependency ---
+
+ADMIN_ROLE = "System Manager"
+
+
+async def require_admin(user: CurrentUser) -> TokenPayload:
+	"""Dependency that requires admin role. Raises 403 if not admin."""
+	if getattr(user, "role", None) != ADMIN_ROLE:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail={"code": "ADMIN_REQUIRED", "message": "Admin role required"},
+		)
+	return user
+
+
+RequireAdmin = Annotated[TokenPayload, Depends(require_admin)]
+
+
 # --- Service Dependencies ---
 
 

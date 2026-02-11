@@ -48,6 +48,7 @@ class TokenPayload(BaseModel):
 
     # Optional fields
     iat: int | None = None  # Issued at timestamp
+    role: str | None = None  # User role (e.g., "System Manager" for admins)
 
 
 class LoginProfile(BaseModel):
