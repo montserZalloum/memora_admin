@@ -1,3 +1,14 @@
+function generateItemUUID() {
+	if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+		return crypto.randomUUID();
+	}
+	return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+		var r = Math.random() * 16 | 0;
+		var v = c === 'x' ? r : (r & 0x3 | 0x8);
+		return v.toString(16);
+	});
+}
+
 frappe.ui.form.on('Memora Lesson', {
     refresh: function(frm) {
         // 
@@ -42,7 +53,8 @@ frappe.ui.form.on('Memora Lesson Stage', {
 function open_matching_dialog(frm, cdt, cdn, row, data) {
     let existing_data = (data.pairs || []).map(p => ({
         item_1: p.right,
-        item_2: p.left
+        item_2: p.left,
+        item_id: p.item_id || null
     }));
 
     let d = new frappe.ui.Dialog({
@@ -59,10 +71,9 @@ function open_matching_dialog(frm, cdt, cdn, row, data) {
                 fieldname: 'pairs_table',
                 fieldtype: 'Table',
                 cannot_add_rows: false,
-                // 👇 الحل السحري: تعريف الحقول يدوياً هنا
                 fields: [
                     {
-                        label: 'اليمين (Right)', // نحدد الاسم هنا مباشرة
+                        label: 'اليمين (Right)',
                         fieldname: 'item_1',
                         fieldtype: 'Data',
                         in_list_view: 1,
@@ -74,6 +85,11 @@ function open_matching_dialog(frm, cdt, cdn, row, data) {
                         fieldtype: 'Data',
                         in_list_view: 1,
                         reqd: 1
+                    },
+                    {
+                        fieldname: 'item_id',
+                        fieldtype: 'Data',
+                        hidden: 1
                     }
                 ],
                 data: existing_data,
@@ -86,6 +102,7 @@ function open_matching_dialog(frm, cdt, cdn, row, data) {
             let config_payload = {
                 instruction: values.instruction,
                 pairs: values.pairs_table.map((p, index) => ({
+                    item_id: p.item_id || generateItemUUID(),
                     id: String(index + 1),
                     right: p.item_1,
                     left: p.item_2
@@ -93,7 +110,7 @@ function open_matching_dialog(frm, cdt, cdn, row, data) {
             };
             frappe.model.set_value(cdt, cdn, 'config_json', JSON.stringify(config_payload, null, 2));
             d.hide();
-            frappe.show_alert({message: 'تم الحفظ ✅', indicator: 'green'});
+            frappe.show_alert({message: 'تم الحفظ', indicator: 'green'});
         }
     });
 
@@ -106,7 +123,8 @@ function open_matching_dialog(frm, cdt, cdn, row, data) {
 function open_reveal_dialog(frm, cdt, cdn, row, data) {
     let existing_data = (data.highlights || []).map(h => ({
         item_1: h.word,
-        item_2: h.explanation
+        item_2: h.explanation,
+        item_id: h.item_id || null
     }));
 
     let d = new frappe.ui.Dialog({
@@ -130,7 +148,6 @@ function open_reveal_dialog(frm, cdt, cdn, row, data) {
                 fieldname: 'highlights_table',
                 fieldtype: 'Table',
                 cannot_add_rows: false,
-                // 👇 تعريف الحقول يدوياً هنا أيضاً
                 fields: [
                     {
                         label: 'الكلمة (Word)',
@@ -144,6 +161,11 @@ function open_reveal_dialog(frm, cdt, cdn, row, data) {
                         fieldname: 'item_2',
                         fieldtype: 'Data',
                         in_list_view: 1
+                    },
+                    {
+                        fieldname: 'item_id',
+                        fieldtype: 'Data',
+                        hidden: 1
                     }
                 ],
                 data: existing_data,
@@ -157,6 +179,7 @@ function open_reveal_dialog(frm, cdt, cdn, row, data) {
                 image: values.image,
                 sentence: values.sentence,
                 highlights: values.highlights_table.map(h => ({
+                    item_id: h.item_id || generateItemUUID(),
                     word: h.item_1,
                     explanation: h.item_2
                 }))
@@ -174,10 +197,14 @@ function open_reveal_dialog(frm, cdt, cdn, row, data) {
 // 🏗️ 3. نافذة بناء الجملة (Sentence Builder)
 // =================================================
 function open_sentence_builder_dialog(frm, cdt, cdn, row, data) {
-    // تجهيز البيانات القديمة إذا كانت موجودة
-    let existing_data = (data.words || []).map(w => ({
-        item_1: w
-    }));
+    // Backward compat: old format is ["word1", "word2"] (string array)
+    // New format is [{item_id: "uuid", text: "word1"}, ...] (object array)
+    let existing_data = (data.words || []).map(w => {
+        if (typeof w === 'string') {
+            return { item_1: w, item_id: null };
+        }
+        return { item_1: w.text, item_id: w.item_id || null };
+    });
 
     let d = new frappe.ui.Dialog({
         title: 'إعدادات بناء الجملة (Sentence Builder)',
@@ -213,6 +240,11 @@ function open_sentence_builder_dialog(frm, cdt, cdn, row, data) {
                         fieldtype: 'Data',
                         in_list_view: 1,
                         reqd: 1
+                    },
+                    {
+                        fieldname: 'item_id',
+                        fieldtype: 'Data',
+                        hidden: 1
                     }
                 ],
                 data: existing_data
@@ -221,16 +253,15 @@ function open_sentence_builder_dialog(frm, cdt, cdn, row, data) {
         size: 'large',
         primary_action_label: 'حفظ (Save)',
         primary_action: function(values) {
-            // تحويل الجدول إلى مصفوفة نصوص بسيطة للـ React
-            let words_array = values.words_table.map(row => row.item_1);
-
             let config_payload = {
                 instruction: values.instruction,
                 sentence: values.sentence,
-                words: words_array // سيتم إرسالها كـ Array من الكلمات
+                words: values.words_table.map(row => ({
+                    item_id: row.item_id || generateItemUUID(),
+                    text: row.item_1
+                }))
             };
 
-            // حفظ الـ JSON في حقل الـ Config
             frappe.model.set_value(cdt, cdn, 'config_json', JSON.stringify(config_payload, null, 2));
 
             d.hide();
@@ -248,21 +279,23 @@ function open_mindmap_dialog(frm, cdt, cdn, row, data) {
     let root_label = data.label || '';
     let root_description = data.description || '';
 
-    // تحويل الشجرة المحفوظة إلى قائمة مسطحة مرتبة
+    // Convert saved tree to flat ordered list, preserving item_id
     let existing_data = [];
     if (data.children && Array.isArray(data.children)) {
         data.children.forEach(branch => {
             existing_data.push({
                 node_type: 'فرع',
                 label: branch.label,
-                description: branch.description || ''
+                description: branch.description || '',
+                item_id: branch.item_id || null
             });
             if (branch.children && Array.isArray(branch.children)) {
                 branch.children.forEach(item => {
                     existing_data.push({
                         node_type: 'عنصر',
                         label: item.label,
-                        description: item.description || ''
+                        description: item.description || '',
+                        item_id: item.item_id || null
                     });
                 });
             }
@@ -319,6 +352,11 @@ function open_mindmap_dialog(frm, cdt, cdn, row, data) {
                         fieldtype: 'Data',
                         in_list_view: 1,
                         columns: 4
+                    },
+                    {
+                        fieldname: 'item_id',
+                        fieldtype: 'Data',
+                        hidden: 1
                     }
                 ],
                 data: existing_data,
@@ -332,7 +370,6 @@ function open_mindmap_dialog(frm, cdt, cdn, row, data) {
             let current_branch = null;
             let used_ids = new Set();
 
-            // التحقق: أول صف يجب أن يكون "فرع"
             if (values.nodes_table.length > 0 && values.nodes_table[0].node_type !== 'فرع') {
                 frappe.msgprint('يجب أن يكون الصف الأول من نوع "فرع". لا يمكن إضافة عنصر بدون فرع يسبقه.');
                 return;
@@ -345,19 +382,20 @@ function open_mindmap_dialog(frm, cdt, cdn, row, data) {
                 if (node.node_type === 'فرع') {
                     current_branch = {
                         id: id,
+                        item_id: node.item_id || generateItemUUID(),
                         label: node.label,
                         children: []
                     };
                     if (node.description) current_branch.description = node.description;
                     children.push(current_branch);
                 } else {
-                    // عنصر فرعي — ينتمي للفرع الحالي
                     if (!current_branch) {
                         frappe.msgprint('لا يمكن إضافة عنصر بدون فرع يسبقه.');
                         return;
                     }
                     let item = {
                         id: id,
+                        item_id: node.item_id || generateItemUUID(),
                         label: node.label
                     };
                     if (node.description) item.description = node.description;
