@@ -8,6 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "season_title",
+  "season_seq",
   "start_date",
   "end_date",
   "is_published"
@@ -19,6 +20,15 @@
    "in_list_view": 1,
    "label": "Season Title",
    "reqd": 1
+  },
+  {
+   "description": "Sequential integer for partitioning (1, 2, 3...)",
+   "fieldname": "season_seq",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Season Seq",
+   "reqd": 1,
+   "unique": 1
   },
   {
    "fieldname": "start_date",
@@ -44,7 +54,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 10:30:09.188694",
+ "modified": "2026-02-11 09:35:48.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Season",

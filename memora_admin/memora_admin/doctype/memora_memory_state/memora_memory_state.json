@@ -1,15 +1,16 @@
 {
  "actions": [],
- "allow_rename": 1,
- "autoname": "format:{season}-{subject}-{player}-{stage_id}",
+ "allow_rename": 0,
+ "autoname": "autoincrement",
  "creation": "2026-02-01 11:11:56.352614",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "season",
+  "season_seq",
   "subject",
   "player",
+  "item_id",
   "stage_id",
   "stability",
   "difficulty",
@@ -18,11 +19,10 @@
  ],
  "fields": [
   {
-   "fieldname": "season",
-   "fieldtype": "Link",
+   "fieldname": "season_seq",
+   "fieldtype": "Int",
    "in_list_view": 1,
-   "label": "Season",
-   "options": "Memora Season",
+   "label": "Season Seq",
    "reqd": 1
   },
   {
@@ -39,6 +39,13 @@
    "in_list_view": 1,
    "label": "Player",
    "options": "Memora Player Profile",
+   "reqd": 1
+  },
+  {
+   "fieldname": "item_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item ID",
    "reqd": 1
   },
   {
@@ -62,7 +69,7 @@
   },
   {
    "fieldname": "next_review",
-   "fieldtype": "Datetime",
+   "fieldtype": "Date",
    "label": "Next Review"
   },
   {
@@ -77,7 +84,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 17:34:23.719151",
+ "modified": "2026-02-11 09:35:48.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Memory State",

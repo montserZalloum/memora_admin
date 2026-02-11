@@ -10,6 +10,7 @@
   "player",
   "lesson",
   "stage_id",
+  "item_id",
   "event_type",
   "time_spent",
   "errors_count",
@@ -40,6 +41,11 @@
    "in_list_view": 1,
    "label": "Stage ID",
    "reqd": 1
+  },
+  {
+   "fieldname": "item_id",
+   "fieldtype": "Data",
+   "label": "Item ID"
   },
   {
    "fieldname": "event_type",
@@ -80,7 +86,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 11:11:56.506953",
+ "modified": "2026-02-11 09:35:48.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Interaction Log",
