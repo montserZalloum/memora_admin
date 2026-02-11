@@ -20,6 +20,12 @@ from datetime import datetime
 import frappe
 import redis
 
+from fastapi_app.core.constants import (
+	DIRTY_PROGRESS_KEY,
+	DIRTY_WALLETS_KEY,
+	INTERACTION_BUFFER_KEY,
+)
+
 logger = logging.getLogger(__name__)
 
 # Debug file for troubleshooting sync issues
@@ -61,12 +67,6 @@ def _parse_timestamp(timestamp_str: str) -> str:
 	except Exception as e:
 		logger.warning(f"Failed to parse timestamp {timestamp_str}: {e}")
 		return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-# Redis key constants (must match FastAPI constants)
-DIRTY_PROGRESS_KEY = "memora:dirty:progress"
-DIRTY_WALLETS_KEY = "memora:dirty:wallets"
-INTERACTION_BUFFER_KEY = "memora:buffer:interactions"
-
 
 def get_redis():
 	"""Get Redis connection using Frappe site config."""
@@ -336,10 +336,17 @@ def flush_interaction_buffer():
 				logger.error(error_msg, exc_info=True)
 				frappe.log_error(error_msg)
 
-		# Trim processed items from list (atomic operation)
-		# LTRIM keeps elements from count to end, removing processed ones
-		_write_debug_log(f"Trimming {count} items from buffer...")
-		r.ltrim(INTERACTION_BUFFER_KEY, count, -1)
+		# Trim successfully inserted items from list (atomic operation)
+		# LTRIM keeps elements from `inserted` to end, removing only successfully processed ones
+		# Failed items remain at the head of the list for retry on next flush cycle
+		if inserted < count:
+			logger.warning(
+				f"Partial flush: {inserted}/{count} interactions inserted, "
+				f"{count - inserted} failed items remain in buffer for retry"
+			)
+			_write_debug_log(f"PARTIAL FLUSH: {inserted}/{count} inserted, {count - inserted} remain")
+		_write_debug_log(f"Trimming {inserted} items from buffer (of {count} fetched)...")
+		r.ltrim(INTERACTION_BUFFER_KEY, inserted, -1)
 		_write_debug_log(f"Trim complete")
 
 		# Commit all inserts
