@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-07)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v1.8 Memory State Redesign — Phase 27, Plan 01 complete (schema foundation)
+**Current focus:** v1.8 Memory State Redesign — Phase 27, Plan 02 complete (content pipeline)
 
 ## Current Position
 
 Phase: 27 (Memory State Redesign — Item-Level FSRS)
-Plan: 1 of 4
+Plan: 2 of 4
 Status: In progress
-Last activity: 2026-02-11 — Completed 27-01-PLAN.md (Schema Foundation)
+Last activity: 2026-02-11 — Completed 27-02-PLAN.md (Content Pipeline)
 
-Progress: [██░░░░░░░░] 25%
+Progress: [█████░░░░░] 50%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 77
+- Total plans completed: 78
 - Milestones shipped: 7
 
 **By Milestone:**
@@ -35,7 +35,7 @@ Progress: [██░░░░░░░░] 25%
 | v1.5 Real-Time Notifications | 1 | 2 | Shipped 2026-02-08 |
 | v1.6 FSRS Review System | 1 | 3 | Shipped 2026-02-09 |
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
-| v1.8 Memory State Redesign | 1 | 4 | In Progress (1/4) |
+| v1.8 Memory State Redesign | 1 | 4 | In Progress (2/4) |
 
 ## Accumulated Context
 
@@ -75,6 +75,9 @@ All decisions logged in PROJECT.md Key Decisions table.
 - UUID polyfill stored functions for MariaDB 10.6 (no native UUID_TO_BIN/BIN_TO_UUID)
 - RANGE partitioning managed via after_migrate with REMOVE PARTITIONING -> re-partition cycle for column type changes
 - next_review changed from Datetime to Date on Memory State (already clamped to midnight)
+- SENTENCE_BUILDER words format changed from string array to object array with item_id (backward compat preserved)
+- Per-item interactions share stage time_spent (item-level time breakdown not tracked)
+- Hearts calculation unchanged (uses stage-level fail_count, not item-level)
 
 ### Pending Todos
 
@@ -115,6 +118,6 @@ All decisions logged in PROJECT.md Key Decisions table.
 ## Session Continuity
 
 Last session: 2026-02-11
-Stopped at: Completed 27-01-PLAN.md (Schema Foundation)
+Stopped at: Completed 27-02-PLAN.md (Content Pipeline)
 Resume file: None
-Next action: Execute 27-02-PLAN.md (Content Pipeline)
+Next action: Execute 27-03-PLAN.md (FSRS Rewrite)
