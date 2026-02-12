@@ -167,7 +167,9 @@ Plans:
   2. `curl` to `register_player(mobile, password, display_name)` creates a new Player Profile with hashed password and returns the docname
   3. `curl` to `set_player_password(player_name, new_password)` updates the password hash and can be called from admin context (Frappe Desk)
   4. Admin can reset a player's password from the Player Profile form in Frappe Desk, and the player's existing sessions are invalidated
-**Plans:** TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 30-01-PLAN.md — Frappe auth API (3 whitelisted functions) + Desk Reset Password button
 
 #### Phase 31: FastAPI Auth Endpoints + OTP System
 
@@ -226,7 +228,7 @@ Plans:
 | 27. Memory State Redesign | v1.8 | 5/5 | Complete | 2026-02-11 |
 | 28. Tech Debt & Reliability Fixes | v1.9 | 4/4 | Complete | 2026-02-11 |
 | 29. DocType Schema Foundation | v2.0 | 1/1 | Complete | 2026-02-12 |
-| 30. Frappe Auth API Bridge | v2.0 | 0/TBD | Not started | - |
+| 30. Frappe Auth API Bridge | v2.0 | 0/1 | Not started | - |
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 0/TBD | Not started | - |
 | 32. Event Handler & API Migration | v2.0 | 0/TBD | Not started | - |
 
