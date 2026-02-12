@@ -13,7 +13,7 @@
 - SHIPPED **v1.7 Profile Page API** — Phase 26 (shipped 2026-02-10)
 - SHIPPED **v1.8 Memory State Redesign** — Phase 27 (shipped 2026-02-11)
 - SHIPPED **v1.9 Tech Debt & Reliability Fixes** — Phase 28 (shipped 2026-02-12)
-- IN PROGRESS **v2.0 Mobile-First Player Authentication** — Phases 29-32
+- SHIPPED **v2.0 Mobile-First Player Authentication** — Phases 29-32 (shipped 2026-02-12)
 
 ## Phases
 
@@ -133,14 +133,14 @@ See: `.planning/milestones/v1.9-ROADMAP.md` for full details
 
 </details>
 
-### v2.0 Mobile-First Player Authentication (In Progress)
+### v2.0 Mobile-First Player Authentication (Shipped 2026-02-12)
 
 **Milestone Goal:** Replace Frappe User-based email authentication for players with phone+password model on Player Profile DocType. Players authenticate via phone number + password stored directly in Memora Player Profile. Admins keep Frappe User email auth.
 
 - [x] **Phase 29: DocType Schema Foundation** - Player Profile schema changes for phone+password identity (completed 2026-02-12)
 - [x] **Phase 30: Frappe Auth API Bridge** - Whitelisted Frappe APIs for password verification and player management (completed 2026-02-12)
 - [x] **Phase 31: FastAPI Auth Endpoints + OTP System** - Player-facing login, registration, password reset, and OTP (completed 2026-02-12)
-- [ ] **Phase 32: Event Handler & API Migration** - Update all code referencing old identity model
+- [x] **Phase 32: Event Handler & API Migration** - Update all code referencing old identity model (completed 2026-02-12)
 
 #### Phase 29: DocType Schema Foundation
 
@@ -200,9 +200,9 @@ Plans:
   3. plan_change_sync.py and profile_sync.py write to the FastAPI Redis instance (`get_fastapi_redis()`) instead of `frappe.cache()`, verified by checking Redis keys after triggering sync events
 **Plans:** 3 plans
 Plans:
-- [ ] 32-01-PLAN.md — Event handlers (access_sync, device_sync, plan_change_sync, profile_sync) + schema user field removal
-- [ ] 32-02-PLAN.md — Frappe APIs (purchase, profile, subscriptions, devices) docname migration
-- [ ] 32-03-PLAN.md — Scheduled tasks (profile_cache, fsrs_processor) identity + Redis fix
+- [x] 32-01-PLAN.md — Event handlers (access_sync, device_sync, plan_change_sync, profile_sync) + schema user field removal (completed 2026-02-12)
+- [x] 32-02-PLAN.md — Frappe APIs (purchase, profile, subscriptions, devices) docname migration (completed 2026-02-12)
+- [x] 32-03-PLAN.md — Scheduled tasks (profile_cache, fsrs_processor) identity + Redis fix (completed 2026-02-12)
 
 ## Progress
 
@@ -239,6 +239,6 @@ Plans:
 | 29. DocType Schema Foundation | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 30. Frappe Auth API Bridge | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 4/4 | Complete | 2026-02-12 |
-| 32. Event Handler & API Migration | v2.0 | 0/3 | Not started | - |
+| 32. Event Handler & API Migration | v2.0 | 3/3 | Complete | 2026-02-12 |
 
-**Total:** 32 phases (91 plans complete, 3 remaining) across 12 milestones
+**Total:** 32 phases (94 plans complete, 0 remaining) across 12 milestones

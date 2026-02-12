@@ -54,10 +54,10 @@ Requirements for mobile-first player authentication migration. Each maps to road
 
 - [x] **MIGR-01**: JWT `sub` = Player Profile docname (PLAYER-00001), `mobile` claim for phone number
 - [x] **MIGR-02**: `create_access_token()` updated — `email` optional, `mobile` added
-- [ ] **MIGR-03**: Event handlers updated — `doc.user` replaced with `doc.name` in access_sync, device_sync, plan_change_sync, profile_sync
-- [ ] **MIGR-04**: Frappe APIs updated — purchase.py, profile.py, subscriptions.py, devices.py remove `{"user": player_id}` lookups
+- [x] **MIGR-03**: Event handlers updated — `doc.user` replaced with `doc.name` in access_sync, device_sync, plan_change_sync, profile_sync
+- [x] **MIGR-04**: Frappe APIs updated — purchase.py, profile.py, subscriptions.py, devices.py remove `{"user": player_id}` lookups
 - [x] **MIGR-05**: Frappe whitelisted auth API created (`memora_admin/api/auth.py`) with verify_player_password, register_player, set_player_password
-- [ ] **MIGR-06**: Fix pre-existing bug: plan_change_sync.py and profile_sync.py use wrong Redis client (frappe.cache() instead of get_fastapi_redis())
+- [x] **MIGR-06**: Fix pre-existing bug: plan_change_sync.py and profile_sync.py use wrong Redis client (frappe.cache() instead of get_fastapi_redis())
 - [x] **MIGR-07**: Old single `/auth/login` endpoint removed, replaced by separate player/admin endpoints
 
 ## Future Requirements
@@ -128,10 +128,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SEC-05 | Phase 31 | Complete |
 | MIGR-01 | Phase 31 | Complete |
 | MIGR-02 | Phase 31 | Complete |
-| MIGR-03 | Phase 32 | Pending |
-| MIGR-04 | Phase 32 | Pending |
+| MIGR-03 | Phase 32 | Complete |
+| MIGR-04 | Phase 32 | Complete |
 | MIGR-05 | Phase 30 | Complete |
-| MIGR-06 | Phase 32 | Pending |
+| MIGR-06 | Phase 32 | Complete |
 | MIGR-07 | Phase 31 | Complete |
 
 **Coverage:**
@@ -147,4 +147,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-12*
-*Last updated: 2026-02-12 after Phase 31 completion (AUTH-01..05, REG-01..06, RESET-01..05, SEC-01, SEC-02, SEC-04, SEC-05, MIGR-01, MIGR-02, MIGR-07 → Complete)*
+*Last updated: 2026-02-12 after Phase 32 completion (MIGR-03, MIGR-04, MIGR-06 → Complete). All 35 v2.0 requirements complete.*
