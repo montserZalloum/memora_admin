@@ -137,7 +137,7 @@ See: `.planning/milestones/v1.9-ROADMAP.md` for full details
 
 **Milestone Goal:** Replace Frappe User-based email authentication for players with phone+password model on Player Profile DocType. Players authenticate via phone number + password stored directly in Memora Player Profile. Admins keep Frappe User email auth.
 
-- [ ] **Phase 29: DocType Schema Foundation** - Player Profile schema changes for phone+password identity
+- [x] **Phase 29: DocType Schema Foundation** - Player Profile schema changes for phone+password identity (completed 2026-02-12)
 - [ ] **Phase 30: Frappe Auth API Bridge** - Whitelisted Frappe APIs for password verification and player management
 - [ ] **Phase 31: FastAPI Auth Endpoints + OTP System** - Player-facing login, registration, password reset, and OTP
 - [ ] **Phase 32: Event Handler & API Migration** - Update all code referencing old identity model
@@ -155,7 +155,7 @@ See: `.planning/milestones/v1.9-ROADMAP.md` for full details
   5. Passwords under 8 characters rejected by validate() with clear error message
 **Plans:** 1 plan
 Plans:
-- [ ] 29-01-PLAN.md — JSON schema + Python class hooks for phone+password identity
+- [x] 29-01-PLAN.md — JSON schema + Python class hooks for phone+password identity (completed 2026-02-12)
 
 #### Phase 30: Frappe Auth API Bridge
 
@@ -225,9 +225,9 @@ Plans:
 | 26. Profile Page API | v1.7 | 2/2 | Complete | 2026-02-10 |
 | 27. Memory State Redesign | v1.8 | 5/5 | Complete | 2026-02-11 |
 | 28. Tech Debt & Reliability Fixes | v1.9 | 4/4 | Complete | 2026-02-11 |
-| 29. DocType Schema Foundation | v2.0 | 0/1 | Planned | - |
+| 29. DocType Schema Foundation | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 30. Frappe Auth API Bridge | v2.0 | 0/TBD | Not started | - |
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 0/TBD | Not started | - |
 | 32. Event Handler & API Migration | v2.0 | 0/TBD | Not started | - |
 
-**Total:** 32 phases (85 plans complete, v2.0 plans TBD) across 12 milestones
+**Total:** 32 phases (86 plans complete, v2.0 plans TBD) across 12 milestones

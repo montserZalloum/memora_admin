@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v2.0 Mobile-First Player Authentication — Phase 29 (DocType Schema Foundation)
+**Current focus:** v2.0 Mobile-First Player Authentication — Phase 29 complete, ready for Phase 30
 
 ## Current Position
 
 Phase: 29 of 32 (DocType Schema Foundation)
-Plan: — (phase not yet planned)
-Status: Ready to plan
-Last activity: 2026-02-12 — Roadmap created for v2.0 milestone (phases 29-32)
+Plan: 1 of 1 (complete)
+Status: Phase 29 complete
+Last activity: 2026-02-12 — Completed 29-01-PLAN.md (DocType Schema Foundation)
 
-Progress: [============================..] 93% (85/~TBD plans, 28/32 phases)
+Progress: [============================..] 94% (86/~TBD plans, 29/32 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 85
+- Total plans completed: 86
 - Milestones shipped: 11
 
 **By Milestone:**
@@ -51,6 +51,8 @@ Recent decisions affecting current work:
 - Separate login endpoints (clean player/admin separation)
 - Static OTP "1111" stub (ship auth flow now, swap real SMS later)
 - 3-step password reset (most secure OTP flow per OWASP)
+- Mobile not reqd in JSON schema; mandatory enforced in validate() for new docs only (backward compat)
+- __setup__() for flags (not __init__()) per Frappe Document lifecycle
 
 ### Pending Todos
 
@@ -60,12 +62,12 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - Payment gateway integration (PRCHS-03) deferred to future work — all transactions currently manual approval
-- Research pitfall: Password fieldtype uses Fernet (not hashing) -- must use `flags.ignore_save_passwords` + manual `update_password()` for PBKDF2-SHA256
-- Research pitfall: `__Auth` table keying -- must lookup docname from mobile BEFORE calling `check_password()`
+- `profile_sync.py` references `doc.user` which is None for phone-based players -- needs update in Phase 32
+- Research pitfall resolved: `flags.ignore_save_passwords` + `update_password()` pattern implemented in Phase 29
 
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: v2.0 roadmap created (phases 29-32), ready to plan Phase 29
+Stopped at: Completed 29-01-PLAN.md (DocType Schema Foundation)
 Resume file: None
-Next action: `/gsd:plan-phase 29` (DocType Schema Foundation)
+Next action: `/gsd:plan-phase 30` (Frappe Auth API Bridge)
