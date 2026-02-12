@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v2.0 Mobile-First Player Authentication — Phase 30 complete, ready for Phase 31
+**Current focus:** v2.0 Mobile-First Player Authentication — Phase 31 in progress
 
 ## Current Position
 
-Phase: 30 of 32 (Frappe Auth API Bridge)
-Plan: 1 of 1 (complete)
-Status: Phase 30 complete
-Last activity: 2026-02-12 — Completed 30-01-PLAN.md (Frappe Auth API Bridge)
+Phase: 31 of 32 (FastAPI Auth Endpoints + OTP System)
+Plan: 1 of 4 (complete)
+Status: In progress
+Last activity: 2026-02-12 — Completed 31-01-PLAN.md (Core Auth Infrastructure)
 
-Progress: [=============================.] 97% (87/~TBD plans, 30/32 phases)
+Progress: [=============================.] 97% (88/~91 plans, 31/32 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 87
+- Total plans completed: 88
 - Milestones shipped: 11
 
 **By Milestone:**
@@ -53,6 +53,9 @@ Recent decisions affecting current work:
 - 3-step password reset (most secure OTP flow per OWASP)
 - Mobile not reqd in JSON schema; mandatory enforced in validate() for new docs only (backward compat)
 - __setup__() for flags (not __init__()) per Frappe Document lifecycle
+- create_access_token: email/mobile keyword-only params via * separator (prevents positional arg confusion)
+- OTPProvider protocol for pluggable SMS delivery (StaticOTPProvider dev stub)
+- LoginProfile drops gender field (mobile-first simplification)
 
 ### Pending Todos
 
@@ -69,6 +72,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 30-01-PLAN.md (Frappe Auth API Bridge)
+Stopped at: Completed 31-01-PLAN.md (Core Auth Infrastructure)
 Resume file: None
-Next action: `/gsd:plan-phase 31` (FastAPI Auth Endpoints + OTP System)
+Next action: Execute 31-02-PLAN.md (Player Login + Admin Login endpoints)
