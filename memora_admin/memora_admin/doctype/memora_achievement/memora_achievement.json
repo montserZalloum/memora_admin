@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:ACHV-{#####}",
+ "autoname": "ACHV-.#####.",
  "creation": "2026-02-01 17:34:23.936673",
  "doctype": "DocType",
  "editable_grid": 1,

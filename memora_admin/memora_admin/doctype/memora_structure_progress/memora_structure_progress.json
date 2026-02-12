@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:PROG-{#####}",
+ "autoname": "PROG-.#####.",
  "creation": "2026-02-01 11:11:56.199991",
  "doctype": "DocType",
  "editable_grid": 1,

@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:ANLT-{#####}",
+ "autoname": "ANLT-.#####.",
  "creation": "2026-02-01 11:14:19.742784",
  "doctype": "DocType",
  "editable_grid": 1,

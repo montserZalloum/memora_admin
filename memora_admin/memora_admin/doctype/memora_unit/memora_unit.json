@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:UNT-{#####}",
+ "autoname": "UNT-.#####.",
  "creation": "2026-02-01 10:26:28.877315",
  "doctype": "DocType",
  "editable_grid": 1,

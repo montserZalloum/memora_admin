@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:MJR-{#####}",
+ "autoname": "MJR-.#####.",
  "creation": "2026-02-01 10:37:54.766508",
  "doctype": "DocType",
  "editable_grid": 1,

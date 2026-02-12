@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:SUBJ-{#####}",
+ "autoname": "SUBJ-.#####.",
  "creation": "2026-02-01 10:21:41.937073",
  "doctype": "DocType",
  "editable_grid": 1,
