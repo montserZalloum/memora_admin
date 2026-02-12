@@ -357,7 +357,8 @@ async def get_registration_options(
 ) -> dict:
 	"""Return available options for registration form pickers.
 
-	Returns grades (with nested majors), plans, seasons, avatars, and genders.
+	Returns grades (with nested majors), plans, and seasons.
+	Avatars and genders are hardcoded client-side.
 	Cached in Redis for 5 minutes (changes infrequently).
 	"""
 	return await _get_registration_options(redis)

@@ -245,11 +245,11 @@ Step 3 (confirm new password):
             "grade": "GRD-00001",
             "major": "MJR-00001"
         }
-    ],
-    "avatars": ["pre", "blonde", "Caleb", "Jad", "Sadie", "Valentina"],
-    "genders": ["Male", "Female"]
+    ]
 }
 ```
+
+> **Note:** Avatars and genders are hardcoded client-side and not returned by this endpoint.
 
 **Client flow:** Client calls `GET /auth/registration-options` first, uses grade+major selection to filter available plans, then submits registration with the selected values.
 
@@ -611,9 +611,10 @@ def create_access_token(
 # Frappe-side API (memora_admin/api/auth.py -- add to existing file)
 @frappe.whitelist(allow_guest=False)
 def get_registration_options() -> dict:
-    """Return available grades, majors, plans, and avatars for registration.
+    """Return available grades, plans, and seasons for registration.
 
     Called by FastAPI via FrappeClient. Provides data for mobile app pickers.
+    Avatars and genders are hardcoded client-side.
     """
     # Get published seasons (should be exactly 1 active)
     seasons = frappe.get_all(
@@ -648,8 +649,6 @@ def get_registration_options() -> dict:
         "grades": grades,
         "plans": plans,
         "seasons": seasons,
-        "avatars": ["pre", "blonde", "Caleb", "Jad", "Sadie", "Valentina"],
-        "genders": ["Male", "Female"],
     }
 ```
 

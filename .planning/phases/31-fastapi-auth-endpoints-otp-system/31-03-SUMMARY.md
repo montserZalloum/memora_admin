@@ -16,7 +16,7 @@ provides:
   - "POST /auth/player/register - 2-step OTP registration (step 1: send OTP)"
   - "POST /auth/player/register/verify - verify OTP, create account, auto-login"
   - "POST /auth/player/register/resend - resend OTP with cooldown"
-  - "GET /auth/registration-options - grades, plans, seasons, avatars, genders"
+  - "GET /auth/registration-options - grades, plans, seasons (avatars/genders client-side)"
   - "check_phone_exists Frappe API for upfront duplicate detection"
   - "get_registration_options Frappe API with grade/major resolution"
 affects:
@@ -71,7 +71,7 @@ completed: 2026-02-12
 - POST /auth/player/register: validates phone uniqueness via Frappe API, creates pending registration with OTP in Redis, returns opaque pending_id
 - POST /auth/player/register/verify: verifies OTP, auto-populates season and major, calls register_player, then auto-logs in (device registration, session, tokens, wallet)
 - POST /auth/player/register/resend: resends OTP with 60s cooldown enforcement
-- GET /auth/registration-options: returns grades (with nested majors + titles), plans, seasons, avatars, and genders; cached in Redis for 5 minutes
+- GET /auth/registration-options: returns grades (with nested majors + titles), plans, and seasons; cached in Redis for 5 minutes (avatars/genders are hardcoded client-side)
 - check_phone_exists and get_registration_options Frappe whitelisted APIs added to memora_admin/api/auth.py
 
 ## Task Commits

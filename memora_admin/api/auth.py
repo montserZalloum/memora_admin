@@ -164,10 +164,11 @@ def check_phone_exists(mobile: str) -> dict:
 
 @frappe.whitelist(allow_guest=False)
 def get_registration_options() -> dict:
-	"""Return available grades, plans, seasons, avatars, and genders for registration.
+	"""Return available grades, plans, and seasons for registration.
 
 	Called by FastAPI via FrappeClient. Provides data for mobile app pickers.
 	Results are cached in Redis by the FastAPI endpoint (5-min TTL).
+	Avatars and genders are hardcoded client-side and not included here.
 	"""
 	# Get published seasons (latest by season_seq)
 	seasons = frappe.get_all(
@@ -225,8 +226,6 @@ def get_registration_options() -> dict:
 			for p in plans
 		],
 		"seasons": [{"name": s["name"], "title": s["season_title"]} for s in seasons],
-		"avatars": ["pre", "blonde", "Caleb", "Jad", "Sadie", "Valentina"],
-		"genders": ["Male", "Female"],
 	}
 
 
