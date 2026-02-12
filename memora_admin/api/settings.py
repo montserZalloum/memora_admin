@@ -23,4 +23,5 @@ def get_gamification_settings() -> dict:
 		"max_devices_per_player": settings.max_devices_per_player or 3,
 		"default_max_hearts": settings.default_max_hearts or 5,
 		"xp_per_heart": settings.xp_per_heart or 0,
+		"session_timeout_days": settings.session_timeout_days or 30,
 	}

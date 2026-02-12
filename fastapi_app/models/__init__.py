@@ -2,9 +2,20 @@
 
 from fastapi_app.models.access import SeasonMeta
 from fastapi_app.models.auth import (
+    AdminLoginRequest,
     FrappeUser,
-    LoginRequest,
+    LoginProfile,
+    PasswordResetConfirmRequest,
+    PasswordResetRequest,
+    PasswordResetVerifyRequest,
+    PasswordResetVerifyResponse,
+    PlayerLoginRequest,
+    PlayerLoginResponse,
     RefreshRequest,
+    RegisterRequest,
+    RegisterResendRequest,
+    RegisterResponse,
+    RegisterVerifyRequest,
     TokenPayload,
     TokenResponse,
 )
@@ -23,12 +34,23 @@ from fastapi_app.models.progress import (
 )
 
 __all__ = [
+    "AdminLoginRequest",
     "FrappeUser",
     "LessonInfo",
-    "LoginRequest",
+    "LoginProfile",
+    "PasswordResetConfirmRequest",
+    "PasswordResetRequest",
+    "PasswordResetVerifyRequest",
+    "PasswordResetVerifyResponse",
     "PlanManifest",
     "PlanSubject",
+    "PlayerLoginRequest",
+    "PlayerLoginResponse",
     "RefreshRequest",
+    "RegisterRequest",
+    "RegisterResendRequest",
+    "RegisterResponse",
+    "RegisterVerifyRequest",
     "SeasonMeta",
     "SubjectHierarchy",
     "SubjectProgress",

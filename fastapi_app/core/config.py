@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     slow_redis_threshold_ms: int = 50
 
     # Auth Token Configuration
-    jwt_access_token_expire_minutes: int = 15
+    jwt_access_token_expire_minutes: int = 60
     jwt_refresh_token_expire_days: int = 30
 
     # Frappe Integration

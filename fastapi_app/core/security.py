@@ -11,10 +11,12 @@ from fastapi_app.core.config import get_settings
 
 def create_access_token(
     user_id: str,
-    email: str,
     plan_id: str,
     display_name: str,
     family_id: str,
+    *,
+    email: str | None = None,
+    mobile: str | None = None,
     role: str | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
@@ -22,11 +24,13 @@ def create_access_token(
     Create a JWT access token with user payload.
 
     Args:
-        user_id: Unique user identifier (goes in 'sub' claim)
-        email: User email address
+        user_id: Unique user identifier (goes in 'sub' claim).
+            For players: PLAYER-##### docname. For admins: email address.
         plan_id: Player's plan document name (e.g., 'PLAN-00001')
         display_name: User's display name
         family_id: Family identifier for session management
+        email: User email address (admin tokens)
+        mobile: User mobile number (player tokens)
         role: Optional user role (e.g., "System Manager" for admin users)
         expires_delta: Optional custom expiration time
 
@@ -36,6 +40,7 @@ def create_access_token(
     Note:
         Timezone is hardcoded to Asia/Amman for all players.
         Role is included only for admin users to keep player tokens lean.
+        Email and mobile are included only when truthy (not in payload if None/empty).
     """
     settings = get_settings()
 
@@ -47,7 +52,6 @@ def create_access_token(
 
     payload: dict[str, Any] = {
         "sub": user_id,
-        "email": email,
         "plan": plan_id,
         "name": display_name,
         "fid": family_id,
@@ -56,6 +60,12 @@ def create_access_token(
         "exp": expire,
         "jti": str(uuid4()),
     }
+
+    # Include identity claims only when truthy (keeps tokens lean)
+    if email:
+        payload["email"] = email
+    if mobile:
+        payload["mobile"] = mobile
 
     # Include role only for admin users (keeps player tokens lean)
     if role:

@@ -18,3 +18,4 @@ class GamificationSettings(BaseModel):
 	max_devices_per_player: int = 3
 	default_max_hearts: int = 5
 	xp_per_heart: int = 0
+	session_timeout_days: int = 30
