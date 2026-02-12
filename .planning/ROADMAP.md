@@ -153,7 +153,9 @@ See: `.planning/milestones/v1.9-ROADMAP.md` for full details
   3. Password stored as PBKDF2-SHA256 hash in `__Auth` table (not Fernet-encrypted in Password fieldtype), verified by `check_password()` returning docname
   4. Existing code referencing `doc.user` continues to work (field exists, nullable, not required)
   5. Passwords under 8 characters rejected by validate() with clear error message
-**Plans:** TBD
+**Plans:** 1 plan
+Plans:
+- [ ] 29-01-PLAN.md — JSON schema + Python class hooks for phone+password identity
 
 #### Phase 30: Frappe Auth API Bridge
 
@@ -223,7 +225,7 @@ See: `.planning/milestones/v1.9-ROADMAP.md` for full details
 | 26. Profile Page API | v1.7 | 2/2 | Complete | 2026-02-10 |
 | 27. Memory State Redesign | v1.8 | 5/5 | Complete | 2026-02-11 |
 | 28. Tech Debt & Reliability Fixes | v1.9 | 4/4 | Complete | 2026-02-11 |
-| 29. DocType Schema Foundation | v2.0 | 0/TBD | Not started | - |
+| 29. DocType Schema Foundation | v2.0 | 0/1 | Planned | - |
 | 30. Frappe Auth API Bridge | v2.0 | 0/TBD | Not started | - |
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 0/TBD | Not started | - |
 | 32. Event Handler & API Migration | v2.0 | 0/TBD | Not started | - |
