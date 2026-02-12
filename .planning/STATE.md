@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v2.0 Mobile-First Player Authentication — Phase 32 in progress (Plan 01 complete)
+**Current focus:** v2.0 Mobile-First Player Authentication — Phase 32 in progress (Plan 02 complete)
 
 ## Current Position
 
 Phase: 32 of 32 (Event Handler & API Migration)
-Plan: 1 of 3
-Status: Plan 01 complete
-Last activity: 2026-02-12 — Completed 32-01-PLAN.md (Event handler migration to PLAYER-##### identity)
+Plan: 2 of 3
+Status: Plan 02 complete
+Last activity: 2026-02-12 — Completed 32-02-PLAN.md (Frappe API migration to PLAYER-##### docname)
 
-Progress: [==============================] 99% (92/~94 plans, 32/32 phases)
+Progress: [==============================] 99% (93/~94 plans, 32/32 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 92
+- Total plans completed: 93
 - Milestones shipped: 11
 
 **By Milestone:**
@@ -68,6 +68,8 @@ Recent decisions affecting current work:
 - Event handlers use doc.player/doc.name directly as Redis identity key (no frappe.get_doc lookup needed)
 - Two-pronged invalidation pattern (direct op + pubsub) adopted for profile_sync and plan_change_sync
 - User field removed from Player Profile schema (clean break, PLAYER-##### is sole identity)
+- Subscription API fallback blocks removed entirely (PLAYER-##### is sole identity, no dual-lookup needed)
+- reviews.py pp.user fixed to pp.name (discovered during Plan 02 verification grep)
 
 ### Pending Todos
 
@@ -84,6 +86,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 32-01-PLAN.md (Event handler migration to PLAYER-##### identity)
+Stopped at: Completed 32-02-PLAN.md (Frappe API migration to PLAYER-##### docname)
 Resume file: None
-Next action: Execute 32-02-PLAN.md (Frappe API migration)
+Next action: Execute 32-03-PLAN.md (Scheduled tasks migration)
