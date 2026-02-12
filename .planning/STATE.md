@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v2.0 Mobile-First Player Authentication — Phase 31 in progress
+**Current focus:** v2.0 Mobile-First Player Authentication — Phase 31 complete
 
 ## Current Position
 
 Phase: 31 of 32 (FastAPI Auth Endpoints + OTP System)
-Plan: 3 of 4 (complete)
-Status: In progress
-Last activity: 2026-02-12 — Completed 31-03-PLAN.md (Registration endpoints with OTP)
+Plan: 4 of 4 (complete)
+Status: Phase complete
+Last activity: 2026-02-12 — Completed 31-04-PLAN.md (Password reset endpoints with OTP)
 
-Progress: [=============================.] 98% (90/~92 plans, 31/32 phases)
+Progress: [==============================] 99% (91/~92 plans, 31/32 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 90
+- Total plans completed: 91
 - Milestones shipped: 11
 
 **By Milestone:**
@@ -63,6 +63,8 @@ Recent decisions affecting current work:
 - Registration: upfront phone check via check_phone_exists Frappe API (better UX before OTP)
 - Season auto-populated from latest published season (not user-facing)
 - Major auto-derived from plan; fallback to first major of selected grade
+- Anti-enumeration: password reset request always returns same response + consistent timing regardless of phone existence
+- check_phone_exists returns player_name for mobile-to-docname resolution (used by password reset confirm)
 
 ### Pending Todos
 
@@ -79,6 +81,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 31-03-PLAN.md (Registration endpoints with OTP)
+Stopped at: Completed 31-04-PLAN.md (Password reset endpoints with OTP)
 Resume file: None
-Next action: Execute 31-04-PLAN.md (Password reset endpoints with OTP)
+Next action: Phase 31 complete. Proceed to Phase 32 planning.
