@@ -1,5 +1,7 @@
 """Profile API for batch profile fetching, memory mastery, and avatar management.
 
+Player identity is PLAYER-##### docname (not email). See Phase 32.
+
 Provides whitelisted APIs for FastAPI:
 - Batch profile fetch (cache miss hydration)
 - Memory mastery breakdown (FSRS stability classification)
@@ -21,7 +23,7 @@ def get_profiles_batch(player_ids: list[str] | str) -> list[dict]:
 	database query rather than N+1 queries.
 
 	Args:
-		player_ids: List of user IDs to fetch (or JSON string of list)
+		player_ids: List of player docnames (PLAYER-#####) to fetch (or JSON string of list)
 
 	Returns:
 		List of profile dicts with player_id, display_name, avatar.
@@ -40,17 +42,17 @@ def get_profiles_batch(player_ids: list[str] | str) -> list[dict]:
 	if not player_ids:
 		return []
 
-	# Single query for all profiles
+	# Single query for all profiles (filter by docname, not user field)
 	profiles = frappe.get_all(
 		"Memora Player Profile",
-		filters={"user": ["in", player_ids]},
-		fields=["user", "display_name", "avatar"],
+		filters={"name": ["in", player_ids]},
+		fields=["name", "display_name", "avatar"],
 	)
 
 	# Transform to expected format
 	return [
 		{
-			"player_id": p.user,
+			"player_id": p.name,
 			"display_name": p.display_name or "",
 			"avatar": p.avatar or "default_avatar",
 		}
@@ -70,7 +72,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None) -> dict:
 	Counts items (each Memory State row = 1 item) with season_seq for partition pruning.
 
 	Args:
-		player_id: User identifier (email).
+		player_id: Player docname (PLAYER-#####).
 		subject_id: Optional subject filter. None or JSON "null" returns all subjects.
 
 	Returns:
@@ -129,7 +131,7 @@ def update_player_avatar(player_id: str, avatar: str) -> dict:
 	stale hardcoded allow-lists (options are admin-configurable).
 
 	Args:
-		player_id: User identifier (email).
+		player_id: Player docname (PLAYER-#####).
 		avatar: Avatar identifier from the predefined options list.
 
 	Returns:
@@ -144,10 +146,10 @@ def update_player_avatar(player_id: str, avatar: str) -> dict:
 	if valid_options and avatar not in valid_options:
 		frappe.throw(f"Invalid avatar option: {avatar}", frappe.ValidationError)
 
-	# Look up profile by user field (not doctype name)
-	profile_name = frappe.get_value("Memora Player Profile", {"user": player_id}, "name")
-	if not profile_name:
+	# Player identity is PLAYER-##### docname
+	if not frappe.db.exists("Memora Player Profile", player_id):
 		frappe.throw(f"Player profile not found for: {player_id}", frappe.DoesNotExistError)
+	profile_name = player_id
 
 	frappe.db.set_value("Memora Player Profile", profile_name, "avatar", avatar)
 	frappe.db.commit()

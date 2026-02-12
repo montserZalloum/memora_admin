@@ -39,7 +39,7 @@ def _get_player_season_seq(player_id: str) -> int:
 		FROM `tabMemora Player Profile` pp
 		INNER JOIN `tabMemora Academic Plan` ap ON ap.name = pp.plan
 		INNER JOIN `tabMemora Season` s ON s.name = ap.season
-		WHERE pp.user = %(player)s
+		WHERE pp.name = %(player)s
 		LIMIT 1
 		""",
 		{"player": player_id},

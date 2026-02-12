@@ -1,5 +1,7 @@
 """Device management APIs for admin panel.
 
+Player identity is PLAYER-##### docname (not email). See Phase 32.
+
 Provides whitelisted APIs for syncing device data from Redis to Frappe child table
 and removing devices with session invalidation.
 
@@ -48,7 +50,7 @@ def sync_devices_from_redis(player_name: str) -> list[dict]:
 		frappe.throw: On Redis connection errors
 	"""
 	profile = frappe.get_doc("Memora Player Profile", player_name)
-	user_id = profile.user
+	user_id = profile.name  # PLAYER-##### docname is the Redis identity key
 
 	try:
 		r = get_fastapi_redis()
@@ -124,7 +126,7 @@ def remove_device(player_name: str, device_id: str) -> dict:
 		frappe.throw: On Redis connection errors
 	"""
 	profile = frappe.get_doc("Memora Player Profile", player_name)
-	user_id = profile.user
+	user_id = profile.name  # PLAYER-##### docname is the Redis identity key
 
 	try:
 		r = get_fastapi_redis()

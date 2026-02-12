@@ -1,4 +1,7 @@
-"""Frappe API for purchase request operations."""
+"""Frappe API for purchase request operations.
+
+Player identity is PLAYER-##### docname (not email). See Phase 32.
+"""
 
 import frappe
 
@@ -14,7 +17,7 @@ def create_purchase_request(
 	"""Create a Subscription Transaction with Pending Approval status.
 
 	Args:
-		user_id: User ID (email) from JWT sub claim
+		user_id: Player docname (PLAYER-#####) from JWT sub claim
 		product_grant_id: Memora Product Grant document name
 		payment_method: Payment method (e.g. "Manual-Admin")
 		payment_proof_url: Optional URL of uploaded payment proof image
@@ -40,10 +43,10 @@ def create_purchase_request(
 	if plan_id and grant.plan != plan_id:
 		frappe.throw("Product not available for your plan", frappe.ValidationError)
 
-	# 2. Get player profile from user
-	player_id = frappe.get_value("Memora Player Profile", {"user": user_id}, "name")
-	if not player_id:
+	# 2. Validate player profile exists (user_id IS the PLAYER-##### docname)
+	if not frappe.db.exists("Memora Player Profile", user_id):
 		frappe.throw("Player profile not found", frappe.DoesNotExistError)
+	player_id = user_id
 
 	# 3. Check for existing pending transaction (duplicate guard)
 	existing = frappe.db.exists(
