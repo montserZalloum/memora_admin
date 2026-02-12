@@ -9,12 +9,12 @@ Requirements for mobile-first player authentication migration. Each maps to road
 
 ### Schema & DocType
 
-- [ ] **SCHEMA-01**: Player Profile autoname changed from `field:user` to `PLAYER-.#####.`
-- [ ] **SCHEMA-02**: `mobile` field added (Data, unique, required) as primary player identifier
-- [ ] **SCHEMA-03**: `password` field added (Password fieldtype, hidden) with `flags.ignore_save_passwords` bypass
-- [ ] **SCHEMA-04**: Phone normalization in `validate()` — strips non-digits, validates 9-15 digit length
-- [ ] **SCHEMA-05**: Password hashing via `update_password()` in `after_insert`/`on_update` (PBKDF2-SHA256, not Fernet)
-- [ ] **SCHEMA-06**: `user` field kept temporarily (nullable, not required) for backward compatibility
+- [x] **SCHEMA-01**: Player Profile autoname changed from `field:user` to `PLAYER-.#####.`
+- [x] **SCHEMA-02**: `mobile` field added (Data, unique, required) as primary player identifier
+- [x] **SCHEMA-03**: `password` field added (Password fieldtype, hidden) with `flags.ignore_save_passwords` bypass
+- [x] **SCHEMA-04**: Phone normalization in `validate()` — strips non-digits, validates 9-15 digit length
+- [x] **SCHEMA-05**: Password hashing via `update_password()` in `after_insert`/`on_update` (PBKDF2-SHA256, not Fernet)
+- [x] **SCHEMA-06**: `user` field kept temporarily (nullable, not required) for backward compatibility
 
 ### Player Authentication
 
@@ -46,7 +46,7 @@ Requirements for mobile-first player authentication migration. Each maps to road
 
 - [ ] **SEC-01**: OTP send rate limiting — 3 per phone per 10 min, 10 per IP per 10 min
 - [ ] **SEC-02**: OTP verification attempt limiting — max 3 incorrect attempts, then invalidate OTP
-- [ ] **SEC-03**: Password policy — minimum 8 characters enforced in validate() and FastAPI
+- [x] **SEC-03**: Password policy — minimum 8 characters enforced in validate() and FastAPI
 - [ ] **SEC-04**: Pluggable OTP provider interface (OTPProvider protocol) with StaticOTPProvider default
 - [ ] **SEC-05**: 60-second cooldown between OTP resends to same number
 
@@ -98,12 +98,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | Phase 29 | Pending |
-| SCHEMA-02 | Phase 29 | Pending |
-| SCHEMA-03 | Phase 29 | Pending |
-| SCHEMA-04 | Phase 29 | Pending |
-| SCHEMA-05 | Phase 29 | Pending |
-| SCHEMA-06 | Phase 29 | Pending |
+| SCHEMA-01 | Phase 29 | Complete |
+| SCHEMA-02 | Phase 29 | Complete |
+| SCHEMA-03 | Phase 29 | Complete |
+| SCHEMA-04 | Phase 29 | Complete |
+| SCHEMA-05 | Phase 29 | Complete |
+| SCHEMA-06 | Phase 29 | Complete |
 | AUTH-01 | Phase 31 | Pending |
 | AUTH-02 | Phase 31 | Pending |
 | AUTH-03 | Phase 31 | Pending |
@@ -123,7 +123,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RESET-06 | Phase 30 | Pending |
 | SEC-01 | Phase 31 | Pending |
 | SEC-02 | Phase 31 | Pending |
-| SEC-03 | Phase 29 | Pending |
+| SEC-03 | Phase 29 | Complete |
 | SEC-04 | Phase 31 | Pending |
 | SEC-05 | Phase 31 | Pending |
 | MIGR-01 | Phase 31 | Pending |
@@ -147,4 +147,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-02-12*
-*Last updated: 2026-02-12 after roadmap creation (traceability populated)*
+*Last updated: 2026-02-12 after Phase 29 completion (SCHEMA-01..06, SEC-03 → Complete)*
