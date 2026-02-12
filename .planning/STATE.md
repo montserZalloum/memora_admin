@@ -5,14 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v2.0 Mobile-First Player Authentication
+**Current focus:** v2.0 Mobile-First Player Authentication — Phase 29 (DocType Schema Foundation)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements for v2.0
-Last activity: 2026-02-12 — Milestone v2.0 started
+Phase: 29 of 32 (DocType Schema Foundation)
+Plan: — (phase not yet planned)
+Status: Ready to plan
+Last activity: 2026-02-12 — Roadmap created for v2.0 milestone (phases 29-32)
+
+Progress: [============================..] 93% (85/~TBD plans, 28/32 phases)
 
 ## Performance Metrics
 
@@ -35,13 +37,20 @@ Last activity: 2026-02-12 — Milestone v2.0 started
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
 | v1.8 Memory State Redesign | 1 | 5 | Shipped 2026-02-11 |
 | v1.9 Tech Debt & Reliability | 1 | 4 | Shipped 2026-02-12 |
-| v2.0 Mobile-First Auth | — | — | In Progress |
+| v2.0 Mobile-First Auth | 4 | TBD | In Progress |
 
 ## Accumulated Context
 
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- Phone+password auth for players (Frappe User overhead unnecessary for mobile-first audience)
+- PLAYER-.#####. autoname (decouples identity from phone number)
+- Separate login endpoints (clean player/admin separation)
+- Static OTP "1111" stub (ship auth flow now, swap real SMS later)
+- 3-step password reset (most secure OTP flow per OWASP)
 
 ### Pending Todos
 
@@ -51,11 +60,12 @@ All decisions logged in PROJECT.md Key Decisions table.
 ### Blockers/Concerns
 
 - Payment gateway integration (PRCHS-03) deferred to future work — all transactions currently manual approval
-- Admin role not populated in login flow — will be addressed in v2.0 (separate admin login endpoint)
+- Research pitfall: Password fieldtype uses Fernet (not hashing) -- must use `flags.ignore_save_passwords` + manual `update_password()` for PBKDF2-SHA256
+- Research pitfall: `__Auth` table keying -- must lookup docname from mobile BEFORE calling `check_password()`
 
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: v2.0 milestone started — defining requirements
+Stopped at: v2.0 roadmap created (phases 29-32), ready to plan Phase 29
 Resume file: None
-Next action: Define requirements and create roadmap
+Next action: `/gsd:plan-phase 29` (DocType Schema Foundation)

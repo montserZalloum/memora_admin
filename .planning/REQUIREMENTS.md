@@ -98,47 +98,53 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SCHEMA-01 | TBD | Pending |
-| SCHEMA-02 | TBD | Pending |
-| SCHEMA-03 | TBD | Pending |
-| SCHEMA-04 | TBD | Pending |
-| SCHEMA-05 | TBD | Pending |
-| SCHEMA-06 | TBD | Pending |
-| AUTH-01 | TBD | Pending |
-| AUTH-02 | TBD | Pending |
-| AUTH-03 | TBD | Pending |
-| AUTH-04 | TBD | Pending |
-| AUTH-05 | TBD | Pending |
-| REG-01 | TBD | Pending |
-| REG-02 | TBD | Pending |
-| REG-03 | TBD | Pending |
-| REG-04 | TBD | Pending |
-| REG-05 | TBD | Pending |
-| REG-06 | TBD | Pending |
-| RESET-01 | TBD | Pending |
-| RESET-02 | TBD | Pending |
-| RESET-03 | TBD | Pending |
-| RESET-04 | TBD | Pending |
-| RESET-05 | TBD | Pending |
-| RESET-06 | TBD | Pending |
-| SEC-01 | TBD | Pending |
-| SEC-02 | TBD | Pending |
-| SEC-03 | TBD | Pending |
-| SEC-04 | TBD | Pending |
-| SEC-05 | TBD | Pending |
-| MIGR-01 | TBD | Pending |
-| MIGR-02 | TBD | Pending |
-| MIGR-03 | TBD | Pending |
-| MIGR-04 | TBD | Pending |
-| MIGR-05 | TBD | Pending |
-| MIGR-06 | TBD | Pending |
-| MIGR-07 | TBD | Pending |
+| SCHEMA-01 | Phase 29 | Pending |
+| SCHEMA-02 | Phase 29 | Pending |
+| SCHEMA-03 | Phase 29 | Pending |
+| SCHEMA-04 | Phase 29 | Pending |
+| SCHEMA-05 | Phase 29 | Pending |
+| SCHEMA-06 | Phase 29 | Pending |
+| AUTH-01 | Phase 31 | Pending |
+| AUTH-02 | Phase 31 | Pending |
+| AUTH-03 | Phase 31 | Pending |
+| AUTH-04 | Phase 31 | Pending |
+| AUTH-05 | Phase 31 | Pending |
+| REG-01 | Phase 31 | Pending |
+| REG-02 | Phase 31 | Pending |
+| REG-03 | Phase 31 | Pending |
+| REG-04 | Phase 31 | Pending |
+| REG-05 | Phase 31 | Pending |
+| REG-06 | Phase 31 | Pending |
+| RESET-01 | Phase 31 | Pending |
+| RESET-02 | Phase 31 | Pending |
+| RESET-03 | Phase 31 | Pending |
+| RESET-04 | Phase 31 | Pending |
+| RESET-05 | Phase 31 | Pending |
+| RESET-06 | Phase 30 | Pending |
+| SEC-01 | Phase 31 | Pending |
+| SEC-02 | Phase 31 | Pending |
+| SEC-03 | Phase 29 | Pending |
+| SEC-04 | Phase 31 | Pending |
+| SEC-05 | Phase 31 | Pending |
+| MIGR-01 | Phase 31 | Pending |
+| MIGR-02 | Phase 31 | Pending |
+| MIGR-03 | Phase 32 | Pending |
+| MIGR-04 | Phase 32 | Pending |
+| MIGR-05 | Phase 30 | Pending |
+| MIGR-06 | Phase 32 | Pending |
+| MIGR-07 | Phase 31 | Pending |
 
 **Coverage:**
 - v2.0 requirements: 35 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 35
+- Mapped to phases: 35
+- Unmapped: 0
+
+**Coverage by phase:**
+- Phase 29: 7 requirements (SCHEMA-01..06, SEC-03)
+- Phase 30: 2 requirements (MIGR-05, RESET-06)
+- Phase 31: 23 requirements (AUTH-01..05, REG-01..06, RESET-01..05, SEC-01, SEC-02, SEC-04, SEC-05, MIGR-01, MIGR-02, MIGR-07)
+- Phase 32: 3 requirements (MIGR-03, MIGR-04, MIGR-06)
 
 ---
 *Requirements defined: 2026-02-12*
-*Last updated: 2026-02-12 after initial definition*
+*Last updated: 2026-02-12 after roadmap creation (traceability populated)*
