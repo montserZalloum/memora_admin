@@ -5,16 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** Planning next milestone
+**Current focus:** v2.0 Mobile-First Player Authentication
 
 ## Current Position
 
-Phase: 28 of 28 (all phases complete)
-Plan: All complete
-Status: Milestone v1.9 shipped
-Last activity: 2026-02-12 — v1.9 milestone archived
-
-Progress: [████████████████████████████████████████] 85/85 plans (28 phases, 11 milestones)
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements for v2.0
+Last activity: 2026-02-12 — Milestone v2.0 started
 
 ## Performance Metrics
 
@@ -37,6 +35,7 @@ Progress: [███████████████████████
 | v1.7 Profile Page API | 1 | 2 | Shipped 2026-02-10 |
 | v1.8 Memory State Redesign | 1 | 5 | Shipped 2026-02-11 |
 | v1.9 Tech Debt & Reliability | 1 | 4 | Shipped 2026-02-12 |
+| v2.0 Mobile-First Auth | — | — | In Progress |
 
 ## Accumulated Context
 
@@ -52,11 +51,11 @@ All decisions logged in PROJECT.md Key Decisions table.
 ### Blockers/Concerns
 
 - Payment gateway integration (PRCHS-03) deferred to future work — all transactions currently manual approval
-- Admin role not populated in login flow — infrastructure exists but login endpoint doesn't fetch roles from Frappe
+- Admin role not populated in login flow — will be addressed in v2.0 (separate admin login endpoint)
 
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: v1.9 milestone archived
+Stopped at: v2.0 milestone started — defining requirements
 Resume file: None
-Next action: Start next milestone with `/gsd:new-milestone`
+Next action: Define requirements and create roadmap

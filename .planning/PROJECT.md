@@ -137,7 +137,17 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 
 ### Active
 
-(None — planning next milestone)
+**v2.0 Mobile-First Player Authentication:**
+- [ ] Player Profile DocType redesign — remove `user` link to Frappe User, add `mobile` + `password` fields, autoname `PLAYER-.#####.`
+- [ ] Phone number validation — digits only, no country code handling
+- [ ] OTP system — generate/verify/expire flow, static "1111" stub, pluggable sender interface for future SMS/WhatsApp
+- [ ] Separate player login — `/auth/player/login` (phone + password → JWT)
+- [ ] Separate admin login — `/auth/admin/login` (email + password → Frappe session → JWT)
+- [ ] Player self-registration — `/auth/player/register` with OTP verification
+- [ ] Password reset (3-step) — request OTP → verify OTP (temp token) → set new password
+- [ ] Frappe whitelisted auth API — password verification for Player Profile without Frappe session
+- [ ] Event handler migration — replace `doc.user` references with `doc.name`/`doc.mobile` in access_sync, device_sync, plan_change_sync
+- [ ] FastAPI auth model updates — LoginRequest, TokenPayload, security module changes
 
 ### Out of Scope
 
@@ -190,7 +200,7 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - **Tech stack**: Frappe v15 + FastAPI + Redis + MariaDB — as specified in PRD
 - **Performance**: Sub-20ms response times for game API — critical for user experience
 - **Scalability**: Design for 100K concurrent users — bitmap storage, batch writes
-- **Compatibility**: Must work with existing 32 DocTypes — no breaking changes to schemas
+- **Compatibility**: Must work with existing 32 DocTypes — Player Profile schema changes are intentional breaking change for v2.0
 - **CDN**: Mock layer that can be swapped for Cloudflare R2 — clean abstraction required
 
 ## Key Decisions
@@ -242,5 +252,11 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 | calculate_xp_award in service layer | Module-level function importable by any endpoint | Good |
 | Safe Lua tonumber pattern | Two-step (raw and tonumber(raw)) or 0 handles all edge cases | Good |
 
+| Phone+password auth for players | Players don't have emails; Frappe User overhead unnecessary for mobile-first audience | — Pending |
+| PLAYER-.#####. autoname | Decouples identity from phone number; avoids Frappe rename_doc if number changes | — Pending |
+| Separate login endpoints | Clean player/admin separation; no detection heuristics needed | — Pending |
+| Static OTP "1111" stub | Ship auth flow now; swap real SMS/WhatsApp provider later | — Pending |
+| 3-step password reset | OTP verify → temp token → set password; most secure flow | — Pending |
+
 ---
-*Last updated: 2026-02-12 after v1.9 milestone*
+*Last updated: 2026-02-12 after v2.0 milestone started*
