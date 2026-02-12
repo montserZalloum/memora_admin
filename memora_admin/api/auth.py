@@ -152,11 +152,14 @@ def check_phone_exists(mobile: str) -> dict:
 	"""Check whether a phone number is already registered.
 
 	Used by FastAPI registration endpoint for upfront duplicate detection
-	(better UX than discovering after OTP verification).
+	and by password reset for mobile-to-docname resolution.
+
+	Returns:
+		{"exists": bool, "player_name": str|None}
 	"""
 	cleaned = re.sub(r"[^\d]", "", mobile)
-	exists = frappe.db.exists("Memora Player Profile", {"mobile": cleaned})
-	return {"exists": bool(exists)}
+	player_name = frappe.db.get_value("Memora Player Profile", {"mobile": cleaned}, "name")
+	return {"exists": bool(player_name), "player_name": player_name}
 
 
 @frappe.whitelist(allow_guest=False)

@@ -13,6 +13,10 @@ from fastapi_app.core.security import create_access_token, create_refresh_token,
 from fastapi_app.models.auth import (
 	AdminLoginRequest,
 	LoginProfile,
+	PasswordResetConfirmRequest,
+	PasswordResetRequest,
+	PasswordResetVerifyRequest,
+	PasswordResetVerifyResponse,
 	PlayerLoginRequest,
 	PlayerLoginResponse,
 	RefreshRequest,
@@ -585,3 +589,95 @@ async def player_register_resend(
 	otp_service = OTPService(redis)
 	await otp_service.resend_registration_otp(body.pending_id, client_ip)
 	return {"message": "OTP resent"}
+
+
+# =============================================================================
+# Password reset endpoints (3-step OWASP-compliant flow)
+# =============================================================================
+
+
+@router.post("/player/password-reset/request")
+async def password_reset_request(
+	request: Request,
+	body: PasswordResetRequest,
+	redis: RedisClient,
+) -> dict:
+	"""
+	Password reset step 1: request OTP for password reset.
+
+	Anti-enumeration design: ALWAYS returns the same generic message regardless
+	of whether the phone number is registered. Rate limits and cooldown run
+	in all cases for timing consistency.
+	"""
+	client_ip = _get_client_ip(request)
+	otp_service = OTPService(redis)
+
+	# Check phone existence (needed to decide whether to store OTP)
+	phone_exists = False
+	try:
+		frappe_client = await get_frappe_client()
+		result = await frappe_client.call(
+			"memora_admin.api.auth.check_phone_exists",
+			{"mobile": body.mobile},
+		)
+		phone_exists = bool(result and result.get("exists"))
+	except Exception:
+		# Treat Frappe errors as "not found" for anti-enumeration
+		pass
+
+	# OTPService handles rate limit + cooldown always, OTP storage only if phone exists
+	await otp_service.create_password_reset(body.mobile, client_ip, phone_exists=phone_exists)
+
+	return {"message": "If this number is registered, you will receive an OTP"}
+
+
+@router.post("/player/password-reset/verify", response_model=PasswordResetVerifyResponse)
+async def password_reset_verify(
+	body: PasswordResetVerifyRequest,
+	redis: RedisClient,
+) -> PasswordResetVerifyResponse:
+	"""
+	Password reset step 2: verify OTP and receive temporary reset token.
+
+	The reset token is cryptographically random, bound to the phone number,
+	has a 15-minute TTL, and is single-use (deleted from Redis after validation).
+	"""
+	otp_service = OTPService(redis)
+	reset_token = await otp_service.verify_password_reset_otp(body.mobile, body.otp)
+	return PasswordResetVerifyResponse(reset_token=reset_token)
+
+
+@router.post("/player/password-reset/confirm")
+async def password_reset_confirm(
+	body: PasswordResetConfirmRequest,
+	redis: RedisClient,
+) -> dict:
+	"""
+	Password reset step 3: set new password using temporary reset token.
+
+	Validates the single-use token, resolves the mobile number to the player
+	docname, then calls set_player_password which handles both the password
+	hash update and session invalidation (RESET-05: forces all devices to re-login).
+	"""
+	otp_service = OTPService(redis)
+	# validate_reset_token is single-use: deletes token from Redis, returns mobile
+	mobile = await otp_service.validate_reset_token(body.reset_token)
+
+	# Resolve mobile to player docname via check_phone_exists
+	frappe_client = await get_frappe_client()
+	phone_check = await frappe_client.call(
+		"memora_admin.api.auth.check_phone_exists",
+		{"mobile": mobile},
+	)
+	if not phone_check or not phone_check.get("exists"):
+		raise HTTPException(status_code=401, detail="Account not found")
+
+	player_name = phone_check["player_name"]
+
+	# set_player_password handles hash update AND session invalidation (RESET-05)
+	await frappe_client.call(
+		"memora_admin.api.auth.set_player_password",
+		{"player_name": player_name, "new_password": body.new_password},
+	)
+
+	return {"message": "Password reset successful. Please log in again."}

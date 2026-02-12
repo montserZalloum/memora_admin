@@ -302,30 +302,41 @@ class OTPService:
 
 	# --- Password reset flow ---
 
-	async def create_password_reset(self, mobile: str, ip_address: str) -> None:
+	async def create_password_reset(self, mobile: str, ip_address: str, *, phone_exists: bool = True) -> None:
 		"""Create a password reset OTP.
 
-		Stores OTP in Redis with TTL. Does NOT verify phone exists in DB
-		(endpoint handles that + anti-enumeration).
+		Anti-enumeration design: rate limit and cooldown ALWAYS run (timing consistency).
+		OTP is only stored and sent when phone_exists=True.
+		When phone_exists=False, cooldown is still set but no OTP is generated.
+
+		Args:
+			mobile: Phone number
+			ip_address: Client IP for rate limiting
+			phone_exists: Whether the phone is registered (controls OTP storage/sending)
 
 		Raises:
 			HTTPException(429): Rate limit or cooldown exceeded
 		"""
-		# Check rate limit and cooldown
+		# ALWAYS check rate limit and cooldown (timing consistency for anti-enumeration)
 		await self._check_otp_rate_limit(mobile, ip_address)
 		await self._check_cooldown(mobile)
 
-		# Generate and store OTP
-		otp = "1111"
-		reset_data = {"otp": otp, "attempts": 0}
-		reset_key = f"{self.prefix}reset:{mobile}"
-		await self.redis.set(reset_key, json.dumps(reset_data), ex=self.OTP_TTL)
-
-		# Set cooldown and send
+		# ALWAYS set cooldown (timing consistency)
 		await self._set_cooldown(mobile)
-		await self.provider.send_otp(mobile, otp)
 
-		logger.info("password_reset_otp_sent", mobile_suffix=mobile[-4:])
+		if phone_exists:
+			# Generate and store OTP only for existing phones
+			otp = "1111"
+			reset_data = {"otp": otp, "attempts": 0}
+			reset_key = f"{self.prefix}reset:{mobile}"
+			await self.redis.set(reset_key, json.dumps(reset_data), ex=self.OTP_TTL)
+
+			# Send via provider
+			await self.provider.send_otp(mobile, otp)
+			logger.info("password_reset_otp_sent", mobile_suffix=mobile[-4:])
+		else:
+			# Phone not found -- no OTP stored, no SMS sent (anti-enumeration)
+			logger.info("password_reset_phone_not_found", mobile_suffix=mobile[-4:])
 
 	async def verify_password_reset_otp(self, mobile: str, otp: str) -> str:
 		"""Verify OTP for password reset.
