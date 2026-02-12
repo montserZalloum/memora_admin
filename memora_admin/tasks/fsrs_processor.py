@@ -1,6 +1,8 @@
 """
 FSRS spaced repetition processor.
 
+# Player identity is PLAYER-##### docname (not email). See Phase 32.
+
 Processes recent interactions to compute and persist FSRS memory state at item level.
 Each sub-element (question, matching pair, word, etc.) gets its own Memory State record.
 Excludes skippable stages (from Memora Lesson Stage Settings).
@@ -94,11 +96,11 @@ def _resolve_player_seasons(players: list[str]) -> dict[str, tuple[str, int]]:
 
 	rows = frappe.db.sql(
 		"""
-		SELECT pp.user AS player, s.name AS season, s.season_seq
+		SELECT pp.name AS player, s.name AS season, s.season_seq
 		FROM `tabMemora Player Profile` pp
 		INNER JOIN `tabMemora Academic Plan` ap ON ap.name = pp.plan
 		INNER JOIN `tabMemora Season` s ON s.name = ap.season
-		WHERE pp.user IN %(players)s
+		WHERE pp.name IN %(players)s
 		""",
 		{"players": players},
 		as_dict=True,
