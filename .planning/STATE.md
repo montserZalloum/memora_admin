@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-12)
 ## Current Position
 
 Phase: 31 of 32 (FastAPI Auth Endpoints + OTP System)
-Plan: 2 of 4 (complete)
+Plan: 3 of 4 (complete)
 Status: In progress
-Last activity: 2026-02-12 — Completed 31-02-PLAN.md (Player Login + Admin Login endpoints)
+Last activity: 2026-02-12 — Completed 31-03-PLAN.md (Registration endpoints with OTP)
 
-Progress: [=============================.] 98% (89/~91 plans, 31/32 phases)
+Progress: [=============================.] 98% (90/~92 plans, 31/32 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 89
+- Total plans completed: 90
 - Milestones shipped: 11
 
 **By Milestone:**
@@ -60,6 +60,9 @@ Recent decisions affecting current work:
 - Admin login retains FrappeAuthService (Frappe User auth unchanged)
 - Player refresh TTL from session_timeout_days (Memora Settings); admin refresh TTL from .env
 - Admin tokens include role="System Manager" claim, preserved across refreshes
+- Registration: upfront phone check via check_phone_exists Frappe API (better UX before OTP)
+- Season auto-populated from latest published season (not user-facing)
+- Major auto-derived from plan; fallback to first major of selected grade
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 31-02-PLAN.md (Player Login + Admin Login endpoints)
+Stopped at: Completed 31-03-PLAN.md (Registration endpoints with OTP)
 Resume file: None
-Next action: Execute 31-03-PLAN.md (Registration endpoints with OTP)
+Next action: Execute 31-04-PLAN.md (Password reset endpoints with OTP)
