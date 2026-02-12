@@ -40,7 +40,7 @@ Requirements for mobile-first player authentication migration. Each maps to road
 - [ ] **RESET-03**: Player sets new password with temp token via `POST /auth/player/password-reset/confirm`
 - [ ] **RESET-04**: Temp token is cryptographically random (secrets.token_urlsafe(32)), bound to phone, 10-min TTL, single-use
 - [ ] **RESET-05**: All existing sessions invalidated on password change (OWASP requirement)
-- [ ] **RESET-06**: Admin can reset player password from Frappe Desk (triggers session invalidation)
+- [x] **RESET-06**: Admin can reset player password from Frappe Desk (triggers session invalidation)
 
 ### Security
 
@@ -56,7 +56,7 @@ Requirements for mobile-first player authentication migration. Each maps to road
 - [ ] **MIGR-02**: `create_access_token()` updated — `email` optional, `mobile` added
 - [ ] **MIGR-03**: Event handlers updated — `doc.user` replaced with `doc.name` in access_sync, device_sync, plan_change_sync, profile_sync
 - [ ] **MIGR-04**: Frappe APIs updated — purchase.py, profile.py, subscriptions.py, devices.py remove `{"user": player_id}` lookups
-- [ ] **MIGR-05**: Frappe whitelisted auth API created (`memora_admin/api/auth.py`) with verify_player_password, register_player, set_player_password
+- [x] **MIGR-05**: Frappe whitelisted auth API created (`memora_admin/api/auth.py`) with verify_player_password, register_player, set_player_password
 - [ ] **MIGR-06**: Fix pre-existing bug: plan_change_sync.py and profile_sync.py use wrong Redis client (frappe.cache() instead of get_fastapi_redis())
 - [ ] **MIGR-07**: Old single `/auth/login` endpoint removed, replaced by separate player/admin endpoints
 
@@ -120,7 +120,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RESET-03 | Phase 31 | Pending |
 | RESET-04 | Phase 31 | Pending |
 | RESET-05 | Phase 31 | Pending |
-| RESET-06 | Phase 30 | Pending |
+| RESET-06 | Phase 30 | Complete |
 | SEC-01 | Phase 31 | Pending |
 | SEC-02 | Phase 31 | Pending |
 | SEC-03 | Phase 29 | Complete |
@@ -130,7 +130,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MIGR-02 | Phase 31 | Pending |
 | MIGR-03 | Phase 32 | Pending |
 | MIGR-04 | Phase 32 | Pending |
-| MIGR-05 | Phase 30 | Pending |
+| MIGR-05 | Phase 30 | Complete |
 | MIGR-06 | Phase 32 | Pending |
 | MIGR-07 | Phase 31 | Pending |
 
