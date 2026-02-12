@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v2.0 Mobile-First Player Authentication — Phase 29 complete, ready for Phase 30
+**Current focus:** v2.0 Mobile-First Player Authentication — Phase 30 complete, ready for Phase 31
 
 ## Current Position
 
-Phase: 29 of 32 (DocType Schema Foundation)
+Phase: 30 of 32 (Frappe Auth API Bridge)
 Plan: 1 of 1 (complete)
-Status: Phase 29 complete
-Last activity: 2026-02-12 — Completed 29-01-PLAN.md (DocType Schema Foundation)
+Status: Phase 30 complete
+Last activity: 2026-02-12 — Completed 30-01-PLAN.md (Frappe Auth API Bridge)
 
-Progress: [============================..] 94% (86/~TBD plans, 29/32 phases)
+Progress: [=============================.] 97% (87/~TBD plans, 30/32 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 86
+- Total plans completed: 87
 - Milestones shipped: 11
 
 **By Milestone:**
@@ -64,10 +64,11 @@ Recent decisions affecting current work:
 - Payment gateway integration (PRCHS-03) deferred to future work — all transactions currently manual approval
 - `profile_sync.py` references `doc.user` which is None for phone-based players -- needs update in Phase 32
 - Research pitfall resolved: `flags.ignore_save_passwords` + `update_password()` pattern implemented in Phase 29
+- Mobile-to-docname resolution required before any __Auth table operation (check_password keys by PLAYER-##### docname, not phone)
 
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 29-01-PLAN.md (DocType Schema Foundation)
+Stopped at: Completed 30-01-PLAN.md (Frappe Auth API Bridge)
 Resume file: None
-Next action: `/gsd:plan-phase 30` (Frappe Auth API Bridge)
+Next action: `/gsd:plan-phase 31` (FastAPI Auth Endpoints + OTP System)
