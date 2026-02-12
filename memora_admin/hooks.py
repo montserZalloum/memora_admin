@@ -26,7 +26,7 @@ app_license = "mit"
 
 # include js, css files in header of desk.html
 # app_include_css = "/assets/memora_admin/css/memora_admin.css"
-# app_include_js = "/assets/memora_admin/js/memora_admin.js"
+app_include_js = "/assets/memora_admin/js/admin_filter_helper.js"
 
 # include js, css files in header of web template
 # web_include_css = "/assets/memora_admin/css/memora_admin.css"

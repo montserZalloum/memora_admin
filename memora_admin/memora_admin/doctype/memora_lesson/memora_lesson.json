@@ -1,12 +1,14 @@
 {
  "actions": [],
- "allow_rename": 1,
  "autoname": "LES-.#####.",
  "creation": "2026-02-01 10:28:14.454466",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "filter_section",
+  "admin_filter_html",
+  "main_section",
   "lesson_title",
   "topic",
   "base_xp",
@@ -21,6 +23,19 @@
   "is_reviewable"
  ],
  "fields": [
+  {
+   "fieldname": "filter_section",
+   "fieldtype": "Section Break",
+   "label": "Filter Helper"
+  },
+  {
+   "fieldname": "admin_filter_html",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "main_section",
+   "fieldtype": "Section Break"
+  },
   {
    "fieldname": "lesson_title",
    "fieldtype": "Data",
@@ -107,8 +122,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 17:34:23.075371",
- "modified_by": "Administrator",
+ "modified": "2026-02-12 14:37:24.549165",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Lesson",
  "naming_rule": "Expression",

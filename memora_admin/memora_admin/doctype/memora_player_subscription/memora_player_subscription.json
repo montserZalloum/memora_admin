@@ -1,6 +1,5 @@
 {
  "actions": [],
- "allow_rename": 1,
  "autoname": "PSUB-.#####.",
  "creation": "2026-02-01 18:06:02.173190",
  "doctype": "DocType",
@@ -51,8 +50,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 18:06:02.173190",
- "modified_by": "Administrator",
+ "modified": "2026-02-12 14:39:37.450652",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Player Subscription",
  "owner": "Administrator",
@@ -77,5 +76,6 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "access_key"
+ "title_field": "access_key",
+ "workspace": "Memora"
 }

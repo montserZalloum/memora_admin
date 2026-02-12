@@ -1,12 +1,14 @@
 {
  "actions": [],
- "allow_rename": 1,
  "autoname": "UNT-.#####.",
  "creation": "2026-02-01 10:26:28.877315",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "filter_section",
+  "admin_filter_html",
+  "main_section",
   "unit_title",
   "track",
   "sort_order",
@@ -19,6 +21,19 @@
   "total_lessons"
  ],
  "fields": [
+  {
+   "fieldname": "filter_section",
+   "fieldtype": "Section Break",
+   "label": "Filter Helper"
+  },
+  {
+   "fieldname": "admin_filter_html",
+   "fieldtype": "HTML"
+  },
+  {
+   "fieldname": "main_section",
+   "fieldtype": "Section Break"
+  },
   {
    "fieldname": "unit_title",
    "fieldtype": "Data",
@@ -90,8 +105,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 17:34:22.619306",
- "modified_by": "Administrator",
+ "modified": "2026-02-12 14:37:13.227652",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Unit",
  "owner": "Administrator",
@@ -113,6 +128,7 @@
  "rows_threshold_for_grid_search": 20,
  "search_fields": "unit_title",
  "show_name_in_global_search": 1,
+ "show_title_field_in_link": 1,
  "sort_field": "sort_order",
  "sort_order": "ASC",
  "states": [],

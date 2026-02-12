@@ -1,0 +1,154 @@
+{
+ "actions": [],
+ "autoname": "FILT-.#####.",
+ "creation": "2026-02-12 10:00:00",
+ "description": "Reusable filter presets for content creators. Content items (Track, Unit, Topic, Lesson) can share identical names across different subjects, making it hard to pick the right one. This DocType lets admins create named presets (e.g. 'G9 - Arabic - Math - S2') with cascading fields (Season > Grade > Major > Plan > Subject > Track > Unit > Topic). Selecting a preset from any content form automatically narrows the Link dropdowns to only relevant items. Loaded globally via admin_filter_helper.js and consumed by MemoraAdminFilter.setup() in each content form's JS.",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "filter_name",
+  "sb_plan_context",
+  "season",
+  "grade",
+  "cb_plan_context",
+  "major",
+  "academic_plan",
+  "sb_content_scope",
+  "subject",
+  "track",
+  "cb_content_scope",
+  "unit",
+  "topic",
+  "sb_test_filter",
+  "test_level",
+  "test_filter_btn",
+  "test_results_html"
+ ],
+ "fields": [
+  {
+   "fieldname": "filter_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Filter Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "sb_plan_context",
+   "fieldtype": "Section Break",
+   "label": "Plan Context"
+  },
+  {
+   "fieldname": "season",
+   "fieldtype": "Link",
+   "label": "Season",
+   "options": "Memora Season"
+  },
+  {
+   "fieldname": "grade",
+   "fieldtype": "Link",
+   "label": "Grade",
+   "options": "Memora Grade"
+  },
+  {
+   "fieldname": "cb_plan_context",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "major",
+   "fieldtype": "Link",
+   "label": "Major",
+   "options": "Memora Major"
+  },
+  {
+   "fieldname": "academic_plan",
+   "fieldtype": "Link",
+   "label": "Academic Plan",
+   "options": "Memora Academic Plan"
+  },
+  {
+   "fieldname": "sb_content_scope",
+   "fieldtype": "Section Break",
+   "label": "Content Scope"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "label": "Subject",
+   "options": "Memora Subject"
+  },
+  {
+   "fieldname": "track",
+   "fieldtype": "Link",
+   "label": "Track",
+   "options": "Memora Track"
+  },
+  {
+   "fieldname": "cb_content_scope",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Link",
+   "label": "Unit",
+   "options": "Memora Unit"
+  },
+  {
+   "fieldname": "topic",
+   "fieldtype": "Link",
+   "label": "Topic",
+   "options": "Memora Topic"
+  },
+  {
+   "fieldname": "sb_test_filter",
+   "fieldtype": "Section Break",
+   "label": "Test Filter"
+  },
+  {
+   "fieldname": "test_level",
+   "fieldtype": "Select",
+   "label": "Test Level",
+   "options": "\nSubject\nTrack\nUnit\nTopic\nLesson"
+  },
+  {
+   "fieldname": "test_filter_btn",
+   "fieldtype": "Button",
+   "label": "Test Filter"
+  },
+  {
+   "fieldname": "test_results_html",
+   "fieldtype": "HTML",
+   "label": "Test Results"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-12 14:30:37.607166",
+ "modified_by": "zmontsaer@gmail.com",
+ "module": "Memora Admin",
+ "name": "Memora Admin Filter",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "search_fields": "filter_name",
+ "show_name_in_global_search": 1,
+ "show_title_field_in_link": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "filter_name"
+}

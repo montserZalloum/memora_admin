@@ -113,7 +113,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-10 16:50:04.468872",
+ "modified": "2026-02-12 14:32:43.088180",
  "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Academic Plan",
@@ -137,8 +137,10 @@
  "rows_threshold_for_grid_search": 20,
  "search_fields": "plan_name",
  "show_name_in_global_search": 1,
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "title_field": "plan_name"
+ "title_field": "plan_name",
+ "workspace": "Memora"
 }

@@ -2,6 +2,27 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Memora Lesson", {
+	refresh(frm) {
+		MemoraAdminFilter.setup(frm, function (filter_doc) {
+			if (filter_doc && filter_doc.unit) {
+				frm.set_query("topic", () => ({
+					filters: { unit: filter_doc.unit },
+				}));
+			} else if (filter_doc && filter_doc.track) {
+				frm.set_query("topic", () => ({
+					filters: { track: filter_doc.track },
+				}));
+			} else if (filter_doc && filter_doc.subject) {
+				frm.set_query("topic", () => ({
+					filters: { subject: filter_doc.subject },
+				}));
+			} else {
+				frm.set_query("topic", () => ({}));
+			}
+			frm.refresh_field("topic");
+		});
+	},
+
 	topic(frm) {
 		if (frm.doc.topic) {
 			frappe.db.get_value(

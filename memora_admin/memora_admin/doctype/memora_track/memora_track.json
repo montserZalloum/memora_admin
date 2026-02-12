@@ -1,6 +1,5 @@
 {
  "actions": [],
- "allow_rename": 1,
  "autoname": "Track-.#####.",
  "creation": "2026-02-01 10:22:53.527709",
  "doctype": "DocType",
@@ -8,7 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "filter_section",
-  "academic_plan_html",
+  "admin_filter_html",
   "main_section",
   "track_title",
   "subject",
@@ -29,7 +28,7 @@
    "label": "Filter Helper"
   },
   {
-   "fieldname": "academic_plan_html",
+   "fieldname": "admin_filter_html",
    "fieldtype": "HTML"
   },
   {
@@ -110,8 +109,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-01 17:34:22.394376",
- "modified_by": "Administrator",
+ "modified": "2026-02-12 14:36:04.900836",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Track",
  "owner": "Administrator",
@@ -133,8 +132,10 @@
  "rows_threshold_for_grid_search": 20,
  "search_fields": "track_title",
  "show_name_in_global_search": 1,
+ "show_title_field_in_link": 1,
  "sort_field": "sort_order",
  "sort_order": "ASC",
  "states": [],
- "title_field": "track_title"
+ "title_field": "track_title",
+ "workspace": "Memora"
 }
