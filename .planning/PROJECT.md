@@ -135,19 +135,22 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - ✓ player_id Path validation with regex — v1.9
 - ✓ redirect_slashes replacing dual route decorators — v1.9
 
+**v2.0 Mobile-First Player Authentication:**
+- ✓ Player Profile DocType redesign — PLAYER-.#####. autoname, mobile+password fields, PBKDF2-SHA256 hashing — v2.0
+- ✓ Phone number validation — digits only, 9-15 length enforcement — v2.0
+- ✓ OTP system — Redis-backed storage, pluggable OTPProvider protocol, StaticOTPProvider dev stub — v2.0
+- ✓ Separate player login — `/auth/player/login` (phone+password → JWT, no Frappe session) — v2.0
+- ✓ Separate admin login — `/auth/admin/login` (email+password → Frappe session → JWT) — v2.0
+- ✓ Player self-registration — 2-step OTP flow with auto-login — v2.0
+- ✓ Password reset (3-step) — OWASP-compliant with anti-enumeration design — v2.0
+- ✓ Frappe whitelisted auth API — verify/register/set_password without Frappe sessions — v2.0
+- ✓ Event handler migration — all doc.user → doc.name/doc.player across 4 handlers — v2.0
+- ✓ Frappe API migration — all {"user": ...} lookups eliminated from 5 API files — v2.0
+- ✓ Scheduled task migration — profile_cache.py + fsrs_processor.py on PLAYER-##### identity — v2.0
+
 ### Active
 
-**v2.0 Mobile-First Player Authentication:**
-- [ ] Player Profile DocType redesign — remove `user` link to Frappe User, add `mobile` + `password` fields, autoname `PLAYER-.#####.`
-- [ ] Phone number validation — digits only, no country code handling
-- [ ] OTP system — generate/verify/expire flow, static "1111" stub, pluggable sender interface for future SMS/WhatsApp
-- [ ] Separate player login — `/auth/player/login` (phone + password → JWT)
-- [ ] Separate admin login — `/auth/admin/login` (email + password → Frappe session → JWT)
-- [ ] Player self-registration — `/auth/player/register` with OTP verification
-- [ ] Password reset (3-step) — request OTP → verify OTP (temp token) → set new password
-- [ ] Frappe whitelisted auth API — password verification for Player Profile without Frappe session
-- [ ] Event handler migration — replace `doc.user` references with `doc.name`/`doc.mobile` in access_sync, device_sync, plan_change_sync
-- [ ] FastAPI auth model updates — LoginRequest, TokenPayload, security module changes
+(None yet — ship to validate)
 
 ### Out of Scope
 
@@ -166,22 +169,27 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 
 ## Context
 
-**Current State (v1.9 shipped):**
-- FastAPI sidecar: ~12,000 lines Python
-- Frappe module: ~5,400 lines Python
-- ~17,450 total Python LOC
+**Current State (v2.0 shipped):**
+- FastAPI sidecar: ~10,150 lines Python
+- Frappe module: ~8,800 lines Python
+- ~18,950 total Python LOC
 - 32 Frappe DocTypes
-- 28 phases completed, 85 plans executed
-- 11 milestones shipped (v1.0 through v1.9)
+- 32 phases completed, 94 plans executed
+- 12 milestones shipped (v1.0 through v2.0)
+- Player identity: PLAYER-##### docname (phone+password auth, no Frappe User)
+- Admin identity: Frappe User email (unchanged)
+- 10 auth endpoints (player login, admin login, refresh, registration, password reset)
+- OTP system ready for real SMS/WhatsApp provider swap
 
 **Technical Environment:**
 - Frappe v15 for admin panel and content management
 - FastAPI sidecar for high-performance game API
-- Redis for hot data (progress, wallets, sessions, devices, leaderboards, profiles, stats, catalogs, notifications)
+- Redis for hot data (progress, wallets, sessions, devices, leaderboards, profiles, stats, catalogs, notifications, OTPs)
 - MariaDB for cold data (via Frappe ORM) with RANGE partitioning on Memory State
 - Mock CDN layer (local filesystem, R2-swappable)
 - WebSocket notifications (replaced SSE in v1.5)
 - fsrs package for item-level spaced repetition scheduling
+- PBKDF2-SHA256 password hashing via Frappe __Auth table
 
 **Performance Achieved:**
 - Access check: O(1) Redis SISMEMBER
@@ -200,7 +208,7 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - **Tech stack**: Frappe v15 + FastAPI + Redis + MariaDB — as specified in PRD
 - **Performance**: Sub-20ms response times for game API — critical for user experience
 - **Scalability**: Design for 100K concurrent users — bitmap storage, batch writes
-- **Compatibility**: Must work with existing 32 DocTypes — Player Profile schema changes are intentional breaking change for v2.0
+- **Compatibility**: Must work with existing 32 DocTypes — Player Profile now uses PLAYER-##### identity (v2.0 breaking change shipped)
 - **CDN**: Mock layer that can be swapped for Cloudflare R2 — clean abstraction required
 
 ## Key Decisions
@@ -252,11 +260,16 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 | calculate_xp_award in service layer | Module-level function importable by any endpoint | Good |
 | Safe Lua tonumber pattern | Two-step (raw and tonumber(raw)) or 0 handles all edge cases | Good |
 
-| Phone+password auth for players | Players don't have emails; Frappe User overhead unnecessary for mobile-first audience | — Pending |
-| PLAYER-.#####. autoname | Decouples identity from phone number; avoids Frappe rename_doc if number changes | — Pending |
-| Separate login endpoints | Clean player/admin separation; no detection heuristics needed | — Pending |
-| Static OTP "1111" stub | Ship auth flow now; swap real SMS/WhatsApp provider later | — Pending |
-| 3-step password reset | OTP verify → temp token → set password; most secure flow | — Pending |
+| Phone+password auth for players | Players don't have emails; Frappe User overhead unnecessary for mobile-first audience | Good |
+| PLAYER-.#####. autoname | Decouples identity from phone number; avoids Frappe rename_doc if number changes | Good |
+| Separate login endpoints | Clean player/admin separation; no detection heuristics needed | Good |
+| Static OTP "1111" stub | Ship auth flow now; swap real SMS/WhatsApp provider later | Good |
+| 3-step password reset | OTP verify → temp token → set password; most secure flow | Good |
+| Anti-enumeration password reset | Same response + consistent timing regardless of phone existence | Good |
+| FrappeClient.call for player login | Single HTTP call vs 4-call FrappeAuthService flow; no Frappe session created | Good |
+| OTPProvider protocol | runtime_checkable protocol enables hot-swap from StaticOTPProvider to real SMS | Good |
+| session_timeout_days from Memora Settings | Admin-configurable player refresh TTL via Frappe DocType | Good |
+| User field removed from Player Profile | Clean break; PLAYER-##### is sole identity; no confusion about what identifies a player | Good |
 
 ---
-*Last updated: 2026-02-12 after v2.0 milestone started*
+*Last updated: 2026-02-12 after v2.0 milestone*

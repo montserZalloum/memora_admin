@@ -1,5 +1,31 @@
 # Project Milestones: Memora Platform
 
+## v2.0 Mobile-First Player Authentication (Shipped: 2026-02-12)
+
+**Delivered:** Replaced Frappe User-based email authentication with phone+password model on Player Profile DocType, with OTP registration, OWASP-compliant password reset, and complete codebase identity migration to PLAYER-##### docnames.
+
+**Phases completed:** 29-32 (9 plans total)
+
+**Key accomplishments:**
+- Player Profile DocType redesigned with PLAYER-.#####. autoname, mobile+password fields, PBKDF2-SHA256 hashing
+- Frappe auth API bridge: 3 whitelisted functions + Desk Reset Password button
+- 10 FastAPI auth endpoints: player/admin login, token refresh, 2-step OTP registration, 3-step password reset
+- OTP system with pluggable provider protocol, rate limiting, anti-enumeration design
+- Complete identity migration: all event handlers, Frappe APIs, and scheduled tasks on PLAYER-##### docname
+- Zero residual old identity references (doc.user, profile.user, pp.user, {"user": ...})
+
+**Stats:**
+- 50 files modified
+- +9,100 / -390 lines Python (~18,950 total LOC)
+- 4 phases, 9 plans
+- 1 day (2026-02-12)
+
+**Git range:** `feat(29-01)` → `fix(32-03)` (40 commits)
+
+**What's next:** Planning next milestone
+
+---
+
 ## v1.9 Tech Debt & Reliability Fixes (Shipped: 2026-02-12)
 
 **Delivered:** Fixed data reliability issues, eliminated code duplication across FastAPI/Frappe runtimes, and cleaned up dead code — hardening the codebase for production scale.

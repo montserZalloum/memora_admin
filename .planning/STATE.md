@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v2.0 Mobile-First Player Authentication — Phase 32 COMPLETE (all 3 plans done)
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 32 of 32 (Event Handler & API Migration)
-Plan: 3 of 3
-Status: Phase 32 COMPLETE -- all plans executed
-Last activity: 2026-02-12 — Completed 32-03-PLAN.md (Scheduled tasks migration to PLAYER-##### docname)
+Phase: 32 of 32 (all phases complete)
+Plan: N/A
+Status: v2.0 milestone shipped
+Last activity: 2026-02-12 — v2.0 Mobile-First Player Authentication milestone complete
 
 Progress: [==============================] 100% (94/94 plans, 32/32 phases)
 
@@ -20,7 +20,7 @@ Progress: [==============================] 100% (94/94 plans, 32/32 phases)
 
 **Velocity:**
 - Total plans completed: 94
-- Milestones shipped: 11
+- Milestones shipped: 12
 
 **By Milestone:**
 
@@ -44,34 +44,6 @@ Progress: [==============================] 100% (94/94 plans, 32/32 phases)
 ### Decisions
 
 All decisions logged in PROJECT.md Key Decisions table.
-Recent decisions affecting current work:
-
-- Phone+password auth for players (Frappe User overhead unnecessary for mobile-first audience)
-- PLAYER-.#####. autoname (decouples identity from phone number)
-- Separate login endpoints (clean player/admin separation)
-- Static OTP "1111" stub (ship auth flow now, swap real SMS later)
-- 3-step password reset (most secure OTP flow per OWASP)
-- Mobile not reqd in JSON schema; mandatory enforced in validate() for new docs only (backward compat)
-- __setup__() for flags (not __init__()) per Frappe Document lifecycle
-- create_access_token: email/mobile keyword-only params via * separator (prevents positional arg confusion)
-- OTPProvider protocol for pluggable SMS delivery (StaticOTPProvider dev stub)
-- LoginProfile drops gender field (mobile-first simplification)
-- Player login uses FrappeClient.call(verify_player_password) -- single call, no Frappe session
-- Admin login retains FrappeAuthService (Frappe User auth unchanged)
-- Player refresh TTL from session_timeout_days (Memora Settings); admin refresh TTL from .env
-- Admin tokens include role="System Manager" claim, preserved across refreshes
-- Registration: upfront phone check via check_phone_exists Frappe API (better UX before OTP)
-- Season auto-populated from latest published season (not user-facing)
-- Major auto-derived from plan; fallback to first major of selected grade
-- Anti-enumeration: password reset request always returns same response + consistent timing regardless of phone existence
-- check_phone_exists returns player_name for mobile-to-docname resolution (used by password reset confirm)
-- Event handlers use doc.player/doc.name directly as Redis identity key (no frappe.get_doc lookup needed)
-- Two-pronged invalidation pattern (direct op + pubsub) adopted for profile_sync and plan_change_sync
-- User field removed from Player Profile schema (clean break, PLAYER-##### is sole identity)
-- Subscription API fallback blocks removed entirely (PLAYER-##### is sole identity, no dual-lookup needed)
-- reviews.py pp.user fixed to pp.name (discovered during Plan 02 verification grep)
-- Scheduled tasks: profile_cache.py uses get_fastapi_redis() (not frappe.conf.redis_cache) for correct Redis namespace
-- Scheduled tasks: fsrs_processor.py get_redis() left unchanged for FSRS-internal keys (not consumed by FastAPI)
 
 ### Pending Todos
 
@@ -81,13 +53,10 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - Payment gateway integration (PRCHS-03) deferred to future work — all transactions currently manual approval
-- `profile_sync.py` doc.user issue RESOLVED in Phase 32 Plan 01 (migrated to doc.name + get_fastapi_redis())
-- Research pitfall resolved: `flags.ignore_save_passwords` + `update_password()` pattern implemented in Phase 29
-- Mobile-to-docname resolution required before any __Auth table operation (check_password keys by PLAYER-##### docname, not phone)
 
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 32-03-PLAN.md (Scheduled tasks migration to PLAYER-##### docname)
+Stopped at: v2.0 milestone archived
 Resume file: None
-Next action: Phase 32 complete. All v2.0 Mobile-First Auth plans shipped.
+Next action: Start next milestone with `/gsd:new-milestone`
