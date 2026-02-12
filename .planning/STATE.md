@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-12)
 ## Current Position
 
 Phase: 31 of 32 (FastAPI Auth Endpoints + OTP System)
-Plan: 1 of 4 (complete)
+Plan: 2 of 4 (complete)
 Status: In progress
-Last activity: 2026-02-12 — Completed 31-01-PLAN.md (Core Auth Infrastructure)
+Last activity: 2026-02-12 — Completed 31-02-PLAN.md (Player Login + Admin Login endpoints)
 
-Progress: [=============================.] 97% (88/~91 plans, 31/32 phases)
+Progress: [=============================.] 98% (89/~91 plans, 31/32 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 88
+- Total plans completed: 89
 - Milestones shipped: 11
 
 **By Milestone:**
@@ -56,6 +56,10 @@ Recent decisions affecting current work:
 - create_access_token: email/mobile keyword-only params via * separator (prevents positional arg confusion)
 - OTPProvider protocol for pluggable SMS delivery (StaticOTPProvider dev stub)
 - LoginProfile drops gender field (mobile-first simplification)
+- Player login uses FrappeClient.call(verify_player_password) -- single call, no Frappe session
+- Admin login retains FrappeAuthService (Frappe User auth unchanged)
+- Player refresh TTL from session_timeout_days (Memora Settings); admin refresh TTL from .env
+- Admin tokens include role="System Manager" claim, preserved across refreshes
 
 ### Pending Todos
 
@@ -72,6 +76,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 31-01-PLAN.md (Core Auth Infrastructure)
+Stopped at: Completed 31-02-PLAN.md (Player Login + Admin Login endpoints)
 Resume file: None
-Next action: Execute 31-02-PLAN.md (Player Login + Admin Login endpoints)
+Next action: Execute 31-03-PLAN.md (Registration endpoints with OTP)
