@@ -242,7 +242,7 @@ def test_filter(academic_plan="", subject="", track="", unit="", topic="", level
 		level_badge = f'<span style="{badge_style}background-color:{color};">{lvl}</span>'
 		if samples:
 			sample_badges = " ".join(
-				f'<span style="{badge_style}background-color:{color}88;color:#333;">'
+				f'<span style="{badge_style}background-color:{color};">'
 				f"{s.get('title', s.get('name', ''))}</span>"
 				for s in samples
 			)

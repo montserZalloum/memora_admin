@@ -96,21 +96,24 @@
    "fieldtype": "Link",
    "label": "Unit",
    "options": "Memora Unit",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "track",
    "fieldtype": "Link",
    "label": "Track",
    "options": "Memora Track",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "subject",
    "fieldtype": "Link",
    "label": "Subject",
    "options": "Memora Subject",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "default": "0",

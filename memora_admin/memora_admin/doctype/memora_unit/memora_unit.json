@@ -85,7 +85,8 @@
    "fieldtype": "Link",
    "label": "Subject",
    "options": "Memora Subject",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "default": "0",
