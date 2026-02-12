@@ -1,5 +1,6 @@
-"""Authentication endpoints for player and admin login."""
+"""Authentication endpoints for player login, admin login, and registration."""
 
+import json
 from datetime import timedelta
 
 import jwt
@@ -15,11 +16,16 @@ from fastapi_app.models.auth import (
 	PlayerLoginRequest,
 	PlayerLoginResponse,
 	RefreshRequest,
+	RegisterRequest,
+	RegisterResendRequest,
+	RegisterResponse,
+	RegisterVerifyRequest,
 	TokenResponse,
 )
 from fastapi_app.services.device import DeviceService
 from fastapi_app.services.frappe import FrappeAuthService
 from fastapi_app.services.frappe_client import FrappeAPIError
+from fastapi_app.services.otp import OTPService
 from fastapi_app.services.rate_limit import RateLimiter
 from fastapi_app.services.session import SessionService
 from fastapi_app.services.settings import SettingsService
@@ -209,9 +215,7 @@ async def admin_login(
 
 	# 2. Verify via FrappeAuthService (admin uses Frappe User auth)
 	frappe_service = FrappeAuthService(settings.frappe_url, settings.frappe_site)
-	user, _profile_data = await frappe_service.verify_credentials(
-		credentials.email, credentials.password
-	)
+	user, _profile_data = await frappe_service.verify_credentials(credentials.email, credentials.password)
 
 	if not user:
 		raise HTTPException(
@@ -312,3 +316,272 @@ async def refresh(
 			status_code=status.HTTP_401_UNAUTHORIZED,
 			detail="Invalid credentials",
 		)
+
+
+# =============================================================================
+# Registration endpoints
+# =============================================================================
+
+REGISTRATION_OPTIONS_CACHE_KEY = "memora:registration_options"
+REGISTRATION_OPTIONS_CACHE_TTL = 300  # 5 minutes
+
+
+async def _get_registration_options(redis: "RedisClient", frappe_client=None) -> dict:
+	"""Fetch registration options from cache or Frappe API.
+
+	Used by both GET /registration-options and the verify endpoint
+	(for auto-populating season and major).
+	"""
+	cached = await redis.get(REGISTRATION_OPTIONS_CACHE_KEY)
+	if cached:
+		return json.loads(cached if isinstance(cached, str) else cached.decode())
+
+	if frappe_client is None:
+		frappe_client = await get_frappe_client()
+
+	result = await frappe_client.call("memora_admin.api.auth.get_registration_options")
+
+	if result:
+		await redis.set(REGISTRATION_OPTIONS_CACHE_KEY, json.dumps(result), ex=REGISTRATION_OPTIONS_CACHE_TTL)
+
+	return result or {}
+
+
+@router.get("/registration-options")
+async def get_registration_options(
+	redis: RedisClient,
+) -> dict:
+	"""Return available options for registration form pickers.
+
+	Returns grades (with nested majors), plans, seasons, avatars, and genders.
+	Cached in Redis for 5 minutes (changes infrequently).
+	"""
+	return await _get_registration_options(redis)
+
+
+@router.post("/player/register", response_model=RegisterResponse)
+async def player_register(
+	request: Request,
+	body: RegisterRequest,
+	redis: RedisClient,
+) -> RegisterResponse:
+	"""
+	Player registration step 1: submit details and receive OTP.
+
+	Checks upfront that the phone number is not already registered (409 error).
+	Stores pending registration in Redis and sends OTP via configured provider.
+	Returns an opaque pending_id for verification.
+
+	Rate limited: 3 OTP/phone/10min, 10 OTP/IP/10min, 60s resend cooldown.
+	"""
+	client_ip = _get_client_ip(request)
+
+	# Check if phone already registered in MariaDB (upfront for better UX)
+	frappe_client = await get_frappe_client()
+	try:
+		phone_check = await frappe_client.call(
+			"memora_admin.api.auth.check_phone_exists",
+			{"mobile": body.mobile},
+		)
+		if phone_check and phone_check.get("exists"):
+			raise HTTPException(
+				status_code=status.HTTP_409_CONFLICT,
+				detail="Phone number already registered",
+			)
+	except FrappeAPIError:
+		# If Frappe is unreachable, let the registration proceed --
+		# register_player will catch duplicates at verify time
+		logger.warning("check_phone_exists_failed", mobile_suffix=body.mobile[-4:])
+
+	# Create pending registration with OTP
+	otp_service = OTPService(redis)
+	pending_id = await otp_service.create_pending_registration(
+		mobile=body.mobile,
+		password=body.password,
+		display_name=body.display_name,
+		gender=body.gender,
+		grade=body.grade,
+		plan=body.plan,
+		major=body.major,
+		ip_address=client_ip,
+	)
+
+	return RegisterResponse(pending_id=pending_id, message="OTP sent")
+
+
+@router.post("/player/register/verify", response_model=PlayerLoginResponse)
+async def player_register_verify(
+	request: Request,
+	body: RegisterVerifyRequest,
+	redis: RedisClient,
+	settings: SettingsDep,
+) -> PlayerLoginResponse | JSONResponse:
+	"""
+	Player registration step 2: verify OTP and create account.
+
+	On valid OTP, creates the Player Profile via Frappe register_player API,
+	then auto-logs the player in (returns tokens + profile immediately).
+
+	Requires X-Device-ID header for auto-login device registration.
+	Season is auto-populated from the latest published season.
+	Major is auto-derived from the selected plan when not provided.
+	"""
+	# Require X-Device-ID for auto-login
+	device_id = request.headers.get("X-Device-ID")
+	if not device_id:
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail={"code": "DEVICE_ID_REQUIRED", "message": "X-Device-ID header required"},
+		)
+
+	# Verify OTP -- returns registration data on success
+	otp_service = OTPService(redis)
+	reg_data = await otp_service.verify_registration_otp(body.pending_id, body.otp)
+
+	# Get registration options for season and major auto-population
+	frappe_client = await get_frappe_client()
+	options = await _get_registration_options(redis, frappe_client)
+
+	# Auto-populate season from latest published season
+	seasons = options.get("seasons", [])
+	if not seasons:
+		raise HTTPException(
+			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+			detail="No active season available",
+		)
+	season = seasons[0]["name"]
+
+	# Auto-derive major from plan when not provided
+	major = reg_data.get("major")
+	if not major:
+		plan_name = reg_data["plan"]
+		plans = options.get("plans", [])
+		for p in plans:
+			if p["name"] == plan_name:
+				major = p.get("major")
+				break
+
+		# If plan has no major, use first major of the selected grade
+		if not major:
+			grade_name = reg_data["grade"]
+			grades = options.get("grades", [])
+			for g in grades:
+				if g["name"] == grade_name and g.get("majors"):
+					major = g["majors"][0]["name"]
+					break
+
+	# Create player via Frappe API
+	try:
+		profile = await frappe_client.call(
+			"memora_admin.api.auth.register_player",
+			{
+				"mobile": reg_data["mobile"],
+				"password": reg_data["password"],
+				"plan": reg_data["plan"],
+				"grade": reg_data["grade"],
+				"major": major or "",
+				"season": season,
+				"display_name": reg_data["display_name"],
+				"gender": reg_data["gender"],
+			},
+		)
+	except FrappeAPIError as e:
+		# Handle "Phone already registered" from Frappe (race condition safety net)
+		if "Phone already registered" in str(e):
+			raise HTTPException(
+				status_code=status.HTTP_409_CONFLICT,
+				detail="Phone number already registered",
+			)
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail="Registration failed. Please try again.",
+		)
+
+	player_id = profile["player_id"]
+
+	# Auto-login flow (same pattern as player_login)
+	# Fetch session_timeout_days from Memora Settings
+	settings_service = SettingsService(redis, frappe_client)
+	game_settings = await settings_service.get_gamification_settings()
+	session_ttl_days = game_settings.session_timeout_days
+	max_devices = game_settings.max_devices_per_player
+
+	# Device registration
+	user_agent = request.headers.get("User-Agent", "Unknown")
+	platform_hint = request.headers.get("X-Platform")
+
+	device_service = DeviceService(redis, key_prefix=settings.redis_key_prefix)
+	device_result = await device_service.register_device(
+		user_id=player_id,
+		device_id=device_id,
+		user_agent=user_agent,
+		max_devices=max_devices,
+		platform_hint=platform_hint,
+	)
+
+	if not device_result.success:
+		return JSONResponse(
+			status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+			content={
+				"code": "DEVICE_LIMIT_EXCEEDED",
+				"message": f"Device limit reached ({device_result.current_count}/{device_result.max_count}). Contact support to manage your devices.",
+			},
+		)
+
+	# Fetch wallet XP (should be 0 for new player)
+	wallet_service = WalletService(redis, key_prefix=settings.redis_key_prefix, frappe_client=frappe_client)
+	wallet = await wallet_service.get_wallet(player_id)
+
+	# Create session
+	session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
+	family_id = await session_service.create_session(
+		player_id,
+		plan_id=profile["plan"],
+		ttl_days=session_ttl_days,
+	)
+
+	# Create tokens (player: mobile claim, no email)
+	access_token = create_access_token(
+		user_id=player_id,
+		mobile=profile["mobile"],
+		plan_id=profile["plan"],
+		display_name=profile.get("display_name", ""),
+		family_id=family_id,
+		expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
+	)
+
+	refresh_token = create_refresh_token(
+		user_id=player_id,
+		family_id=family_id,
+		expires_delta=timedelta(days=session_ttl_days),
+	)
+
+	logger.info("player_registered", player_id=player_id)
+
+	return PlayerLoginResponse(
+		access_token=access_token,
+		refresh_token=refresh_token,
+		profile=LoginProfile(
+			display_name=profile.get("display_name", ""),
+			avatar=profile.get("avatar") or "default_avatar",
+			xp=wallet.get("xp", 0),
+		),
+	)
+
+
+@router.post("/player/register/resend")
+async def player_register_resend(
+	request: Request,
+	body: RegisterResendRequest,
+	redis: RedisClient,
+) -> dict:
+	"""
+	Resend OTP for a pending registration.
+
+	Generates a new OTP and resets the attempt counter.
+	Subject to 60-second cooldown between resends.
+	"""
+	client_ip = _get_client_ip(request)
+	otp_service = OTPService(redis)
+	await otp_service.resend_registration_otp(body.pending_id, client_ip)
+	return {"message": "OTP resent"}

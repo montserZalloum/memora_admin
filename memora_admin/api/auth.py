@@ -1,7 +1,8 @@
 """Player authentication APIs for FastAPI bridge.
 
-Three whitelisted Frappe APIs that let the FastAPI sidecar verify passwords,
-register players, and manage passwords -- all without creating Frappe sessions.
+Five whitelisted Frappe APIs that let the FastAPI sidecar verify passwords,
+register players, manage passwords, check phone existence, and fetch
+registration options -- all without creating Frappe sessions.
 
 Called by FastAPI via FrappeClient with API key auth (allow_guest=False).
 """
@@ -95,18 +96,20 @@ def register_player(
 		avatar = "pre"
 
 	# Create player doc -- DocType hooks handle password hashing + wallet DocType creation
-	doc = frappe.get_doc({
-		"doctype": "Memora Player Profile",
-		"mobile": cleaned,
-		"password": password,
-		"plan": plan,
-		"grade": grade,
-		"major": major,
-		"season": season,
-		"display_name": display_name,
-		"avatar": avatar,
-		"gender": gender,
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Player Profile",
+			"mobile": cleaned,
+			"password": password,
+			"plan": plan,
+			"grade": grade,
+			"major": major,
+			"season": season,
+			"display_name": display_name,
+			"avatar": avatar,
+			"gender": gender,
+		}
+	)
 	doc.insert(ignore_permissions=True)
 
 	# Seed Redis wallet so player is fully ready immediately
@@ -142,6 +145,86 @@ def set_player_password(player_name: str, new_password: str) -> dict:
 	_invalidate_player_sessions(player_name)
 
 	return {"success": True, "player_name": player_name}
+
+
+@frappe.whitelist(allow_guest=False)
+def check_phone_exists(mobile: str) -> dict:
+	"""Check whether a phone number is already registered.
+
+	Used by FastAPI registration endpoint for upfront duplicate detection
+	(better UX than discovering after OTP verification).
+	"""
+	cleaned = re.sub(r"[^\d]", "", mobile)
+	exists = frappe.db.exists("Memora Player Profile", {"mobile": cleaned})
+	return {"exists": bool(exists)}
+
+
+@frappe.whitelist(allow_guest=False)
+def get_registration_options() -> dict:
+	"""Return available grades, plans, seasons, avatars, and genders for registration.
+
+	Called by FastAPI via FrappeClient. Provides data for mobile app pickers.
+	Results are cached in Redis by the FastAPI endpoint (5-min TTL).
+	"""
+	# Get published seasons (latest by season_seq)
+	seasons = frappe.get_all(
+		"Memora Season",
+		filters={"is_published": 1},
+		fields=["name", "season_title"],
+		order_by="season_seq DESC",
+		limit=5,
+	)
+
+	# Get all grades with their majors (sorted by sort_order)
+	grades = frappe.get_all(
+		"Memora Grade",
+		fields=["name", "grade_title", "sort_order"],
+		order_by="sort_order ASC",
+	)
+	for grade in grades:
+		# Fetch child table rows linking to Memora Major
+		grade_majors = frappe.get_all(
+			"Memora Grade Major",
+			filters={"parent": grade["name"]},
+			fields=["major"],
+		)
+		# Resolve each major link to get the title
+		majors = []
+		for gm in grade_majors:
+			major_title = frappe.db.get_value("Memora Major", gm["major"], "major_title")
+			majors.append({"name": gm["major"], "title": major_title or gm["major"]})
+		grade["majors"] = majors
+
+	# Get published plans
+	plans = frappe.get_all(
+		"Memora Academic Plan",
+		filters={"is_published": 1},
+		fields=["name", "plan_name", "grade", "major"],
+	)
+
+	return {
+		"grades": [
+			{
+				"name": g["name"],
+				"title": g["grade_title"],
+				"sort_order": g["sort_order"],
+				"majors": g["majors"],
+			}
+			for g in grades
+		],
+		"plans": [
+			{
+				"name": p["name"],
+				"title": p["plan_name"],
+				"grade": p["grade"],
+				"major": p.get("major"),
+			}
+			for p in plans
+		],
+		"seasons": [{"name": s["name"], "title": s["season_title"]} for s in seasons],
+		"avatars": ["pre", "blonde", "Caleb", "Jad", "Sadie", "Valentina"],
+		"genders": ["Male", "Female"],
+	}
 
 
 # =============================================================================
