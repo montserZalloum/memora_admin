@@ -198,7 +198,11 @@ Plans:
   1. Subscription change for a player (created with PLAYER-##### naming) correctly syncs access grant to Redis and invalidates the player's session
   2. Purchase flow, profile update, and device removal all work for PLAYER-##### named profiles without `{"user": player_id}` lookups
   3. plan_change_sync.py and profile_sync.py write to the FastAPI Redis instance (`get_fastapi_redis()`) instead of `frappe.cache()`, verified by checking Redis keys after triggering sync events
-**Plans:** TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 32-01-PLAN.md — Event handlers (access_sync, device_sync, plan_change_sync, profile_sync) + schema user field removal
+- [ ] 32-02-PLAN.md — Frappe APIs (purchase, profile, subscriptions, devices) docname migration
+- [ ] 32-03-PLAN.md — Scheduled tasks (profile_cache, fsrs_processor) identity + Redis fix
 
 ## Progress
 
@@ -235,6 +239,6 @@ Plans:
 | 29. DocType Schema Foundation | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 30. Frappe Auth API Bridge | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 4/4 | Complete | 2026-02-12 |
-| 32. Event Handler & API Migration | v2.0 | 0/TBD | Not started | - |
+| 32. Event Handler & API Migration | v2.0 | 0/3 | Not started | - |
 
-**Total:** 32 phases (91 plans complete, v2.0 plans TBD) across 12 milestones
+**Total:** 32 phases (91 plans complete, 3 remaining) across 12 milestones
