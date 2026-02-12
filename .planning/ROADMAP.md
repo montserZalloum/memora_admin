@@ -178,11 +178,16 @@ Plans:
 **Requirements:** AUTH-01, AUTH-02, AUTH-03, AUTH-04, AUTH-05, REG-01, REG-02, REG-03, REG-04, REG-05, REG-06, RESET-01, RESET-02, RESET-03, RESET-04, RESET-05, SEC-01, SEC-02, SEC-04, SEC-05, MIGR-01, MIGR-02, MIGR-07
 **Success Criteria** (what must be TRUE):
   1. Player can register by sending OTP to phone, verifying with "1111", and receiving JWT tokens -- the created Player Profile has wallet and Redis state initialized
-  2. Player can log in with phone+password via `POST /auth/player/login` and receives tokens plus profile data (display_name, avatar, gender, XP) in a single response
+  2. Player can log in with phone+password via `POST /auth/player/login` and receives tokens plus profile data (display_name, avatar, xp) in a single response
   3. Admin can log in with email+password via `POST /auth/admin/login` using existing Frappe User flow, and both player and admin can refresh tokens via `POST /auth/refresh`
   4. Player can reset forgotten password via 3-step OTP flow (request OTP, verify OTP to get temp token, set new password with temp token) and all existing sessions are invalidated afterward
   5. OTP sending is rate-limited (3/phone/10min, 10/IP/10min), verification attempts limited (3 incorrect = OTP invalidated), and resend has 60-second cooldown
-**Plans:** TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 31-01-PLAN.md — Core infrastructure: JWT updates, Pydantic models, config, OTP service
+- [ ] 31-02-PLAN.md — Player login, admin login, and token refresh endpoints
+- [ ] 31-03-PLAN.md — Registration flow (2-step OTP) + registration options endpoint
+- [ ] 31-04-PLAN.md — Password reset flow (3-step OTP)
 
 #### Phase 32: Event Handler & API Migration
 
@@ -229,7 +234,7 @@ Plans:
 | 28. Tech Debt & Reliability Fixes | v1.9 | 4/4 | Complete | 2026-02-11 |
 | 29. DocType Schema Foundation | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 30. Frappe Auth API Bridge | v2.0 | 1/1 | Complete | 2026-02-12 |
-| 31. FastAPI Auth Endpoints + OTP System | v2.0 | 0/TBD | Not started | - |
+| 31. FastAPI Auth Endpoints + OTP System | v2.0 | 0/4 | Not started | - |
 | 32. Event Handler & API Migration | v2.0 | 0/TBD | Not started | - |
 
 **Total:** 32 phases (87 plans complete, v2.0 plans TBD) across 12 milestones
