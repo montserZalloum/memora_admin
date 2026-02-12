@@ -3,11 +3,14 @@
 Sync profile updates to Redis cache for fast profile lookups in leaderboards.
 Per CONTEXT.md: Profile cache invalidates within seconds, 1-hour TTL.
 """
+# Player identity is PLAYER-##### docname (not email). See Phase 32.
 
 import json
 import time
 
 import frappe
+
+from memora_admin.events.access_sync import get_fastapi_redis
 
 # Cache TTL: 1 hour per CONTEXT.md
 CACHE_TTL = 3600
@@ -22,29 +25,28 @@ def on_player_profile_updated(doc, method):
 	- 1-hour TTL on cached profiles
 	- Cache stores: {player_id, display_name, avatar}
 
-	Also publishes invalidation message for any FastAPI instances
-	that may have cached the profile in memory.
+	Uses two-pronged invalidation (direct SET + pubsub),
+	matching the established pattern in catalog_sync.py.
 	"""
-	cache = frappe.cache()
-	redis_key = f"memora:profile:{doc.user}"
+	r = get_fastapi_redis()
+	redis_key = f"memora:profile:{doc.name}"
 
 	# Build profile data
 	profile_data = {
-		"player_id": doc.user,
+		"player_id": doc.name,
 		"display_name": doc.display_name or "",
 		"avatar": doc.avatar or "default_avatar",
 	}
 
-	# SET with TTL
-	cache.set_value(redis_key, json.dumps(profile_data), expires_in_sec=CACHE_TTL)
+	# 1. Direct SET with TTL (immediate effect)
+	r.set(redis_key, json.dumps(profile_data), ex=CACHE_TTL)
 
-	# Publish invalidation message for FastAPI ProfileService cache
-	# This ensures any in-memory caches in FastAPI are also invalidated
+	# 2. Pubsub: notify FastAPI in-process caches
 	invalidation_msg = json.dumps({
 		"type": "profile",
-		"player_id": doc.user,
+		"player_id": doc.name,
 		"timestamp": time.time(),
 	})
-	cache.publish("memora:cache:invalidate", invalidation_msg)
+	r.publish("memora:cache:invalidate", invalidation_msg)
 
-	frappe.logger().info(f"Profile {doc.user} synced to Redis")
+	frappe.logger().info(f"Profile {doc.name} synced to Redis")

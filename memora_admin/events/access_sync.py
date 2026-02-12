@@ -9,6 +9,7 @@ IMPORTANT: This module writes to TWO Redis instances:
 
 The FastAPI sidecar uses a separate Redis instance without Frappe's site prefix.
 """
+# Player identity is PLAYER-##### docname (not email). See Phase 32.
 
 import os
 from pathlib import Path
@@ -85,27 +86,9 @@ def on_subscription_change(doc, method):
     - Add grant if is_active, remove if not
     - Grants are additive and permanent until revoked
     """
-    player_id = doc.player
+    # doc.player is the PLAYER-##### docname — use directly as Redis identity key
+    user_id = doc.player
     access_key = doc.access_key
-
-    # Get player's user_id from Player Profile (if player field is docname)
-    # If player field is already user_id, use directly
-    try:
-        if frappe.db.exists("Memora Player Profile", player_id):
-            player_doc = frappe.get_doc("Memora Player Profile", player_id)
-            user_id = player_doc.user
-        else:
-            # Assume player field contains user_id directly
-            user_id = player_id
-    except Exception:
-        user_id = player_id
-
-    if not user_id:
-        frappe.log_error(
-            f"No user linked to player {player_id}",
-            "Access Sync Error"
-        )
-        return
 
     r = get_fastapi_redis()
     redis_key = f"memora:access:{user_id}"
@@ -120,22 +103,13 @@ def on_subscription_change(doc, method):
 
 def on_subscription_deleted(doc, method):
     """Remove grant when subscription is deleted."""
-    player_id = doc.player
+    # doc.player is the PLAYER-##### docname — use directly as Redis identity key
+    user_id = doc.player
 
-    try:
-        if frappe.db.exists("Memora Player Profile", player_id):
-            player_doc = frappe.get_doc("Memora Player Profile", player_id)
-            user_id = player_doc.user
-        else:
-            user_id = player_id
-    except Exception:
-        user_id = player_id
-
-    if user_id:
-        r = get_fastapi_redis()
-        redis_key = f"memora:access:{user_id}"
-        r.srem(redis_key, doc.access_key)
-        frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
+    r = get_fastapi_redis()
+    redis_key = f"memora:access:{user_id}"
+    r.srem(redis_key, doc.access_key)
+    frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
 
 
 # =============================================================================

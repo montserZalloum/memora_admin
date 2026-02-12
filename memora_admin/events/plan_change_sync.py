@@ -5,11 +5,14 @@ so they must re-login to get a new token with the updated plan_id.
 
 Per CONTEXT.md: No graceful transition - immediate invalidation acceptable.
 """
+# Player identity is PLAYER-##### docname (not email). See Phase 32.
 
 import json
 import time
 
 import frappe
+
+from memora_admin.events.access_sync import get_fastapi_redis
 
 
 def on_player_profile_plan_changed(doc, method):
@@ -19,27 +22,27 @@ def on_player_profile_plan_changed(doc, method):
     - Immediate invalidation, player must re-login
     - No graceful transition needed
 
-    Uses direct Redis key deletion (same as SessionService.invalidate_session).
+    Uses two-pronged invalidation (direct delete + pubsub),
+    matching the established pattern in catalog_sync.py.
     """
     # Only act if plan field actually changed
     if not doc.has_value_changed("plan"):
         return
 
-    cache = frappe.cache()
+    r = get_fastapi_redis()
 
-    # Delete session key to invalidate all tokens
-    # Key pattern matches SessionService: memora:session:{user_id}
-    session_key = f"memora:session:{doc.user}"
-    cache.delete_value(session_key)
+    # 1. Direct delete: invalidate session immediately
+    # Key pattern matches SessionService: memora:session:{player_id}
+    session_key = f"memora:session:{doc.name}"
+    r.delete(session_key)
 
-    # Publish invalidation message for any FastAPI in-memory caches
-    # (Though session validation is Redis-based, this is good practice)
+    # 2. Pubsub: notify FastAPI in-process caches
     invalidation_msg = json.dumps({
         "type": "session",
-        "player_id": doc.user,
+        "player_id": doc.name,
         "reason": "plan_changed",
         "timestamp": time.time(),
     })
-    cache.publish("memora:cache:invalidate", invalidation_msg)
+    r.publish("memora:cache:invalidate", invalidation_msg)
 
-    frappe.logger().info(f"Session invalidated for {doc.user} due to plan change")
+    frappe.logger().info(f"Session invalidated for {doc.name} due to plan change")

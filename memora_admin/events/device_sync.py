@@ -7,6 +7,7 @@ Syncs device removal from Frappe child table to Redis when admin
 updates a player profile. Uses get_fastapi_redis() for correct
 Redis namespace (shared with FastAPI sidecar).
 """
+# Player identity is PLAYER-##### docname (not email). See Phase 32.
 
 import frappe
 import redis
@@ -42,7 +43,7 @@ def on_player_profile_update(doc, method):
 	if not removed_devices:
 		return
 
-	user_id = doc.user
+	user_id = doc.name
 	devices_key = f"memora:devices:{user_id}"
 	session_key = f"memora:session:{user_id}"
 
