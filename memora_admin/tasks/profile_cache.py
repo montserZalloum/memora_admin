@@ -1,6 +1,8 @@
 """
 Profile cache pre-warming task for active leaderboard players.
 
+# Player identity is PLAYER-##### docname (not email). See Phase 32.
+
 Per CONTEXT.md:
 - Hourly pre-warm cache for active leaderboard players
 - 1-hour TTL on cached profiles
@@ -19,6 +21,7 @@ from datetime import datetime
 import frappe
 import redis
 
+from memora_admin.events.access_sync import get_fastapi_redis
 from memora_admin.tasks.task_utils import (
 	AMMAN_TZ,
 	TASK_DURATION,
@@ -35,11 +38,6 @@ CACHE_TTL = 3600
 
 # Leaderboard key prefix (must match leaderboard.py)
 LB_PREFIX = "memora:lb"
-
-
-def get_redis():
-	"""Get Redis connection using Frappe site config."""
-	return redis.from_url(frappe.conf.redis_cache)
 
 
 def warm_profile_cache(triggered_by: str = "Scheduler"):
@@ -62,7 +60,7 @@ def warm_profile_cache(triggered_by: str = "Scheduler"):
 	# Idempotency check - only run once per hour window
 	# For hourly tasks, we check against hour rather than day
 	hour_key = f"{task_name}:{datetime.now(AMMAN_TZ).strftime('%Y-%m-%d-%H')}"
-	r = get_redis()
+	r = get_fastapi_redis()
 	if r.get(f"memora:task_ran:{hour_key}"):
 		logger.info(f"{task_name} already completed for this hour")
 		return
@@ -150,8 +148,8 @@ def _do_warm_cache(r: redis.Redis) -> int:
 	# Batch fetch profiles from Frappe
 	profiles = frappe.get_all(
 		"Memora Player Profile",
-		filters={"user": ["in", list(player_ids)]},
-		fields=["user", "display_name", "avatar"],
+		filters={"name": ["in", list(player_ids)]},
+		fields=["name", "display_name", "avatar"],
 	)
 
 	if not profiles:
@@ -161,9 +159,9 @@ def _do_warm_cache(r: redis.Redis) -> int:
 	# Pipeline SET to cache each profile
 	pipe = r.pipeline()
 	for p in profiles:
-		key = f"memora:profile:{p.user}"
+		key = f"memora:profile:{p.name}"
 		data = json.dumps({
-			"player_id": p.user,
+			"player_id": p.name,
 			"display_name": p.display_name or "",
 			"avatar": p.avatar or "default_avatar",
 		})
