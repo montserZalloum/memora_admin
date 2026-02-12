@@ -9,6 +9,57 @@ frappe.ui.form.on("Memora Player Profile", {
 			show_grant_dialog(frm);
 		}, __("Actions"));
 
+		frm.add_custom_button(__("Reset Password"), function() {
+			let dialog = new frappe.ui.Dialog({
+				title: __("Reset Player Password"),
+				fields: [
+					{
+						fieldname: "new_password",
+						fieldtype: "Password",
+						label: __("New Password"),
+						reqd: 1,
+						description: __("Minimum 8 characters"),
+					},
+					{
+						fieldname: "confirm_password",
+						fieldtype: "Password",
+						label: __("Confirm Password"),
+						reqd: 1,
+					},
+				],
+				primary_action_label: __("Reset Password"),
+				primary_action: function(values) {
+					if (values.new_password !== values.confirm_password) {
+						frappe.msgprint(__("Passwords do not match"));
+						return;
+					}
+					if (values.new_password.length < 8) {
+						frappe.msgprint(__("Password must be at least 8 characters"));
+						return;
+					}
+					frappe.call({
+						method: "memora_admin.api.auth.set_player_password",
+						args: {
+							player_name: frm.doc.name,
+							new_password: values.new_password,
+						},
+						freeze: true,
+						freeze_message: __("Resetting password..."),
+						callback: function(r) {
+							if (r.message && r.message.success) {
+								dialog.hide();
+								frappe.show_alert({
+									message: __("Password reset. Player will be logged out."),
+									indicator: "green",
+								});
+							}
+						},
+					});
+				},
+			});
+			dialog.show();
+		}, __("Actions"));
+
 		frm.set_df_property("authorized_devices", "read_only", 1);
 
 		// Sync devices from Redis once per form session.
