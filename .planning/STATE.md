@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-12)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v2.0 Mobile-First Player Authentication — Phase 31 complete
+**Current focus:** v2.0 Mobile-First Player Authentication — Phase 32 in progress (Plan 01 complete)
 
 ## Current Position
 
-Phase: 31 of 32 (FastAPI Auth Endpoints + OTP System)
-Plan: 4 of 4 (complete)
-Status: Phase complete
-Last activity: 2026-02-12 — Completed 31-04-PLAN.md (Password reset endpoints with OTP)
+Phase: 32 of 32 (Event Handler & API Migration)
+Plan: 1 of 3
+Status: Plan 01 complete
+Last activity: 2026-02-12 — Completed 32-01-PLAN.md (Event handler migration to PLAYER-##### identity)
 
-Progress: [==============================] 99% (91/~92 plans, 31/32 phases)
+Progress: [==============================] 99% (92/~94 plans, 32/32 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 91
+- Total plans completed: 92
 - Milestones shipped: 11
 
 **By Milestone:**
@@ -65,6 +65,9 @@ Recent decisions affecting current work:
 - Major auto-derived from plan; fallback to first major of selected grade
 - Anti-enumeration: password reset request always returns same response + consistent timing regardless of phone existence
 - check_phone_exists returns player_name for mobile-to-docname resolution (used by password reset confirm)
+- Event handlers use doc.player/doc.name directly as Redis identity key (no frappe.get_doc lookup needed)
+- Two-pronged invalidation pattern (direct op + pubsub) adopted for profile_sync and plan_change_sync
+- User field removed from Player Profile schema (clean break, PLAYER-##### is sole identity)
 
 ### Pending Todos
 
@@ -74,13 +77,13 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - Payment gateway integration (PRCHS-03) deferred to future work — all transactions currently manual approval
-- `profile_sync.py` references `doc.user` which is None for phone-based players -- needs update in Phase 32
+- `profile_sync.py` doc.user issue RESOLVED in Phase 32 Plan 01 (migrated to doc.name + get_fastapi_redis())
 - Research pitfall resolved: `flags.ignore_save_passwords` + `update_password()` pattern implemented in Phase 29
 - Mobile-to-docname resolution required before any __Auth table operation (check_password keys by PLAYER-##### docname, not phone)
 
 ## Session Continuity
 
 Last session: 2026-02-12
-Stopped at: Completed 31-04-PLAN.md (Password reset endpoints with OTP)
+Stopped at: Completed 32-01-PLAN.md (Event handler migration to PLAYER-##### identity)
 Resume file: None
-Next action: Phase 31 complete. Proceed to Phase 32 planning.
+Next action: Execute 32-02-PLAN.md (Frappe API migration)
