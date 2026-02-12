@@ -1,524 +1,617 @@
-# Features Research: v1.1 Feature Expansion
+# Feature Landscape: Phone+Password Authentication with OTP
 
-**Milestone:** v1.1 Feature Expansion
-**Features:** Game Sessions, Leaderboards, Device Management, Scheduled Tasks
-**Researched:** 2026-02-02
-**Overall Confidence:** MEDIUM-HIGH (based on industry patterns and official documentation)
-
----
-
-## Executive Summary
-
-This research covers expected behavior for four feature areas in v1.1: game sessions, leaderboards, device management, and scheduled tasks. Key findings:
-
-**Game Sessions:** Session tracking is table stakes for lesson flow (start → stages → end). Modern platforms expect TTL-based sessions with automatic cleanup, crash recovery, and session resumption. Redis hashes with TTL are standard.
-
-**Leaderboards:** Multiple timeframes (daily, weekly, all-time) are now expected. Daily resets at midnight UTC-7 are common. Redis sorted sets are the de facto solution. Critical anti-pattern: avoid public rankings without privacy controls (demotivates low performers).
-
-**Device Management:** 3-device limit is industry standard for educational platforms. Concurrent session detection prevents account sharing. Passwordless and low-friction UX are 2026 priorities. Avoid forcing device deauthorization flows.
-
-**Scheduled Tasks:** Native Redis TTL expiration events (2026 pattern) outperform cron-based cleanup. Streak resets at midnight in user's local timezone. Hourly session cleanup with TTL-based expiration is standard.
+**Domain:** Mobile-first player authentication for Arabic-speaking educational platform
+**Researched:** 2026-02-12
+**Mode:** Ecosystem (Features dimension for mobile auth migration milestone)
+**Overall Confidence:** HIGH (well-understood domain, existing codebase reviewed, OWASP guidance cross-referenced)
 
 ---
 
-## Game Sessions
+## Table Stakes
 
-### Table Stakes
+Features users expect. Missing any of these makes the auth system broken or insecure.
 
-Features users expect for session tracking.
+### TS-1: Phone Number Login (Phone + Password)
 
-| Feature | Description | Complexity | Notes |
-|---------|-------------|------------|-------|
-| **Start session on lesson begin** | Create session record with metadata (lesson_id, user_id, start_time) | Low | Redis hash: `session:{uuid}` with TTL=3600s |
-| **Session TTL** | Auto-expire inactive sessions | Low | Prevents Redis bloat. Standard: 1 hour TTL |
-| **Stage completion tracking** | Record each stage interaction in active session | Low | Append to session metadata or separate list |
-| **End session on lesson complete** | Finalize session, trigger completion flow (XP, progress) | Low | Delete session key, fire completion logic |
-| **Session existence check** | Validate active session before accepting stage completions | Low | EXISTS check on session key |
-| **Session metadata** | Store lesson_id, user_id, subject_id, start_time, stages_completed | Low | Enables analytics and recovery |
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Player logs in with phone number + password, receives JWT tokens |
+| **Why Expected** | Core migration goal; replaces email-based Frappe User login |
+| **Complexity** | Medium |
+| **Confidence** | HIGH (PRD fully specifies; existing auth.py provides the pattern) |
 
-**Implementation Pattern (Industry Standard):**
+**Behavior:**
+- Player submits `mobile` + `password` to `POST /auth/player/login`
+- FastAPI calls Frappe whitelisted API to verify password via `check_password()` on Player Profile
+- On success: register device, create session, return JWT access + refresh tokens + profile
+- On failure: generic "Invalid credentials" (no user enumeration)
+- Existing enriched response pattern (tokens + profile + XP) is preserved
+
+**What changes from current:**
+- No Frappe session created/destroyed per login (no `login`/`logout` API calls)
+- No `lookup_user_by_mobile` step (phone IS the identifier, not a lookup to email)
+- `FrappeUser` model replaced with simpler player identity from Player Profile
+- JWT `sub` = phone number (was email), `email` field removed from access token
+
+### TS-2: Phone Number Normalization
+
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | All phone numbers normalized to digits-only with country code before storage and lookup |
+| **Why Expected** | Without normalization, same person creates duplicate accounts with different formatting |
+| **Complexity** | Low |
+| **Confidence** | HIGH (E.164 standard is well-documented; PRD specifies this) |
+
+**Behavior:**
+- Strip all non-digit characters (`+`, spaces, dashes, parentheses)
+- Store as digits only with country code: `966512345678`
+- Normalization enforced in TWO places:
+  1. Player Profile `validate()` hook in Frappe (catches admin-created profiles)
+  2. FastAPI request validation (catches player-initiated registration/login)
+- Target audience is Saudi Arabia (966) and Jordan (962) primarily
+
+**Normalization rules:**
 ```
-Session Key: session:{session_id}
-Structure: Redis hash
-TTL: 3600 seconds (1 hour)
-Fields:
-  - user_id
-  - lesson_id
-  - subject_id
-  - start_time (Unix timestamp)
-  - stages_completed (comma-separated or JSON array)
-  - last_activity (timestamp, updated on each stage)
+Input: "+962 512 345 678" -> Stored: "962512345678"
+Input: "0512345678"       -> Stored: "966512345678" (with default country code)
+Input: "962512345678"     -> Stored: "962512345678"
 ```
 
-### Differentiators
+**Key format details (from E.164 research):**
+- Saudi Arabia: country code 966, subscriber numbers are 9 digits, total 12 digits. Mobile numbers have second digit `5`.
+- Jordan: country code 962, subscriber numbers are 9 digits (including area/operator code), total 12 digits. Mobile prefixes: 77 (Orange), 78 (Umniah), 79 (Zain).
+- Validation: reject if fewer than 10 digits or more than 15 digits after normalization.
 
-Features that enhance session tracking beyond basics.
+**Implementation decision from PRD:** User enters full number with country code digits. No country code picker in v1. If number starts with `0`, apply default country code (configurable, default `966`). Otherwise use as-is.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Session recovery on crash** | Resume lesson progress if app crashes mid-lesson | Medium | Load session from Redis on reconnect. Duolingo pattern: show "Continue where you left off" |
-| **Concurrent session detection** | Prevent simultaneous lesson sessions from same user | Medium | Check for existing session before creating new one. Return error with session_id |
-| **Session analytics** | Track drop-off rates, average time per stage | Medium | Flush session data to Interaction Log on end |
-| **Idle timeout with warning** | Warn user before session expires, extend TTL on activity | High | Requires WebSocket or polling. Out of scope for v1.1 |
-| **Multi-device session sync** | Show active session across devices | High | Complex. Requires pub/sub or polling. Defer to future |
+### TS-3: Phone Number Uniqueness
 
-### Anti-Features
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | One account per phone number, enforced at database level |
+| **Why Expected** | Prevents duplicate accounts; phone number is the identity |
+| **Complexity** | Low |
+| **Confidence** | HIGH (standard database constraint; PRD specifies `unique` on `mobile` field) |
 
-Patterns to avoid.
+**Behavior:**
+- `mobile` field on Player Profile has `unique: 1` in DocType JSON
+- MariaDB UNIQUE constraint prevents duplicates at DB level (race-condition-safe)
+- Registration returns clear error on duplicate without revealing whether the phone is registered (for privacy): "Registration failed. If you already have an account, please login instead."
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Session state in client only** | Crashes lose progress. No server validation. | Always create server-side session on lesson start |
-| **No TTL on sessions** | Redis bloat from abandoned sessions | Set TTL=3600s. Cleanup expired sessions hourly |
-| **Blocking on session end** | Slow lesson complete if MariaDB sync delays | Fire-and-forget session cleanup. Background flush to analytics |
-| **Session replay without validation** | Security risk: users could fabricate session data | Validate session ownership (user_id in JWT matches session.user_id) |
-| **Complex state machine** | Tracking every UI interaction creates fragility | Track only meaningful events: start, stage complete, end |
+**Architecture note:** PRD recommends `autoname: "PLAYER-.#####."` with separate `mobile` field (not `autoname: "field:mobile"`). This decouples identity from phone number, allowing future phone number changes without Frappe `rename_doc()`.
 
-### Dependencies on Existing Features
+### TS-4: Self-Registration with OTP Verification
 
-| New Feature | Depends On (v1.0) |
-|-------------|-------------------|
-| Start session endpoint | JWT authentication, Access control (Double-Gate) |
-| Stage complete in session | Session existence, Interaction logging buffer |
-| End session → lesson complete | Bitmap progress (SETBIT), XP award (HINCRBY), Streak update (Lua script) |
-| Session cleanup task | Scheduled task framework (Frappe scheduler) |
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Player registers with phone + password + profile fields; phone verified via OTP before account creation |
+| **Why Expected** | Self-service registration is mandatory for mobile apps; OTP proves phone ownership |
+| **Complexity** | Medium-High |
+| **Confidence** | HIGH (well-established pattern; Redis pending state is standard) |
+
+**Flow (2-step):**
+
+1. **Request registration** (`POST /auth/player/register`)
+   - Player submits: `mobile`, `password`, `display_name`, `avatar`, `grade`, `major`, `season`
+   - Server validates all fields (phone format, password strength, required fields)
+   - Server checks phone uniqueness (both MariaDB and Redis reservation)
+   - Server generates OTP, stores pending registration in Redis with TTL
+   - Server sends OTP to phone (static `"1111"` for now per project context)
+   - Returns: `{ "message": "OTP sent", "pending_id": "<token>" }`
+
+2. **Verify OTP and create account** (`POST /auth/player/register/verify`)
+   - Player submits: `pending_id` + `otp`
+   - Server validates OTP against Redis pending state
+   - On match: create Player Profile in Frappe, delete pending state, return JWT tokens
+   - On mismatch: increment attempt counter, return error
+
+**Critical security pattern:** Do NOT issue a valid auth token at registration before OTP verification. The OTP step must gate actual account creation. Store registration data in Redis `memora:pending:{token}` with 10-minute TTL, only create the Frappe document after OTP verification succeeds. This is verified as a known vulnerability -- issuing tokens before OTP verification makes the OTP screen purely cosmetic. (Source: multiple security articles, including "Broken OTP: Why issuing a full token at signup is a security bug" - Medium, Feb 2026)
+
+**Redis key:** `memora:pending:{random_token}` containing JSON with all registration fields + OTP + attempt count + created_at
+
+### TS-5: Password Policy
+
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Minimum password requirements enforced at registration and password change |
+| **Why Expected** | Without policy, players use weak passwords leading to account compromises |
+| **Complexity** | Low |
+| **Confidence** | HIGH (OWASP ASVS provides clear guidance) |
+
+**Recommended policy:**
+- Minimum 8 characters (OWASP recommends 8+ with extra protections, or 12+ without)
+- No maximum length cap below 128 characters
+- Allow all characters (Arabic, Latin, digits, symbols, spaces)
+- No arbitrary complexity rules (no "must contain uppercase + number" -- OWASP guidance: these reduce entropy by making passwords predictable)
+- Check against common password list is optional for v1 but recommended post-launch
+
+**Implementation:** Validate in Player Profile `validate()` hook AND in FastAPI request validation (belt and suspenders). Frappe's Password fieldtype handles the hashing (PBKDF2-SHA256 in `__Auth` table).
+
+**Frappe Password fieldtype verification (HIGH confidence):** Passwords on custom DocTypes are stored in the separate `__Auth` table (not in the DocType table), auto-hashed with PBKDF2-SHA256 via passlib, and `check_password(doctype, name, fieldname, password)` works for any DocType. Verified via Frappe source code (`frappe/utils/password.py` on GitHub) and Frappe docs.
+
+### TS-6: Password Reset via OTP (3-Step)
+
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Player resets password via phone OTP: request OTP, verify OTP, set new password |
+| **Why Expected** | Players forget passwords; without reset, they are permanently locked out |
+| **Complexity** | Medium |
+| **Confidence** | HIGH (PRD specifies 3-step flow; OWASP Forgot Password Cheat Sheet provides guidance) |
+
+**Flow:**
+
+1. **Request OTP** (`POST /auth/player/password-reset/request`)
+   - Player submits: `mobile`
+   - Server checks if phone exists (but returns same response either way -- no user enumeration)
+   - If exists: generate OTP, store in Redis `memora:reset:{mobile}` with 10-min TTL
+   - Send OTP to phone (static `"1111"` for now)
+   - Returns: `{ "message": "If this number is registered, you will receive an OTP" }`
+
+2. **Verify OTP** (`POST /auth/player/password-reset/verify`)
+   - Player submits: `mobile` + `otp`
+   - Server validates OTP against Redis
+   - On match: generate a `reset_token` (short-lived, 5-min TTL), store in Redis `memora:reset_token:{token}` -> mobile
+   - Returns: `{ "reset_token": "<token>" }`
+   - On mismatch: increment attempt counter, return error
+
+3. **Set new password** (`POST /auth/player/password-reset/confirm`)
+   - Player submits: `reset_token` + `new_password`
+   - Server validates token from Redis, retrieves mobile
+   - Updates password on Player Profile via Frappe API
+   - Deletes reset token from Redis
+   - **Invalidates ALL existing sessions** (OWASP recommendation: mandatory)
+   - Returns success (player must re-login)
+
+**Security requirements (from OWASP Forgot Password Cheat Sheet):**
+- Reset OTP valid for max 10 minutes
+- Reset token (step 2 output) valid for max 5 minutes
+- Max 3 OTP verification attempts before requiring new OTP request
+- All tokens generated using cryptographically secure random number generator
+- Tokens invalidated after use
+- Session invalidation on password change is MANDATORY (prevents attacker who stole a session from retaining access after victim resets password)
+
+### TS-7: OTP Rate Limiting (Send-Side)
+
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Rate limit OTP send requests to prevent SMS pumping and abuse |
+| **Why Expected** | Without this, attackers drain SMS budget via automated requests (SMS pumping attack) |
+| **Complexity** | Medium |
+| **Confidence** | HIGH (Twilio documents 5 per 10 minutes; industry consensus is clear) |
+
+**Recommended limits:**
+
+| Dimension | Limit | Window | Rationale |
+|-----------|-------|--------|-----------|
+| Per phone number | 3 OTP sends | 10 minutes | Prevents targeted harassment of one number |
+| Per IP address | 10 OTP sends | 10 minutes | Prevents bot farms hitting many numbers |
+| Global cooldown | 60 seconds between resends to same number | Per request | Prevents rapid resend clicking |
+
+**SMS pumping context:** In an SMS pumping attack, bots submit premium-rate phone numbers into OTP forms, generating charges. Prevention requires rate limiting, geographic controls, and monitoring send-to-verify ratios. For static OTP ("1111"), SMS pumping is not a cost risk yet, but the rate limiting infrastructure must be built now so it is in place when real SMS is enabled. (Source: TechTarget SMS pumping article)
+
+**Implementation:** Reuse the existing `RateLimiter` Lua script pattern from `rate_limit.py`. Add new keys:
+- `memora:ratelimit:otp:phone:{mobile}` - per-phone OTP send counter
+- `memora:ratelimit:otp:ip:{ip}` - per-IP OTP send counter
+- `memora:ratelimit:otp:cooldown:{mobile}` - 60s cooldown flag
+
+**Response when rate limited:** HTTP 429 with `retry_after` seconds, same pattern as login rate limiting.
+
+### TS-8: OTP Verification Attempt Limiting
+
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Limit OTP guess attempts per pending registration or reset flow |
+| **Why Expected** | A 4-digit OTP has only 10,000 combinations; without limits, brute-force is trivial |
+| **Complexity** | Low |
+| **Confidence** | HIGH (universal security requirement; Twilio enforces max 5 check attempts) |
+
+**Behavior:**
+- Max 3 incorrect OTP attempts per pending registration/reset
+- After 3 failures: invalidate the OTP, delete the pending state, require starting over
+- Attempt counter stored alongside OTP in Redis (part of the pending state JSON)
+- On each failed attempt, return remaining attempts: `{ "error": "INVALID_OTP", "remaining_attempts": 2 }`
+
+**Math:** With 4-digit OTP and 3 attempts, brute-force probability is 3/10,000 = 0.03%. Acceptable.
+
+### TS-9: Session Invalidation on Password Change
+
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | All existing sessions invalidated when password changes (via reset or admin action) |
+| **Why Expected** | OWASP mandates this; prevents stolen sessions from persisting after password reset |
+| **Complexity** | Low |
+| **Confidence** | HIGH (OWASP session management cheat sheet; existing SessionService supports this) |
+
+**Behavior:**
+- On password reset (step 3): call `session_service.invalidate_session(user_id)`
+- On admin password change: Frappe hook triggers session invalidation via Redis
+- All devices with old tokens get 401 on next API call, must re-login
+- Device registrations are NOT cleared (devices are still "known", just logged out)
+
+**Already built:** `SessionService.invalidate_session()` exists and deletes the Redis session key, which automatically invalidates all tokens tied to that family_id. This is the exact mechanism needed.
+
+### TS-10: Separate Admin and Player Login Endpoints
+
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Distinct endpoints for admin vs player authentication |
+| **Why Expected** | Different auth mechanisms (Frappe User vs Player Profile); prevents confusion and security crossover |
+| **Complexity** | Low |
+| **Confidence** | HIGH (PRD specifies this; clean separation is standard practice) |
+
+**Endpoint structure:**
+- `POST /auth/player/login` - Phone + password, verifies against Player Profile
+- `POST /auth/player/register` - Self-registration, sends OTP
+- `POST /auth/player/register/verify` - Verify OTP, create account
+- `POST /auth/player/register/resend` - Resend OTP with cooldown
+- `POST /auth/player/password-reset/request` - Request password reset OTP
+- `POST /auth/player/password-reset/verify` - Verify OTP, get reset token
+- `POST /auth/player/password-reset/confirm` - Set new password
+- `POST /auth/admin/login` - Email + password, verifies against Frappe User (existing flow)
+- `POST /auth/refresh` - Token refresh (shared, works for both player and admin tokens)
+
+**Migration note:** The current single `/auth/login` endpoint with `is_email()` detection must be replaced. The `is_email()` function, `lookup_user_by_mobile()`, and the Frappe session-based `verify_credentials()` for players are all removed. Admin login can retain the Frappe session-based verification flow.
 
 ---
 
-## Leaderboards
+## Differentiators
 
-### Table Stakes
+Features that improve the experience beyond baseline. Valuable but not blocking for launch.
 
-Features users expect for competitive rankings.
+### D-1: Enriched Login Response with Profile Data
 
-| Feature | Description | Complexity | Notes |
-|---------|-------------|------------|-------|
-| **All-time XP leaderboard** | Global ranking by total XP | Low | Single Redis sorted set: ZADD `leaderboard:alltime` |
-| **Daily XP leaderboard** | Ranking by XP earned today, resets at midnight | Medium | Separate sorted set: `leaderboard:daily:{YYYY-MM-DD}` |
-| **Top N retrieval** | Fetch top 10/50/100 players | Low | ZREVRANGE with limit |
-| **User's rank lookup** | Show "You are #47" | Low | ZREVRANK for user's position |
-| **User's score in leaderboard** | Show user's XP alongside rank | Low | ZSCORE for user's points |
-| **Automatic reset scheduling** | Daily leaderboard resets at midnight UTC | Medium | Scheduled task creates new key, archives old key |
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Login response includes profile data (display_name, avatar, gender, XP) alongside tokens |
+| **Value Proposition** | Eliminates separate profile fetch call; faster app launch |
+| **Complexity** | Low (already built) |
+| **Confidence** | HIGH |
 
-**Implementation Pattern (Industry Standard):**
-```
-Redis Sorted Sets:
-  leaderboard:alltime → ZADD user_id score (never resets)
-  leaderboard:daily:{date} → ZADD user_id score (resets daily)
-  leaderboard:streak → ZADD user_id streak_count
+**Status:** Already implemented in current `EnrichedTokenResponse`. Must be preserved. The new player login endpoint returns the same enriched response structure.
 
-Daily reset (midnight UTC-7 is common):
-  1. Rename leaderboard:daily:{yesterday} → leaderboard:archive:daily:{yesterday}
-  2. Expire archive key after 30 days (TTL=2592000)
-  3. Create new leaderboard:daily:{today} key
+### D-2: Pending Registration with Phone Reservation
 
-Google Play Games SDK pattern: Automatically creates daily, weekly, all-time versions.
-```
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | During OTP verification window, the phone number is "soft-reserved" to prevent race conditions |
+| **Value Proposition** | Prevents frustrating scenario where two people try to register the same number simultaneously |
+| **Complexity** | Low |
+| **Confidence** | MEDIUM |
 
-### Differentiators
+**Behavior:**
+- When registration is requested but OTP not yet verified, store a reservation key in Redis: `memora:phone_reserved:{normalized_mobile}` with 10-min TTL
+- If another registration attempt comes in for the same number while pending, return: "This phone number has a pending registration. Please wait or try again later."
+- Reservation cleared on: OTP success (account created), OTP expiry (TTL), or 3 failed attempts
 
-Features that enhance leaderboards.
+**Why not table stakes:** The UNIQUE constraint on the `mobile` field in MariaDB is the true guard against duplicate accounts. This reservation is a UX improvement to give better error messages during the OTP window.
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Multiple timeframes** | Daily, weekly, all-time gives more ways to compete | Medium | 3 sorted sets. Weekly reset on Sunday midnight |
-| **Streak leaderboard** | Compete on consistency, not just volume | Low | Separate sorted set from XP. Update on streak change |
-| **Cached leaderboard results** | Avoid ZREVRANGE on every request at scale | Medium | Cache top 100 for 5 minutes. Trade-off: freshness vs performance |
-| **User + context** | Show rank #43-47 (user at #45, with 2 above/below) | Medium | ZREVRANGE with offset around user's rank |
-| **League-based competition** | Group users by activity level (like Duolingo leagues) | High | Prevents demotivation of low performers. Complex cohort logic. Defer to future |
-| **Anonymous rankings** | Show ranks without revealing usernames (privacy) | Low | Display "Player #123" instead of real names. GDPR-friendly |
+### D-3: OTP Resend with Cooldown
 
-### Anti-Features
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Player can request OTP resend during registration/reset, with 60s cooldown |
+| **Value Proposition** | Handles SMS delivery failures without starting the entire flow over |
+| **Complexity** | Low |
+| **Confidence** | HIGH |
 
-Patterns to avoid (critical for educational context).
+**Behavior:**
+- `POST /auth/player/register/resend` with `pending_id`
+- `POST /auth/player/password-reset/resend` with `mobile`
+- Generates NEW OTP (invalidates old one), resets attempt counter
+- Enforces 60-second cooldown between resends
+- Does NOT reset the overall 10-minute TTL of the pending state
+- Returns `retry_after` seconds if cooldown active
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Public rankings without privacy** | Demotivates low performers. Privacy concerns. Research shows negative impact on learning. | Opt-in leaderboards OR league-based cohorts OR show only top 10 + user's rank |
-| **Real-time update on every XP change** | Expensive ZINCRBY on hot key. Bottleneck at scale. | Batch leaderboard updates every 5-10 minutes OR update on lesson complete only |
-| **Single global leaderboard only** | New users can never catch up. Demotivating. | Add daily/weekly resets. Fresh competition every period. |
-| **Leaderboard as only engagement** | Creates anxiety, eventual burnout (research-backed). | Multiple engagement hooks: achievements, progress, streaks. Leaderboard is ONE of many. |
-| **No explanation of scoring** | Users confused why they're ranked lower despite more lessons. | Clear: "Ranked by XP earned today" or "Ranked by current streak" |
+### D-4: Leaderboard Privacy Protection
 
-**Research Note (HIGH confidence):** A 2021 study in JMIR Serious Games found that students at the bottom of leaderboards experience demotivation and disengagement. Penn State research (2024) emphasizes balancing competition with individual progress tracking. 2026 trend: gamification focuses on purpose and progression, not superficial PBL (points, badges, leaderboards).
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Leaderboards display `display_name`, never raw phone numbers |
+| **Value Proposition** | Prevents exposing player phone numbers to other players |
+| **Complexity** | Low |
+| **Confidence** | HIGH (PRD identifies this as concern #8) |
 
-### Dependencies on Existing Features
+**Behavior:**
+- All leaderboard entries use `display_name` from Player Profile
+- JWT `sub` (now phone number) is never exposed in any player-facing response
+- Audit all endpoints that return `player_id` to ensure they map to `display_name`
 
-| New Feature | Depends On (v1.0) |
-|-------------|-------------------|
-| Leaderboard update on XP gain | XP award (HINCRBY on wallet) |
-| User rank lookup | User profile, authentication |
-| Daily reset task | Scheduled task framework |
-| Streak leaderboard | Streak tracking (Lua script) |
+### D-5: Admin Password Reset for Players
 
----
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Admin can reset a player's password from Frappe Desk |
+| **Value Proposition** | Support channel for players who cannot self-reset (lost phone, etc.) |
+| **Complexity** | Low |
+| **Confidence** | HIGH |
 
-## Device Management
+**Behavior:**
+- Admin navigates to Player Profile in Frappe Desk
+- Sets new password via Password field
+- Frappe handles hashing into `__Auth` table automatically
+- Frappe hook triggers session invalidation for that player
+- Player must re-login with new password on next app open
 
-### Table Stakes
+### D-6: Graceful Migration for Existing Players
 
-Features users expect for multi-device access.
+| Aspect | Detail |
+|--------|--------|
+| **Feature** | Existing email-based players are migrated to phone-based auth without data loss |
+| **Value Proposition** | No player progress is lost; smooth transition |
+| **Complexity** | Medium |
+| **Confidence** | MEDIUM |
 
-| Feature | Description | Complexity | Notes |
-|---------|-------------|------------|-------|
-| **Device registration on login** | Store device metadata (device_id, name, platform, last_login) | Low | Redis hash: `devices:{user_id}` → HSET device_id metadata |
-| **Device limit enforcement** | Maximum N devices per user (typically 3-5) | Low | COUNT keys before adding. Reject if at limit. |
-| **Device listing** | Show user their authorized devices | Low | HGETALL `devices:{user_id}` |
-| **Device deauthorization** | User can remove a device remotely | Low | HDEL `devices:{user_id}` device_id |
-| **Last login timestamp** | Show "iPhone - Last used 2 hours ago" | Low | Update timestamp on every login |
-| **Device metadata** | Store platform (iOS/Android/Web), device name, IP (optional) | Low | JSON in hash value |
+**Behavior:**
+- Migration script:
+  1. For each existing Player Profile, read `user` field (Frappe User email)
+  2. Look up `mobile_no` from that Frappe User
+  3. Set `mobile` field on Player Profile with normalized number
+  4. Set a temporary password (or flag account for password reset on first login)
+  5. Change `autoname` from `field:user` to `PLAYER-.#####.`
+  6. Use `rename_doc()` to change docname from email to new PLAYER-XXXXX format
+- Redis keys referencing old email must be flushed or migrated
+- All linked records (subscriptions, wallets, progress) follow the rename
 
-**Implementation Pattern (Industry Standard):**
-```
-Redis Hash:
-  Key: devices:{user_id}
-  Fields: device_id → JSON metadata
-    {
-      "device_id": "uuid-v4",
-      "platform": "iOS",
-      "device_name": "iPhone 13",
-      "first_login": "2026-02-01T10:00:00Z",
-      "last_login": "2026-02-02T15:30:00Z"
-    }
-
-Device Limit Enforcement:
-  - Free tier: 2 devices
-  - Premium tier: 3 devices
-  - Family tier: 5 devices
-
-Common pattern: Allow exceeding limit temporarily, force deauthorization on next login.
-```
-
-### Differentiators
-
-Features that enhance device management.
-
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Passwordless authentication** | Reduces friction. 2026 UX best practice. | Medium | WebAuthn, biometric, magic link. Out of scope for v1.1 |
-| **Concurrent session detection** | Prevent account sharing by detecting simultaneous logins | Medium | Track active session token per device. Reject if 2+ sessions active |
-| **Device trust levels** | New device requires 2FA, trusted device skips | High | Requires 2FA implementation. Defer to future |
-| **Automatic device cleanup** | Remove devices inactive for 90+ days | Low | Scheduled task checks last_login timestamps |
-| **Device fingerprinting** | Detect multiple "devices" from same browser | High | Complex. Privacy concerns. Avoid unless necessary |
-
-### Anti-Features
-
-Patterns to avoid.
-
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Immediate logout on device limit** | Frustrating UX. User mid-lesson gets kicked out. | Allow session to finish. Enforce limit on next login attempt |
-| **No way to remove old devices** | User loses phone, buys new one, can't login. Support nightmare. | Always provide self-service device deauthorization |
-| **Forcing device deauth flow** | "Choose which device to remove" is friction. Low adoption. | Auto-remove least recently used device (with warning notification) |
-| **Device limit too restrictive** | 1-2 devices frustrates legitimate users (phone + tablet). | 3 devices is industry standard. 5 for family plans. |
-| **Storing sensitive device data** | IP addresses, exact location raises privacy concerns. | Store minimal metadata. Platform and last login timestamp only. |
-| **Client-only device checks** | Easily bypassed by modifying client code. | Always validate device authorization server-side |
-
-**Research Note (HIGH confidence):** 2026 device management best practice is balancing security with user-first UX. MDM platforms that rely on heavy control create friction and low adoption. Passwordless authentication and low-friction flows are priorities.
-
-### Dependencies on Existing Features
-
-| New Feature | Depends On (v1.0) |
-|-------------|-------------------|
-| Device registration | Login endpoint (JWT issuance) |
-| Device limit check | Redis connection, Player profile |
-| Concurrent session detection | Session tracking (if implemented) |
-| Device cleanup task | Scheduled task framework |
+**Risk:** `rename_doc()` updates all linked records but is expensive and can fail on large datasets. Test thoroughly with production data volume.
 
 ---
 
-## Scheduled Tasks
+## Anti-Features
 
-### Table Stakes
+Features to explicitly NOT build. Common mistakes in this domain that waste time or create problems.
 
-Features needed for background maintenance.
+### AF-1: Do NOT Build Country Code Picker / Auto-Detection
 
-| Feature | Description | Complexity | Notes |
-|---------|-------------|------------|-------|
-| **Daily streak reset at midnight** | Zero out streaks for users who didn't complete a lesson today | Medium | Runs daily at 00:00 in user's timezone (or UTC) |
-| **Session cleanup (expired sessions)** | Delete Redis keys for sessions past TTL | Low | Hourly task. Redis auto-expires with TTL, but cleanup ensures consistency |
-| **Leaderboard daily reset** | Archive yesterday's leaderboard, create today's | Low | Runs at midnight UTC-7 (common pattern) |
-| **Task scheduling framework** | Cron-like scheduler for recurring jobs | Low | Frappe scheduler already exists (used in v1.0) |
-| **Task logging** | Record task execution time, success/failure | Low | Write to Frappe DocType or system log |
+| Aspect | Detail |
+|--------|--------|
+| **Anti-Feature** | Country code dropdown, auto-detection by IP, or phone number library (libphonenumber) |
+| **Why Avoid** | Adds complexity for a known audience (Saudi Arabia + Jordan). Players know their own numbers. PRD explicitly states "user enters full number." |
+| **What to Do Instead** | Accept digits-only input. Strip non-digit characters. If number starts with `0`, apply default country code (configurable, default `966`). Otherwise use as-is. Validate length (10-15 digits). |
 
-**Implementation Pattern (Industry Standard):**
-```
-Frappe Scheduler (already in use):
-  - all: Every event (avoid, too frequent)
-  - cron: Cron expression (e.g., "0 0 * * *" for daily midnight)
-  - daily: Runs once per day
-  - hourly: Runs every hour
-  - weekly: Runs once per week
+### AF-2: Do NOT Build Real SMS Gateway in v1
 
-2026 Pattern (Redis-native):
-  - Use Redis keyspace notifications for expiration events
-  - Subscribe to __keyevent@0__:expired channel
-  - React to expired session keys instantly
-  - Eliminates polling, reduces redundant calls
+| Aspect | Detail |
+|--------|--------|
+| **Anti-Feature** | Integrating Twilio/Vonage/local SMS provider for OTP delivery |
+| **Why Avoid** | Project context specifies static "1111" OTP for now. SMS integration adds cost, vendor dependency, delivery reliability concerns, and regulatory requirements. Build the OTP verification logic correctly first; SMS provider is a pluggable backend to add later. |
+| **What to Do Instead** | Use a `send_otp()` function that logs the OTP and returns success. Make it pluggable (strategy pattern or config flag) so swapping in a real SMS provider later requires changing one module, not the entire flow. Log OTP to structured logger in dev/staging. NEVER log OTP in production once real SMS is enabled. |
 
-Spring Boot example:
-  spring.session.redis.cleanup-cron: "0 * * * * *" (every minute)
+### AF-3: Do NOT Build Phone Number Change Flow in v1
 
-Modern approach: TTL + expiration events > cron cleanup
-```
+| Aspect | Detail |
+|--------|--------|
+| **Anti-Feature** | Allowing players to change their phone number via the app |
+| **Why Avoid** | Phone number change requires: OTP verification of NEW number, session invalidation, Redis key migration, potential `rename_doc()` if phone is the docname. High complexity for a rare use case. PRD recommends `PLAYER-.#####.` autoname specifically to decouple identity from phone number. |
+| **What to Do Instead** | Admin-only phone number change via Frappe Desk for v1. Build the DocType with `PLAYER-.#####.` autoname so phone changes are just a field update, not a document rename. |
 
-### Differentiators
+### AF-4: Do NOT Build Email Fallback Authentication
 
-Features that enhance scheduled tasks.
+| Aspect | Detail |
+|--------|--------|
+| **Anti-Feature** | Keeping email as an alternative login method for players |
+| **Why Avoid** | The entire point of this migration is to remove Frappe User dependency for players. Supporting both email and phone creates two auth paths, two verification flows, and doubles the security surface. Players are mobile-first Arabic students who have phones, not email accounts. |
+| **What to Do Instead** | Clean break: players use phone only. Admins use email only. The `is_email()` detection logic is removed entirely. |
 
-| Feature | Value Proposition | Complexity | Notes |
-|---------|-------------------|------------|-------|
-| **Redis expiration events** | Instant reaction to key expiry. No polling overhead. | Medium | Requires enabling keyspace notifications in Redis config |
-| **Distributed task locking** | Prevent duplicate execution across multiple servers | Medium | Redis SETNX for lock. Critical in multi-server deployments |
-| **Task retry logic** | Auto-retry failed tasks with exponential backoff | Medium | Requires task queue (Celery, RQ, or Frappe's built-in) |
-| **Task monitoring dashboard** | View task history, failures, durations | Medium | Frappe provides basic logging. Custom DocType for detailed tracking |
-| **Dynamic scheduling** | Adjust task frequency based on load | High | Complex. Not needed for v1.1 |
+### AF-5: Do NOT Build TOTP/Authenticator App Support
 
-### Anti-Features
+| Aspect | Detail |
+|--------|--------|
+| **Anti-Feature** | Adding Google Authenticator or similar TOTP as a second factor |
+| **Why Avoid** | Target audience is students on mobile phones. TOTP requires installing a separate app, understanding QR codes, and managing recovery codes. SMS OTP is the right level of security for this audience. Adding TOTP creates support burden with zero user demand. Research shows SMS OTP, while weaker than TOTP against sophisticated attacks, is the appropriate tradeoff for accessibility in educational platforms. |
+| **What to Do Instead** | Phone ownership verification via SMS OTP at registration is sufficient. The 3-device limit + session family_id provides additional security layers. |
 
-Patterns to avoid.
+### AF-6: Do NOT Build Password Expiry or Password History
 
-| Anti-Feature | Why Avoid | What to Do Instead |
-|--------------|-----------|-------------------|
-| **Polling for expired sessions** | Every server instance queries Redis every minute. Redundant. | Use Redis TTL auto-expiration + keyspace events |
-| **Server-time streak reset** | Unfair to users in different timezones. | Store user timezone. Calculate midnight in user's local time |
-| **Blocking task execution** | Long-running task blocks API requests. | Run tasks in background worker (Frappe scheduler already does this) |
-| **No failure handling** | Task fails silently. No retry, no alert. | Log failures. Retry with backoff. Alert if critical task fails |
-| **Hardcoded schedules** | Changing task frequency requires code deployment. | Configuration-driven schedules (Frappe hooks.py supports this) |
+| Aspect | Detail |
+|--------|--------|
+| **Anti-Feature** | Forcing password rotation or preventing password reuse |
+| **Why Avoid** | NIST 800-63B and modern OWASP guidance explicitly recommend AGAINST periodic password expiry. It leads to weaker passwords (users just increment a number). Password history checks add complexity for minimal security benefit. |
+| **What to Do Instead** | Allow passwords to live indefinitely. Enforce strong passwords via length requirement (8+ chars). If a breach is detected, force reset via admin action. |
 
-**Research Note (HIGH confidence):** Redis keyspace notifications (expire events) are the 2026 best practice for session cleanup. OWASP session management cheatsheet emphasizes TTL on all session keys. Microsoft documentation (2024) recommends cron cleanup as fallback, not primary mechanism.
+### AF-7: Do NOT Build CAPTCHA for OTP Requests
 
-### Dependencies on Existing Features
+| Aspect | Detail |
+|--------|--------|
+| **Anti-Feature** | Adding CAPTCHA/reCAPTCHA before OTP send |
+| **Why Avoid** | This is a native mobile app, not a web form. CAPTCHA is a poor experience in mobile apps, especially for young Arabic-speaking students. The rate limiting (TS-7) provides sufficient bot protection for the expected scale. |
+| **What to Do Instead** | Rely on rate limiting (per-phone + per-IP) and device fingerprinting. If SMS pumping becomes a real problem at scale, consider invisible reCAPTCHA v3 or device attestation (SafetyNet/App Attest) as a future enhancement. |
 
-| New Feature | Depends On (v1.0) |
-|-------------|-------------------|
-| Streak reset task | Wallet data (Redis hash), Streak tracking (Lua script) |
-| Session cleanup task | Session keys in Redis |
-| Leaderboard reset task | Leaderboard sorted sets |
-| Task scheduling | Frappe scheduler (already configured in v1.0) |
+### AF-8: Do NOT Build "Remember Me" or Biometric Login in Auth Layer
+
+| Aspect | Detail |
+|--------|--------|
+| **Anti-Feature** | Server-side "remember me" toggle or biometric auth handling in the API |
+| **Why Avoid** | The 30-day refresh token already provides "remember me" behavior. Biometric unlock (Face ID, fingerprint) is a client-side concern -- the mobile app stores the refresh token in secure storage and unlocks it with biometrics. The server never sees biometric data. |
+| **What to Do Instead** | Keep the 30-day refresh token. Client-side biometric unlock is the mobile team's responsibility. Document this for the mobile team so they know the server contract is unchanged. |
 
 ---
 
-## Cross-Feature Dependencies
-
-Critical ordering for v1.1 implementation.
+## Feature Dependencies
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                   GAME SESSIONS (implement first)               │
-├─────────────────────────────────────────────────────────────────┤
-│  Start session endpoint                                         │
-│       └── Depends on: JWT auth (v1.0), Access control (v1.0)    │
-│  Stage complete in session                                      │
-│       └── Depends on: Session existence check                   │
-│  End session → lesson complete                                  │
-│       └── Depends on: Bitmap progress (v1.0), XP award (v1.0)   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   LEADERBOARDS (implement second)               │
-├─────────────────────────────────────────────────────────────────┤
-│  Leaderboard update on XP gain                                  │
-│       └── Depends on: XP award (v1.0), ZINCRBY on sorted set    │
-│  Top N + user rank endpoints                                    │
-│       └── Depends on: Leaderboard population                    │
-│  Streak leaderboard                                             │
-│       └── Depends on: Streak tracking (v1.0)                    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   DEVICE MANAGEMENT (implement third)           │
-├─────────────────────────────────────────────────────────────────┤
-│  Device registration on login                                   │
-│       └── Depends on: Login endpoint (v1.0)                     │
-│  Device limit enforcement                                       │
-│       └── Depends on: Device registration                       │
-│  Device listing + deauthorization                               │
-│       └── Depends on: Device metadata in Redis                  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   SCHEDULED TASKS (implement last)              │
-├─────────────────────────────────────────────────────────────────┤
-│  Session cleanup (hourly)                                       │
-│       └── Depends on: Game sessions being created               │
-│  Daily leaderboard reset (daily)                                │
-│       └── Depends on: Leaderboards being populated              │
-│  Streak reset (daily)                                           │
-│       └── Depends on: Streak tracking (v1.0)                    │
-│  Device cleanup (weekly)                                        │
-│       └── Depends on: Device registration                       │
-└─────────────────────────────────────────────────────────────────┘
+TS-2 (Phone Normalization)
+  |
+  v
+TS-3 (Phone Uniqueness) ------> TS-4 (Registration + OTP)
+  |                                 |
+  |                                 +--> TS-7 (OTP Send Rate Limiting)
+  |                                 +--> TS-8 (OTP Verify Attempt Limiting)
+  |                                 +--> D-2 (Phone Reservation)
+  |                                 +--> D-3 (OTP Resend)
+  |
+  v
+TS-1 (Phone Login) ---------------> TS-5 (Password Policy)
+  |                                 |
+  |                                 v
+  |                               TS-6 (Password Reset + OTP)
+  |                                 |
+  |                                 +--> TS-9 (Session Invalidation)
+  |
+  v
+TS-10 (Separate Endpoints) -------> D-1 (Enriched Login Response)
+                                    D-4 (Leaderboard Privacy)
+                                    D-5 (Admin Password Reset)
+
+Independent (execute last):
+  D-6 (Migration Script) -- depends on everything above being built first
 ```
 
-**Critical Path for v1.1:**
-
-1. **Game Sessions** - Core lesson flow. Must work before leaderboards (sessions feed analytics).
-2. **Leaderboards** - Depends on XP being accumulated (v1.0 ready), but adds competitive layer.
-3. **Device Management** - Security feature. Can be developed in parallel with sessions.
-4. **Scheduled Tasks** - Background maintenance. Implement last after features are stable.
-
-**Parallelization Opportunity:**
-- Game Sessions + Device Management can be developed simultaneously (no dependencies).
-- Leaderboards depend on XP (v1.0), so can start immediately.
-- Scheduled Tasks wait for all features to stabilize.
+**Key dependency insight:** Phone normalization (TS-2) is the foundation. Everything else depends on having a consistent, normalized phone number format. Build and test this first.
 
 ---
 
-## MVP Recommendation for v1.1
+## MVP Recommendation
 
-### Must Have (Core v1.1)
+For the first usable version of phone+password auth, prioritize in this order:
 
-| Priority | Feature | Rationale |
-|----------|---------|-----------|
-| 1 | Start/end session endpoints | Core lesson flow tracking |
-| 2 | Session TTL and cleanup | Prevent Redis bloat |
-| 3 | All-time XP leaderboard | Table stakes competitive feature |
-| 4 | Daily XP leaderboard | Fresh competition every day |
-| 5 | Device registration on login | Security against account sharing |
-| 6 | Device limit enforcement (3 devices) | Prevent abuse |
-| 7 | Daily leaderboard reset task | Maintain daily rankings |
-| 8 | Session cleanup task (hourly) | Remove expired sessions |
+### Must Ship (Phase 1 - Core Auth)
 
-### Should Have (Enhanced v1.1)
+1. **TS-2** Phone Number Normalization -- foundation for everything
+2. **TS-3** Phone Number Uniqueness -- database constraint
+3. **TS-5** Password Policy -- validation logic
+4. **TS-1** Phone Login -- core login endpoint
+5. **TS-10** Separate Endpoints -- clean endpoint structure
+6. **D-1** Enriched Login Response -- already built, just preserve it
 
-| Priority | Feature | Rationale |
-|----------|---------|-----------|
-| 9 | Streak leaderboard | Different competition axis |
-| 10 | Device listing endpoint | User self-service |
-| 11 | Cached leaderboard results | Performance at scale |
-| 12 | User rank + context (±2 positions) | Better UX than just "#47" |
+### Must Ship (Phase 2 - Registration + OTP)
 
-### Nice to Have (Polish)
+7. **TS-4** Self-Registration with OTP -- pending state in Redis
+8. **TS-7** OTP Send Rate Limiting -- MUST ship with OTP
+9. **TS-8** OTP Verify Attempt Limiting -- MUST ship with OTP
+10. **D-2** Phone Reservation -- ship with registration
 
-| Priority | Feature | Rationale |
-|----------|---------|-----------|
-| 13 | Session recovery on crash | Better UX, prevents frustration |
-| 14 | Concurrent session detection | Advanced account sharing prevention |
-| 15 | Weekly leaderboard | Additional timeframe |
-| 16 | Device auto-cleanup (90d inactive) | Automated maintenance |
+### Must Ship (Phase 3 - Password Reset + Migration)
 
-### Defer to Post-v1.1
+11. **TS-6** Password Reset via OTP -- 3-step flow
+12. **TS-9** Session Invalidation on Password Change -- security requirement
+13. **D-3** OTP Resend -- quality of life
+14. **D-5** Admin Password Reset -- support channel
+15. **D-4** Leaderboard Privacy -- audit and fix before go-live
+16. **D-6** Migration Script -- final step before go-live
 
-| Feature | Reason to Defer |
-|---------|-----------------|
-| League-based leaderboards | Complex cohort logic. Requires more users for meaningful cohorts. |
-| Real-time leaderboard updates | WebSocket complexity. Cached results sufficient for MVP. |
-| Redis keyspace notifications | Optimization. Cron-based cleanup works for v1.1 scale. |
-| Device fingerprinting | Privacy concerns. Device limit sufficient for now. |
-| 2FA for new devices | Adds complexity. Basic device management first. |
-| Session idle timeout warnings | Requires WebSocket or polling. TTL expiration sufficient. |
+### Defer to Post-Launch
+
+- All anti-features above are explicitly excluded
+- Real SMS provider integration (replace static "1111")
+- Phone number change flow (admin-only for now)
+- Common password list checking
+- SMS delivery monitoring/analytics
 
 ---
 
-## Complexity Assessment
+## Detailed Behavior Specifications
 
-| Feature Area | Overall Complexity | Risk Factors |
-|--------------|-------------------|--------------|
-| **Game Sessions** | Low-Medium | TTL management, ensuring atomic end-session logic |
-| **Leaderboards** | Low | Redis sorted sets are well-understood. Reset logic straightforward. |
-| **Device Management** | Low | Simple Redis hash operations. Limit enforcement is basic counting. |
-| **Scheduled Tasks** | Low | Frappe scheduler already in use (v1.0). Adding new tasks is incremental. |
+### Error Response Patterns
 
-**Highest Risk:** Leaderboard anti-pattern (demotivation). Mitigation: Start with opt-in or private rankings.
+All auth endpoints should follow a consistent error response format:
 
-**Lowest Risk:** Device management. Standard CRUD operations on Redis hash.
+```json
+{
+  "detail": {
+    "code": "ERROR_CODE",
+    "message": "Human-readable message (Arabic-friendly)"
+  }
+}
+```
 
----
+**Error codes for registration:**
 
-## Performance Considerations
+| Code | HTTP Status | When |
+|------|-------------|------|
+| `PHONE_INVALID_FORMAT` | 400 | Phone number fails validation after normalization |
+| `PASSWORD_TOO_SHORT` | 400 | Password below minimum length |
+| `MISSING_REQUIRED_FIELD` | 400 | Required profile field missing |
+| `OTP_RATE_LIMITED` | 429 | Too many OTP requests |
+| `PHONE_PENDING_REGISTRATION` | 409 | Phone has pending OTP verification |
+| `INVALID_OTP` | 401 | Wrong OTP code |
+| `OTP_EXPIRED` | 401 | Pending state expired (10 min TTL) |
+| `OTP_MAX_ATTEMPTS` | 401 | 3 failed OTP attempts, must restart flow |
+| `REGISTRATION_FAILED` | 500 | Frappe document creation failed |
 
-### Game Sessions
-- **Start session:** O(1) - HSET to create hash
-- **Stage complete:** O(1) - HSET to update field
-- **End session:** O(1) - DEL session key + existing lesson complete logic
-- **Session cleanup:** O(n) - SCAN for expired keys (use TTL auto-expiration to minimize)
+**Error codes for login:**
 
-### Leaderboards
-- **Update leaderboard:** O(log N) - ZADD to sorted set
-- **Fetch top 100:** O(log N + 100) - ZREVRANGE
-- **User rank lookup:** O(log N) - ZREVRANK
-- **Daily reset:** O(1) - RENAME + EXPIRE
+| Code | HTTP Status | When |
+|------|-------------|------|
+| `INVALID_CREDENTIALS` | 401 | Wrong phone/password (generic, no enumeration) |
+| `DEVICE_ID_REQUIRED` | 400 | Missing X-Device-ID header |
+| `DEVICE_LIMIT_EXCEEDED` | 429 | 3-device limit reached |
+| `NO_PLAN_ASSIGNED` | 401 | Player profile has no plan |
+| `LOGIN_RATE_LIMITED` | 429 | Too many login attempts |
 
-**Scaling concern:** Global leaderboard at 100K users → 100K members in sorted set. Redis handles this, but ZREVRANGE becomes slower. Mitigation: Cache top 100 for 5 minutes.
+**Error codes for password reset:**
 
-### Device Management
-- **Register device:** O(1) - HSET
-- **List devices:** O(n) - HGETALL (n = devices per user, typically 3-5)
-- **Remove device:** O(1) - HDEL
-- **Limit check:** O(1) - HLEN
+| Code | HTTP Status | When |
+|------|-------------|------|
+| `OTP_RATE_LIMITED` | 429 | Too many OTP requests |
+| `INVALID_OTP` | 401 | Wrong OTP code |
+| `OTP_EXPIRED` | 401 | Reset OTP expired |
+| `OTP_MAX_ATTEMPTS` | 401 | 3 failed attempts, must restart |
+| `INVALID_RESET_TOKEN` | 401 | Reset token invalid or expired |
+| `PASSWORD_TOO_SHORT` | 400 | New password below minimum length |
 
-**No scaling concerns.** Per-user hashes are small.
+### Redis Key Patterns for OTP State
 
-### Scheduled Tasks
-- **Streak reset:** O(n) - Iterate all users with dirty streak flag (use dirty set pattern from v1.0)
-- **Session cleanup:** O(1) - Redis TTL auto-expires (cron task is just safety net)
-- **Leaderboard reset:** O(1) - RENAME + EXPIRE
+| Key | Value | TTL | Purpose |
+|-----|-------|-----|---------|
+| `memora:pending:{token}` | JSON: `{mobile, password_hash, display_name, avatar, grade, major, season, otp, attempts, created_at}` | 600s (10 min) | Pending registration |
+| `memora:phone_reserved:{mobile}` | `1` | 600s (10 min) | Prevent duplicate pending registrations |
+| `memora:reset:{mobile}` | JSON: `{otp, attempts, created_at}` | 600s (10 min) | Password reset OTP state |
+| `memora:reset_token:{token}` | mobile number string | 300s (5 min) | Verified reset token (between step 2 and 3) |
+| `memora:ratelimit:otp:phone:{mobile}` | counter (integer) | 600s (10 min) | OTP send rate limit per phone |
+| `memora:ratelimit:otp:ip:{ip}` | counter (integer) | 600s (10 min) | OTP send rate limit per IP |
+| `memora:ratelimit:otp:cooldown:{mobile}` | `1` | 60s | Resend cooldown flag |
 
-**Optimization:** Use dirty set pattern for streak reset (only iterate users with recent activity).
+### OTP Provider Interface
+
+Design the OTP sending as a pluggable interface from day one:
+
+```python
+class OTPProvider(Protocol):
+    async def send_otp(self, mobile: str, otp: str) -> bool:
+        """Send OTP to mobile number. Returns True on success."""
+        ...
+
+class StaticOTPProvider:
+    """Development provider - always uses static OTP, logs instead of sending."""
+    async def send_otp(self, mobile: str, otp: str) -> bool:
+        logger.info("otp_generated", mobile=mobile[-4:], otp_length=len(otp))
+        return True
+
+class TwilioOTPProvider:
+    """Production provider - sends via Twilio Verify. (Future)"""
+    ...
+```
+
+**Configuration:** Select provider via environment variable `OTP_PROVIDER=static|twilio`.
 
 ---
 
 ## Sources
 
-### Game Sessions (MEDIUM-HIGH confidence)
-- [Duolingo Session Tracking Patterns](https://medium.com/@salamprem49/duolingo-streak-system-detailed-breakdown-design-flow-886f591c953f) - Session flow, user onboarding
-- [Session Management Best Practices - OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) - TTL, security patterns
-- [Redis Session Management](https://redis.io/solutions/session-management/) - Official Redis patterns
-- [Session Tracking State Management Pitfalls](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/app-state?view=aspnetcore-8.0) - Microsoft ASP.NET Core docs
+### HIGH Confidence (Official Documentation, Codebase, Standards)
+- Frappe Password fieldtype and `__Auth` table: [Field Types - Frappe Docs](https://docs.frappe.io/framework/user/en/basics/doctypes/fieldtypes)
+- Frappe `password.py` source: [frappe/frappe/utils/password.py](https://github.com/frappe/frappe/blob/develop/frappe/utils/password.py)
+- OWASP Forgot Password Cheat Sheet: [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html)
+- OWASP Authentication Cheat Sheet: [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
+- OWASP Session Management Cheat Sheet: [OWASP](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+- Twilio OTP Rate Limits and Timeouts: [Twilio Verify Docs](https://www.twilio.com/docs/verify/api/rate-limits-and-timeouts)
+- Twilio Developer Best Practices: [Twilio Verify Best Practices](https://www.twilio.com/docs/verify/developer-best-practices)
+- E.164 Phone Format - Saudi Arabia: [sent.dm/resources/sa](https://www.sent.dm/resources/sa)
+- E.164 Phone Format - Jordan: [sent.dm/resources/jo](https://www.sent.dm/resources/jo)
+- Existing codebase: `fastapi_app/api/v1/endpoints/auth.py`, `services/rate_limit.py`, `services/session.py`, `services/device.py`, `services/frappe.py`
+- PRD: `.planning/prd/mobile-auth-migration.md`
 
-### Leaderboards (HIGH confidence)
-- [Leaderboard Design Principles - JMIR](https://pmc.ncbi.nlm.nih.gov/articles/PMC8097522/) - Academic research on educational leaderboards, demotivation risks
-- [Penn State - Leaderboards in Educational Gaming](https://sites.psu.edu/zaczidik/2024/09/15/leaderboards-in-educational-gaming-striking-a-balance-between-motivation-and-meaningful-learning/) - Balance competition with learning
-- [Google Play Games Services - Leaderboards](https://developers.google.com/games/services/common/concepts/leaderboards) - Automatic daily/weekly/all-time creation
-- [LootLocker - Leaderboard Scheduled Resets](https://lootlocker.com/blog/leaderboard-resets-rewards) - Reset patterns, cron expressions
-- [Yukai Chou - PBL Fallacy](https://yukaichou.com/gamification-study/points-badges-and-leaderboards-the-gamification-fallacy/) - Anti-pattern warnings
-- [Gamification in 2026 Trends](https://tesseractlearning.com/blogs/view/gamification-in-2026-going-beyond-stars-badges-and-points/) - Purpose over superficial rewards
+### MEDIUM Confidence (Verified with Multiple Sources)
+- OTP rate limiting patterns: [Unkey Blog - Ratelimiting OTP](https://www.unkey.com/blog/ratelimiting-otp), confirmed by Twilio documentation
+- SMS pumping attack prevention: [TechTarget](https://www.techtarget.com/searchsecurity/feature/SMS-pumping-attacks-and-how-to-mitigate-them)
+- Pending registration state (no token before OTP verification): [Medium - Broken OTP](https://medium.com/@shamveelkhilji/broken-otp-why-issuing-a-full-token-at-signup-is-a-security-bug-and-how-to-fix-it-3ed99a2e18b8), confirmed by [LoginRadius Redis+OTP](https://www.loginradius.com/blog/engineering/guest-post/multi-factor-authentication-using-redis-cache-and-otp)
+- OTP lifecycle states: [Medium - OTP Lifecycle](https://medium.com/@jayashri.shinde1795/understanding-the-lifecycle-and-status-codes-of-otp-verification-b74b83557b7e)
+- OWASP ASVS password recommendations: [Medium - CWE-521](https://medium.com/@pavusa/secure-authentication-done-right-owasp-asvs-v4-0-3-cwe-521-weak-password-requirements-97bd38923be4)
 
-### Device Management (MEDIUM confidence)
-- [How to Prevent Multiple Logins - Rupt](https://www.rupt.dev/blog/how-to-prevent-multiple-user-logins-for-the-same-account) - Device limit patterns
-- [Device Management UX Best Practices 2026](https://www.venn.com/learn/byod/mobile-device-management/) - Friction reduction, user-first UX
-- [5 MDM Best Practices](https://www.beyondidentity.com/resource/5-mobile-device-management-best-practices) - Passwordless authentication, low friction
-- [Microsoft Intune Best Practices 2025](https://windowsmanagementexperts.com/7-microsoft-intune-best-practices/) - Endpoint analytics, performance monitoring
-
-### Scheduled Tasks (HIGH confidence)
-- [Redis Key Expiration Events](https://gokhana.medium.com/redis-key-expiration-automating-tasks-with-redis-events-not-cron-jobs-bc403d0beedb) - 2026 pattern: events > cron
-- [Spring Boot Redis Session Cleanup](https://runebook.dev/en/articles/spring_boot/application-properties/application-properties.web.spring.session.redis.cleanup-cron) - Cron-based cleanup patterns
-- [Redis TTL Command](https://redis.io/commands/ttl/) - Official Redis documentation
-
-### Streak Mechanics (MEDIUM confidence)
-- [Duolingo Streak Freeze](https://duoplanet.com/duolingo-streak-freeze/) - Streak protection patterns
-- [Microsoft Rewards Streak Protection](https://support.microsoft.com/en-us/topic/microsoft-rewards-streak-protection-bc0753f8-be5b-4284-9fcd-ee93946ec822) - 14-day protection, annual reset
-- [Elevate Streak Freeze](https://support.elevateapp.com/hc/en-us/articles/28507604797595-What-is-a-streak-freeze) - Milestone-based freeze grants
-
-### Industry Context (MEDIUM confidence)
-- [Top 7 AI Tools for Gamified Learning 2026](https://www.disco.co/blog/ai-tools-for-gamified-learning-2026) - Real-time progress tracking
-- [EdApp Leaderboards](https://support.edapp.com/leaderboards) - Admin best practices
-- [Growth Engineering - Leaderboards in LMS](https://www.growthengineering.co.uk/gamification-leaderboards-lms/) - Refreshing leaderboards periodically
+### LOW Confidence (Single Source, Needs Validation if Critical)
+- NIST 800-63B recommendation against password expiry (widely referenced but not directly verified from NIST document in this research session)
+- Google Identity Platform test phone numbers pattern for development OTP testing
 
 ---
 
-## Research Confidence Assessment
-
-| Area | Confidence | Rationale |
-|------|------------|-----------|
-| **Game Sessions** | MEDIUM-HIGH | OWASP and Redis official docs (HIGH). Duolingo patterns (MEDIUM, web search). |
-| **Leaderboards** | HIGH | Academic research (JMIR, Penn State) + Google Play official docs. Anti-patterns well-documented. |
-| **Device Management** | MEDIUM | Industry best practices (web search). Limited official documentation on educational-specific patterns. |
-| **Scheduled Tasks** | HIGH | Redis official docs + Spring Boot patterns. 2026 trend (keyspace events) from recent Medium articles. |
-
-**Low Confidence Areas (need validation):**
-- None identified. Research covered all four areas with multiple sources.
-
-**Verification Notes:**
-- Leaderboard demotivation research: Cross-verified JMIR study (2021) with Penn State article (2024) and 2026 trends.
-- Redis session patterns: Verified OWASP cheatsheet with Redis official documentation.
-- Device limits: Verified 3-device standard across multiple industry sources.
-- Scheduled task patterns: Verified traditional cron approach with emerging 2026 Redis events pattern.
-
----
-
-*Research complete. Ready for requirements definition and technical planning.*
+*Research complete. Ready for requirements definition and implementation planning.*
