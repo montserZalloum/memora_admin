@@ -15,6 +15,11 @@ function clear_downstream(frm, field) {
 	(DOWNSTREAM[field] || []).forEach((f) => frm.set_value(f, ""));
 }
 
+function clear_test_results(frm) {
+	let wrapper = frm.fields_dict.test_results_html?.$wrapper;
+	if (wrapper) wrapper.html("");
+}
+
 function setup_cascading_filters(frm) {
 	// Major: filtered by grade's child table
 	frm.set_query("major", () => {
@@ -55,18 +60,24 @@ function setup_cascading_filters(frm) {
 		return {};
 	});
 
-	// Unit: filtered by track
+	// Unit: filtered by most specific ancestor
 	frm.set_query("unit", () => {
 		if (frm.doc.track) {
 			return { filters: { track: frm.doc.track } };
+		} else if (frm.doc.subject) {
+			return { filters: { subject: frm.doc.subject } };
 		}
 		return {};
 	});
 
-	// Topic: filtered by unit
+	// Topic: filtered by most specific ancestor
 	frm.set_query("topic", () => {
 		if (frm.doc.unit) {
 			return { filters: { unit: frm.doc.unit } };
+		} else if (frm.doc.track) {
+			return { filters: { track: frm.doc.track } };
+		} else if (frm.doc.subject) {
+			return { filters: { subject: frm.doc.subject } };
 		}
 		return {};
 	});
@@ -79,49 +90,59 @@ frappe.ui.form.on("Memora Admin Filter", {
 
 	grade(frm) {
 		clear_downstream(frm, "grade");
+		clear_test_results(frm);
 		setup_cascading_filters(frm);
 	},
 
 	season(frm) {
 		clear_downstream(frm, "season");
+		clear_test_results(frm);
 		setup_cascading_filters(frm);
 	},
 
 	major(frm) {
 		clear_downstream(frm, "major");
+		clear_test_results(frm);
 		setup_cascading_filters(frm);
 	},
 
 	academic_plan(frm) {
 		clear_downstream(frm, "academic_plan");
+		clear_test_results(frm);
 		setup_cascading_filters(frm);
 	},
 
 	subject(frm) {
 		clear_downstream(frm, "subject");
+		clear_test_results(frm);
 		setup_cascading_filters(frm);
 	},
 
 	track(frm) {
 		clear_downstream(frm, "track");
+		clear_test_results(frm);
 		setup_cascading_filters(frm);
 	},
 
 	unit(frm) {
 		clear_downstream(frm, "unit");
+		clear_test_results(frm);
 		setup_cascading_filters(frm);
 	},
 
-	test_filter_btn(frm) {
-		if (frm.is_dirty()) {
-			frappe.msgprint(__("Please save the filter before testing."));
-			return;
-		}
+	test_level(frm) {
+		clear_test_results(frm);
+	},
 
+	test_filter_btn(frm) {
 		frappe.call({
 			method: "memora_admin.memora_admin.doctype.memora_admin_filter.memora_admin_filter.test_filter",
 			args: {
-				filter_name: frm.doc.name,
+				academic_plan: frm.doc.academic_plan || "",
+				subject: frm.doc.subject || "",
+				track: frm.doc.track || "",
+				unit: frm.doc.unit || "",
+				topic: frm.doc.topic || "",
 				level: frm.doc.test_level || "",
 			},
 			callback(r) {

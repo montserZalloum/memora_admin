@@ -4,7 +4,11 @@
 frappe.ui.form.on("Memora Topic", {
 	refresh(frm) {
 		MemoraAdminFilter.setup(frm, function (filter_doc) {
-			if (filter_doc && filter_doc.track) {
+			if (filter_doc && filter_doc.unit) {
+				frm.set_query("unit", () => ({
+					filters: { name: filter_doc.unit },
+				}));
+			} else if (filter_doc && filter_doc.track) {
 				frm.set_query("unit", () => ({
 					filters: { track: filter_doc.track },
 				}));

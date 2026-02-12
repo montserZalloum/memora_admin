@@ -154,9 +154,15 @@ def _get_tracks_for_filter(doc, limit=2):
 
 
 @frappe.whitelist()
-def test_filter(filter_name, level=""):
+def test_filter(academic_plan="", subject="", track="", unit="", topic="", level=""):
 	"""Test the filter by querying sample records at each content level."""
-	doc = frappe.get_doc("Memora Admin Filter", filter_name)
+	doc = frappe._dict(
+		academic_plan=academic_plan,
+		subject=subject,
+		track=track,
+		unit=unit,
+		topic=topic,
+	)
 
 	level_config = {
 		"Subject": {
@@ -181,6 +187,14 @@ def test_filter(filter_name, level=""):
 		},
 	}
 
+	level_colors = {
+		"Subject": "#2490ef",
+		"Track": "#ed8e1b",
+		"Unit": "#29cd42",
+		"Topic": "#7c5de4",
+		"Lesson": "#e84d5a",
+	}
+
 	levels = [level] if level else ["Subject", "Track", "Unit", "Topic", "Lesson"]
 	rows = []
 
@@ -188,46 +202,25 @@ def test_filter(filter_name, level=""):
 		cfg = level_config[lvl]
 
 		if lvl == "Subject":
-			# Subject uses plan join
-			samples = _get_subjects_for_filter(doc, limit=2)
-			if not doc.academic_plan:
-				# No plan set — count all subjects
-				total = frappe.db.count("Memora Subject")
-				sample_names = []
+			if doc.subject:
+				title = frappe.db.get_value("Memora Subject", doc.subject, "subject_title") or ""
+				samples = [{"name": doc.subject, "title": title}]
+			elif doc.academic_plan:
+				samples = _get_subjects_for_filter(doc, limit=2)
 			else:
-				total = frappe.db.sql(
-					"""
-					SELECT COUNT(*) FROM `tabMemora Plan Subject`
-					WHERE parent = %s AND parenttype = 'Memora Academic Plan'
-					""",
-					doc.academic_plan,
-				)[0][0]
-				sample_names = [f"{s.name} ({s.title})" for s in samples]
-			rows.append((lvl, total, ", ".join(sample_names) if sample_names else "-"))
+				samples = []
+			rows.append((lvl, samples))
 			continue
 
 		if lvl == "Track" and not _build_filters(doc, lvl):
-			# No direct filter — try plan join
-			samples = _get_tracks_for_filter(doc, limit=2)
 			if doc.academic_plan:
-				total = frappe.db.sql(
-					"""
-					SELECT COUNT(*)
-					FROM `tabMemora Track` t
-					INNER JOIN `tabMemora Plan Subject` ps ON ps.subject = t.subject
-					WHERE ps.parent = %s AND ps.parenttype = 'Memora Academic Plan'
-					""",
-					doc.academic_plan,
-				)[0][0]
+				samples = _get_tracks_for_filter(doc, limit=2)
 			else:
-				total = frappe.db.count("Memora Track")
 				samples = []
-			sample_names = [f"{s.name} ({s.title})" for s in samples]
-			rows.append((lvl, total, ", ".join(sample_names) if sample_names else "-"))
+			rows.append((lvl, samples))
 			continue
 
 		filters = _build_filters(doc, lvl)
-		total = frappe.db.count(cfg["doctype"], filters)
 		samples = frappe.get_all(
 			cfg["doctype"],
 			filters=filters,
@@ -235,14 +228,27 @@ def test_filter(filter_name, level=""):
 			order_by=cfg["title_field"],
 			limit_page_length=2,
 		)
-		sample_names = [f"{s.name} ({s.title})" for s in samples]
-		rows.append((lvl, total, ", ".join(sample_names) if sample_names else "-"))
+		rows.append((lvl, samples))
 
 	# Build HTML table
-	html = '<table class="table table-bordered table-sm">'
-	html += "<thead><tr><th>Level</th><th>Total</th><th>Samples</th></tr></thead><tbody>"
-	for lvl, total, samples_str in rows:
-		html += f"<tr><td>{lvl}</td><td>{total}</td><td>{samples_str}</td></tr>"
+	badge_style = (
+		"display:inline-block;padding:3px 10px;margin:2px 4px;border-radius:12px;"
+		"font-size:12px;color:#fff;font-weight:500;"
+	)
+	html = '<table class="table table-bordered table-sm" style="margin-top:10px;">'
+	html += "<thead><tr><th>Level</th><th>Samples (up to 2)</th></tr></thead><tbody>"
+	for lvl, samples in rows:
+		color = level_colors[lvl]
+		level_badge = f'<span style="{badge_style}background-color:{color};">{lvl}</span>'
+		if samples:
+			sample_badges = " ".join(
+				f'<span style="{badge_style}background-color:{color}88;color:#333;">'
+				f"{s.get('title', s.get('name', ''))}</span>"
+				for s in samples
+			)
+		else:
+			sample_badges = '<span style="color:#999;">-</span>'
+		html += f"<tr><td>{level_badge}</td><td>{sample_badges}</td></tr>"
 	html += "</tbody></table>"
 
 	return html
