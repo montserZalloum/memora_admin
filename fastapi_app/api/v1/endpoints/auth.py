@@ -1,26 +1,31 @@
-"""Authentication endpoints."""
+"""Authentication endpoints for player and admin login."""
 
 from datetime import timedelta
 
 import jwt
+import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from fastapi_app.api.deps import RedisClient, SettingsDep, get_frappe_client
 from fastapi_app.core.security import create_access_token, create_refresh_token, decode_token
 from fastapi_app.models.auth import (
-	EnrichedTokenResponse,
+	AdminLoginRequest,
 	LoginProfile,
-	LoginRequest,
+	PlayerLoginRequest,
+	PlayerLoginResponse,
 	RefreshRequest,
 	TokenResponse,
 )
 from fastapi_app.services.device import DeviceService
-from fastapi_app.services.frappe import FrappeAuthService, is_email
+from fastapi_app.services.frappe import FrappeAuthService
+from fastapi_app.services.frappe_client import FrappeAPIError
 from fastapi_app.services.rate_limit import RateLimiter
 from fastapi_app.services.session import SessionService
 from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.wallet import WalletService
+
+logger = structlog.get_logger()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -34,25 +39,24 @@ def _get_client_ip(request: Request) -> str:
 	return request.client.host if request.client else "unknown"
 
 
-@router.post("/login", response_model=EnrichedTokenResponse)
-async def login(
+@router.post("/player/login", response_model=PlayerLoginResponse)
+async def player_login(
 	request: Request,
-	credentials: LoginRequest,
+	credentials: PlayerLoginRequest,
 	redis: RedisClient,
 	settings: SettingsDep,
-) -> EnrichedTokenResponse | JSONResponse:
+) -> PlayerLoginResponse | JSONResponse:
 	"""
-	Login with Frappe credentials, receive JWT tokens and profile data.
+	Player login with phone + password.
 
-	Accepts either email or mobile number as identifier.
+	Verifies credentials via Frappe verify_player_password API (single call, no Frappe session).
+	Returns JWT tokens and profile data (display_name, avatar, xp).
+
 	Requires X-Device-ID header for device registration.
 	Rate limited: 10 attempts/min per IP, 5 attempts/min per account.
 	New login invalidates any previous session.
-	Device registration enforces max_devices_per_player limit.
-
-	Per CONTEXT.md: Login fails with clear error if player has no plan assigned.
 	"""
-	# Require X-Device-ID header
+	# 1. Require X-Device-ID header
 	device_id = request.headers.get("X-Device-ID")
 	if not device_id:
 		raise HTTPException(
@@ -66,15 +70,14 @@ async def login(
 
 	client_ip = _get_client_ip(request)
 
-	# Check rate limits (use identifier instead of email)
+	# 2. Rate limit check
 	rate_limiter = RateLimiter(redis)
 	allowed, retry_after, limit_type = await rate_limiter.check_rate_limit(
 		ip_address=client_ip,
-		target_account=credentials.identifier,
+		target_account=credentials.mobile,
 	)
 
 	if not allowed:
-		# Per CONTEXT.md: include Retry-After header and seconds in body
 		return JSONResponse(
 			status_code=status.HTTP_429_TOO_MANY_REQUESTS,
 			content={
@@ -84,50 +87,38 @@ async def login(
 			headers={"Retry-After": str(retry_after)},
 		)
 
-	# Resolve identifier to email
-	frappe_service = FrappeAuthService(settings.frappe_url, settings.frappe_site)
-
-	if is_email(credentials.identifier):
-		# Identifier is email - use directly
-		email = credentials.identifier
-	else:
-		# Identifier is mobile number - lookup email via Frappe User.mobile_no
-		email = await frappe_service.lookup_user_by_mobile(credentials.identifier)
-		if not email:
-			# Generic error - don't reveal if mobile exists
-			raise HTTPException(
-				status_code=status.HTTP_401_UNAUTHORIZED,
-				detail="Invalid credentials",
-			)
-
-	# Verify credentials with Frappe and fetch player profile in one authenticated session
-	user, profile_data = await frappe_service.verify_credentials(email, credentials.password)
-
-	if not user:
-		# Per CONTEXT.md: generic error, don't reveal if email exists
+	# 3. Verify credentials via Frappe API (single call -- no Frappe session)
+	frappe_client = await get_frappe_client()
+	try:
+		profile = await frappe_client.call(
+			"memora_admin.api.auth.verify_player_password",
+			{"mobile": credentials.mobile, "password": credentials.password},
+		)
+	except FrappeAPIError:
 		raise HTTPException(
 			status_code=status.HTTP_401_UNAUTHORIZED,
 			detail="Invalid credentials",
 		)
 
-	# Check if player profile exists and has plan assigned
-	if not profile_data or not profile_data.get("plan"):
-		# Per CONTEXT.md: Player must have a plan assigned to login
+	# 4. Check profile has plan
+	if not profile or not profile.get("plan"):
 		raise HTTPException(
 			status_code=status.HTTP_401_UNAUTHORIZED,
-			detail="Player must have a plan assigned",
+			detail="Invalid credentials",
 		)
 
-	# Get device limit from settings
-	frappe_client = await get_frappe_client()
+	player_id = profile["player_id"]
+
+	# 5. Fetch session_timeout_days from Memora Settings
 	settings_service = SettingsService(redis, frappe_client)
 	game_settings = await settings_service.get_gamification_settings()
+	session_ttl_days = game_settings.session_timeout_days
 	max_devices = game_settings.max_devices_per_player
 
-	# Register device (atomic with limit check)
+	# 6. Device registration (atomic with limit check)
 	device_service = DeviceService(redis, key_prefix=settings.redis_key_prefix)
 	device_result = await device_service.register_device(
-		user_id=user.user_id,
+		user_id=player_id,
 		device_id=device_id,
 		user_agent=user_agent,
 		max_devices=max_devices,
@@ -135,7 +126,6 @@ async def login(
 	)
 
 	if not device_result.success:
-		# Per CONTEXT.md: HTTP 429 with specific message
 		return JSONResponse(
 			status_code=status.HTTP_429_TOO_MANY_REQUESTS,
 			content={
@@ -144,25 +134,107 @@ async def login(
 			},
 		)
 
-	# Fetch wallet for XP (with FrappeClient for hydration after cache flush)
+	# 7. Fetch wallet for XP (with FrappeClient for hydration after cache flush)
 	wallet_service = WalletService(redis, key_prefix=settings.redis_key_prefix, frappe_client=frappe_client)
-	wallet = await wallet_service.get_wallet(user.user_id)
+	wallet = await wallet_service.get_wallet(player_id)
 
-	# Create new session with plan_id (invalidates any existing session)
+	# 8. Create session (invalidates any previous session)
+	session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
+	family_id = await session_service.create_session(
+		player_id,
+		plan_id=profile["plan"],
+		ttl_days=session_ttl_days,
+	)
+
+	# 9. Create tokens (player: mobile claim, no email)
+	access_token = create_access_token(
+		user_id=player_id,
+		mobile=profile["mobile"],
+		plan_id=profile["plan"],
+		display_name=profile.get("display_name", ""),
+		family_id=family_id,
+		expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
+	)
+
+	refresh_token = create_refresh_token(
+		user_id=player_id,
+		family_id=family_id,
+		expires_delta=timedelta(days=session_ttl_days),
+	)
+
+	# 10. Return enriched response (no gender per CONTEXT.md)
+	return PlayerLoginResponse(
+		access_token=access_token,
+		refresh_token=refresh_token,
+		profile=LoginProfile(
+			display_name=profile.get("display_name", ""),
+			avatar=profile.get("avatar") or "default_avatar",
+			xp=wallet.get("xp", 0),
+		),
+	)
+
+
+@router.post("/admin/login", response_model=TokenResponse)
+async def admin_login(
+	request: Request,
+	credentials: AdminLoginRequest,
+	redis: RedisClient,
+	settings: SettingsDep,
+) -> TokenResponse | JSONResponse:
+	"""
+	Admin login with email + password.
+
+	Uses existing FrappeAuthService to verify credentials via Frappe session.
+	Returns JWT tokens only (no profile enrichment).
+	No X-Device-ID required for admin.
+	"""
+	client_ip = _get_client_ip(request)
+
+	# 1. Rate limit check
+	rate_limiter = RateLimiter(redis)
+	allowed, retry_after, limit_type = await rate_limiter.check_rate_limit(
+		ip_address=client_ip,
+		target_account=credentials.email,
+	)
+
+	if not allowed:
+		return JSONResponse(
+			status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+			content={
+				"detail": "Too many login attempts",
+				"retry_after": retry_after,
+			},
+			headers={"Retry-After": str(retry_after)},
+		)
+
+	# 2. Verify via FrappeAuthService (admin uses Frappe User auth)
+	frappe_service = FrappeAuthService(settings.frappe_url, settings.frappe_site)
+	user, _profile_data = await frappe_service.verify_credentials(
+		credentials.email, credentials.password
+	)
+
+	if not user:
+		raise HTTPException(
+			status_code=status.HTTP_401_UNAUTHORIZED,
+			detail="Invalid credentials",
+		)
+
+	# 3. Create session (admin uses email as user_id)
 	session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
 	family_id = await session_service.create_session(
 		user.user_id,
-		plan_id=profile_data["plan"],
+		plan_id="",
 		ttl_days=settings.jwt_refresh_token_expire_days,
 	)
 
-	# Create tokens (plan_id from profile_data)
+	# 4. Create tokens (admin: email claim, no mobile, role included)
 	access_token = create_access_token(
 		user_id=user.user_id,
 		email=user.email,
-		plan_id=profile_data["plan"],
+		plan_id="",
 		display_name=user.full_name,
 		family_id=family_id,
+		role="System Manager",
 		expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
 	)
 
@@ -172,16 +244,10 @@ async def login(
 		expires_delta=timedelta(days=settings.jwt_refresh_token_expire_days),
 	)
 
-	# Return enriched response with profile data
-	return EnrichedTokenResponse(
+	# 5. Return tokens only (no profile enrichment for admin)
+	return TokenResponse(
 		access_token=access_token,
 		refresh_token=refresh_token,
-		profile=LoginProfile(
-			display_name=profile_data.get("display_name") or user.full_name,
-			avatar=profile_data.get("avatar") or "default_avatar",
-			gender=profile_data.get("gender"),  # May be None
-			xp=wallet.get("xp", 0),
-		),
 	)
 
 
@@ -194,11 +260,10 @@ async def refresh(
 	"""
 	Exchange refresh token for new access token.
 
-	Per CONTEXT.md:
-	- Validates session is still active (not invalidated by new login)
-	- Returns same refresh token (not rotated)
-	- Refresh token is reusable
-	- plan_id sourced from session (not token) to reflect any admin changes
+	Works for both player and admin tokens transparently.
+	Validates session is still active (not invalidated by new login).
+	Returns same refresh token (not rotated).
+	Plan_id sourced from session (not token) to reflect any admin changes.
 	"""
 	try:
 		# Decode refresh token (validates signature, expiry, type)
@@ -219,12 +284,15 @@ async def refresh(
 			)
 
 		# Create new access token with plan_id from session
+		# Pass email and mobile from original token payload (one will be None)
 		access_token = create_access_token(
 			user_id=user_id,
-			email=payload.get("email", ""),
-			plan_id=plan_id,  # From session via validate_session
+			email=payload.get("email"),
+			mobile=payload.get("mobile"),
+			plan_id=plan_id,
 			display_name=payload.get("name", ""),
 			family_id=family_id,
+			role=payload.get("role"),
 			expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
 		)
 
