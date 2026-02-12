@@ -12,8 +12,10 @@ from fastapi_app.api.deps import (
 	GameSessionServiceDep,
 	HierarchyServiceDep,
 	LeaderboardServiceDep,
+	ProgressServiceDep,
 	RedisClient,
 	SettingsServiceDep,
+	StatsServiceDep,
 	WalletServiceDep,
 )
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
@@ -24,6 +26,7 @@ from fastapi_app.models.game_session import (
 	StartSessionRequest,
 	StartSessionResponse,
 )
+from fastapi_app.services.stats import compute_stats_from_hierarchy
 from fastapi_app.services.wallet import calculate_xp_award
 
 logger = structlog.get_logger()
@@ -167,6 +170,8 @@ async def end_session(
 	wallet_service: WalletServiceDep,
 	leaderboard_service: LeaderboardServiceDep,
 	settings_service: SettingsServiceDep,
+	progress_service: ProgressServiceDep,
+	stats_service: StatsServiceDep,
 	redis_client: RedisClient,
 ) -> EndSessionResponse:
 	"""End lesson session and trigger completion flow.
@@ -313,6 +318,27 @@ async def end_session(
 		lesson_path = hierarchy.find_lesson_path(session.lesson_id)
 		if lesson_path:
 			stats_key = f"memora:stats:{user.sub}:{session.subject_id}:v{hierarchy.version}"
+
+			# Ensure stats hash exists with total fields before HINCRBY.
+			# Without this, HINCRBY on a missing/expired key creates a hash with
+			# only "completed" fields (no "total" fields), causing progress endpoints
+			# to return total:0 and percentage:0% until the hash expires.
+			stats_exists = await redis_client.exists(stats_key)
+			if not stats_exists:
+				completed_bits = await progress_service.get_completed_bits(
+					user_id=user.sub,
+					subject_id=session.subject_id,
+					bit_range=hierarchy.bit_range,
+					version=hierarchy.version,
+				)
+				stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+				await stats_service.set_stats(
+					user_id=user.sub,
+					subject_id=session.subject_id,
+					version=hierarchy.version,
+					stats=stats,
+				)
+
 			pipe.hincrby(stats_key, "completed", 1)
 			pipe.hincrby(stats_key, f"{lesson_path.track_id}:completed", 1)
 			pipe.hincrby(stats_key, f"{lesson_path.unit_id}:completed", 1)

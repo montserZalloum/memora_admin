@@ -275,9 +275,9 @@ async def get_subject_tracks(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats (cold start handled)
+	# Get or initialize stats (cold start or incomplete stats handled)
 	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None:
+	if stats is None or "total" not in stats:
 		completed_bits = await progress_service.get_completed_bits(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
@@ -365,9 +365,9 @@ async def get_track_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats
+	# Get or initialize stats (cold start or incomplete stats handled)
 	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None:
+	if stats is None or "total" not in stats:
 		completed_bits = await progress_service.get_completed_bits(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
@@ -474,9 +474,9 @@ async def get_unit_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats
+	# Get or initialize stats (cold start or incomplete stats handled)
 	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None:
+	if stats is None or "total" not in stats:
 		completed_bits = await progress_service.get_completed_bits(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
@@ -675,8 +675,9 @@ async def get_subject_progress(
 		version=hierarchy.version,
 	)
 
-	if stats is None:
-		# Cold start: compute stats from bitmap and cache
+	if stats is None or "total" not in stats:
+		# Cold start or incomplete stats (missing "total" field from partial HINCRBY):
+		# Recompute from bitmap and cache with all fields including totals.
 		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
 		await stats_service.set_stats(
 			user_id=user.sub,
