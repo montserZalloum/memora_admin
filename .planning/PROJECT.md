@@ -2,7 +2,7 @@
 
 ## What This Is
 
-Memora is a gamified educational platform backend for Arabic-speaking students. It provides a high-performance FastAPI game API (sub-10ms hot path) for content delivery, bitmap-based progress tracking, XP/streak gamification with hearts bonus, game session lifecycle management with Lua-optimized completion pipeline, competitive leaderboards with player profiles, FSRS spaced repetition, device security, stage content editing, and subscription-based Double-Gate access control. The platform runs a FastAPI sidecar alongside Frappe for admin/content management, with Redis for hot data and background sync to MariaDB.
+Memora is a gamified educational platform backend for Arabic-speaking students. It provides a high-performance FastAPI game API (sub-10ms hot path) for content delivery, bitmap-based progress tracking, XP/streak gamification with hearts bonus, game session lifecycle management with Lua-optimized completion pipeline, competitive leaderboards with player profiles, FSRS item-level spaced repetition with RANGE-partitioned storage, device security, stage content editing, product store with admin approval flow, real-time WebSocket notifications, rich profile page API, and subscription-based Double-Gate access control. The platform runs a FastAPI sidecar alongside Frappe for admin/content management, with Redis for hot data and background sync to MariaDB. The codebase has been hardened with shared constants, DRY dependency injection, safe Lua patterns, and reusable admin auth.
 
 ## Core Value
 
@@ -89,15 +89,55 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - ✓ FSRS spaced repetition background task (1-minute processing cycle) — v1.3
 - ✓ Legacy POST /progress/complete endpoint removed — v1.3
 
+**v1.4 Product Store:**
+- ✓ FastAPI endpoint to list available Product Grants for player's plan (cached in Redis) — v1.4
+- ✓ Product data assembled from Product Grant → Plan Subject → Item Price — v1.4
+- ✓ Exclude already-purchased products from catalog — v1.4
+- ✓ Subscription Transaction creation via Frappe API — v1.4
+- ✓ Admin approval flow creating subscriptions and syncing access to Redis — v1.4
+- ✓ Redis cache for product catalog per plan, invalidated on Product Grant changes — v1.4
+
+**v1.5 Real-Time Notifications:**
+- ✓ WebSocket notification system with ConnectionManager (100K+ concurrent) — v1.5
+- ✓ Redis pub/sub per-user channels for cross-instance delivery — v1.5
+- ✓ JWT-authenticated WebSocket connections — v1.5
+- ✓ Deprecated SSE endpoint and sse-starlette dependency removed — v1.5
+
+**v1.6 FSRS Review System:**
+- ✓ FSRS processor bug fixes (skippable filter, is_reviewable, date clamping) — v1.6
+- ✓ Review API endpoints (overview, due stages, submit with inline FSRS) — v1.6
+- ✓ MariaDB composite index for 200K+ user review queries — v1.6
+- ✓ 3 XP per review session with Redis-cached overview — v1.6
+
+**v1.7 Profile Page API:**
+- ✓ Hero section (avatar, username, level, XP progress) — v1.7
+- ✓ Subject-filtered stats grid (streak, items learned, XP) — v1.7
+- ✓ Memory mastery breakdown (mature/learning/new) — v1.7
+- ✓ Weekly activity chart and avatar selection — v1.7
+- ✓ Logout endpoint with session/device invalidation — v1.7
+
+**v1.8 Memory State Redesign:**
+- ✓ BIGINT AUTO_INCREMENT PK replacing composite string — v1.8
+- ✓ Item-level FSRS tracking (1 memory state per sub-element) — v1.8
+- ✓ BINARY(16) item_id with UUID generation for interactive stages — v1.8
+- ✓ RANGE partitioning by season_seq for instant archival — v1.8
+- ✓ Review and mastery APIs updated to item level — v1.8
+- ✓ Skippable stage types excluded from item_id generation — v1.8
+
+**v1.9 Tech Debt & Reliability Fixes:**
+- ✓ Interaction buffer LTRIM data loss race condition fixed — v1.9
+- ✓ Redis key constants unified in single shared location — v1.9
+- ✓ deps.py DRY consolidation (RedisClient sub-dependency pattern) — v1.9
+- ✓ Dead code removed (136 lines: log_slow_redis, deprecated models, SSE models) — v1.9
+- ✓ RequireAdmin dependency replacing magic string checks — v1.9
+- ✓ calculate_xp_award moved to service layer — v1.9
+- ✓ Lua tonumber safety pattern — v1.9
+- ✓ player_id Path validation with regex — v1.9
+- ✓ redirect_slashes replacing dual route decorators — v1.9
+
 ### Active
 
-**v1.4 Product Store:**
-- [ ] FastAPI endpoint to list available Product Grants for player's plan (cached in Redis)
-- [ ] Product data assembled from Product Grant → Plan Subject (alias_title, notes) → Item Price (price_list_rate)
-- [ ] Exclude already-purchased products, show "pending" badge for pending transactions
-- [ ] Frappe API endpoint to submit purchase request (creates Subscription Transaction)
-- [ ] Auto-approve for payment gateway, manual approval for other payment methods
-- [ ] Redis cache for product catalog per plan, invalidated on Product Grant changes
+(None — planning next milestone)
 
 ### Out of Scope
 
@@ -112,25 +152,26 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - Real-time leaderboard updates — WebSocket complexity
 - Streak leaderboard — deferred to future milestone
 - User-facing device management — admin-only for now
+- Payment gateway auto-approval — manual approval only for now
 
 ## Context
 
-**Current State (v1.3 shipped):**
-- FastAPI sidecar: ~9,500 lines Python
-- Frappe module: ~4,300 lines Python
-- ~13,800 total Python LOC
+**Current State (v1.9 shipped):**
+- FastAPI sidecar: ~12,000 lines Python
+- Frappe module: ~5,400 lines Python
+- ~17,450 total Python LOC
 - 32 Frappe DocTypes
-- 20 phases completed, 64 plans executed
-- 5 milestones shipped (v1.0, v1.1, v1.2, v1.2.1, v1.3)
+- 28 phases completed, 85 plans executed
+- 11 milestones shipped (v1.0 through v1.9)
 
 **Technical Environment:**
 - Frappe v15 for admin panel and content management
 - FastAPI sidecar for high-performance game API
-- Redis for hot data (progress, wallets, sessions, devices, leaderboards, profiles, stats)
-- MariaDB for cold data (via Frappe ORM)
+- Redis for hot data (progress, wallets, sessions, devices, leaderboards, profiles, stats, catalogs, notifications)
+- MariaDB for cold data (via Frappe ORM) with RANGE partitioning on Memory State
 - Mock CDN layer (local filesystem, R2-swappable)
-- sse-starlette for SSE streaming
-- fsrs package for spaced repetition scheduling
+- WebSocket notifications (replaced SSE in v1.5)
+- fsrs package for item-level spaced repetition scheduling
 
 **Performance Achieved:**
 - Access check: O(1) Redis SISMEMBER
@@ -140,7 +181,9 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - Session operations: O(1) Redis hash operations
 - Leaderboard fetch: O(log N) ZRANGE + batch profile enrichment (<25ms)
 - Lesson status: <5ms via pipeline GETBIT
-- SSE first chunk: <10ms
+- WebSocket notification: <20ms propagation
+- Review queries: <5ms with composite index at 200K+ users
+- Profile endpoints: <50ms on cache hit
 
 ## Constraints
 
@@ -184,11 +227,20 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 | Pipeline MGET for profile cache | Individual keys with MGET for Redis <7.4 compatibility | Good |
 | plan_id in JWT token | Avoids Frappe roundtrip on refresh; session JSON stores {fid, plan} | Good |
 | frm.add_child for device sync | Avoids reload_doc infinite loop in Frappe form lifecycle | Good |
-| sse-starlette for SSE | Mature library; subject summary first event within 10ms | Good |
+| WebSocket replacing SSE | Scalable to 100K+ concurrent; bi-directional capability | Good |
 | Pipeline GETBIT for lesson status | O(1) per-lesson without loading full bitmap | Good |
 | Lua session_complete script | Batches session end into ~4 Redis round-trips for <10ms | Good |
 | FSRS in background task | Keeps hot path <10ms; processes interactions asynchronously | Good |
 | Hearts bonus before streak multiplier | Rewards skill (hearts remaining) amplified by dedication (streak) | Good |
+| BIGINT AUTO_INCREMENT PK | 8 bytes vs ~80 bytes composite string — massive storage savings | Good |
+| BINARY(16) item_id | 16 bytes vs 36 bytes CHAR(36) — 50GB saved at 2.5B rows/season | Good |
+| RANGE partition by season_seq | Instant archival via DROP PARTITION, query pruning | Good |
+| Cross-module constant sharing | Frappe tasks import from fastapi_app.core.constants — single truth | Good |
+| RedisClient sub-dependency | Eliminates 16 copy-pasted Redis constructions in deps.py | Good |
+| RequireAdmin dependency | Eliminates 4 inline magic string checks across endpoints | Good |
+| redirect_slashes=True | FastAPI built-in handles trailing slash — no dual decorators needed | Good |
+| calculate_xp_award in service layer | Module-level function importable by any endpoint | Good |
+| Safe Lua tonumber pattern | Two-step (raw and tonumber(raw)) or 0 handles all edge cases | Good |
 
 ---
-*Last updated: 2026-02-07 after v1.4 milestone started*
+*Last updated: 2026-02-12 after v1.9 milestone*
