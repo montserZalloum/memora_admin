@@ -14,6 +14,7 @@
 - SHIPPED **v1.8 Memory State Redesign** — Phase 27 (shipped 2026-02-11)
 - SHIPPED **v1.9 Tech Debt & Reliability Fixes** — Phase 28 (shipped 2026-02-12)
 - SHIPPED **v2.0 Mobile-First Player Authentication** — Phases 29-32 (shipped 2026-02-12)
+- ACTIVE **v3.0 Voucher Management System** — Phases 33-38
 
 ## Phases (all milestones archived)
 
@@ -145,6 +146,98 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 
 </details>
 
+---
+
+## v3.0 Voucher Management System
+
+**Milestone Goal:** Students can purchase physical cards from libraries and instantly unlock educational content by entering a PIN code in the app. Admins can create batches, generate secure PINs, allocate cards to libraries, track redemptions, handle returns, and reconcile financials.
+
+**Phases:** 6 (Phases 33-38)
+**Requirements:** 51 total across 8 categories
+**Depth:** Comprehensive
+
+### Phase Overview
+
+- [ ] **Phase 33: DocType Foundation** — All voucher schema definitions, state machine enforcement, and security configuration
+- [ ] **Phase 34: Batch Generation & Void** — Secure PIN generation, encrypted export for printing, batch/card void operations
+- [ ] **Phase 35: Allocation & Distribution** — Card allocation to libraries, approval flow, re-allocation, and returns
+- [ ] **Phase 36: Redemption API** — Frappe whitelisted methods + FastAPI proxy with rate limiting, triggering existing access pipeline
+- [ ] **Phase 37: Financial Integration** — Prepaid invoicing, credit notes, commission calculation, and consignment billing
+- [ ] **Phase 38: Reports & Season Expiration** — Admin reports and season-end card expiration job
+
+---
+
+### Phase 33: DocType Foundation
+**Goal**: Admin can see all voucher-related DocTypes in Frappe Desk with correct schema, field types, validations, and database indexes -- ready for business logic in subsequent phases.
+**Depends on**: Nothing (extends existing 32 DocTypes)
+**Requirements**: BATCH-01, BATCH-09, CARD-01, CARD-02, CARD-03, CARD-05, ALLOC-01, ALLOC-08, SEC-02, SEC-03, SEC-04, SEC-05, SEC-06
+**Success Criteria** (what must be TRUE):
+  1. Admin can open Voucher Batch form and configure quantity, pin_length (12/14/16), face_value, and link one or more Product Grants via the Batch Grant child table
+  2. Voucher Card DocType has pin_hmac field (hidden from all views, indexed in database) and status field with all lifecycle states (Available, Allocated, Redeemed, Void, Expired) -- redemption fields are read-only
+  3. Voucher Allocation DocType exists with Allocation Card child table, supporting both Allocate and Return types
+  4. Voucher Redemption Log DocType is read-only after creation (no write/delete permissions) and captures all required audit fields (player, masked PIN, card, library, batch, grant, status, failure_reason, IP, timestamp)
+  5. Customer DocType has custom fields for per-library voucher settings (voucher_requires_approval, commission type/value) and `voucher_hmac_secret` is documented as a site_config.json requirement
+**Plans**: TBD
+
+### Phase 34: Batch Generation & Void
+**Goal**: Admin can create a batch, generate all cards with cryptographically secure PINs via background job, download a decrypted CSV for physical card printing, and void batches or individual cards.
+**Depends on**: Phase 33 (DocTypes exist)
+**Requirements**: BATCH-02, BATCH-03, BATCH-04, BATCH-05, BATCH-06, BATCH-07, BATCH-08, CARD-04
+**Success Criteria** (what must be TRUE):
+  1. Admin clicks "Generate" on a Draft batch and sees real-time progress as cards are created in the background -- each card gets a sequential serial number (VCH-000001) and HMAC-SHA256 hashed PIN using `secrets` module and site_config HMAC key
+  2. An encrypted export file (Fernet) is produced at generation time, and admin can click "Export for Print" to download the decrypted CSV (serial_no, pin, product_names, face_value) -- every export is logged in the append-only export_log child table
+  3. Admin can void an entire batch (all non-final cards become Void, batch becomes Closed, void_reason is required) or void a single card (Available or Allocated cards become Void, void_reason required)
+  4. Batch status transitions are enforced: Draft to Generated to Active to Closed -- invalid transitions are rejected
+**Plans**: TBD
+
+### Phase 35: Allocation & Distribution
+**Goal**: Admin can allocate cards to libraries, manage approval workflows, re-allocate cards between libraries, and process card returns.
+**Depends on**: Phase 34 (batches with generated cards exist)
+**Requirements**: ALLOC-02, ALLOC-03, ALLOC-04, ALLOC-05, ALLOC-06, ALLOC-07
+**Success Criteria** (what must be TRUE):
+  1. Admin can click "Fill Cards" on an allocation to auto-fill available cards from a batch, and can manually add or remove cards from the allocation child table before submitting
+  2. Libraries with `requires_approval=Yes` go through Pending Approval then Approved flow; others auto-approve on submit -- on approval, each card updates to Allocated with library, allocation, and sale_model fields set
+  3. Admin can re-allocate cards from one library to another (Allocated cards can be moved to a different allocation)
+  4. Admin can process returns: Allocated cards return to Available status with library, allocation, and sale_model fields cleared, and return_allocation reference set
+**Plans**: TBD
+
+### Phase 36: Redemption API
+**Goal**: Students can enter a PIN in the app to preview what a voucher unlocks and then redeem it -- content unlocks instantly via the existing subscription pipeline, with full security protections.
+**Depends on**: Phase 35 (allocated cards exist), existing Phase 23 pipeline (Subscription Transaction to Player Subscription to Redis SADD)
+**Requirements**: REDEEM-01, REDEEM-02, REDEEM-03, REDEEM-04, REDEEM-05, REDEEM-06, REDEEM-07, REDEEM-08, REDEEM-09, SEC-01, SCHED-03
+**Success Criteria** (what must be TRUE):
+  1. Student can call POST /api/v1/voucher/preview with a PIN and see the available product grants (grants they already own are filtered out) -- rate limited to 5 attempts/hour per player and 20 attempts/hour per IP
+  2. Student can call POST /api/v1/voucher/redeem with a PIN and chosen grant -- the card is atomically marked Redeemed (SELECT FOR UPDATE), a Subscription Transaction is created (payment_method="Voucher", status="Completed"), and content unlocks instantly via existing Phase 23 hook chain
+  3. All error codes return Arabic messages (INVALID_PIN, NOT_ALLOCATED, ALREADY_REDEEMED, EXPIRED, VOID, BATCH_INACTIVE, SEASON_INACTIVE, ALL_GRANTS_OWNED, GRANT_NOT_IN_BATCH, ALREADY_OWNED, RATE_LIMITED) -- ALREADY_OWNED does not consume the card
+  4. Every redemption attempt (success and failure) is logged in the Voucher Redemption Log with masked PIN (last 4 digits), and HMAC comparison uses hmac.compare_digest() for timing-attack safety
+  5. Rate limit keys auto-expire via Redis TTL with no cleanup job needed
+**Plans**: TBD
+
+### Phase 37: Financial Integration
+**Goal**: Admins can generate invoices for library allocations, process credit notes for returns, and track commission at product and library level -- including automated monthly consignment billing.
+**Depends on**: Phase 35 (allocation flow working), Phase 36 (redemption flow for consignment billing)
+**Requirements**: FIN-01, FIN-02, FIN-03, FIN-04, FIN-05, FIN-06, FIN-07, SCHED-02
+**Success Criteria** (what must be TRUE):
+  1. Approving a prepaid allocation creates a Sales Invoice for the library (quantity times face_value minus commission) and each card tracks its invoice link
+  2. Returning prepaid cards creates a Credit Note (negative Sales Invoice) -- consignment returns require no financial action
+  3. Commission is calculated correctly using the priority chain: product-level override (Voucher Batch Grant) then library default (Customer fields) then zero -- supporting both Percentage and Fixed Amount types with Decimal arithmetic
+  4. Monthly scheduled job (1st of month) generates invoices for redeemed consignment cards from the previous month
+**Plans**: TBD
+
+### Phase 38: Reports & Season Expiration
+**Goal**: Admins have operational visibility into voucher performance, library sales, consignment reconciliation, and security -- and cards automatically expire when their linked season ends.
+**Depends on**: Phase 36 (redemption data flowing), Phase 37 (financial data flowing)
+**Requirements**: RPT-01, RPT-02, RPT-03, RPT-04, SCHED-01
+**Success Criteria** (what must be TRUE):
+  1. Sales by Library report shows redeemed cards per library with face value, commission, net revenue, and invoice status
+  2. Batch Performance report shows card status distribution per batch with redemption rate and days until season end
+  3. Consignment Reconciliation report shows allocated/redeemed/uninvoiced cards per consignment library with amount due
+  4. Security Audit report shows failed redemption attempts per player/IP with failure reason breakdown
+  5. Daily scheduled job expires cards linked to ended or unpublished seasons (Available/Allocated cards become Expired with void_reason="Season Ended")
+**Plans**: TBD
+
+---
+
 ## Progress
 
 | Phase | Milestone | Plans Complete | Status | Completed |
@@ -181,5 +274,11 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 | 30. Frappe Auth API Bridge | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 4/4 | Complete | 2026-02-12 |
 | 32. Event Handler & API Migration | v2.0 | 3/3 | Complete | 2026-02-12 |
+| 33. DocType Foundation | v3.0 | 0/TBD | Not started | - |
+| 34. Batch Generation & Void | v3.0 | 0/TBD | Not started | - |
+| 35. Allocation & Distribution | v3.0 | 0/TBD | Not started | - |
+| 36. Redemption API | v3.0 | 0/TBD | Not started | - |
+| 37. Financial Integration | v3.0 | 0/TBD | Not started | - |
+| 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
 
-**Total:** 32 phases (94 plans complete, 0 remaining) across 12 milestones
+**Total:** 38 phases (94 plans complete, v3.0 TBD) across 13 milestones

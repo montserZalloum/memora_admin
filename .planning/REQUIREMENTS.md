@@ -115,63 +115,63 @@ Deferred to future milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BATCH-01 | — | Pending |
-| BATCH-02 | — | Pending |
-| BATCH-03 | — | Pending |
-| BATCH-04 | — | Pending |
-| BATCH-05 | — | Pending |
-| BATCH-06 | — | Pending |
-| BATCH-07 | — | Pending |
-| BATCH-08 | — | Pending |
-| BATCH-09 | — | Pending |
-| CARD-01 | — | Pending |
-| CARD-02 | — | Pending |
-| CARD-03 | — | Pending |
-| CARD-04 | — | Pending |
-| CARD-05 | — | Pending |
-| ALLOC-01 | — | Pending |
-| ALLOC-02 | — | Pending |
-| ALLOC-03 | — | Pending |
-| ALLOC-04 | — | Pending |
-| ALLOC-05 | — | Pending |
-| ALLOC-06 | — | Pending |
-| ALLOC-07 | — | Pending |
-| ALLOC-08 | — | Pending |
-| REDEEM-01 | — | Pending |
-| REDEEM-02 | — | Pending |
-| REDEEM-03 | — | Pending |
-| REDEEM-04 | — | Pending |
-| REDEEM-05 | — | Pending |
-| REDEEM-06 | — | Pending |
-| REDEEM-07 | — | Pending |
-| REDEEM-08 | — | Pending |
-| REDEEM-09 | — | Pending |
-| SEC-01 | — | Pending |
-| SEC-02 | — | Pending |
-| SEC-03 | — | Pending |
-| SEC-04 | — | Pending |
-| SEC-05 | — | Pending |
-| SEC-06 | — | Pending |
-| FIN-01 | — | Pending |
-| FIN-02 | — | Pending |
-| FIN-03 | — | Pending |
-| FIN-04 | — | Pending |
-| FIN-05 | — | Pending |
-| FIN-06 | — | Pending |
-| FIN-07 | — | Pending |
-| SCHED-01 | — | Pending |
-| SCHED-02 | — | Pending |
-| SCHED-03 | — | Pending |
-| RPT-01 | — | Pending |
-| RPT-02 | — | Pending |
-| RPT-03 | — | Pending |
-| RPT-04 | — | Pending |
+| BATCH-01 | Phase 33 | Pending |
+| BATCH-02 | Phase 34 | Pending |
+| BATCH-03 | Phase 34 | Pending |
+| BATCH-04 | Phase 34 | Pending |
+| BATCH-05 | Phase 34 | Pending |
+| BATCH-06 | Phase 34 | Pending |
+| BATCH-07 | Phase 34 | Pending |
+| BATCH-08 | Phase 34 | Pending |
+| BATCH-09 | Phase 33 | Pending |
+| CARD-01 | Phase 33 | Pending |
+| CARD-02 | Phase 33 | Pending |
+| CARD-03 | Phase 33 | Pending |
+| CARD-04 | Phase 34 | Pending |
+| CARD-05 | Phase 33 | Pending |
+| ALLOC-01 | Phase 33 | Pending |
+| ALLOC-02 | Phase 35 | Pending |
+| ALLOC-03 | Phase 35 | Pending |
+| ALLOC-04 | Phase 35 | Pending |
+| ALLOC-05 | Phase 35 | Pending |
+| ALLOC-06 | Phase 35 | Pending |
+| ALLOC-07 | Phase 35 | Pending |
+| ALLOC-08 | Phase 33 | Pending |
+| REDEEM-01 | Phase 36 | Pending |
+| REDEEM-02 | Phase 36 | Pending |
+| REDEEM-03 | Phase 36 | Pending |
+| REDEEM-04 | Phase 36 | Pending |
+| REDEEM-05 | Phase 36 | Pending |
+| REDEEM-06 | Phase 36 | Pending |
+| REDEEM-07 | Phase 36 | Pending |
+| REDEEM-08 | Phase 36 | Pending |
+| REDEEM-09 | Phase 36 | Pending |
+| SEC-01 | Phase 36 | Pending |
+| SEC-02 | Phase 33 | Pending |
+| SEC-03 | Phase 33 | Pending |
+| SEC-04 | Phase 33 | Pending |
+| SEC-05 | Phase 33 | Pending |
+| SEC-06 | Phase 33 | Pending |
+| FIN-01 | Phase 37 | Pending |
+| FIN-02 | Phase 37 | Pending |
+| FIN-03 | Phase 37 | Pending |
+| FIN-04 | Phase 37 | Pending |
+| FIN-05 | Phase 37 | Pending |
+| FIN-06 | Phase 37 | Pending |
+| FIN-07 | Phase 37 | Pending |
+| SCHED-01 | Phase 38 | Pending |
+| SCHED-02 | Phase 37 | Pending |
+| SCHED-03 | Phase 36 | Pending |
+| RPT-01 | Phase 38 | Pending |
+| RPT-02 | Phase 38 | Pending |
+| RPT-03 | Phase 38 | Pending |
+| RPT-04 | Phase 38 | Pending |
 
 **Coverage:**
-- v1 requirements: 46 total
-- Mapped to phases: 0
-- Unmapped: 46 (pending roadmap creation)
+- v1 requirements: 51 total
+- Mapped to phases: 51
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-13*
-*Last updated: 2026-02-13 after initial definition*
+*Last updated: 2026-02-13 after roadmap creation — all requirements mapped to phases*
