@@ -154,6 +154,82 @@ def _get_tracks_for_filter(doc, limit=2):
 
 
 @frappe.whitelist()
+def get_picker_items(level, parent_value="", plan=""):
+	"""Return items for a given hierarchy level for the cascading button picker.
+
+	Args:
+		level: One of "subject", "track", "unit", "topic"
+		parent_value: The parent item name (e.g., subject name for track level)
+		plan: Academic Plan name (required for subject level, fallback for track level)
+
+	Returns:
+		List of dicts with name, title, sort_order
+	"""
+	level = level.lower()
+
+	if level == "subject":
+		if not plan:
+			return []
+		return frappe.db.sql(
+			"""
+			SELECT ps.subject AS name, sub.subject_title AS title, sub.sort_order
+			FROM `tabMemora Plan Subject` ps
+			INNER JOIN `tabMemora Subject` sub ON sub.name = ps.subject
+			WHERE ps.parent = %(plan)s
+				AND ps.parenttype = 'Memora Academic Plan'
+			ORDER BY sub.sort_order, sub.subject_title
+			""",
+			{"plan": plan},
+			as_dict=True,
+		)
+
+	if level == "track":
+		if parent_value:
+			return frappe.get_all(
+				"Memora Track",
+				filters={"subject": parent_value},
+				fields=["name", "track_title as title", "sort_order"],
+				order_by="sort_order, track_title",
+			)
+		if plan:
+			return frappe.db.sql(
+				"""
+				SELECT t.name, t.track_title AS title, t.sort_order
+				FROM `tabMemora Track` t
+				INNER JOIN `tabMemora Plan Subject` ps ON ps.subject = t.subject
+				WHERE ps.parent = %(plan)s
+					AND ps.parenttype = 'Memora Academic Plan'
+				ORDER BY t.sort_order, t.track_title
+				""",
+				{"plan": plan},
+				as_dict=True,
+			)
+		return []
+
+	if level == "unit":
+		if not parent_value:
+			return []
+		return frappe.get_all(
+			"Memora Unit",
+			filters={"track": parent_value},
+			fields=["name", "unit_title as title", "sort_order"],
+			order_by="sort_order, unit_title",
+		)
+
+	if level == "topic":
+		if not parent_value:
+			return []
+		return frappe.get_all(
+			"Memora Topic",
+			filters={"unit": parent_value},
+			fields=["name", "topic_title as title", "sort_order"],
+			order_by="sort_order, topic_title",
+		)
+
+	return []
+
+
+@frappe.whitelist()
 def test_filter(academic_plan="", subject="", track="", unit="", topic="", level=""):
 	"""Test the filter by querying sample records at each content level."""
 	doc = frappe._dict(
