@@ -191,8 +191,25 @@ def on_plan_updated(doc, method):
 	Uses same debounce pattern as content updates:
 	- If key doesn't exist: set key with TTL, queue build
 	- If key exists: skip (build already pending)
+
+	Also invalidates plan_season_seq cache when the season field changes,
+	so FastAPI resolves the updated season_seq on next request.
 	"""
 	plan_id = doc.name
+
+	# Invalidate season_seq cache when plan's season assignment changes
+	if doc.has_value_changed("season"):
+		try:
+			from memora_admin.events.access_sync import get_fastapi_redis
+
+			r = get_fastapi_redis()
+			r.delete(f"memora:plan_season_seq:{plan_id}")
+			frappe.logger().info(f"plan_season_seq cache invalidated for {plan_id}")
+		except Exception as e:
+			frappe.log_error(
+				f"Failed to invalidate plan_season_seq cache for {plan_id}: {e}",
+				"Season Cache Invalidation Error",
+			)
 
 	cache = frappe.cache
 	debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"

@@ -36,7 +36,50 @@ def _get_player_season_seq(player_id: str) -> int:
 
 
 @frappe.whitelist(allow_guest=False)
-def get_items_learned_count(player_id: str, subject_id: str | None = None) -> dict:
+def get_player_plan(player_id: str) -> dict:
+	"""Get the plan assigned to a player.
+
+	Used by FastAPI to cache player→plan mapping in Redis,
+	avoiding repeated 3-table JOINs.
+
+	Args:
+		player_id: Player docname (PLAYER-#####).
+
+	Returns:
+		Dict with plan (plan docname or None).
+	"""
+	plan = frappe.db.get_value("Memora Player Profile", player_id, "plan")
+	return {"plan": plan}
+
+
+@frappe.whitelist(allow_guest=False)
+def get_plan_season_seq(plan_id: str) -> dict:
+	"""Get the season_seq for an academic plan.
+
+	2-table JOIN: Plan → Season. Used by FastAPI to cache
+	plan→season_seq mapping in Redis.
+
+	Args:
+		plan_id: Academic Plan docname.
+
+	Returns:
+		Dict with season_seq (int, defaults to 1).
+	"""
+	result = frappe.db.sql(
+		"""
+		SELECT s.season_seq
+		FROM `tabMemora Academic Plan` ap
+		INNER JOIN `tabMemora Season` s ON s.name = ap.season
+		WHERE ap.name = %(plan)s
+		LIMIT 1
+		""",
+		{"plan": plan_id},
+	)
+	return {"season_seq": int(result[0][0]) if result else 1}
+
+
+@frappe.whitelist(allow_guest=False)
+def get_items_learned_count(player_id: str, subject_id: str | None = None, season_seq: int | None = None) -> dict:
 	"""Count Memory State records (items learned) for a player.
 
 	Each Memory State row represents one SRS item the player has encountered.
@@ -45,6 +88,7 @@ def get_items_learned_count(player_id: str, subject_id: str | None = None) -> di
 	Args:
 		player_id: Player docname (PLAYER-#####).
 		subject_id: Optional subject filter. None or JSON "null" returns all subjects.
+		season_seq: Optional pre-resolved season_seq. If None, resolves internally.
 
 	Returns:
 		Dict with items_learned count.
@@ -53,7 +97,10 @@ def get_items_learned_count(player_id: str, subject_id: str | None = None) -> di
 	if subject_id in (None, "null", ""):
 		subject_id = None
 
-	season_seq = _get_player_season_seq(player_id)
+	if season_seq is None:
+		season_seq = _get_player_season_seq(player_id)
+	else:
+		season_seq = int(season_seq)
 
 	subject_filter = "AND subject = %(subject)s" if subject_id else ""
 
@@ -118,7 +165,7 @@ def get_profiles_batch(player_ids: list[str] | str) -> list[dict]:
 
 
 @frappe.whitelist(allow_guest=False)
-def get_memory_mastery(player_id: str, subject_id: str | None = None) -> dict:
+def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq: int | None = None) -> dict:
 	"""Get memory mastery breakdown for a player.
 
 	Classifies Memory States into mature/learning/new based on FSRS stability:
@@ -131,6 +178,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None) -> dict:
 	Args:
 		player_id: Player docname (PLAYER-#####).
 		subject_id: Optional subject filter. None or JSON "null" returns all subjects.
+		season_seq: Optional pre-resolved season_seq. If None, resolves internally.
 
 	Returns:
 		Dict with mature, learning, new_items, total counts.
@@ -140,7 +188,10 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None) -> dict:
 		subject_id = None
 
 	# Resolve season_seq via player's plan (same approach as reviews.py)
-	season_seq = _get_player_season_seq(player_id)
+	if season_seq is None:
+		season_seq = _get_player_season_seq(player_id)
+	else:
+		season_seq = int(season_seq)
 
 	subject_filter = "AND subject = %(subject)s" if subject_id else ""
 

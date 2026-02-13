@@ -25,6 +25,9 @@ logger = structlog.get_logger(__name__)
 # Asia/Amman timezone for weekly activity date boundaries
 AMMAN_TZ = ZoneInfo("Asia/Amman")
 
+# TTL for player_plan and plan_season_seq caches (24 hours)
+SEASON_SEQ_CACHE_TTL = 86400
+
 
 class ProfilePageService:
 	"""Aggregation service for profile page endpoints.
@@ -43,6 +46,47 @@ class ProfilePageService:
 		self.redis = redis_client
 		self.frappe = frappe_client
 		self.prefix = key_prefix
+
+	async def _resolve_season_seq(self, player_id: str) -> int | None:
+		"""Resolve season_seq for a player via two-cache lookup.
+
+		Cache 1: memora:player_plan:{player_id} → plan_id
+		Cache 2: memora:plan_season_seq:{plan_id} → season_seq
+
+		On cache miss, fetches from Frappe and caches for 24h.
+		Returns None if player has no plan (lets Frappe fallback to default).
+		"""
+		# Step 1: player → plan
+		plan_key = f"{self.prefix}player_plan:{player_id}"
+		plan_id = await self.redis.get(plan_key)
+		if plan_id is not None:
+			plan_id = plan_id.decode() if isinstance(plan_id, bytes) else plan_id
+		else:
+			result = await self.frappe.call(
+				"memora_admin.api.profile.get_player_plan",
+				{"player_id": player_id},
+			)
+			plan_id = result.get("plan") if result else None
+			if plan_id:
+				await self.redis.set(plan_key, plan_id, ex=SEASON_SEQ_CACHE_TTL)
+			else:
+				logger.debug("player_has_no_plan", player=player_id)
+				return None
+
+		# Step 2: plan → season_seq
+		seq_key = f"{self.prefix}plan_season_seq:{plan_id}"
+		season_seq = await self.redis.get(seq_key)
+		if season_seq is not None:
+			season_seq = season_seq.decode() if isinstance(season_seq, bytes) else season_seq
+			return int(season_seq)
+		else:
+			result = await self.frappe.call(
+				"memora_admin.api.profile.get_plan_season_seq",
+				{"plan_id": plan_id},
+			)
+			seq = result.get("season_seq", 1) if result else 1
+			await self.redis.set(seq_key, str(seq), ex=SEASON_SEQ_CACHE_TTL)
+			return int(seq)
 
 	async def get_hero(self, player_id: str) -> dict:
 		"""Get hero section data: avatar, display_name, level, XP progress.
@@ -115,9 +159,14 @@ class ProfilePageService:
 			items_str = cached_items.decode() if isinstance(cached_items, bytes) else cached_items
 			items_learned = int(items_str)
 		else:
+			# Pre-resolve season_seq to avoid 3-table JOIN inside Frappe
+			season_seq = await self._resolve_season_seq(player_id)
+			params = {"player_id": player_id, "subject_id": subject_id}
+			if season_seq is not None:
+				params["season_seq"] = season_seq
 			result = await self.frappe.call(
 				"memora_admin.api.profile.get_items_learned_count",
-				{"player_id": player_id, "subject_id": subject_id},
+				params,
 			)
 			items_learned = result.get("items_learned", 0) if result else 0
 			await self.redis.set(items_cache_key, str(items_learned), ex=MASTERY_CACHE_TTL)
@@ -205,10 +254,16 @@ class ProfilePageService:
 
 		logger.info("mastery_cache_miss", player=player_id, subject=subject_id)
 
+		# Pre-resolve season_seq to avoid 3-table JOIN inside Frappe
+		season_seq = await self._resolve_season_seq(player_id)
+		params = {"player_id": player_id, "subject_id": subject_id}
+		if season_seq is not None:
+			params["season_seq"] = season_seq
+
 		# Fetch from Frappe API
 		result = await self.frappe.call(
 			"memora_admin.api.profile.get_memory_mastery",
-			{"player_id": player_id, "subject_id": subject_id},
+			params,
 		)
 
 		mastery = {

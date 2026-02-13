@@ -31,10 +31,11 @@ def on_player_profile_plan_changed(doc, method):
 
     r = get_fastapi_redis()
 
-    # 1. Direct delete: invalidate session immediately
+    # 1. Direct delete: invalidate session + player_plan cache immediately
     # Key pattern matches SessionService: memora:session:{player_id}
     session_key = f"memora:session:{doc.name}"
-    r.delete(session_key)
+    player_plan_key = f"memora:player_plan:{doc.name}"
+    r.delete(session_key, player_plan_key)
 
     # 2. Pubsub: notify FastAPI in-process caches
     invalidation_msg = json.dumps({
@@ -45,4 +46,4 @@ def on_player_profile_plan_changed(doc, method):
     })
     r.publish("memora:cache:invalidate", invalidation_msg)
 
-    frappe.logger().info(f"Session invalidated for {doc.name} due to plan change")
+    frappe.logger().info(f"Session + player_plan cache invalidated for {doc.name} due to plan change")
