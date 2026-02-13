@@ -885,6 +885,30 @@ function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 				fieldname: "preview_html",
 				fieldtype: "HTML",
 			},
+			{
+				fieldtype: "Section Break",
+				label: "المشتتات (كلمات خاطئة لإرباك الطالب)",
+			},
+			{
+				label: "",
+				fieldname: "distractors_table",
+				fieldtype: "Table",
+				cannot_add_rows: false,
+				description: "أضف كلمات خاطئة تظهر مع الإجابات الصحيحة لإرباك الطالب",
+				fields: [
+					{
+						label: "الكلمة المشتتة",
+						fieldname: "text",
+						fieldtype: "Data",
+						in_list_view: 1,
+						reqd: 1,
+						columns: 10,
+					},
+				],
+				data: (data.distractors || []).map((d) => ({
+					text: typeof d === "string" ? d : d.text,
+				})),
+			},
 		],
 		size: "extra-large",
 		primary_action_label: "حفظ (Save)",
@@ -898,6 +922,10 @@ function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 				return;
 			}
 
+			let distractors = (values.distractors_table || [])
+				.map((r) => r.text)
+				.filter((t) => t && t.trim());
+
 			let config_payload = {
 				instruction: values.instruction,
 				text: values.fill_text,
@@ -908,6 +936,7 @@ function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 					}
 					return bl;
 				}),
+				distractors: distractors,
 			};
 
 			frappe.model.set_value(
