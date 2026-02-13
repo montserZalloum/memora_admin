@@ -150,7 +150,24 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 
 ### Active
 
-(None yet — ship to validate)
+**v3.0 Voucher Management System:**
+- [ ] Voucher Batch DocType with PIN generation (HMAC-SHA256), serial numbering, and encrypted export file
+- [ ] Voucher Card DocType with enforced state machine (Available → Allocated → Redeemed/Void/Expired)
+- [ ] Voucher Batch Grant child table linking batches to Product Grants with per-product commission overrides
+- [ ] Voucher Allocation DocType with auto-fill, approval flow, and Allocate/Return workflows
+- [ ] Voucher Redemption Log DocType — immutable audit trail of all redemption attempts
+- [ ] Custom fields on Customer DocType for per-library voucher settings (approval, commission)
+- [ ] FastAPI preview endpoint — validate PIN, return available grants (rate-limited)
+- [ ] FastAPI redeem endpoint — proxy to Frappe whitelisted method (rate-limited)
+- [ ] Frappe whitelisted redeem method with SELECT FOR UPDATE locking and atomic transaction
+- [ ] Integration with existing Phase 23 hook (Subscription Transaction → Player Subscription → Redis access)
+- [ ] Prepaid invoice generation on allocation approval
+- [ ] Credit Note generation on prepaid card returns
+- [ ] Commission calculation (product-level override → library default fallback)
+- [ ] Consignment monthly billing scheduled job
+- [ ] Season-end card expiration scheduled job
+- [ ] Void operations (single card + batch void)
+- [ ] Reports: Sales by Library, Batch Performance, Consignment Reconciliation, Security Audit
 
 ### Out of Scope
 
@@ -166,6 +183,7 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 - Streak leaderboard — deferred to future milestone
 - User-facing device management — admin-only for now
 - Payment gateway auto-approval — manual approval only for now
+- Library Portal (Frappe Portal for libraries to view cards/sales/invoices) — future phase after v3.0
 
 ## Context
 
@@ -272,4 +290,4 @@ Memora is a gamified educational platform backend for Arabic-speaking students. 
 | User field removed from Player Profile | Clean break; PLAYER-##### is sole identity; no confusion about what identifies a player | Good |
 
 ---
-*Last updated: 2026-02-12 after v2.0 milestone*
+*Last updated: 2026-02-13 after v3.0 milestone start*
