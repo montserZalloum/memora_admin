@@ -1,466 +1,356 @@
 # Project Research Summary
 
-**Project:** Memora - Gamified Educational Platform Backend
-**Domain:** FastAPI Sidecar Integration with Frappe for High-Performance Game Mechanics
-**Researched:** 2026-02-01
+**Project:** Memora v3.0 - Voucher Management System
+**Domain:** Prepaid physical voucher card distribution for gamified educational content
+**Researched:** 2026-02-13
 **Confidence:** HIGH
 
 ## Executive Summary
 
-Memora is a gamified education platform targeting Arabic-speaking students. The architecture consists of a FastAPI sidecar (port 8001) handling high-performance game mechanics (sub-20ms responses) alongside an existing Frappe v15 application (port 8000) managing content and admin workflows. The two services share a Redis instance for hot data, with Frappe owning MariaDB persistence and the FastAPI sidecar focused exclusively on read-heavy game state operations.
+The voucher system is architecturally a **new entry point into the existing Phase 23 access-grant pipeline**. Physical cards with scratch-off PINs are distributed through 50-100 libraries in Jordan. Students redeem PINs in the mobile app to unlock educational content. The critical insight from research is that voucher redemption creates a `Subscription Transaction` with `payment_method="Voucher"` and `status="Completed"`, which triggers the existing `_handle_approval()` flow. No new access-grant logic is needed. The voucher system reuses the existing Frappe-as-source-of-truth, Redis-as-hot-cache pattern across all 32+ phases.
 
-The recommended approach leverages modern Python async patterns: FastAPI 0.128+ with redis-py 7.1 (using `redis.asyncio`, not abandoned aioredis), PyJWT 2.11 (replacing abandoned python-jose), and orjson for 2-4x JSON serialization speedup. Progress tracking uses Redis bitmaps for O(1) lesson completion checks, sorted sets for leaderboards, and hash structures for wallets (XP, streaks). All game state flows through Redis first, then syncs to MariaDB via Frappe scheduled tasks every 1 minute.
+The recommended approach follows the domain's established patterns: batch generation (telecom VMS pattern), encrypted PIN export for physical card printing, library-level allocation tracking with commission, and atomic redemption with database-level locking. The system requires only ONE new pip dependency (`cryptography>=44.0.0` for Fernet encryption of export files). All other capabilities use Python stdlib (hmac, secrets, csv) or existing Frappe/FastAPI patterns (bulk_insert, background jobs, SELECT FOR UPDATE, rate limiting, FrappeClient HTTP bridge).
 
-The key architectural risks center on data integrity: Redis-to-MariaDB sync creates a 1-2 minute data loss window requiring AOF persistence configuration; bitmap memory can explode with non-contiguous user IDs (mandate contiguous `bitmap_slot` allocation); and timezone-naive streak calculations will break user engagement. Critical prevention: enable Redis AOF with `appendfsync everysec`, use contiguous bitmap offsets, store user timezones, whitelist JWT algorithms, and implement single-writer locks for the build pipeline to prevent race conditions.
+The primary risks are **concurrent redemption race conditions** (two requests redeem the same card simultaneously without SELECT FOR UPDATE locking), **HMAC timing attacks** (using `==` instead of `hmac.compare_digest()` for PIN verification), and **batch generation overwhelming Frappe workers** (generating 10K+ cards synchronously in web request context). Prevention requires pessimistic database locking, constant-time cryptographic comparison, background job processing with chunking, and strict Decimal arithmetic for all financial calculations. The research has HIGH confidence because it's based on direct codebase analysis of 17+ existing integration patterns, verified Frappe framework internals, and cross-referenced security literature.
 
 ## Key Findings
 
 ### Recommended Stack
 
-The Python async ecosystem has matured significantly for high-performance APIs. The critical finding is that **aioredis standalone was abandoned** in December 2021 and merged into redis-py 4.2.0+, requiring developers to use `import redis.asyncio as redis` instead. Similarly, **python-jose was effectively abandoned** 2021-2024 with security concerns, prompting FastAPI documentation to shift recommendations to PyJWT 2.11. The orjson library provides 2-4x faster JSON serialization than the standard library, critical for meeting <20ms response targets.
+**Confidence:** HIGH (verified against existing codebase and Frappe v15 internals)
+
+The voucher system extends the existing stack with minimal new dependencies. The core finding is that Memora already has everything needed except file encryption.
 
 **Core technologies:**
-- **FastAPI 0.128.0**: Native async, automatic OpenAPI docs, Pydantic v2 validation (5-50x faster than v1)
-- **redis-py 7.1.0**: Official async client (`redis.asyncio`) with connection pooling; aioredis standalone is ABANDONED
-- **PyJWT 2.11.0**: JWT encoding/decoding; python-jose is ABANDONED and has known security issues
-- **orjson 3.11.6**: 2-4x faster than standard json, critical for <20ms target
-- **Uvicorn 0.40.0 [standard]**: Production ASGI server with uvloop and httptools for maximum async performance
-- **pydantic-settings 2.12.0**: Type-safe configuration from environment variables with validation
+- **cryptography (Fernet) >= 44.0.0**: AES-encrypted PIN export files — pyca-maintained, misuse-resistant API, handles IV generation/HMAC verification automatically. This is the ONLY new pip dependency.
+- **hmac + hashlib (stdlib)**: HMAC-SHA256 for PIN storage — server-side secret makes DB breach non-catastrophic, constant-time comparison via `hmac.compare_digest()` prevents timing attacks
+- **secrets (stdlib)**: Cryptographic random PIN generation — uses os.urandom() CSPRNG, explicitly recommended over `random` module for security-sensitive tokens
+- **frappe.db.bulk_insert**: Batch document creation — bypasses ORM overhead for 5K+ cards, 10x faster than individual inserts, requires background job with chunking
+- **SELECT FOR UPDATE**: Atomic redemption locking — prevents double-redemption race condition via row-level pessimistic lock during status check-and-update
 
-**Deployment approach:**
-- Containerized: Direct uvicorn with `--workers 4` (one per CPU core for async)
-- Traditional: Gunicorn 25.0.0 with uvicorn workers for process management
-- Worker formula: `workers = CPU_cores` (not 2N+1; async handles concurrency within process)
+**Key integration points:**
+- Redemption reuses existing `Subscription Transaction -> Player Subscription -> Redis SADD` pipeline (Phase 23)
+- Rate limiting reuses existing `RateLimiter` class with Lua script (Phase 8)
+- FastAPI endpoints reuse existing `FrappeClient` HTTP bridge and JWT auth (Phase 11)
+- Background job processing reuses existing `frappe.enqueue()` infrastructure
+
+**Why NOT other technologies:**
+- NOT bcrypt for PINs (12-char system-generated codes with high entropy + server-side secret don't need intentional slowness)
+- NOT pandas for CSV (stdlib csv module sufficient for 2-3 columns)
+- NOT raw AES-GCM (Fernet provides high-level API that prevents IV reuse and padding bugs)
 
 ### Expected Features
 
-Research identified clear feature tiers based on gamified education domain patterns and Memora's existing 31-DocType data model.
+**Confidence:** HIGH (well-established domain, cross-referenced with telecom VMS and education access code systems)
+
+The voucher domain has two major patterns: **telecom recharge card systems** (batch generation, dealer allocation, commission, consignment tracking) and **education access code systems** (one-time activation, content unlock, "already redeemed" error handling). Memora vouchers combine both patterns.
 
 **Must have (table stakes):**
-- **Lesson completion tracking**: Core educational value; uses bitmap-based progress with O(1) lookups
-- **XP accumulation**: Every lesson completion awards XP; Redis HINCRBY on wallet hash
-- **Streak tracking**: Duolingo has trained users to expect daily streaks; critical timezone handling required
-- **Subscription validation**: Double-Gate pattern (season status + player grants) for paid content access
-- **Weekly leaderboard**: Competition drives engagement; Redis sorted sets with sharding for hot-key prevention
-- **JWT authentication**: Standard mobile API auth with stateless verification
+- **Batch creation with configurable size** (1K-10K cards) — fundamental unit of work
+- **CSPRNG PIN generation + HMAC-SHA256 storage** — predictable PINs = catastrophic breach
+- **State machine: Available → Allocated → Redeemed/Void/Expired** — enforced in code, not just UI
+- **One-time atomic redemption** — double-redemption is the #1 voucher fraud vector (HackerOne report #759247)
+- **Redemption rate limiting** (5/hour per player, 20/hour per IP) — defense-in-depth against brute force
+- **Immutable audit log** — compliance and dispute resolution require append-only redemption records
+- **CSV export for print vendor** — PINs must be exported (plaintext, encrypted) for physical card printing
+- **Preview before confirm** — student MUST see what they will unlock BEFORE PIN is consumed (Pearson/Elsevier pattern)
+- **Instant content unlock** — voucher redemption bypasses admin approval, creates Completed transaction immediately
+- **Commission tracking** — libraries need to know their margin or won't participate
 
-**Should have (competitive advantage):**
-- **Bitmap-based progress**: Memora's innovation—sub-millisecond completion checks vs traditional O(n) queries
-- **Excluded bits pattern**: Handle deleted lessons without breaking existing progress data
-- **Double-Gate access control**: Season-wide + individual grants enable instant bulk updates
-- **Build pipeline with debouncing**: Collect content changes for 2 minutes before building to reduce redundant work
-- **Hierarchical JSON structure**: `_h.json` (navigation), `_c.json` (unit content), lesson JSON (stages) for smaller payloads
-- **Interaction buffering**: Buffer high-frequency events in Redis lists, batch flush to MariaDB
+**Should have (competitive):**
+- **QR code on physical card** — scan instead of typing 12 digits, reduces typos for Arabic-speaking students
+- **Graceful "already redeemed" response** — show redemption date without revealing WHO (reduces support tickets)
+- **"Already owned" guard** — if student already has the content, reject redemption WITHOUT consuming card
+- **Automatic commission ledger** — each redemption auto-records library's commission, eliminates monthly reconciliation
+- **Return/unallocate flow** — library returns unsold cards back to central inventory (essential for consignment model)
 
 **Defer (v2+):**
-- Friend streaks (requires social graph not in current scope)
-- Push notifications (requires Firebase integration)
-- League-based competition (needs user base for cohorts)
-- Offline support (significant client complexity)
-- Anti-cheat system (premature optimization)
+- **Library self-service portal** — libraries view inventory, track redemptions, see commission (high complexity, Phase 3+ feature)
+- **Digital-only vouchers (SMS/email)** — changes entire distribution model, requires SMS gateway
+- **Partial redemption** — cards map to specific products, not monetary value (adds confusing UX)
 
-**Anti-features (explicitly avoid):**
-- Server-time streak calculations (timezone bugs)
-- Real-time leaderboard on every request (expensive at scale)
-- Sync on every action (unnecessary DB writes)
-- Client-side access enforcement (security bypass)
-- Per-lesson database access checks (O(n) kills performance)
+**Anti-features (explicitly NOT build):**
+- Card-to-card transfer (creates secondary market, increases fraud surface)
+- Self-service refund/reversal (creates abuse vector: redeem, study, reverse, give card to friend)
+- Complex per-library pricing tiers (over-engineering for 50-100 libraries)
+- Blockchain/NFT vouchers (adds zero value, infinitely harder to maintain)
 
 ### Architecture Approach
 
-The architecture follows a **sidecar pattern** where FastAPI handles high-frequency reads and writes to Redis while Frappe manages admin, content, and persistence. The two applications communicate via Redis pub/sub for cache invalidation and share a Redis instance using key prefixes for isolation (`memora:*` vs `frappe:*`).
+**Confidence:** HIGH (based on direct codebase analysis of 17+ existing patterns)
+
+The voucher system spans both Frappe admin (batch creation, allocation, invoicing) and FastAPI sidecar (student-facing preview/redeem endpoints), connected via the existing FrappeClient HTTP bridge. The architecture follows the established pattern: Frappe holds transactional logic with direct MariaDB access, FastAPI is auth/rate-limit/format proxy.
 
 **Major components:**
 
-1. **FastAPI Sidecar (Port 8001)**: Owns game API endpoints (progress, wallet, leaderboard), session management, hot data layer (Redis reads/writes), access control validation, and interaction buffering. Does NOT own content creation, user registration, or subscription purchases. Never imports `frappe` module to avoid session isolation bugs.
+1. **Voucher Batch (Frappe DocType)** — admin creates batches, defines grant links to Product Grant, triggers background PIN generation. Contains child table of Batch Grants (maps to existing Memora Product Grant).
 
-2. **Frappe Application (Port 8000)**: Owns content management (31 DocTypes for curriculum structure), academic structure (Grade, Major, Season), player master data, business logic (Product Grant, Plan Overrider), build queue orchestration, and cold data persistence (MariaDB as source of truth). Does NOT own real-time game state or high-frequency operations.
+2. **Voucher Card (Frappe DocType, child of Batch)** — stores individual PIN hash with status lifecycle. Fields: pin_hash (HMAC-SHA256), pin_last4 (admin identification), status (state machine), allocated_to (library link), redeemed_by/redeemed_at (audit).
 
-3. **Redis Shared Instance**: Partitioned by key prefix with clear ownership boundaries. `memora:progress:*` (FastAPI writes, Frappe syncs), `memora:wallet:*` (FastAPI writes, Frappe syncs), `memora:access:*` (Frappe writes, FastAPI reads), `memora:season:*` (Frappe writes, FastAPI reads), `memora:session:*` (FastAPI owns), `memora:leaderboard:*` (FastAPI owns), `memora:buffer:*` (FastAPI writes, Frappe reads for batch sync).
+3. **Voucher Allocation (Frappe DocType)** — tracks which Customer/library received cards, links to Sales Invoice for prepaid model, stores encrypted export file. Contains child table of Allocation Cards (junction to individual cards).
 
-4. **Build Pipeline**: Frappe hooks trigger builds on content changes, debounced for 2 minutes. Generates hierarchy JSON (`_h.json`), bitmap structure (`_b.json`), unit content (`_c.json`), and lesson JSON. Uploads to CDN (mock → R2 swap), publishes invalidation message via Redis pub/sub to FastAPI cache.
+4. **Redemption API (memora_admin/api/voucher.py)** — Frappe whitelisted method with SELECT FOR UPDATE locking. Validates PIN → marks card Redeemed → creates Subscription Transaction (status=Completed) → triggers existing _handle_approval() pipeline → creates Player Subscriptions → Redis SADD via access_sync.py.
 
-5. **Sync Mechanisms**: Frappe scheduled tasks run every 1 minute to sync dirty sets from Redis to MariaDB. Progress bitmaps converted to hex strings, wallet state (XP, streak) updated, interaction buffer flushed to `Memora Interaction Log`. Dirty sets cleared after successful sync.
+5. **FastAPI Proxy (fastapi_app/api/v1/endpoints/voucher.py)** — JWT auth → rate limit → FrappeClient.call() delegation. POST /voucher/preview (read-only, no state change) and POST /voucher/redeem (atomic transaction).
 
-**Key patterns:**
-- **Double-Gate access**: Gate 1 checks season status/expiry (~1ms), Gate 2 checks player access set membership (~1ms)
-- **Bitmap progress tracking**: O(1) GETBIT for completion check, SETBIT for marking complete, BITCOUNT for percentage
-- **Interaction buffering**: RPUSH to Redis list on every stage completion, batch INSERT during sync to reduce DB load
-- **Cache invalidation via pub/sub**: Frappe publishes to `memora:invalidate` channel after builds, FastAPI subscriber clears local cache
+6. **PIN Generation Utility (memora_admin/utils/pin_generator.py)** — secure PIN generation via secrets.choice(), HMAC signing, batch generation with chunking, encrypted export file creation using Fernet.
+
+**Critical architectural decisions:**
+- **Core redeem logic lives in Frappe, not FastAPI** — requires SELECT FOR UPDATE (row-level locking) for atomic DB operations, FastAPI has indirect DB connection
+- **Subscription Transaction with status=Completed skips approval** — voucher redemption is pre-paid, triggers existing _handle_approval() which creates Player Subscriptions and syncs to Redis
+- **HMAC PIN storage (not plaintext, not bcrypt)** — deterministic hash allows WHERE clause lookup, server-side secret provides defense layer even on DB breach
+- **No new Redis keys for voucher state** — cards are NOT hot data (max 1 lookup per student per voucher), SELECT FOR UPDATE in MariaDB provides atomicity that Redis cannot
+- **Encrypted file export with Fernet** — PIN export files contain plaintext for printing, stored in private/files/ with additional encryption, key from site_config.json
 
 ### Critical Pitfalls
 
-Research identified 10 critical/moderate pitfalls with high-confidence prevention strategies:
+**Confidence:** HIGH (verified against existing codebase, Frappe internals, and security literature)
 
-1. **Redis Bitmap Memory Explosion**: Non-contiguous player IDs cause massive memory allocation (user ID 8,000,000 = ~1MB). Setting bit offset 2^32-1 blocks server for 300ms. **Prevention**: Use contiguous `bitmap_slot` column (auto-increment from 0) separate from Frappe document names. Estimate memory: 100K users × 100 subjects × ~125 bytes/bitmap = ~1.25MB.
+1. **Concurrent redemption race condition (double-spend)** — two requests redeem same card simultaneously without database locking, both create Subscription Transactions. **Avoid:** Use `frappe.db.sql("SELECT ... FOR UPDATE")` to acquire exclusive row lock during redemption, check-then-update pattern is NOT atomic without locking. Add UNIQUE index on pin_hash column.
 
-2. **Redis-to-MariaDB Sync Data Loss**: 1-minute sync interval + default Redis persistence creates 1-2 minute data loss window on crash. **Prevention**: Enable AOF persistence with `appendfsync everysec` (limits loss to ~1 second), implement idempotent sync with `last_synced_ts` tracking, write-ahead pattern for critical XP awards.
+2. **HMAC timing attack on PIN verification** — using `==` operator to compare HMAC digests leaks information about matching bytes via response time. **Avoid:** Always use `hmac.compare_digest()` for constant-time comparison. Never use `==` for any hash/HMAC values. Attacker can reconstruct HMAC byte-by-byte with ~65K requests.
 
-3. **JWT Algorithm Confusion Attack**: Attacker changes algorithm from RS256 to HS256, signs with public key, server accepts forged tokens. Complete authentication bypass. **Prevention**: Explicitly whitelist algorithms in PyJWT config, reject "none" algorithm, validate claims (iss, aud, exp), use `verify()` not `decode()`.
+3. **frappe.db.commit() silently ignored inside doc_events** — the existing `_handle_approval()` calls commit explicitly but Frappe DISABLES manual commit/rollback during doc_events to preserve atomicity. **Avoid:** Create Subscription Transaction with status=Completed directly (not Pending Approval then update), let Frappe's auto-commit handle transaction boundary. Accept that Redis failure during on_subscription_change rolls back entire transaction (card stays Active, player retries).
 
-4. **Build Pipeline Race Conditions**: 2-minute debounce coalesces triggers but concurrent workers may overwrite CDN files or generate JSON from inconsistent DB state. **Prevention**: Single-writer lock using `SETNX build:lock:{subject_id}`, version stamping in JSON files, atomic CDN updates, FIFO queue ordering per subject.
+4. **Batch generation overwhelming Frappe workers** — generating 10K cards synchronously in web request takes 200-500 seconds (well beyond 120s timeout), naming series contention, memory accumulation. **Avoid:** Always use frappe.enqueue() with queue="long" and timeout=1800. Chunk into batches of 500, commit after each chunk. Use bulk_insert or raw SQL INSERT for maximum performance. Track progress via frappe.publish_realtime().
 
-5. **Streak Timezone Bugs**: Server UTC calculations break streaks for users crossing midnight in their local timezone. User completes lesson at 11:50 PM local (8:50 PM UTC previous day), next day at 12:10 AM local (9:10 PM UTC same day)—server sees "same UTC day, no previous day activity," breaks streak unfairly. **Prevention**: Store user timezone in `Memora Player Profile`, calculate streaks in user-local time, 3-6 hour grace period after midnight, use pytz/zoneinfo for DST handling.
+5. **Float-based financial calculations** — commission percentages multiplied using Python float arithmetic, rounding errors accumulate over thousands of cards into visible discrepancies. **Avoid:** Use `decimal.Decimal` for ALL financial math, initialize from strings (not floats), quantize at each step with ROUND_HALF_UP. Store commission rate as string in DocType (Data field, not Float/Percent).
 
-**Additional moderate pitfalls:**
-- Leaderboard hot-key problem at 100K users (shard into N sorted sets)
-- Excluded bits index drift (never reuse bit indexes, maintain `max_bit_index` counter)
-- Device limit bypass via race conditions (atomic check-and-add using Redis transactions)
-- FastAPI-Frappe session isolation (clear boundary: FastAPI NEVER imports frappe)
-- AOF rewrite disk exhaustion (monitor disk, need 2x AOF size for rewrite)
+**Secondary pitfalls (moderate severity):**
+- Missing `related_grant` on Subscription Transaction breaks _handle_approval()
+- State machine enforcement gaps (allow impossible transitions like Redeemed → Active)
+- Whitelisted method security (missing allow_guest=False, no role restriction, parameter injection)
+- Export file key management (key stored alongside data, no rotation plan, IV reuse in AES)
+- Rate limiting bypass via distributed attack (IP-based limiting ineffective against botnets)
 
 ## Implications for Roadmap
 
-Based on research, the build order must follow strict dependency chains to avoid rework and ensure data integrity from day one.
+Based on research, suggested phase structure for v3.0:
 
-### Phase 1: Infrastructure Foundation
-**Rationale:** All game mechanics depend on Redis access patterns, authentication middleware, and deployment configuration. Building this first prevents cascading changes later.
-
-**Delivers:**
-- FastAPI project scaffold with async Redis client (`redis.asyncio`)
-- Shared Redis key schema documented (all `memora:*` prefixes)
-- Nginx reverse proxy configuration (FastAPI at `/api/v1/`, Frappe at `/`)
-- JWT authentication middleware with algorithm whitelisting
-- Redis persistence config (AOF with `appendfsync everysec`)
-- Connection pooling setup (max 50 connections, decode_responses)
-
-**Addresses:**
-- JWT algorithm confusion attack (Pitfall #3)
-- AOF persistence configuration (Pitfall #2)
-- Redis connection management anti-pattern
-
-**Avoids:**
-- Late-stage authentication refactoring
-- Redis data loss on crash (configure persistence early)
-
-**Research flag:** Standard patterns, skip research-phase.
-
----
-
-### Phase 2: Access Control & Season Meta
-**Rationale:** Content access validation must work before any progress tracking begins. Double-Gate pattern is foundational security.
+### Phase 1: DocType Foundation
+**Rationale:** All DocTypes must exist before any API code can reference them. Purely additive to existing 32 DocTypes, no dependencies on other phases.
 
 **Delivers:**
-- Season meta sync (Frappe `on_update` hook → Redis hash `memora:season:{id}`)
-- Player access set management (Frappe hooks → `memora:access:{player_id}` sets)
-- Double-Gate middleware (season check + player grant check)
-- Plan → Subjects mapping in Redis (`memora:plan:{id}:subjects`)
-- Access check endpoint for client pre-validation
+- 6 new DocTypes: Voucher Batch, Voucher Card, Voucher Batch Grant, Voucher Allocation, Voucher Allocation Card, Voucher Redemption Log
+- Custom fields on Customer DocType for library metadata
+- Database migrations via bench migrate
 
-**Addresses:**
-- Subscription validation (table stakes feature)
-- Double-Gate access control (differentiator)
-- Season expiry mid-lesson (edge case: grace period implementation)
+**Addresses:** Foundation for all table stakes features (TS-1, TS-4, TS-5, TS-22)
 
-**Avoids:**
-- Late-stage access control bolted on (causes permission bypass bugs)
+**Avoids:** Pitfall #7 (state machine enforcement) by defining valid transitions in DocType class, Pitfall #4 (float financial fields) by using Data fieldtype for commission rates
 
-**Research flag:** Custom pattern for Memora, but PRD is detailed. Skip research-phase.
+**Research flag:** SKIP — standard Frappe DocType creation, well-documented patterns
 
----
-
-### Phase 3: Progress Tracking (Bitmaps)
-**Rationale:** Core educational value. Must be implemented with correct memory patterns from day one (refactoring bitmaps with data is expensive).
+### Phase 2: PIN Generation & Batch Management
+**Rationale:** Admin must create batches and generate PINs before any allocation or redemption can happen. Builds on Phase 1 DocTypes.
 
 **Delivers:**
-- `bitmap_slot` allocation system (contiguous IDs, auto-increment)
-- Lesson completion write (SETBIT `memora:progress:{player}:{subject}`)
-- Progress fetch endpoint (GETBIT for single lesson, BITCOUNT for percentage)
-- Dirty progress tracking (`memora:dirty:progress` set)
-- Unit/Track/Topic rollup calculations (aggregate from lesson bitmaps)
+- PIN generation utility (secrets.choice(), HMAC signing)
+- Batch.generate_pins() background job with chunking
+- HMAC secret configuration in site_config.json
+- Batch lifecycle management (Draft → Generated → Allocated → Expired)
 
-**Addresses:**
-- Lesson completion tracking (table stakes)
-- Bitmap-based progress (differentiator)
-- Bitmap memory explosion (Pitfall #1)
+**Addresses:** Table stakes TS-1, TS-2, TS-3 (batch creation, CSPRNG PIN generation, HMAC storage)
 
-**Avoids:**
-- Non-contiguous ID allocation (causes memory explosion)
-- Per-lesson database queries (O(n) performance killer)
+**Uses:** cryptography (Fernet), hmac (stdlib), secrets (stdlib), frappe.enqueue(), frappe.db.bulk_insert
 
-**Research flag:** Standard Redis bitmap pattern, but memory implications are critical. No additional research needed if following PRD constraints.
+**Avoids:** Pitfall #2 (timing attack) via hmac.compare_digest(), Pitfall #4 (batch generation timeout) via background job with chunking, Pitfall #5 (float math) via Decimal for denomination
 
----
+**Research flag:** SKIP — patterns exist in codebase (bulk_insert in memora_lesson.py, background jobs in existing services)
 
-### Phase 4: Session & Interaction Flow
-**Rationale:** Session state enables mid-lesson resume and interaction buffering. Builds on progress tracking.
+### Phase 3: Allocation & Encrypted Export
+**Rationale:** Libraries need to receive cards before students can redeem. Export needed for physical card printing. Depends on Phase 2 (batches with generated PINs).
 
 **Delivers:**
-- Session management (start/end lesson endpoints)
-- Session state in Redis (`memora:session:{id}` hash with 1-hour TTL)
-- Stage completion endpoint (writes to progress bitmap)
-- Interaction buffering (RPUSH to `memora:buffer:interactions`)
-- Idempotency handling (completion_id deduplication)
+- Allocation controller with SELECT FOR UPDATE allocation logic
+- Fernet-encrypted file generation for print vendor
+- Frappe File attachment to Allocation doc
+- Optional Sales Invoice creation
 
-**Addresses:**
-- Session state persistence (table stakes)
-- Interaction buffering (differentiator)
-- Multiple concurrent stage completions (edge case)
+**Addresses:** Table stakes TS-5, TS-12 (batch allocation, CSV export), TS-23 (prepaid sale model)
 
-**Avoids:**
-- Missing TTL on session keys (memory leak)
-- Duplicate XP awards from retry logic
+**Uses:** Fernet encryption, frappe.utils.file_manager.save_file, is_private=1 for export files
 
-**Research flag:** Standard pattern, skip research-phase.
+**Avoids:** Pitfall #9 (export key management) by storing per-batch keys in Password field, plaintext PINs never persist after export
 
----
+**Research flag:** SKIP — Fernet is high-level API, file_manager is standard Frappe pattern
 
-### Phase 5: Wallet & Gamification (XP, Streaks)
-**Rationale:** Depends on session completion flow. Streak logic is complex (timezone handling) and must be correct from day one.
+### Phase 4: Core Redemption API (Frappe Side)
+**Rationale:** Transactional core must be built and testable via Frappe API before adding FastAPI proxy layer. This is the CRITICAL PATH.
 
 **Delivers:**
-- XP calculation (base + heart bonus) on lesson completion
-- Wallet update (HINCRBY `memora:wallet:{player}` for XP)
-- Streak calculation in user-local timezone (requires timezone storage)
-- Streak update logic (compare `last_streak_activity_date`)
-- Grace period for streak maintenance (3-6 hours after midnight)
-- Wallet fetch endpoint (HGETALL for XP, streak, total lessons)
+- memora_admin/api/voucher.py with preview_voucher() and redeem_voucher()
+- SELECT FOR UPDATE race-condition-safe redemption
+- Subscription Transaction creation (status=Completed, payment_method=Voucher)
+- Voucher Redemption Log creation
+- Integration with existing _handle_approval() pipeline
 
-**Addresses:**
-- XP accumulation (table stakes)
-- Streak tracking (table stakes)
-- Streak timezone bugs (Pitfall #5)
+**Addresses:** Table stakes TS-6, TS-13, TS-16 (atomic redemption, PIN entry, instant unlock), differentiators D-2, D-3 (graceful error messages, already-owned guard)
 
-**Avoids:**
-- Server-time calculations (breaks streaks unfairly)
-- Missing timezone field (requires schema change later)
+**Avoids:** Pitfall #1 (double-redemption race) via SELECT FOR UPDATE, Pitfall #3 (commit ignored) by creating Completed transaction directly, Pitfall #8 (whitelisted security) via frappe.only_for()
 
-**Research flag:** Timezone handling is tricky. Consider research-phase for edge cases (DST transitions, timezone changes).
+**Research flag:** DEEP DIVE — this phase touches the existing subscription pipeline (memora_subscription_transaction.py lines 36-65), needs integration testing to verify _handle_approval() behavior when status=Completed on insert vs update
 
----
-
-### Phase 6: Sync Mechanisms (Redis → MariaDB)
-**Rationale:** Game mechanics must work before implementing persistence. Sync is background process that doesn't block gameplay.
+### Phase 5: FastAPI Proxy Layer
+**Rationale:** Student-facing API must go through FastAPI for JWT auth and rate limiting. Built last because it depends on all previous phases.
 
 **Delivers:**
-- Progress sync task (reads dirty set, fetches bitmaps, converts to hex, updates MariaDB)
-- Wallet sync task (HGETALL wallets, batch update MariaDB)
-- Interaction flush task (LRANGE buffer, batch INSERT, LTRIM)
-- Dirty set management (SADD on writes, DEL after sync)
-- Sync Log DocType integration
-- Idempotent sync with `last_synced_ts`
+- fastapi_app/models/voucher.py (Pydantic schemas)
+- fastapi_app/services/voucher.py (VoucherService with rate limiting)
+- fastapi_app/api/v1/endpoints/voucher.py (POST /voucher/preview, POST /voucher/redeem)
+- Dependency injection updates (deps.py, router.py)
 
-**Addresses:**
-- Data persistence requirement
-- Redis-to-MariaDB sync data loss (Pitfall #2)
-- Sync job ordering (edge case: streak reset before wallet sync)
+**Addresses:** Table stakes TS-10, TS-14, TS-15 (rate limiting, preview before confirm, specific error messages)
 
-**Avoids:**
-- Real-time database writes (performance killer at scale)
-- Data loss on Redis crash (AOF + regular sync limits window)
+**Uses:** Existing RateLimiter with new key prefixes, FrappeClient HTTP bridge, CurrentUser JWT auth
 
-**Research flag:** Standard Frappe scheduled task pattern, skip research-phase.
+**Avoids:** Pitfall #10 (rate limiting bypass) via dual-key (player + IP) rate limits, Pitfall #8 (parameter injection) by always using JWT sub claim
 
----
+**Research flag:** SKIP — reuses existing FastAPI patterns (RateLimiter in rate_limit.py, FrappeClient in deps.py)
 
-### Phase 7: Build Pipeline (Content → CDN)
-**Rationale:** Can be developed in parallel with game mechanics. Independent workflow from Frappe content changes to CDN.
+### Phase 6: Reporting & Admin Features
+**Rationale:** Operational quality features after core flow works. No blocking dependencies.
 
 **Delivers:**
-- Frappe `doc_events.on_update` hooks for content DocTypes
-- Build queue with 2-minute debouncing (collect triggers, batch process)
-- JSON generation (hierarchy `_h.json`, bitmap structure `_b.json`, content `_c.json`, lesson JSON)
-- Bitmap index allocation (`bit_index`, `excluded_bits` for deleted lessons)
-- Mock CDN upload interface (swap to R2 in production)
-- Pub/sub cache invalidation (publish to `memora:invalidate`)
-- Single-writer lock (`SETNX build:lock:{subject_id}`)
+- Batch performance report (generated/allocated/redeemed/void counts)
+- Sales report (revenue by batch, by library, by date range)
+- Consignment reconciliation report
+- Security audit report (redemption log with failed attempts)
+- Batch list view with status summary
+- Individual card lookup by serial
 
-**Addresses:**
-- Fast content loading (table stakes)
-- Build pipeline with debouncing (differentiator)
-- Hierarchical JSON separation (differentiator)
-- Build pipeline race conditions (Pitfall #4)
-- Excluded bits index drift (Pitfall #7)
+**Addresses:** Table stakes TS-18, TS-19, TS-21 (batch list view, card lookup, reports)
 
-**Avoids:**
-- Concurrent build overwrites
-- Reusing bit indexes (causes progress corruption)
-- Building unpublished content (edge case: status filter)
+**Avoids:** Pitfall #15 (Frappe Desk UI performance) via database indexes on (card_batch, status) composite
 
-**Research flag:** Custom pipeline with debouncing. Consider research-phase for distributed lock patterns and CDN integration.
-
----
-
-### Phase 8: Leaderboards
-**Rationale:** Self-contained feature. Depends on wallet XP updates but doesn't block core functionality.
-
-**Delivers:**
-- Leaderboard sorted sets (daily, weekly, monthly, all-time)
-- Sharded leaderboards (16 shards to prevent hot-key problem)
-- Leaderboard update on lesson completion (ZINCRBY)
-- Leaderboard query endpoint (ZREVRANGE for top N, ZREVRANK for player position)
-- Reset logic for daily/weekly/monthly boards
-
-**Addresses:**
-- Weekly leaderboard (table stakes)
-- Multiple timeframes (differentiator)
-- Leaderboard hot-key problem (Pitfall #6)
-
-**Avoids:**
-- Single sorted set for 100K users (hot-key bottleneck)
-- Real-time leaderboard refresh on every request (cache instead)
-
-**Research flag:** Standard Redis sorted set pattern, but sharding is important. Skip research-phase.
-
----
-
-### Phase 9: Achievement System
-**Rationale:** Polish feature. Depends on wallet, progress, and potentially leaderboard data. Can be last.
-
-**Delivers:**
-- Achievement evaluation logic (threshold-based: 100 lessons, 7-day streak)
-- Achievement types (lessons_completed, streak_days, total_xp, perfect_lesson)
-- Achievement unlock tracking (`memora:achievements:{player}` set)
-- Achievement notification endpoint (poll for new unlocks)
-
-**Addresses:**
-- Threshold-based achievements (differentiator)
-- Achievement variety (differentiator)
-
-**Avoids:**
-- Real-time WebSocket notifications (defer to v2)
-
-**Research flag:** Standard gamification pattern, skip research-phase.
-
----
+**Research flag:** SKIP — standard Frappe Report Builder, no complex queries
 
 ### Phase Ordering Rationale
 
-The suggested order follows three principles from research:
-
-1. **Foundation before features**: Redis data patterns, authentication, and persistence configuration must be correct from day one. Refactoring these with production data is expensive and risky. Infrastructure (Phase 1) addresses critical pitfalls early (JWT algorithm confusion, AOF persistence, connection pooling).
-
-2. **Read before write, access before progress**: Access control (Phase 2) gates all content delivery. Progress tracking (Phase 3) writes data that must be validated against access. Building access first prevents security bypasses. Building progress with correct bitmap patterns (contiguous `bitmap_slot`) prevents Pitfall #1 (memory explosion).
-
-3. **Core game loop before polish**: Phases 3-6 deliver the core gameplay experience (complete lesson → track progress → earn XP/streaks → sync to database). Leaderboards (Phase 8) and achievements (Phase 9) are engagement multipliers but not essential for MVP. Build pipeline (Phase 7) can proceed in parallel as it's independent.
-
-**Dependency chain:**
 ```
-Phase 1 (Infrastructure)
-    ↓
-Phase 2 (Access Control) ← required by all content endpoints
-    ↓
-Phase 3 (Progress) ← requires access validation
-    ↓
-Phase 4 (Sessions) ← writes to progress
-    ↓
-Phase 5 (Wallet/Streaks) ← triggered by session completion
-    ↓
-Phase 6 (Sync) ← persists progress + wallet
-    ↓
-Phase 8 (Leaderboards) ← depends on wallet XP
-    ↓
-Phase 9 (Achievements) ← depends on wallet + progress
-
-Phase 7 (Build Pipeline) ← independent, can be parallel with 4-6
+Phase 1 (DocTypes) → Phase 2 (PIN Gen) → Phase 3 (Allocation) → Phase 4 (Redeem) → Phase 5 (FastAPI) → Phase 6 (Reports)
+     |                     |                     |                    |                   |                  |
+  Foundation           Admin creates         Admin distributes    Testable via       Student-facing    Operational
+  (tables exist)       batches with PINs     cards to libraries   Frappe directly    endpoints live    quality
 ```
+
+**Why this order:**
+- Phase 1 must come first (code cannot reference DocTypes that don't exist)
+- Phase 2 before Phase 3 (cannot allocate cards that don't exist)
+- Phase 3 before Phase 4 (cannot redeem cards that haven't been distributed)
+- Phase 4 before Phase 5 (FastAPI proxies to Frappe, Frappe must work standalone first)
+- Phase 6 can run parallel to Phase 5 (reporting has no API dependencies)
+
+**Dependency highlights:**
+- Phase 4 depends on existing Phase 23 pipeline (Subscription Transaction → Player Subscription → Redis SADD via access_sync.py)
+- Phase 5 depends on existing FastAPI infrastructure (JWT auth from Phase 11, RateLimiter from Phase 8, FrappeClient from Phase 15)
+- All phases depend on existing Frappe foundation (DocType system, whitelisted methods, background jobs)
+
+**How this avoids pitfalls:**
+- Building Frappe API first (Phase 4) before FastAPI proxy (Phase 5) allows testing atomic redemption in isolation, catching race conditions early
+- Background job generation (Phase 2) before allocation (Phase 3) ensures batch creation won't timeout when libraries request large quantities
+- Financial calculations in Decimal from Phase 2 onward prevents accumulation of float errors across phases
 
 ### Research Flags
 
-**Phases needing deeper research during planning:**
-- **Phase 5 (Wallet/Streaks)**: Timezone edge cases (DST transitions, user timezone changes mid-month), grace period tuning. Research focus: "streak calculation edge cases in user timezones."
-- **Phase 7 (Build Pipeline)**: Distributed lock patterns for single-writer guarantee at scale, CDN swap strategy (mock → R2), debouncing implementation in Frappe scheduler. Research focus: "distributed debounce patterns and CDN abstraction layers."
+Phases likely needing deeper research during planning:
 
-**Phases with standard patterns (skip research-phase):**
-- **Phase 1 (Infrastructure)**: FastAPI + Redis setup is well-documented in official docs
-- **Phase 2 (Access Control)**: Double-Gate pattern is custom to Memora but fully specified in PRD
-- **Phase 3 (Progress)**: Redis bitmap pattern is standard; memory constraints documented in research
-- **Phase 4 (Sessions)**: Standard session management with TTL
-- **Phase 6 (Sync)**: Frappe scheduled tasks are standard; dirty set pattern is simple
-- **Phase 8 (Leaderboards)**: Redis sorted set leaderboards are well-documented; sharding pattern is standard
-- **Phase 9 (Achievements)**: Standard threshold evaluation logic
+- **Phase 4 (Core Redemption API):** Complex integration with existing subscription pipeline. The existing _handle_approval() method (memora_subscription_transaction.py:36-65) assumes certain fields and behaviors. Need integration test to verify: (1) creating transaction with status=Completed on insert fires on_update correctly, (2) missing related_grant is caught gracefully, (3) Redis failure during on_subscription_change rolls back card state update, (4) Player Subscription expiry derives from batch validity not player's season. **Recommendation:** Run /gsd:research-phase before implementing Phase 4 to trace the full hook chain.
+
+- **Phase 3 (Encrypted Export):** Fernet encryption is straightforward, but the export file lifecycle needs clarification: when to generate (at batch creation or allocation?), when to delete (immediate after download or 7-day TTL?), how to handle re-export requests. **Recommendation:** Skip research-phase but add detailed spec in requirements for export workflow edge cases.
+
+Phases with standard patterns (skip research-phase):
+
+- **Phase 1:** DocType creation follows established Frappe patterns, codebase has 32+ DocTypes as templates
+- **Phase 2:** Background job + bulk_insert patterns exist in codebase (memora_lesson.py line 33 for SELECT FOR UPDATE, existing background jobs for quiz generation)
+- **Phase 5:** FastAPI endpoint creation, rate limiting, JWT auth all follow existing patterns from sessions.py, otp.py, purchase.py
+- **Phase 6:** Frappe Report Builder, standard list views, no novel patterns
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | **HIGH** | All technologies verified on PyPI with recent releases (FastAPI 0.128.0 Dec 2025, redis-py 7.1.0 Nov 2025, PyJWT 2.11.0 Jan 2026). Official documentation for all components. Abandonment of aioredis and python-jose confirmed from multiple sources. |
-| Features | **MEDIUM-HIGH** | Table stakes features based on industry patterns (Duolingo gamification research, Redis leaderboard solutions). Differentiators are Memora-specific innovations (bitmap progress, excluded_bits, Double-Gate) validated against PRD. Anti-features validated against community pitfalls. |
-| Architecture | **MEDIUM-HIGH** | Sidecar pattern, Redis partitioning, and pub/sub cache invalidation are standard distributed system patterns. Frappe-FastAPI integration boundary verified from official Frappe docs and community discussions. Specific Redis key schema is custom but follows best practices. |
-| Pitfalls | **HIGH** | Critical pitfalls (bitmap memory, JWT attacks, timezone bugs) verified from official Redis docs, security research, and gamification domain experts. Prevention strategies cross-referenced with multiple sources. Edge cases derived from PRD analysis. |
+| Stack | HIGH | Minimal new dependencies (only cryptography), verified against Frappe v15 source and existing codebase patterns. HMAC, secrets, bulk_insert all confirmed in docs and source. |
+| Features | HIGH | Well-established domain (telecom VMS + education access codes), cross-referenced 6+ VMS products (Estel, 6D Tech, Seamless) and 3+ education platforms (Pearson, Elsevier, VitalSource). Feature set aligns with industry norms. |
+| Architecture | HIGH | Based on direct codebase analysis of 17+ files. Integration points verified: Subscription Transaction payment_method field already has "Voucher" option, access_sync.py hook exists, FrappeClient and RateLimiter patterns proven. Only uncertainty is _handle_approval() behavior with status=Completed on insert (needs integration test). |
+| Pitfalls | HIGH | Race condition verified from HackerOne report #759247 and security literature. Timing attack verified from Python CVE-2022-48566. frappe.db.commit() behavior verified from Frappe source code (database.py). Float precision issues verified from real-world Python financial bugs. Batch generation timeout verified from Frappe forum discussions. |
 
-**Overall confidence:** **HIGH**
+**Overall confidence:** HIGH
 
-The stack choices are production-ready with official documentation. The architecture follows established patterns for async Python APIs with Redis hot data. The pitfalls are well-researched with proven prevention strategies. The main uncertainty is in execution-level details (exact sync intervals, leaderboard shard count tuning) that require load testing, not research.
+The voucher system follows established patterns in both the domain (telecom VMS, education access codes) and the existing Memora codebase. The only novel aspect is the batch generation scale (5K-10K cards), which is addressed via background jobs with chunking. The redemption integration with Phase 23's subscription pipeline is well-understood from code inspection, though an integration test will confirm hook firing behavior.
 
 ### Gaps to Address
 
-**During planning:**
-- **Exact sync interval tuning**: Research suggests 1 minute, but this needs validation under load. Plan Phase 6 with configurable intervals for A/B testing.
-- **Leaderboard shard count**: Research suggests 16 shards for 100K users, but this is an estimate. Plan Phase 8 with parameterized shard count.
-- **Grace period for streaks**: Research suggests 3-6 hours, but this affects user behavior. Plan Phase 5 with feature flag for A/B testing.
-- **Build debounce interval**: 2 minutes suggested, but may need adjustment based on editor workflows. Plan Phase 7 with configurable debounce.
+**Gap 1: _handle_approval() commit behavior**
+- **Issue:** The existing method calls frappe.db.commit() explicitly but this is silently ignored during doc_events. The voucher redemption pathway creates a transaction with status=Completed, which should trigger on_update → _handle_approval(). Need to verify: (a) does on_update fire on insert when status=Completed, or only on subsequent updates? (b) if Redis is down during on_subscription_change, does the entire transaction roll back including the card status update?
+- **Resolution:** Add integration test in Phase 4 that simulates Redis failure. Document the atomicity boundary. If needed, modify _handle_approval() to handle voucher-specific flow (remove the dead commit() calls, add voucher payment_method check).
 
-**During implementation:**
-- **Redis memory monitoring**: Set up alerts for bitmap memory usage early in Phase 3 to validate estimates.
-- **AOF rewrite disk space**: Monitor during Phase 1 infrastructure setup; provision 2x AOF size.
-- **Device limit enforcement**: Test race conditions during Phase 2; validate atomic check-and-add under concurrent load.
-- **CDN swap strategy**: Design abstraction layer in Phase 7 but defer actual R2 integration to deployment phase.
+**Gap 2: Export file lifecycle**
+- **Issue:** Research does not definitively answer: when is the encrypted export generated (at batch creation, at allocation, or on-demand)? When is it deleted (immediate after download, 7-day TTL, never)?
+- **Resolution:** Specify in Phase 3 requirements. Recommendation: generate at allocation time (when library is known), attach to Allocation doc, set 7-day TTL, log all downloads, admin can re-generate if lost.
 
-**Validation during early phases:**
-- **Bitmap slot allocation**: Verify contiguous ID strategy in Phase 3; monitor memory with first 1K users.
-- **Timezone handling**: Test streak calculations across timezones in Phase 5; include DST transition dates.
-- **Build pipeline locks**: Test concurrent build triggers in Phase 7; verify single-writer guarantee.
+**Gap 3: ERPNext Sales Invoice availability**
+- **Issue:** STACK.md notes the codebase has "options": "Sales Invoice" on the erpnext_invoice field in Subscription Transaction, but NO erpnext imports exist. Is ERPNext installed on the production site?
+- **Resolution:** Check during Phase 3 planning. If ERPNext is NOT installed, create a lightweight custom "Memora Invoice" DocType instead (fields: customer, items, total, status). Do not block on ERPNext availability.
+
+**Gap 4: Commission calculation timing**
+- **Issue:** FEATURES.md mentions automatic commission ledger entries but does not specify: commission recorded at allocation time (when library receives cards) or at redemption time (when student uses card)? For consignment model, must be at redemption. For prepaid model, could be either.
+- **Resolution:** Specify in Phase 3/4 requirements based on business model. Recommendation: always record commission at redemption time (consistent across both prepaid and consignment), prepaid sale records upfront payment separately.
+
+**Gap 5: Partial batch allocation granularity**
+- **Issue:** FEATURES.md mentions batch-level vs card-level allocation but research does not conclude which is MVP.
+- **Resolution:** Start with batch-level allocation (one batch → one library) in Phase 3. Add card-level allocation as Phase 6+ enhancement if libraries request partial batches. The batch DocType has a library Link field set at allocation time.
 
 ## Sources
 
 ### Primary (HIGH confidence)
 
-**Stack Research:**
-- [FastAPI Official Documentation](https://fastapi.tiangolo.com/) - Lifespan events, dependencies, background tasks
-- [redis-py Asyncio Documentation](https://redis.readthedocs.io/en/stable/examples/asyncio_examples.html) - Connection pooling, async patterns
-- [Redis Bitmaps](https://redis.io/docs/latest/develop/data-types/bitmaps/) - Memory usage, SETBIT performance
-- [Redis Sorted Sets](https://redis.io/docs/latest/develop/data-types/sorted-sets/) - Leaderboard patterns
-- [PyJWT Documentation](https://pyjwt.readthedocs.io/en/latest/usage.html) - Algorithm enforcement
-- [Pydantic Settings](https://docs.pydantic.dev/latest/concepts/pydantic_settings/) - Configuration management
-- PyPI verification for all package versions (FastAPI 0.128.0, Uvicorn 0.40.0, redis 7.1.0, PyJWT 2.11.0, orjson 3.11.6)
+**Codebase Analysis:**
+- memora_admin/memora_admin/doctype/memora_subscription_transaction/memora_subscription_transaction.py — Phase 23 approval pipeline, _handle_approval() method
+- memora_admin/events/access_sync.py — on_subscription_change hook, Redis SADD for access grants
+- fastapi_app/services/purchase.py — FastAPI→Frappe proxy pattern
+- fastapi_app/services/rate_limit.py — Reusable RateLimiter with Lua script
+- fastapi_app/api/deps.py — Dependency injection patterns
+- fastapi_app/core/frappe_client.py — FrappeClient HTTP bridge
+- memora_admin/memora_admin/doctype/memora_lesson/memora_lesson.py:33 — SELECT FOR UPDATE precedent
 
-**Architecture Research:**
-- [Redis Persistence Documentation](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/) - AOF configuration
-- [FastAPI Behind a Proxy](https://fastapi.tiangolo.com/advanced/behind-a-proxy/) - Nginx integration
-- [Frappe Background Jobs](https://docs.frappe.io/framework/user/en/api/background_jobs) - Scheduled tasks
+**Official Documentation:**
+- [Python hmac module](https://docs.python.org/3/library/hmac.html)
+- [Python secrets module](https://docs.python.org/3/library/secrets.html)
+- [Python decimal module](https://docs.python.org/3/library/decimal.html)
+- [cryptography (Fernet)](https://cryptography.io/en/latest/fernet/)
+- [Frappe v15 Database API](https://docs.frappe.io/framework/v15/user/en/api/database)
+- [Frappe v15 Background Jobs](https://docs.frappe.io/framework/v15/user/en/api/background_jobs)
+- [Frappe file_manager.py source](https://github.com/frappe/frappe/blob/develop/frappe/utils/file_manager.py)
+- [Frappe Document class source](https://github.com/frappe/frappe/blob/develop/frappe/model/document.py)
 
-**Pitfalls Research:**
-- [Redis SETBIT Command](https://redis.io/docs/latest/commands/setbit/) - Memory allocation behavior
-- [Redis Transactions (WATCH)](https://redis.io/docs/latest/develop/using-commands/transactions/) - Atomic operations
-- [JWT Security Best Practices - 42Crunch](https://42crunch.com/7-ways-to-avoid-jwt-pitfalls/) - Algorithm confusion
-- [PortSwigger JWT Attacks](https://portswigger.net/web-security/jwt) - Vulnerability patterns
+**Security Standards:**
+- [OWASP Password Storage Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html)
+- [CVE-2022-48566 - Python hmac.compare_digest timing flaw](https://www.cve.news/cve-2022-48566/)
+- [HackerOne Report #759247 - Race Condition Double Redemption](https://hackerone.com/reports/759247)
 
 ### Secondary (MEDIUM confidence)
 
-**Features Research:**
-- [Duolingo Gamification Secrets](https://www.orizon.co/blog/duolingos-gamification-secrets) - Streak engagement data (3.6x), freeze mechanics (21% churn reduction)
-- [Trophy.so - How to Build Streaks](https://trophy.so/blog/how-to-build-a-streaks-feature) - Timezone edge cases
-- [Redis Leaderboards Solution](https://redis.io/solutions/leaderboards/) - Sorted set patterns
-- [TalentLMS - Gamification Mistakes](https://www.talentlms.com/blog/common-gamification-mistakes-avoid/) - Anti-patterns
+**Domain Patterns:**
+- [F5 Gift Card Cracking Prevention](https://www.f5.com/go/solution/gift-card-cracking) — brute-force enumeration attack patterns
+- [DataDome Gift Card Fraud Prevention](https://datadome.co/threats/gift-card-fraud-prevention/) — enumeration detection
+- [Estel Telecom VMS](https://www.esteltelecom.com/products/vms-voucher-management-system) — telecom voucher lifecycle
+- [6D Technologies Voucher Management](https://www.6dtechnologies.com/fintech/voucher-management-solution/) — distributor tracking
+- [Pearson Already-Redeemed Support](https://support.pearson.com/getsupport/s/article/Registration-Access-Code-Already-Redeemed) — education platform error handling
+- [Elsevier Access Code Redemption](https://service.elsevier.com/app/answers/detail/a_id/28693/supporthub/evolve/) — education "already redeemed" flow
 
-**Stack Research:**
-- [FastAPI Best Practices - zhanymkanov](https://github.com/zhanymkanov/fastapi-best-practices) - Production patterns
-- [orjson Benchmarks](https://undercodetesting.com/boost-fastapi-performance-by-20-with-orjson/) - Serialization speedup
-- [Gunicorn + Uvicorn Guide](https://medium.com/@iklobato/mastering-gunicorn-and-uvicorn-the-right-way-to-deploy-fastapi-applications-aaa06849841e) - Worker configuration
+**Technical Patterns:**
+- [Database Locking to Solve Race Condition](https://www.coderbased.com/p/database-locking)
+- [Transaction Locking to Prevent Race Conditions](https://sqlfordevs.com/transaction-locking-prevent-race-condition)
+- [InnoDB Lock Modes - MariaDB](https://mariadb.com/docs/server/server-usage/storage-engines/innodb/innodb-lock-modes)
+- [Deferred Bulk Inserts in Frappe](https://tej.sh/blog/frappe-deferred-bulk/)
+- [Timing Attacks against String Comparison in Python](https://sqreen.github.io/DevelopersSecurityBestPractices/timing-attack/python)
+- [Python Decimal vs Float: The $10,000 Mistake](https://pranaysuyash.medium.com/how-i-lost-10-000-because-of-a-python-float-and-how-you-can-avoid-my-mistake-3bd2e5b4094d)
 
-**Architecture Research:**
-- [Redis Pub/Sub Cache Invalidation](https://www.milanjovanovic.tech/blog/solving-the-distributed-cache-invalidation-problem-with-redis-and-hybridcache) - Pattern validation
-- [Nginx Reverse Proxy Guide](https://www.getpagespeed.com/server-setup/nginx/nginx-reverse-proxy) - Configuration patterns
-
-**Pitfalls Research:**
-- [Trophy.so Timezone Handling](https://trophy.so/blog/handling-time-zones-gamification) - Streak timezone bugs
-- [Leaderboard System Design](https://systemdesign.one/leaderboard-system-design/) - Hot-key problem
-- [FusionAuth Device Limiting](https://fusionauth.io/docs/extend/examples/device-limiting) - Race conditions
-
-### Tertiary (LOW confidence, needs validation)
-
-- [Frappe FastAPI Discussion](https://discuss.frappe.io/t/fastapi-vs-werkzeug/72785) - Session isolation concerns
-- [GitLab Pipeline Race Conditions](https://gitlab.com/gitlab-org/gitlab/-/issues/202691) - Build concurrency
-- [Redis Persistence Failure Scenarios](https://medium.com/@sohail_saifi/how-redis-persistence-actually-works-and-when-it-fails-c3715d11529f) - AOF edge cases
-
-### Project-Specific (HIGH confidence)
-
-- Memora PROJECT.md - Requirements and constraints
-- Memora DocType schemas - 31 DocTypes, existing data model
-- Memora PRD - Double-Gate pattern, bitmap structure, build pipeline spec
+### Tertiary (LOW confidence)
+- Arizona Lottery Scratch & Scan QR pattern (single source, but QR-on-card concept is straightforward)
+- Consignment software commission patterns from Shopify articles (applicable concepts but different domain)
 
 ---
-
-*Research completed: 2026-02-01*
+*Research completed: 2026-02-13*
 *Ready for roadmap: yes*
