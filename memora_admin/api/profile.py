@@ -15,6 +15,63 @@ All queries include season_seq for partition pruning. See setup.py for details.
 import frappe
 
 
+def _get_player_season_seq(player_id: str) -> int:
+	"""Get the season_seq for a player's plan.
+
+	Resolves: Player Profile -> Academic Plan -> Season -> season_seq.
+	Single JOIN query. Falls back to 1 if player has no plan/season assigned.
+	"""
+	result = frappe.db.sql(
+		"""
+		SELECT s.season_seq
+		FROM `tabMemora Player Profile` pp
+		INNER JOIN `tabMemora Academic Plan` ap ON ap.name = pp.plan
+		INNER JOIN `tabMemora Season` s ON s.name = ap.season
+		WHERE pp.name = %(player)s
+		LIMIT 1
+		""",
+		{"player": player_id},
+	)
+	return int(result[0][0]) if result else 1
+
+
+@frappe.whitelist(allow_guest=False)
+def get_items_learned_count(player_id: str, subject_id: str | None = None) -> dict:
+	"""Count Memory State records (items learned) for a player.
+
+	Each Memory State row represents one SRS item the player has encountered.
+	Uses season_seq for partition pruning (resolved via player's academic plan).
+
+	Args:
+		player_id: Player docname (PLAYER-#####).
+		subject_id: Optional subject filter. None or JSON "null" returns all subjects.
+
+	Returns:
+		Dict with items_learned count.
+	"""
+	# Handle JSON "null" string from API calls
+	if subject_id in (None, "null", ""):
+		subject_id = None
+
+	season_seq = _get_player_season_seq(player_id)
+
+	subject_filter = "AND subject = %(subject)s" if subject_id else ""
+
+	result = frappe.db.sql(
+		f"""
+		SELECT COUNT(*) as cnt
+		FROM `tabMemora Memory State`
+		WHERE player = %(player)s
+		  AND season_seq = %(season_seq)s
+		{subject_filter}
+	""",
+		{"player": player_id, "season_seq": season_seq, "subject": subject_id},
+	)
+	count = int(result[0][0]) if result else 0
+
+	return {"items_learned": count}
+
+
 @frappe.whitelist(allow_guest=False)
 def get_profiles_batch(player_ids: list[str] | str) -> list[dict]:
 	"""Batch fetch profiles from Memora Player Profile.
@@ -82,16 +139,8 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None) -> dict:
 	if subject_id in (None, "null", ""):
 		subject_id = None
 
-	# Get active season seq for partition pruning
-	from datetime import date as date_type
-
-	today = date_type.today()
-	season_seq = frappe.db.get_value(
-		"Memora Season",
-		{"is_published": 1, "start_date": ["<=", today], "end_date": [">=", today]},
-		"season_seq",
-	)
-	season_seq = int(season_seq) if season_seq else 1
+	# Resolve season_seq via player's plan (same approach as reviews.py)
+	season_seq = _get_player_season_seq(player_id)
 
 	subject_filter = "AND subject = %(subject)s" if subject_id else ""
 

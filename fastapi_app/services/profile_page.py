@@ -107,29 +107,20 @@ class ProfilePageService:
 			score = await self.redis.zscore(f"{self.prefix}lb:alltime:subject:{subject_id}", player_id)
 			total_xp = int(score) if score is not None else 0
 
-		# Items learned
-		if subject_id is not None:
-			raw = await self.redis.hget(f"{self.prefix}stats:{player_id}:{subject_id}:v1", "completed")
-			if raw is not None:
-				raw_str = raw.decode() if isinstance(raw, bytes) else raw
-				items_learned = int(raw_str)
-			else:
-				items_learned = 0
+		# Items learned: count of Memory State records (SRS items encountered)
+		# Cached in Redis with 5-min TTL. On cache miss, fetches from Frappe API.
+		items_cache_key = f"{self.prefix}items_learned:{player_id}:{subject_id or 'all'}"
+		cached_items = await self.redis.get(items_cache_key)
+		if cached_items is not None:
+			items_str = cached_items.decode() if isinstance(cached_items, bytes) else cached_items
+			items_learned = int(items_str)
 		else:
-			# Sum across all subjects
-			keys = await self.redis.keys(f"{self.prefix}stats:{player_id}:*")
-			if keys:
-				pipe = self.redis.pipeline()
-				for key in keys:
-					pipe.hget(key, "completed")
-				results = await pipe.execute()
-				items_learned = 0
-				for val in results:
-					if val is not None:
-						val_str = val.decode() if isinstance(val, bytes) else val
-						items_learned += int(val_str)
-			else:
-				items_learned = 0
+			result = await self.frappe.call(
+				"memora_admin.api.profile.get_items_learned_count",
+				{"player_id": player_id, "subject_id": subject_id},
+			)
+			items_learned = result.get("items_learned", 0) if result else 0
+			await self.redis.set(items_cache_key, str(items_learned), ex=MASTERY_CACHE_TTL)
 
 		return {
 			"subject": subject_id,
