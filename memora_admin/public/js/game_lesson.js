@@ -65,6 +65,8 @@ frappe.ui.form.on("Memora Lesson Stage", {
 			open_question_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else if (row.stage_type === "INFORMATION") {
 			open_information_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
+		} else if (row.stage_type === "FILL_BLANK") {
+			open_fill_blank_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else {
 			frappe.msgprint("لا يوجد محرر لهذا النوع بعد");
 		}
@@ -583,7 +585,6 @@ function open_question_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 			}
 
 			let config_payload = {
-				instruction: values.instruction,
 				question: values.question,
 				answers: values.answers_table.map((a) => {
 					let answer = {
@@ -839,6 +840,245 @@ function open_information_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 	// Cleanup on close
 	d.onhide = function () {
 		d.$wrapper.off("mousedown.info_hl");
+	};
+
+	d.show();
+	renderPreview();
+}
+
+// =================================================
+// ✏️ 7. نافذة أكمل الفراغات (Fill in the Blank)
+// =================================================
+function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let blanks = (data.blanks || []).map((b) => ({
+		from: b.from,
+		to: b.to,
+		item_id: b.item_id || null,
+	}));
+
+	let d = new frappe.ui.Dialog({
+		title: "إعدادات أكمل الفراغات (Fill in the Blank)",
+		fields: [
+			{
+				label: "التعليمات",
+				fieldname: "instruction",
+				fieldtype: "Data",
+				default: data.instruction || "أكمل الفراغات التالية",
+			},
+			{
+				fieldtype: "Section Break",
+				label: "المحتوى",
+			},
+			{
+				label: "النص",
+				fieldname: "fill_text",
+				fieldtype: "Small Text",
+				reqd: 1,
+				default: data.text || "",
+				description: "تعديل النص قد يُبطل الفراغات الحالية إذا تغيّر موضع الكلمات",
+			},
+			{
+				fieldtype: "Section Break",
+				label: "المعاينة — حدد نصاً لتحويله إلى فراغ، واضغط على فراغ موجود لإزالته",
+			},
+			{
+				fieldname: "preview_html",
+				fieldtype: "HTML",
+			},
+		],
+		size: "extra-large",
+		primary_action_label: "حفظ (Save)",
+		primary_action: function (values) {
+			if (!values.fill_text) {
+				frappe.msgprint("يجب إدخال النص.");
+				return;
+			}
+			if (blanks.length === 0) {
+				frappe.msgprint("يجب تحديد فراغ واحد على الأقل.");
+				return;
+			}
+
+			let config_payload = {
+				instruction: values.instruction,
+				text: values.fill_text,
+				blanks: blanks.map((b) => {
+					let bl = { from: b.from, to: b.to };
+					if (!skipItemIds) {
+						bl.item_id = b.item_id || generateItemUUID();
+					}
+					return bl;
+				}),
+			};
+
+			frappe.model.set_value(
+				cdt,
+				cdn,
+				"config_json",
+				JSON.stringify(config_payload, null, 2)
+			);
+			d.hide();
+			frappe.show_alert({ message: "تم حفظ أكمل الفراغات", indicator: "green" });
+		},
+	});
+
+	// --- helpers ---
+
+	function _escapeHtml(str) {
+		return str
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
+	}
+
+	function _getTextOffset(container, targetNode, targetOffset) {
+		let walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+		let offset = 0;
+		while (walker.nextNode()) {
+			if (walker.currentNode === targetNode) {
+				return offset + targetOffset;
+			}
+			offset += walker.currentNode.textContent.length;
+		}
+		return offset;
+	}
+
+	// --- preview renderer ---
+
+	function renderPreview() {
+		let text = d.get_value("fill_text") || "";
+
+		// Drop blanks that fell out of bounds after a text edit
+		blanks = blanks.filter(
+			(b) => b.from >= 0 && b.to <= text.length && b.from < b.to
+		);
+
+		// Sort by start position
+		let sorted = [...blanks].sort((a, b) => a.from - b.from);
+
+		// Build HTML with blank segments
+		let html = "";
+		let lastEnd = 0;
+		for (let b of sorted) {
+			if (b.from < lastEnd) continue; // skip overlapping
+			if (b.from > lastEnd) {
+				html += _escapeHtml(text.slice(lastEnd, b.from));
+			}
+			html +=
+				'<mark class="fill-bl" data-from="' +
+				b.from +
+				'" data-to="' +
+				b.to +
+				'" ' +
+				'style="background:#d4edda;padding:1px 4px;border-radius:3px;' +
+				'border-bottom:2px dashed #28a745;cursor:pointer;" ' +
+				'title="اضغط لإزالة الفراغ">' +
+				_escapeHtml(text.slice(b.from, b.to)) +
+				"</mark>";
+			lastEnd = b.to;
+		}
+		if (lastEnd < text.length) {
+			html += _escapeHtml(text.slice(lastEnd));
+		}
+
+		let wrapper =
+			'<div style="position:relative;">' +
+			'<div class="fill-preview-text" style="padding:15px;border:1px solid #d1d8dd;' +
+			"border-radius:4px;min-height:80px;line-height:2.2;font-size:15px;" +
+			'direction:rtl;white-space:pre-wrap;user-select:text;">' +
+			(html ||
+				'<span style="color:#8d99a6;">اكتب النص أعلاه لتظهر المعاينة</span>') +
+			"</div>" +
+			'<div class="fill-add-bl-tip" style="display:none;position:absolute;' +
+			"background:#171717;color:#fff;padding:6px 14px;border-radius:6px;" +
+			"cursor:pointer;font-size:13px;z-index:10;" +
+			'box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap;">' +
+			"إضافة فراغ" +
+			"</div>" +
+			"</div>";
+
+		let $wrapper = d.fields_dict.preview_html.$wrapper;
+		$wrapper.html(wrapper);
+
+		let $preview = $wrapper.find(".fill-preview-text");
+		let $tip = $wrapper.find(".fill-add-bl-tip");
+
+		// --- selection → tooltip ---
+		$preview.on("mouseup", function () {
+			let sel = window.getSelection();
+			if (!sel || sel.isCollapsed || !sel.rangeCount) {
+				$tip.hide();
+				return;
+			}
+
+			let range = sel.getRangeAt(0);
+			let el = $preview[0];
+
+			if (!el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+				$tip.hide();
+				return;
+			}
+
+			let from = _getTextOffset(el, range.startContainer, range.startOffset);
+			let to = _getTextOffset(el, range.endContainer, range.endOffset);
+
+			if (from === to) {
+				$tip.hide();
+				return;
+			}
+			if (from > to) [from, to] = [to, from];
+
+			// Position tooltip above selection
+			let rect = range.getBoundingClientRect();
+			let cRect = $wrapper.find("> div")[0].getBoundingClientRect();
+
+			$tip.css({
+				top: rect.top - cRect.top - 36,
+				left: rect.left - cRect.left + rect.width / 2 - 50,
+				display: "block",
+			});
+
+			$tip.off("click").on("click", function () {
+				// Prevent overlapping blanks
+				if (blanks.some((b) => from < b.to && to > b.from)) {
+					frappe.msgprint("هذا التحديد يتداخل مع فراغ موجود.");
+					$tip.hide();
+					sel.removeAllRanges();
+					return;
+				}
+				blanks.push({ from: from, to: to, item_id: null });
+				$tip.hide();
+				sel.removeAllRanges();
+				renderPreview();
+			});
+		});
+
+		// --- click existing blank → remove ---
+		$preview.on("click", ".fill-bl", function () {
+			let f = parseInt($(this).data("from"));
+			let t = parseInt($(this).data("to"));
+			blanks = blanks.filter((b) => !(b.from === f && b.to === t));
+			renderPreview();
+		});
+	}
+
+	// Hide tooltip on outside click
+	d.$wrapper.on("mousedown.fill_bl", function (e) {
+		if (!$(e.target).closest(".fill-add-bl-tip").length) {
+			d.fields_dict.preview_html.$wrapper.find(".fill-add-bl-tip").hide();
+		}
+	});
+
+	// Re-render preview when text changes (debounced)
+	d.$wrapper.on(
+		"input",
+		'[data-fieldname="fill_text"] textarea',
+		frappe.utils.debounce(renderPreview, 400)
+	);
+
+	// Cleanup on close
+	d.onhide = function () {
+		d.$wrapper.off("mousedown.fill_bl");
 	};
 
 	d.show();
