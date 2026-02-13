@@ -1,9 +1,11 @@
 """Shared dependencies for API endpoints."""
 
+import json
 from typing import Annotated
 
 import jwt
 import redis.asyncio as redis
+import structlog
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
 
@@ -29,6 +31,8 @@ from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.stats import StatsService
 from fastapi_app.services.wallet import WalletService
 
+logger = structlog.get_logger()
+
 # Common dependencies
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
@@ -47,21 +51,35 @@ RedisClient = Annotated[redis.Redis, Depends(get_redis)]
 
 async def get_current_user(
 	credentials: Annotated[str, Depends(security)],
+	redis_client: RedisClient,
+	settings: SettingsDep,
 ) -> TokenPayload:
 	"""
-	Stateless JWT verification - no database lookup per CONTEXT.md.
+	JWT verification with Redis session validation for single-session enforcement.
 
 	Checks:
 	1. Token signature is valid (HS256)
 	2. Token is not expired
 	3. Token type is "access"
 	4. Required claims present (sub, exp, type, fid)
+	5. Session family_id matches current active session in Redis
+
+	Step 5 enforces single-session: when a player logs in on a new device,
+	the old device's tokens are immediately invalidated because the family_id
+	in Redis no longer matches.
 
 	Returns TokenPayload with user claims.
+	Raises 401 if session has been superseded by a newer login.
 	"""
 	credentials_exception = HTTPException(
 		status_code=status.HTTP_401_UNAUTHORIZED,
 		detail="Invalid credentials",
+		headers={"WWW-Authenticate": "Bearer"},
+	)
+
+	session_expired_exception = HTTPException(
+		status_code=status.HTTP_401_UNAUTHORIZED,
+		detail={"code": "SESSION_SUPERSEDED", "message": "Session invalidated by new login"},
 		headers={"WWW-Authenticate": "Bearer"},
 	)
 
@@ -70,8 +88,7 @@ async def get_current_user(
 
 	try:
 		payload = decode_token(token, verify_type="access")
-		return TokenPayload(**payload)
-
+		token_payload = TokenPayload(**payload)
 	except jwt.ExpiredSignatureError:
 		raise credentials_exception
 	except jwt.InvalidTokenError:
@@ -79,6 +96,43 @@ async def get_current_user(
 	except Exception:
 		# Catch-all for any validation errors (e.g., missing fields in TokenPayload)
 		raise credentials_exception
+
+	# Validate session family_id against Redis (single-session enforcement)
+	session_key = f"{settings.redis_key_prefix}session:{token_payload.sub}"
+	try:
+		raw = await redis_client.get(session_key)
+		if raw is None:
+			# No active session at all -- token is orphaned
+			logger.info("session_not_found", user_id=token_payload.sub)
+			raise session_expired_exception
+
+		if isinstance(raw, bytes):
+			raw = raw.decode("utf-8")
+
+		try:
+			session_data = json.loads(raw)
+			current_fid = session_data.get("fid")
+		except json.JSONDecodeError:
+			# Legacy plain family_id string
+			current_fid = raw
+
+		if current_fid != token_payload.fid:
+			logger.info(
+				"session_superseded",
+				user_id=token_payload.sub,
+				token_fid=token_payload.fid,
+				current_fid=current_fid,
+			)
+			raise session_expired_exception
+
+	except HTTPException:
+		raise
+	except Exception as e:
+		# Redis failure should NOT block the request -- degrade gracefully
+		# Log warning but allow the request through (stateless fallback)
+		logger.warning("session_check_redis_error", error=str(e), user_id=token_payload.sub)
+
+	return token_payload
 
 
 # Type alias for protected endpoints

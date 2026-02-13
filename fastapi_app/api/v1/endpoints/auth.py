@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 
 from fastapi_app.api.deps import RedisClient, SettingsDep, get_frappe_client
 from fastapi_app.core.security import create_access_token, create_refresh_token, decode_token
+from fastapi_app.core.ws_manager import ConnectionManager
 from fastapi_app.models.auth import (
 	AdminLoginRequest,
 	LoginProfile,
@@ -47,6 +48,44 @@ def _get_client_ip(request: Request) -> str:
 		# First IP in chain is the original client
 		return forwarded.split(",")[0].strip()
 	return request.client.host if request.client else "unknown"
+
+
+async def _force_kick_old_sessions(request: Request, player_id: str) -> None:
+	"""Send session_invalidated event via WebSocket and close old connections.
+
+	Called after creating a new session to immediately notify any connected
+	devices that their session has been superseded. This provides instant
+	feedback rather than waiting for the next API call to fail with 401.
+
+	Best-effort: failures are logged but do not block the login flow.
+	"""
+	try:
+		ws_manager: ConnectionManager | None = getattr(request.app.state, "ws_manager", None)
+		if ws_manager is None:
+			return
+
+		# Send session_invalidated event to all connected WebSockets for this user
+		event = json.dumps(
+			{
+				"type": "session_invalidated",
+				"message": "Your session has been ended because you logged in on another device.",
+			}
+		)
+		sent = await ws_manager.send_to_user(player_id, event)
+		if sent > 0:
+			logger.info("session_kick_sent", player_id=player_id, ws_count=sent)
+
+		# Close all WebSocket connections for the user (they'll get the message first)
+		connections = ws_manager._connections.get(player_id, set()).copy()
+		for ws in connections:
+			try:
+				await ws.close(code=4001, reason="Session superseded by new login")
+			except Exception:
+				pass
+
+	except Exception as e:
+		# Best-effort: don't block login if WS kick fails
+		logger.warning("session_kick_failed", player_id=player_id, error=str(e))
 
 
 @router.post("/player/login", response_model=PlayerLoginResponse)
@@ -148,7 +187,11 @@ async def player_login(
 	wallet_service = WalletService(redis, key_prefix=settings.redis_key_prefix, frappe_client=frappe_client)
 	wallet = await wallet_service.get_wallet(player_id)
 
-	# 8. Create session (invalidates any previous session)
+	# 8. Force-kick old WebSocket connections BEFORE creating new session
+	# This sends "session_invalidated" to any connected devices and closes their WS
+	await _force_kick_old_sessions(request, player_id)
+
+	# 9. Create session (invalidates any previous session in Redis)
 	session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
 	family_id = await session_service.create_session(
 		player_id,
@@ -156,7 +199,7 @@ async def player_login(
 		ttl_days=session_ttl_days,
 	)
 
-	# 9. Create tokens (player: mobile claim, no email)
+	# 10. Create tokens (player: mobile claim, no email)
 	access_token = create_access_token(
 		user_id=player_id,
 		mobile=profile["mobile"],
@@ -172,7 +215,7 @@ async def player_login(
 		expires_delta=timedelta(days=session_ttl_days),
 	)
 
-	# 10. Return enriched response (no gender per CONTEXT.md)
+	# 11. Return enriched response (no gender per CONTEXT.md)
 	return PlayerLoginResponse(
 		access_token=access_token,
 		refresh_token=refresh_token,
@@ -536,6 +579,9 @@ async def player_register_verify(
 	# Fetch wallet XP (should be 0 for new player)
 	wallet_service = WalletService(redis, key_prefix=settings.redis_key_prefix, frappe_client=frappe_client)
 	wallet = await wallet_service.get_wallet(player_id)
+
+	# Force-kick old WebSocket connections (unlikely for new registration but safe)
+	await _force_kick_old_sessions(request, player_id)
 
 	# Create session
 	session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
