@@ -61,6 +61,10 @@ frappe.ui.form.on("Memora Lesson Stage", {
 			open_sentence_builder_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else if (row.stage_type === "MINDMAP") {
 			open_mindmap_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
+		} else if (row.stage_type === "QUESTION") {
+			open_question_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
+		} else if (row.stage_type === "INFORMATION") {
+			open_information_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else {
 			frappe.msgprint("لا يوجد محرر لهذا النوع بعد");
 		}
@@ -496,4 +500,347 @@ function _generate_mindmap_id(used_ids) {
 		}
 	} while (used_ids.has(id));
 	return id;
+}
+
+// =================================================
+// ❓ 5. نافذة السؤال متعدد الخيارات (Question)
+// =================================================
+function open_question_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let existing_answers = (data.answers || []).map((a) => ({
+		answer_text: a.text,
+		is_correct: a.is_correct ? 1 : 0,
+		item_id: a.item_id || null,
+	}));
+
+	let d = new frappe.ui.Dialog({
+		title: "إعدادات السؤال (Question)",
+		fields: [
+			{
+				label: "التعليمات",
+				fieldname: "instruction",
+				fieldtype: "Data",
+				default: data.instruction || "اختر الإجابة الصحيحة",
+			},
+			{
+				label: "نص السؤال",
+				fieldname: "question",
+				fieldtype: "Small Text",
+				reqd: 1,
+				default: data.question || "",
+			},
+			{
+				fieldtype: "Section Break",
+				label: "الإجابات",
+			},
+			{
+				label: "",
+				fieldname: "answers_table",
+				fieldtype: "Table",
+				cannot_add_rows: false,
+				description: "أضف إجابتين على الأقل وحدد الإجابة الصحيحة",
+				fields: [
+					{
+						label: "نص الإجابة",
+						fieldname: "answer_text",
+						fieldtype: "Data",
+						in_list_view: 1,
+						reqd: 1,
+						columns: 7,
+					},
+					{
+						label: "صحيحة؟",
+						fieldname: "is_correct",
+						fieldtype: "Check",
+						in_list_view: 1,
+						columns: 2,
+					},
+					{
+						fieldname: "item_id",
+						fieldtype: "Data",
+						hidden: 1,
+					},
+				],
+				data: existing_answers,
+				get_data: () => existing_answers,
+			},
+		],
+		size: "large",
+		primary_action_label: "حفظ (Save)",
+		primary_action: function (values) {
+			if (!values.answers_table || values.answers_table.length < 2) {
+				frappe.msgprint("يجب إضافة إجابتين على الأقل.");
+				return;
+			}
+
+			let correct_count = values.answers_table.filter((a) => a.is_correct).length;
+			if (correct_count === 0) {
+				frappe.msgprint("يجب تحديد إجابة صحيحة واحدة على الأقل.");
+				return;
+			}
+			if (correct_count > 1) {
+				frappe.msgprint("يجب تحديد إجابة صحيحة واحدة فقط.");
+				return;
+			}
+
+			let config_payload = {
+				instruction: values.instruction,
+				question: values.question,
+				answers: values.answers_table.map((a) => {
+					let answer = {
+						text: a.answer_text,
+						is_correct: !!a.is_correct,
+					};
+					if (!skipItemIds) {
+						answer.item_id = a.item_id || generateItemUUID();
+					}
+					return answer;
+				}),
+			};
+
+			frappe.model.set_value(
+				cdt,
+				cdn,
+				"config_json",
+				JSON.stringify(config_payload, null, 2)
+			);
+			d.hide();
+			frappe.show_alert({ message: "تم حفظ السؤال", indicator: "green" });
+		},
+	});
+
+	d.show();
+}
+
+// =================================================
+// ℹ️ 6. نافذة المعلومات (Information)
+// =================================================
+function open_information_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let highlights = (data.highlights || []).map((h) => ({
+		from: h.from,
+		to: h.to,
+		item_id: h.item_id || null,
+	}));
+
+	let d = new frappe.ui.Dialog({
+		title: "إعدادات المعلومات (Information)",
+		fields: [
+			{
+				label: "التعليمات",
+				fieldname: "instruction",
+				fieldtype: "Data",
+				default: data.instruction || "اقرأ المعلومات التالية",
+			},
+			{
+				fieldtype: "Section Break",
+				label: "المحتوى",
+			},
+			{
+				label: "النص",
+				fieldname: "info_text",
+				fieldtype: "Small Text",
+				reqd: 1,
+				default: data.text || "",
+				description: "تعديل النص قد يُبطل التمييزات الحالية إذا تغيّر موضع الكلمات",
+			},
+			{
+				fieldtype: "Section Break",
+				label: "المعاينة — حدد نصاً لإضافة تمييز، واضغط على تمييز موجود لإزالته",
+			},
+			{
+				fieldname: "preview_html",
+				fieldtype: "HTML",
+			},
+		],
+		size: "extra-large",
+		primary_action_label: "حفظ (Save)",
+		primary_action: function (values) {
+			if (!values.info_text) {
+				frappe.msgprint("يجب إدخال النص.");
+				return;
+			}
+
+			let config_payload = {
+				instruction: values.instruction,
+				text: values.info_text,
+				highlights: highlights.map((h) => {
+					let hl = { from: h.from, to: h.to };
+					if (!skipItemIds) {
+						hl.item_id = h.item_id || generateItemUUID();
+					}
+					return hl;
+				}),
+			};
+
+			frappe.model.set_value(
+				cdt,
+				cdn,
+				"config_json",
+				JSON.stringify(config_payload, null, 2)
+			);
+			d.hide();
+			frappe.show_alert({ message: "تم حفظ المعلومات", indicator: "green" });
+		},
+	});
+
+	// --- helpers ---
+
+	function _escapeHtml(str) {
+		return str
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
+	}
+
+	function _getTextOffset(container, targetNode, targetOffset) {
+		let walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+		let offset = 0;
+		while (walker.nextNode()) {
+			if (walker.currentNode === targetNode) {
+				return offset + targetOffset;
+			}
+			offset += walker.currentNode.textContent.length;
+		}
+		return offset;
+	}
+
+	// --- preview renderer ---
+
+	function renderPreview() {
+		let text = d.get_value("info_text") || "";
+
+		// Drop highlights that fell out of bounds after a text edit
+		highlights = highlights.filter(
+			(h) => h.from >= 0 && h.to <= text.length && h.from < h.to
+		);
+
+		// Sort by start position
+		let sorted = [...highlights].sort((a, b) => a.from - b.from);
+
+		// Build HTML with <mark> segments
+		let html = "";
+		let lastEnd = 0;
+		for (let h of sorted) {
+			if (h.from < lastEnd) continue; // skip overlapping
+			if (h.from > lastEnd) {
+				html += _escapeHtml(text.slice(lastEnd, h.from));
+			}
+			html +=
+				'<mark class="info-hl" data-from="' +
+				h.from +
+				'" data-to="' +
+				h.to +
+				'" ' +
+				'style="background:#fff3cd;padding:1px 4px;border-radius:3px;cursor:pointer;" ' +
+				'title="اضغط لإزالة التمييز">' +
+				_escapeHtml(text.slice(h.from, h.to)) +
+				"</mark>";
+			lastEnd = h.to;
+		}
+		if (lastEnd < text.length) {
+			html += _escapeHtml(text.slice(lastEnd));
+		}
+
+		let wrapper =
+			'<div style="position:relative;">' +
+			'<div class="info-preview-text" style="padding:15px;border:1px solid #d1d8dd;' +
+			"border-radius:4px;min-height:80px;line-height:2.2;font-size:15px;" +
+			'direction:rtl;white-space:pre-wrap;user-select:text;">' +
+			(html ||
+				'<span style="color:#8d99a6;">اكتب النص أعلاه لتظهر المعاينة</span>') +
+			"</div>" +
+			'<div class="info-add-hl-tip" style="display:none;position:absolute;' +
+			"background:#171717;color:#fff;padding:6px 14px;border-radius:6px;" +
+			"cursor:pointer;font-size:13px;z-index:10;" +
+			'box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap;">' +
+			"إضافة تمييز" +
+			"</div>" +
+			"</div>";
+
+		let $wrapper = d.fields_dict.preview_html.$wrapper;
+		$wrapper.html(wrapper);
+
+		let $preview = $wrapper.find(".info-preview-text");
+		let $tip = $wrapper.find(".info-add-hl-tip");
+
+		// --- selection → tooltip ---
+		$preview.on("mouseup", function () {
+			let sel = window.getSelection();
+			if (!sel || sel.isCollapsed || !sel.rangeCount) {
+				$tip.hide();
+				return;
+			}
+
+			let range = sel.getRangeAt(0);
+			let el = $preview[0];
+
+			if (!el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+				$tip.hide();
+				return;
+			}
+
+			let from = _getTextOffset(el, range.startContainer, range.startOffset);
+			let to = _getTextOffset(el, range.endContainer, range.endOffset);
+
+			if (from === to) {
+				$tip.hide();
+				return;
+			}
+			if (from > to) [from, to] = [to, from];
+
+			// Position tooltip above selection
+			let rect = range.getBoundingClientRect();
+			let cRect = $wrapper.find("> div")[0].getBoundingClientRect();
+
+			$tip.css({
+				top: rect.top - cRect.top - 36,
+				left: rect.left - cRect.left + rect.width / 2 - 50,
+				display: "block",
+			});
+
+			$tip.off("click").on("click", function () {
+				// Prevent overlapping highlights
+				if (highlights.some((h) => from < h.to && to > h.from)) {
+					frappe.msgprint("هذا التحديد يتداخل مع تمييز موجود.");
+					$tip.hide();
+					sel.removeAllRanges();
+					return;
+				}
+				highlights.push({ from: from, to: to, item_id: null });
+				$tip.hide();
+				sel.removeAllRanges();
+				renderPreview();
+			});
+		});
+
+		// --- click existing highlight → remove ---
+		$preview.on("click", ".info-hl", function () {
+			let f = parseInt($(this).data("from"));
+			let t = parseInt($(this).data("to"));
+			highlights = highlights.filter((h) => !(h.from === f && h.to === t));
+			renderPreview();
+		});
+	}
+
+	// Hide tooltip on outside click
+	d.$wrapper.on("mousedown.info_hl", function (e) {
+		if (!$(e.target).closest(".info-add-hl-tip").length) {
+			d.fields_dict.preview_html.$wrapper.find(".info-add-hl-tip").hide();
+		}
+	});
+
+	// Re-render preview when text changes (debounced)
+	d.$wrapper.on(
+		"input",
+		'[data-fieldname="info_text"] textarea',
+		frappe.utils.debounce(renderPreview, 400)
+	);
+
+	// Cleanup on close
+	d.onhide = function () {
+		d.$wrapper.off("mousedown.info_hl");
+	};
+
+	d.show();
+	renderPreview();
 }
