@@ -182,10 +182,11 @@ class TopicProgress(BaseModel):
 		"""Calculate completion percentage.
 
 		Safe division: returns 0.0 if total is 0.
+		Clamped to 0-100 to prevent display bugs from stale stats data.
 		"""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)
 
 
 class UnitProgress(BaseModel):
@@ -203,7 +204,7 @@ class UnitProgress(BaseModel):
 		"""Calculate completion percentage."""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)
 
 
 class TrackProgress(BaseModel):
@@ -221,7 +222,7 @@ class TrackProgress(BaseModel):
 		"""Calculate completion percentage."""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)
 
 
 class SubjectProgress(BaseModel):
@@ -242,7 +243,7 @@ class SubjectProgress(BaseModel):
 		"""Calculate completion percentage."""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)
 
 
 class SubjectSummary(BaseModel):
@@ -278,7 +279,7 @@ class TrackSummary(BaseModel):
 		"""Calculate completion percentage."""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)
 
 
 class UnitSummary(BaseModel):
@@ -298,7 +299,7 @@ class UnitSummary(BaseModel):
 		"""Calculate completion percentage."""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)
 
 
 class TrackDetail(BaseModel):
@@ -319,7 +320,7 @@ class TrackDetail(BaseModel):
 		"""Calculate completion percentage."""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)
 
 
 class UnitDetail(BaseModel):
@@ -340,7 +341,7 @@ class UnitDetail(BaseModel):
 		"""Calculate completion percentage."""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)
 
 
 # --- Lesson Completion Models (Phase 18) ---
@@ -375,4 +376,4 @@ class TopicLessonsResponse(BaseModel):
 		"""Calculate completion percentage."""
 		if self.total == 0:
 			return 0.0
-		return round(self.completed / self.total * 100, 1)
+		return min(round(self.completed / self.total * 100, 1), 100.0)

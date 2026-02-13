@@ -319,12 +319,17 @@ async def end_session(
 		if lesson_path:
 			stats_key = f"memora:stats:{user.sub}:{session.subject_id}:v{hierarchy.version}"
 
-			# Ensure stats hash exists with total fields before HINCRBY.
-			# Without this, HINCRBY on a missing/expired key creates a hash with
-			# only "completed" fields (no "total" fields), causing progress endpoints
-			# to return total:0 and percentage:0% until the hash expires.
+			# Check if stats hash exists before deciding how to update.
+			# Two paths:
+			# 1) Stats hash MISSING (cold start): Compute from bitmap which already
+			#    includes the just-completed lesson (SETBIT happened in Lua script above).
+			#    Do NOT also HINCRBY -- that would double-count the completion.
+			# 2) Stats hash EXISTS: Increment completed counters via HINCRBY.
 			stats_exists = await redis_client.exists(stats_key)
 			if not stats_exists:
+				# Cold start: bitmap already has the new bit set, so
+				# compute_stats_from_hierarchy will include this lesson.
+				# No HINCRBY needed -- stats are already accurate.
 				completed_bits = await progress_service.get_completed_bits(
 					user_id=user.sub,
 					subject_id=session.subject_id,
@@ -338,12 +343,13 @@ async def end_session(
 					version=hierarchy.version,
 					stats=stats,
 				)
-
-			pipe.hincrby(stats_key, "completed", 1)
-			pipe.hincrby(stats_key, f"{lesson_path.track_id}:completed", 1)
-			pipe.hincrby(stats_key, f"{lesson_path.unit_id}:completed", 1)
-			pipe.hincrby(stats_key, f"{lesson_path.topic_id}:completed", 1)
-			pipe.expire(stats_key, 3600)
+			else:
+				# Stats hash exists: increment completed counters
+				pipe.hincrby(stats_key, "completed", 1)
+				pipe.hincrby(stats_key, f"{lesson_path.track_id}:completed", 1)
+				pipe.hincrby(stats_key, f"{lesson_path.unit_id}:completed", 1)
+				pipe.hincrby(stats_key, f"{lesson_path.topic_id}:completed", 1)
+				pipe.expire(stats_key, 3600)
 			stats_updated = True
 
 	pipe_results = await pipe.execute()

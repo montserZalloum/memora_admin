@@ -219,6 +219,8 @@ async def get_progress_summary(
 			subject_id=subject_id,
 			version=hierarchy.version,
 		)
+		# Clamp completed to total (BITCOUNT may exceed total if bitmap has stale bits)
+		completed = min(completed, total)
 
 		# Calculate percentage
 		percentage = round(completed / total * 100, 1) if total > 0 else 0.0
