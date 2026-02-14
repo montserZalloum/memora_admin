@@ -236,7 +236,10 @@ Plans:
   2. Returning prepaid cards creates a Credit Note (negative Sales Invoice) -- consignment returns require no financial action
   3. Commission is calculated correctly using the priority chain: product-level override (Voucher Batch Grant) then library default (Customer fields) then zero -- supporting both Percentage and Fixed Amount types with Decimal arithmetic
   4. Monthly scheduled job (1st of month) generates invoices for redeemed consignment cards from the previous month
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 37-01-PLAN.md — Commission calculation, invoice service, custom fields, and service Item
+- [ ] 37-02-PLAN.md — Allocation financial hooks and consignment billing cron job
 
 ### Phase 38: Reports & Season Expiration
 **Goal**: Admins have operational visibility into voucher performance, library sales, consignment reconciliation, and security -- and cards automatically expire when their linked season ends.
@@ -292,7 +295,7 @@ Plans:
 | 34. Batch Generation & Void | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 35. Allocation & Distribution | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 36. Redemption API | v3.0 | 2/2 | Complete | 2026-02-14 |
-| 37. Financial Integration | v3.0 | 0/TBD | Not started | - |
+| 37. Financial Integration | v3.0 | 0/2 | Not started | - |
 | 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
 
 **Total:** 38 phases (106 plans complete, v3.0 in progress) across 13 milestones
