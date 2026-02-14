@@ -64,6 +64,12 @@ class VoucherService:
 		frappe_client: FrappeClient,
 		hmac_secret: str,
 	):
+		if not hmac_secret:
+			raise ValueError(
+				"VOUCHER_HMAC_SECRET is not configured in .env. "
+				"It must match voucher_hmac_secret in Frappe site_config.json. "
+				"Without it, PIN lookups will always fail with INVALID_PIN."
+			)
 		self.redis = redis_client
 		self.frappe = frappe_client
 		self.hmac_secret = hmac_secret
