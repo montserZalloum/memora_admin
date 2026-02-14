@@ -10,9 +10,9 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 33 of 38 (DocType Foundation)
-Plan: 2 of 3 complete
-Status: Executing
-Last activity: 2026-02-14 — Completed 33-02 (Voucher Card & Allocation DocTypes)
+Plan: 3 of 3 complete
+Status: Phase Complete
+Last activity: 2026-02-14 — Completed 33-03 (Redemption Log, Custom Fields & Index)
 
 Progress: [################################..........] 87% (32/38 phases)
 
@@ -56,6 +56,9 @@ Recent decisions affecting current work:
 - [33-02]: Data fieldtype for pin_hmac (not Password) to enable WHERE clause queries for O(1) redemption lookup
 - [33-02]: index_web_pages_for_search=0 on Voucher Card to prevent 10K+ cards from polluting global search
 - [33-02]: Terminal states (Redeemed/Void/Expired) enforce immutability at the ORM level
+- [33-03]: Redemption Log permissions are create+read only (no write/delete/cancel/share) for immutable audit trail
+- [33-03]: Commission value stored as Data (string) for Decimal precision in Python
+- [33-03]: voucher_hmac_secret is manual site_config.json requirement, not auto-generated
 
 ### Pending Todos
 
@@ -70,6 +73,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 33-02-PLAN.md (Voucher Card & Allocation DocTypes)
+Stopped at: Completed 33-03-PLAN.md (Redemption Log, Custom Fields & Index)
 Resume file: None
-Next action: Execute 33-03-PLAN.md
+Next action: Execute Phase 34 (Core Redemption)
