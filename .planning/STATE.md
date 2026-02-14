@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 33 of 38 (DocType Foundation)
-Plan: 1 of 3 complete
+Plan: 2 of 3 complete
 Status: Executing
-Last activity: 2026-02-14 — Completed 33-01 (Voucher Batch & Batch Grant DocTypes)
+Last activity: 2026-02-14 — Completed 33-02 (Voucher Card & Allocation DocTypes)
 
 Progress: [################################..........] 87% (32/38 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 94
+- Total plans completed: 95
 - Milestones shipped: 12
 
 **By Milestone:**
@@ -53,6 +53,9 @@ Recent decisions affecting current work:
 - [v3.0]: Subscription Transaction with status="Completed" triggers existing Phase 23 pipeline
 - [33-01]: Data fieldtype for commission_value (not Currency/Float) to avoid float precision issues
 - [33-01]: allow_rename=0 on Voucher Batch since card records reference batch names
+- [33-02]: Data fieldtype for pin_hmac (not Password) to enable WHERE clause queries for O(1) redemption lookup
+- [33-02]: index_web_pages_for_search=0 on Voucher Card to prevent 10K+ cards from polluting global search
+- [33-02]: Terminal states (Redeemed/Void/Expired) enforce immutability at the ORM level
 
 ### Pending Todos
 
@@ -67,6 +70,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 33-01-PLAN.md (Voucher Batch & Batch Grant DocTypes)
+Stopped at: Completed 33-02-PLAN.md (Voucher Card & Allocation DocTypes)
 Resume file: None
-Next action: Execute 33-02-PLAN.md
+Next action: Execute 33-03-PLAN.md
