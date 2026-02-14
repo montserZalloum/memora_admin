@@ -5,14 +5,14 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v3.0 Voucher Management System — Phase 35 complete, next: Phase 36
+**Current focus:** v3.0 Voucher Management System — Phase 36 in progress
 
 ## Current Position
 
-Phase: 35 of 38 (Allocation & Distribution)
-Plan: 2 of 2 complete
-Status: Phase Complete
-Last activity: 2026-02-14 — Completed 35-02 (Form Buttons & UI)
+Phase: 36 of 38 (Redemption API)
+Plan: 1 of 2 complete
+Status: In Progress
+Last activity: 2026-02-14 — Completed 36-01 (Frappe Voucher Redemption API)
 
 Progress: [###################################.........] 92% (35/38 phases)
 
@@ -74,6 +74,9 @@ Recent decisions affecting current work:
 - [35-01]: Card-batch validation in both API layer and controller validate() for defense-in-depth
 - [35-02]: Dynamic submit indicator color (green=Completed auto-approve, blue=Pending Approval)
 - [35-02]: Optional reject reason (not required) to allow quick rejections
+- [36-01]: Redemption Log status uses DocType Select options (Success, Invalid PIN, etc.) not generic Success/Failed
+- [36-01]: Season validation uses player plan -> season chain (Voucher Batch has no season field)
+- [36-01]: Module-level dicts for error code mapping (_CARD_STATUS_ERRORS, _ERROR_TO_LOG_STATUS)
 
 ### Pending Todos
 
@@ -88,6 +91,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 35-02-PLAN.md (Form Buttons & UI) — Phase 35 complete
+Stopped at: Completed 36-01-PLAN.md (Frappe Voucher Redemption API)
 Resume file: None
-Next action: Begin Phase 36 (Redemption)
+Next action: Execute 36-02-PLAN.md (FastAPI Voucher Endpoints)
