@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v3.0 Voucher Management System — Phase 34: Batch Generation & Void
+**Current focus:** v3.0 Voucher Management System — Phase 35: Allocation & Distribution
 
 ## Current Position
 
-Phase: 34 of 38 (Batch Generation & Void)
-Plan: 3 of 3 complete
-Status: Phase Complete
-Last activity: 2026-02-14 — Completed 34-03 (Export, Void & Cleanup)
+Phase: 35 of 38 (Allocation & Distribution)
+Plan: 1 of 2 complete
+Status: In Progress
+Last activity: 2026-02-14 — Completed 35-01 (Allocation API & Controller)
 
 Progress: [##################################........] 89% (34/38 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 99
+- Total plans completed: 100
 - Milestones shipped: 12
 
 **By Milestone:**
@@ -68,6 +68,10 @@ Recent decisions affecting current work:
 - [34-03]: Direct SQL UPDATE for void_batch instead of ORM per-card save (performance for up to 1000 cards)
 - [34-03]: File doc deletion via frappe.delete_doc handles both DB record and physical file cleanup
 - [34-03]: 30-day TTL for encrypted exports as security/storage tradeoff
+- [35-01]: Two-step save for auto-approve (Draft->Approved->Completed) to respect VALID_TRANSITIONS map
+- [35-01]: status IN ('Available', 'Allocated') in _apply_allocation for re-allocation support without return-first
+- [35-01]: frappe.db.count for batch allocated_count (recount, not increment/decrement) to avoid counter drift
+- [35-01]: Card-batch validation in both API layer and controller validate() for defense-in-depth
 
 ### Pending Todos
 
@@ -82,6 +86,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 34-03-PLAN.md (Export, Void & Cleanup)
+Stopped at: Completed 35-01-PLAN.md (Allocation API & Controller)
 Resume file: None
-Next action: Begin Phase 35
+Next action: Execute 35-02-PLAN.md (Form Buttons & UI)
