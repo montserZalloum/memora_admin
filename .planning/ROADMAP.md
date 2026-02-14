@@ -177,7 +177,11 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
   3. Voucher Allocation DocType exists with Allocation Card child table, supporting both Allocate and Return types
   4. Voucher Redemption Log DocType is read-only after creation (no write/delete permissions) and captures all required audit fields (player, masked PIN, card, library, batch, grant, status, failure_reason, IP, timestamp)
   5. Customer DocType has custom fields for per-library voucher settings (voucher_requires_approval, commission type/value) and `voucher_hmac_secret` is documented as a site_config.json requirement
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 33-01-PLAN.md — Voucher Batch + Batch Grant child table with state machine
+- [ ] 33-02-PLAN.md — Voucher Card + Voucher Allocation + Allocation Card with state machines
+- [ ] 33-03-PLAN.md — Voucher Redemption Log + Customer custom fields + composite index
 
 ### Phase 34: Batch Generation & Void
 **Goal**: Admin can create a batch, generate all cards with cryptographically secure PINs via background job, download a decrypted CSV for physical card printing, and void batches or individual cards.
@@ -274,7 +278,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 | 30. Frappe Auth API Bridge | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 4/4 | Complete | 2026-02-12 |
 | 32. Event Handler & API Migration | v2.0 | 3/3 | Complete | 2026-02-12 |
-| 33. DocType Foundation | v3.0 | 0/TBD | Not started | - |
+| 33. DocType Foundation | v3.0 | 0/3 | Not started | - |
 | 34. Batch Generation & Void | v3.0 | 0/TBD | Not started | - |
 | 35. Allocation & Distribution | v3.0 | 0/TBD | Not started | - |
 | 36. Redemption API | v3.0 | 0/TBD | Not started | - |
