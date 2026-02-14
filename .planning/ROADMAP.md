@@ -192,7 +192,11 @@ Plans:
   2. An encrypted export file (Fernet) is produced at generation time, and admin can click "Export for Print" to download the decrypted CSV (serial_no, pin, product_names, face_value) -- every export is logged in the append-only export_log child table
   3. Admin can void an entire batch (all non-final cards become Void, batch becomes Closed, void_reason is required) or void a single card (Available or Allocated cards become Void, void_reason required)
   4. Batch status transitions are enforced: Draft to Generated to Active to Closed -- invalid transitions are rejected
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 34-01-PLAN.md — Export Log child table, Batch schema additions, and voucher service module (crypto + generator)
+- [ ] 34-02-PLAN.md — Generation background job with bulk insert and Generate Cards button
+- [ ] 34-03-PLAN.md — Export for Print download, batch/card void operations, and cleanup task
 
 ### Phase 35: Allocation & Distribution
 **Goal**: Admin can allocate cards to libraries, manage approval workflows, re-allocate cards between libraries, and process card returns.
@@ -279,7 +283,7 @@ Plans:
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 4/4 | Complete | 2026-02-12 |
 | 32. Event Handler & API Migration | v2.0 | 3/3 | Complete | 2026-02-12 |
 | 33. DocType Foundation | v3.0 | 3/3 | Complete | 2026-02-14 |
-| 34. Batch Generation & Void | v3.0 | 0/TBD | Not started | - |
+| 34. Batch Generation & Void | v3.0 | 0/3 | Not started | - |
 | 35. Allocation & Distribution | v3.0 | 0/TBD | Not started | - |
 | 36. Redemption API | v3.0 | 0/TBD | Not started | - |
 | 37. Financial Integration | v3.0 | 0/TBD | Not started | - |
