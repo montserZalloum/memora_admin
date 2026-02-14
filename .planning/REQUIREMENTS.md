@@ -71,16 +71,16 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 
 ### Scheduled Jobs (SCHED)
 
-- [ ] **SCHED-01**: Daily job: expire cards linked to ended/unpublished seasons (Available/Allocated → Expired, void_reason="Season Ended")
+- [x] **SCHED-01**: Daily job: expire cards linked to ended/unpublished seasons (Available/Allocated → Expired, void_reason="Season Ended")
 - [x] **SCHED-02**: Monthly job (1st): generate consignment invoices for redeemed cards from previous month
 - [x] **SCHED-03**: Rate limit keys auto-expire via Redis TTL (no cleanup job needed)
 
 ### Reports (RPT)
 
-- [ ] **RPT-01**: Sales by Library report — redeemed cards per library with face value, commission, net revenue, invoice status
-- [ ] **RPT-02**: Batch Performance report — card status distribution per batch with redemption rate and days until season end
-- [ ] **RPT-03**: Consignment Reconciliation report — allocated/redeemed/uninvoiced cards per consignment library with amount due
-- [ ] **RPT-04**: Security Audit report — failed redemption attempts per player/IP with failure reason breakdown
+- [x] **RPT-01**: Sales by Library report — redeemed cards per library with face value, commission, net revenue, invoice status
+- [x] **RPT-02**: Batch Performance report — card status distribution per batch with redemption rate and days until season end
+- [x] **RPT-03**: Consignment Reconciliation report — allocated/redeemed/uninvoiced cards per consignment library with amount due
+- [x] **RPT-04**: Security Audit report — failed redemption attempts per player/IP with failure reason breakdown
 
 ## v2 Requirements
 
@@ -159,13 +159,13 @@ Deferred to future milestone.
 | FIN-05 | Phase 37 | Complete |
 | FIN-06 | Phase 37 | Complete |
 | FIN-07 | Phase 37 | Complete |
-| SCHED-01 | Phase 38 | Pending |
+| SCHED-01 | Phase 38 | Complete |
 | SCHED-02 | Phase 37 | Complete |
 | SCHED-03 | Phase 36 | Complete |
-| RPT-01 | Phase 38 | Pending |
-| RPT-02 | Phase 38 | Pending |
-| RPT-03 | Phase 38 | Pending |
-| RPT-04 | Phase 38 | Pending |
+| RPT-01 | Phase 38 | Complete |
+| RPT-02 | Phase 38 | Complete |
+| RPT-03 | Phase 38 | Complete |
+| RPT-04 | Phase 38 | Complete |
 
 **Coverage:**
 - v1 requirements: 51 total

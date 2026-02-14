@@ -14,7 +14,7 @@
 - SHIPPED **v1.8 Memory State Redesign** — Phase 27 (shipped 2026-02-11)
 - SHIPPED **v1.9 Tech Debt & Reliability Fixes** — Phase 28 (shipped 2026-02-12)
 - SHIPPED **v2.0 Mobile-First Player Authentication** — Phases 29-32 (shipped 2026-02-12)
-- ACTIVE **v3.0 Voucher Management System** — Phases 33-38
+- SHIPPED **v3.0 Voucher Management System** — Phases 33-38 (shipped 2026-02-14)
 
 ## Phases (all milestones archived)
 
@@ -163,7 +163,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 - [x] **Phase 35: Allocation & Distribution** — Card allocation to libraries, approval flow, re-allocation, and returns (completed 2026-02-14)
 - [x] **Phase 36: Redemption API** — Frappe whitelisted methods + FastAPI proxy with rate limiting, triggering existing access pipeline (completed 2026-02-14)
 - [x] **Phase 37: Financial Integration** — Prepaid invoicing, credit notes, commission calculation, and consignment billing (completed 2026-02-14)
-- [ ] **Phase 38: Reports & Season Expiration** — Admin reports and season-end card expiration job
+- [x] **Phase 38: Reports & Season Expiration** — Admin reports and season-end card expiration job (completed 2026-02-14)
 
 ---
 
@@ -253,8 +253,8 @@ Plans:
   5. Daily scheduled job expires cards linked to ended or unpublished seasons (Available/Allocated cards become Expired with void_reason="Season Ended")
 **Plans:** 2 plans
 Plans:
-- [ ] 38-01-PLAN.md — Sales by Library + Batch Performance reports with report/ directory setup
-- [ ] 38-02-PLAN.md — Consignment Reconciliation + Security Audit reports + Season Expiration job
+- [x] 38-01-PLAN.md — Sales by Library + Batch Performance reports with report/ directory setup
+- [x] 38-02-PLAN.md — Consignment Reconciliation + Security Audit reports + Season Expiration job
 
 ---
 
@@ -299,6 +299,6 @@ Plans:
 | 35. Allocation & Distribution | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 36. Redemption API | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 37. Financial Integration | v3.0 | 2/2 | Complete | 2026-02-14 |
-| 38. Reports & Season Expiration | v3.0 | 0/2 | Not started | - |
+| 38. Reports & Season Expiration | v3.0 | 2/2 | Complete | 2026-02-14 |
 
-**Total:** 38 phases (106 plans complete, v3.0 in progress) across 13 milestones
+**Total:** 38 phases (108 plans complete, v3.0 complete) across 13 milestones
