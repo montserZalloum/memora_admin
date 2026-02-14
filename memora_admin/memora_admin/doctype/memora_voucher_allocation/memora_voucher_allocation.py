@@ -26,9 +26,47 @@ class MemoraVoucherAllocation(Document):
 		if self.status == "Completed":
 			if self.allocation_type == "Allocate":
 				self._apply_allocation()
+				if self.sale_model == "Prepaid":
+					self._create_prepaid_invoice()
 			elif self.allocation_type == "Return":
 				self._apply_return()
+				if self.sale_model == "Prepaid":
+					self._create_prepaid_credit_note()
+				# FIN-06: Consignment returns require NO financial action
 			self._update_batch_counters()
+
+	def _create_prepaid_invoice(self):
+		"""Create Sales Invoice for completed prepaid allocation (FIN-01).
+
+		Invoice failure is logged but does NOT roll back the allocation --
+		financial docs can be recreated manually if needed.
+		"""
+		try:
+			from memora_admin.memora_admin.services.voucher.invoice import (
+				create_prepaid_allocation_invoice,
+			)
+
+			invoice_name = create_prepaid_allocation_invoice(self.name)
+			frappe.msgprint(f"Sales Invoice {invoice_name} created", alert=True)
+		except Exception:
+			frappe.log_error(title=f"Invoice creation failed for allocation {self.name}")
+
+	def _create_prepaid_credit_note(self):
+		"""Create Credit Note for completed prepaid return (FIN-02).
+
+		Credit note failure is logged but does NOT roll back the return --
+		financial docs can be recreated manually if needed.
+		"""
+		try:
+			from memora_admin.memora_admin.services.voucher.invoice import (
+				create_prepaid_return_credit_note,
+			)
+
+			credit_note_name = create_prepaid_return_credit_note(self.name)
+			if credit_note_name:
+				frappe.msgprint(f"Credit Note {credit_note_name} created", alert=True)
+		except Exception:
+			frappe.log_error(title=f"Credit note creation failed for allocation {self.name}")
 
 	def _validate_status_transition(self):
 		if not self.is_new() and self.has_value_changed("status"):
