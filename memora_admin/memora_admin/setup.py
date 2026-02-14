@@ -10,8 +10,9 @@ import frappe
 
 
 def after_install():
-	"""Create custom roles after app installation."""
+	"""Create custom roles and voucher schema extensions after app installation."""
 	create_task_admin_role()
+	_setup_voucher_schema()
 
 
 def create_task_admin_role():
@@ -134,6 +135,7 @@ def after_migrate():
 	3. item_id column override from varchar to BINARY(16)
 	4. RANGE partitioning by season_seq with composite PK
 	5. Unique + composite indexes for query performance
+	6. Voucher schema extensions (custom fields, composite indexes)
 	"""
 	try:
 		_ensure_uuid_polyfill_functions()
@@ -154,6 +156,12 @@ def after_migrate():
 		_ensure_memory_state_partitioning()
 	except Exception as e:
 		print(f"[after_migrate] Partitioning setup failed: {e}")
+
+	# Voucher schema extensions
+	try:
+		_setup_voucher_schema()
+	except Exception as e:
+		print(f"[after_migrate] Voucher schema setup failed: {e}")
 
 
 def _ensure_uuid_polyfill_functions():
@@ -465,3 +473,40 @@ def _ensure_memory_state_indexes():
 	if _existing_all:
 		frappe.db.sql_ddl("ALTER TABLE `tabMemora Memory State` DROP INDEX idx_mastery")
 		print("[after_migrate] Dropped idx_mastery (write amplification risk at scale)")
+
+
+def _setup_voucher_schema():
+	"""Set up voucher-related schema extensions. Idempotent."""
+	from memora_admin.memora_admin.custom.customer_fields import add_customer_voucher_fields
+
+	# NOTE: voucher_hmac_secret must be manually added to site_config.json before Phase 34.
+	# Generate with: python3 -c 'import secrets; print(secrets.token_hex(32))'
+	# Add to site_config.json: {"voucher_hmac_secret": "<generated_hex>"}
+	# See SEC-06 requirement.
+
+	add_customer_voucher_fields()
+	print("[after_migrate] Customer voucher fields ensured")
+
+	_ensure_voucher_card_indexes()
+
+
+def _ensure_voucher_card_indexes():
+	"""Create composite index on Voucher Card (batch, status) for allocation queries."""
+	# Skip if table doesn't exist yet (fresh install before bench migrate)
+	tables = frappe.db.get_tables()
+	if "tabMemora Voucher Card" not in tables:
+		return
+
+	existing = frappe.db.sql("""
+		SELECT DISTINCT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
+		WHERE TABLE_SCHEMA = DATABASE()
+		AND TABLE_NAME = 'tabMemora Voucher Card'
+		AND INDEX_NAME = 'idx_batch_status'
+	""")
+
+	if not existing:
+		frappe.db.sql_ddl("""
+			ALTER TABLE `tabMemora Voucher Card`
+			ADD INDEX idx_batch_status (batch, status)
+		""")
+		print("[after_migrate] Created INDEX idx_batch_status on tabMemora Voucher Card")
