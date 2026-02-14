@@ -1,0 +1,54 @@
+{
+ "actions": [],
+ "creation": "2026-02-14 09:21:13.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "exported_by",
+  "exported_at",
+  "card_count"
+ ],
+ "fields": [
+  {
+   "fieldname": "exported_by",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Exported By",
+   "options": "User",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "exported_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Exported At",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "card_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Card Count",
+   "read_only": 1,
+   "reqd": 1
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-02-14 09:21:13.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Voucher Batch Export Log",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

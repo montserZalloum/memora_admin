@@ -20,6 +20,9 @@
   "allocated_count",
   "redeemed_count",
   "voided_count",
+  "encrypted_file_url",
+  "section_export_history",
+  "export_log",
   "section_void",
   "void_reason",
   "section_notes",
@@ -116,6 +119,27 @@
    "read_only": 1
   },
   {
+   "fieldname": "encrypted_file_url",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Encrypted File URL",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.status!='Draft'",
+   "fieldname": "section_export_history",
+   "fieldtype": "Section Break",
+   "label": "Export History"
+  },
+  {
+   "fieldname": "export_log",
+   "fieldtype": "Table",
+   "label": "Export Log",
+   "options": "Memora Voucher Batch Export Log",
+   "read_only": 1
+  },
+  {
    "collapsible": 1,
    "depends_on": "eval:doc.status=='Closed'",
    "fieldname": "section_void",
@@ -142,7 +166,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-14 08:08:21.637330",
+ "modified": "2026-02-14 09:21:13.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Voucher Batch",
