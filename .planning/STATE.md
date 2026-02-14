@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v3.0 Voucher Management System — Phase 38 in progress (plan 01 of 02 complete)
+**Current focus:** v3.0 Voucher Management System — Phase 38 complete (all plans done)
 
 ## Current Position
 
 Phase: 38 of 38 (Reports & Season Expiration)
-Plan: 1 of 2 complete
-Status: In Progress
-Last activity: 2026-02-14 — Plan 01 (Script Reports) complete
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-02-14 — Plan 02 (Consignment Reconciliation, Security Audit, Season Expiration) complete
 
-Progress: [######################################......] 98% (37.5/38 phases)
+Progress: [############################################] 100% (38/38 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 107
+- Total plans completed: 108
 - Milestones shipped: 12
 
 **By Milestone:**
@@ -88,6 +88,9 @@ Recent decisions affecting current work:
 - [38-01]: Sales by Library groups by library+batch+sale_model+invoice_status for granular commission calculation
 - [38-01]: Batch Performance uses MIN subquery for season end to handle multi-grant batches conservatively
 - [38-01]: add_total_row=0 for Batch Performance since totaling percentages and days_until_end is meaningless
+- [38-02]: Consignment Reconciliation date filter uses c.modified for full lifecycle visibility
+- [38-02]: Uninvoiced consignment cards displayed as normal data, not errors (monthly billing runs on 1st)
+- [38-02]: Season expiration expires cards if ANY batch grant links to ended/unpublished season (conservative)
 
 ### Pending Todos
 
@@ -101,6 +104,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 38-01-PLAN.md (Script Reports)
+Stopped at: Completed 38-02-PLAN.md (Consignment Reconciliation, Security Audit, Season Expiration)
 Resume file: None
-Next action: Execute 38-02-PLAN.md (remaining reports + season expiration)
+Next action: Phase 38 complete. v3.0 Voucher Management System milestone complete.
