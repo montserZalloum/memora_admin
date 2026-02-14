@@ -19,6 +19,10 @@ def on_purchase_request_created(doc, method):
 	if doc.status != "Pending Approval":
 		return
 
+	# Voucher redemptions auto-approve instantly -- no admin notification needed
+	if doc.payment_method == "Voucher":
+		return
+
 	# Get player display name
 	player_name = frappe.get_value("Memora Player Profile", doc.player, "display_name") or doc.player
 
