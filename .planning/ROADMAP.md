@@ -222,7 +222,10 @@ Plans:
   3. All error codes return Arabic messages (INVALID_PIN, NOT_ALLOCATED, ALREADY_REDEEMED, EXPIRED, VOID, BATCH_INACTIVE, SEASON_INACTIVE, ALL_GRANTS_OWNED, GRANT_NOT_IN_BATCH, ALREADY_OWNED, RATE_LIMITED) -- ALREADY_OWNED does not consume the card
   4. Every redemption attempt (success and failure) is logged in the Voucher Redemption Log with masked PIN (last 4 digits), and HMAC comparison uses hmac.compare_digest() for timing-attack safety
   5. Rate limit keys auto-expire via Redis TTL with no cleanup job needed
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 36-01-PLAN.md — Frappe whitelisted methods (preview_voucher + redeem_voucher) and purchase_sync Voucher bypass
+- [ ] 36-02-PLAN.md — FastAPI layer (VoucherService, Pydantic models, endpoints, rate limiting, config)
 
 ### Phase 37: Financial Integration
 **Goal**: Admins can generate invoices for library allocations, process credit notes for returns, and track commission at product and library level -- including automated monthly consignment billing.
@@ -288,7 +291,7 @@ Plans:
 | 33. DocType Foundation | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 34. Batch Generation & Void | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 35. Allocation & Distribution | v3.0 | 2/2 | Complete | 2026-02-14 |
-| 36. Redemption API | v3.0 | 0/TBD | Not started | - |
+| 36. Redemption API | v3.0 | 0/2 | Not started | - |
 | 37. Financial Integration | v3.0 | 0/TBD | Not started | - |
 | 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
 
