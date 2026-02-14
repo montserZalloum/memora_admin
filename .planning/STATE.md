@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 34 of 38 (Batch Generation & Void)
-Plan: 1 of 3 complete
+Plan: 2 of 3 complete
 Status: In Progress
-Last activity: 2026-02-14 — Completed 34-01 (Schema & Service Foundation)
+Last activity: 2026-02-14 — Completed 34-02 (Batch Generation Workflow)
 
 Progress: [#################################.........] 87% (33/38 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 98
+- Total plans completed: 99
 - Milestones shipped: 12
 
 **By Milestone:**
@@ -62,6 +62,9 @@ Recent decisions affecting current work:
 - [34-01]: HKDF with fixed versioned salt for Fernet key derivation (not PBKDF2) -- designed for high-entropy input
 - [34-01]: PIN alphabet 30 chars excluding ambiguous 0/O/1/I/L for print readability
 - [34-01]: Serial block reservation uses single FOR UPDATE lock for entire block, not per-card
+- [34-02]: Single bulk_insert for all cards (no chunking) since max batch quantity is 1000
+- [34-02]: Document name = serial_no via bulk_insert, bypassing autoname VCH-.#####. pattern
+- [34-02]: grant_label from Product Grant used for CSV export product_names column
 
 ### Pending Todos
 
@@ -76,6 +79,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 34-01-PLAN.md (Schema & Service Foundation)
+Stopped at: Completed 34-02-PLAN.md (Batch Generation Workflow)
 Resume file: None
-Next action: Execute 34-02-PLAN.md
+Next action: Execute 34-03-PLAN.md
