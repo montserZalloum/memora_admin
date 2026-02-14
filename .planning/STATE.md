@@ -9,17 +9,17 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 
 ## Current Position
 
-Phase: 33 of 38 (DocType Foundation)
-Plan: 3 of 3 complete
-Status: Phase Complete
-Last activity: 2026-02-14 — Completed 33-03 (Redemption Log, Custom Fields & Index)
+Phase: 34 of 38 (Batch Generation & Void)
+Plan: 1 of 3 complete
+Status: In Progress
+Last activity: 2026-02-14 — Completed 34-01 (Schema & Service Foundation)
 
 Progress: [#################################.........] 87% (33/38 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 97
+- Total plans completed: 98
 - Milestones shipped: 12
 
 **By Milestone:**
@@ -59,6 +59,9 @@ Recent decisions affecting current work:
 - [33-03]: Redemption Log permissions are create+read only (no write/delete/cancel/share) for immutable audit trail
 - [33-03]: Commission value stored as Data (string) for Decimal precision in Python
 - [33-03]: voucher_hmac_secret is manual site_config.json requirement, not auto-generated
+- [34-01]: HKDF with fixed versioned salt for Fernet key derivation (not PBKDF2) -- designed for high-entropy input
+- [34-01]: PIN alphabet 30 chars excluding ambiguous 0/O/1/I/L for print readability
+- [34-01]: Serial block reservation uses single FOR UPDATE lock for entire block, not per-card
 
 ### Pending Todos
 
@@ -73,6 +76,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 33-03-PLAN.md (Redemption Log, Custom Fields & Index)
+Stopped at: Completed 34-01-PLAN.md (Schema & Service Foundation)
 Resume file: None
-Next action: `/gsd:plan-phase 34`
+Next action: Execute 34-02-PLAN.md
