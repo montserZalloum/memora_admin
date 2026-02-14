@@ -478,6 +478,7 @@ def _ensure_memory_state_indexes():
 def _setup_voucher_schema():
 	"""Set up voucher-related schema extensions. Idempotent."""
 	from memora_admin.memora_admin.custom.customer_fields import add_customer_voucher_fields
+	from memora_admin.memora_admin.custom.invoice_fields import add_voucher_invoice_fields
 
 	# NOTE: voucher_hmac_secret must be manually added to site_config.json before Phase 34.
 	# Generate with: python3 -c 'import secrets; print(secrets.token_hex(32))'
@@ -487,7 +488,44 @@ def _setup_voucher_schema():
 	add_customer_voucher_fields()
 	print("[after_migrate] Customer voucher fields ensured")
 
+	add_voucher_invoice_fields()
+	print("[after_migrate] Voucher invoice Link fields ensured")
+
+	_ensure_voucher_service_item()
 	_ensure_voucher_card_indexes()
+
+
+def _ensure_voucher_service_item():
+	"""Create the MEMORA-VOUCHER-CARD service Item if it doesn't exist.
+
+	This Item is used as the line item on Sales Invoices and Credit Notes
+	for voucher card transactions. It's a non-stock, sales-only service item.
+
+	Wrapped in try/except because it depends on ERPNext's Item DocType
+	being available (ERPNext must be installed).
+	"""
+	try:
+		if frappe.db.exists("Item", "MEMORA-VOUCHER-CARD"):
+			return
+
+		item = frappe.get_doc(
+			{
+				"doctype": "Item",
+				"item_code": "MEMORA-VOUCHER-CARD",
+				"item_name": "Memora Voucher Card",
+				"item_group": "Services",
+				"stock_uom": "Nos",
+				"is_stock_item": 0,
+				"is_sales_item": 1,
+				"include_item_in_manufacturing": 0,
+				"description": "Memora educational voucher card",
+			}
+		)
+		item.insert(ignore_permissions=True)
+		frappe.db.commit()
+		print("[after_migrate] Created MEMORA-VOUCHER-CARD service item")
+	except Exception as e:
+		print(f"[after_migrate] Voucher service item creation skipped: {e}")
 
 
 def _ensure_voucher_card_indexes():
