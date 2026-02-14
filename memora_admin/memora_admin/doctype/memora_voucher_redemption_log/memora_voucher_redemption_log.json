@@ -1,0 +1,123 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "VRLOG-.#####.",
+ "creation": "2026-02-14 08:20:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "player",
+  "pin_masked",
+  "card",
+  "library",
+  "column_break_1",
+  "batch",
+  "requested_grant",
+  "status",
+  "section_details",
+  "failure_reason",
+  "ip_address",
+  "timestamp"
+ ],
+ "fields": [
+  {
+   "fieldname": "player",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Player",
+   "options": "Memora Player Profile",
+   "reqd": 1
+  },
+  {
+   "fieldname": "pin_masked",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "PIN (Masked)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "card",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Card",
+   "options": "Memora Voucher Card"
+  },
+  {
+   "fieldname": "library",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Library",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "batch",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Batch",
+   "options": "Memora Voucher Batch"
+  },
+  {
+   "fieldname": "requested_grant",
+   "fieldtype": "Link",
+   "label": "Requested Grant",
+   "options": "Memora Product Grant"
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Success\nInvalid PIN\nAlready Redeemed\nExpired\nVoid\nBatch Inactive\nSeason Inactive\nAll Grants Owned\nGrant Not In Batch\nAlready Owned\nRate Limited\nNot Allocated\nError",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_details",
+   "fieldtype": "Section Break",
+   "label": "Details"
+  },
+  {
+   "fieldname": "failure_reason",
+   "fieldtype": "Data",
+   "label": "Failure Reason"
+  },
+  {
+   "fieldname": "ip_address",
+   "fieldtype": "Data",
+   "label": "IP Address"
+  },
+  {
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Timestamp",
+   "reqd": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-02-14 08:20:00.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Voucher Redemption Log",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": []
+}
