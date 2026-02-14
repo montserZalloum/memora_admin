@@ -251,7 +251,10 @@ Plans:
   3. Consignment Reconciliation report shows allocated/redeemed/uninvoiced cards per consignment library with amount due
   4. Security Audit report shows failed redemption attempts per player/IP with failure reason breakdown
   5. Daily scheduled job expires cards linked to ended or unpublished seasons (Available/Allocated cards become Expired with void_reason="Season Ended")
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 38-01-PLAN.md — Sales by Library + Batch Performance reports with report/ directory setup
+- [ ] 38-02-PLAN.md — Consignment Reconciliation + Security Audit reports + Season Expiration job
 
 ---
 
@@ -296,6 +299,6 @@ Plans:
 | 35. Allocation & Distribution | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 36. Redemption API | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 37. Financial Integration | v3.0 | 2/2 | Complete | 2026-02-14 |
-| 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
+| 38. Reports & Season Expiration | v3.0 | 0/2 | Not started | - |
 
 **Total:** 38 phases (106 plans complete, v3.0 in progress) across 13 milestones
