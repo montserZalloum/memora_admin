@@ -105,7 +105,7 @@ def generate_cards_job(batch_name: str) -> None:
 
 		# Build product names string from batch grants
 		product_names = ", ".join(
-			frappe.db.get_value("Memora Product Grant", grant.product_grant, "grant_label")
+			frappe.db.get_value("Memora Product Grant", grant.product_grant, "item_code")
 			or grant.product_grant
 			for grant in batch.batch_grants
 		)
@@ -520,7 +520,7 @@ def preview_voucher(pin_hmac: str, player_id: str) -> dict:
 		)
 		if not all_owned:
 			display_name = (
-				frappe.db.get_value("Memora Product Grant", bg.product_grant, "grant_label")
+				frappe.db.get_value("Memora Product Grant", bg.product_grant, "item_code")
 				or bg.product_grant
 			)
 			available_grants.append({
