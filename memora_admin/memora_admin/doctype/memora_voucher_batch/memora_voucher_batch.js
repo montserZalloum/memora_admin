@@ -41,6 +41,73 @@ frappe.ui.form.on("Memora Voucher Batch", {
 			);
 		}
 
+		// Export for Print button: Generated or Active batches with an export file
+		if (["Generated", "Active"].includes(frm.doc.status) && frm.doc.encrypted_file_url) {
+			frm.add_custom_button(
+				__("Export for Print"),
+				function () {
+					window.open(
+						frappe.request.url +
+							"?cmd=memora_admin.memora_admin.api.voucher.export_for_print&batch_name=" +
+							encodeURIComponent(frm.doc.name)
+					);
+					// Reload form after brief delay to show new export_log entry
+					setTimeout(function () {
+						frm.reload_doc();
+					}, 2000);
+				},
+				__("Actions")
+			);
+		}
+
+		// Void Batch button: Generated or Active batches
+		if (["Generated", "Active"].includes(frm.doc.status)) {
+			frm.add_custom_button(
+				__("Void Batch"),
+				function () {
+					frappe.prompt(
+						[
+							{
+								fieldname: "void_reason",
+								fieldtype: "Small Text",
+								label: __("Void Reason"),
+								reqd: 1,
+								description: __(
+									"This will void ALL non-final cards and close the batch. This cannot be undone."
+								),
+							},
+						],
+						function (values) {
+							frappe.call({
+								method: "memora_admin.memora_admin.api.voucher.void_batch",
+								args: {
+									batch_name: frm.doc.name,
+									void_reason: values.void_reason,
+								},
+								callback: function (r) {
+									if (r.message) {
+										frappe.show_alert({
+											message: __(
+												"{0} cards voided. Batch closed.",
+												[r.message.voided_count]
+											),
+											indicator: "orange",
+										});
+										frm.reload_doc();
+									}
+								},
+							});
+						},
+						__("Void Batch"),
+						__("Void")
+					);
+				},
+				__("Actions")
+			);
+			// Make the Void Batch button red
+			frm.change_custom_button_type(__("Void Batch"), __("Actions"), "danger");
+		}
+
 		// Real-time event listeners
 		frappe.realtime.on("batch_generation_complete", function (data) {
 			if (data.batch_name === frm.doc.name) {
