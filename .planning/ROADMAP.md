@@ -159,7 +159,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 ### Phase Overview
 
 - [x] **Phase 33: DocType Foundation** — All voucher schema definitions, state machine enforcement, and security configuration (completed 2026-02-14)
-- [ ] **Phase 34: Batch Generation & Void** — Secure PIN generation, encrypted export for printing, batch/card void operations
+- [x] **Phase 34: Batch Generation & Void** — Secure PIN generation, encrypted export for printing, batch/card void operations (completed 2026-02-14)
 - [ ] **Phase 35: Allocation & Distribution** — Card allocation to libraries, approval flow, re-allocation, and returns
 - [ ] **Phase 36: Redemption API** — Frappe whitelisted methods + FastAPI proxy with rate limiting, triggering existing access pipeline
 - [ ] **Phase 37: Financial Integration** — Prepaid invoicing, credit notes, commission calculation, and consignment billing
@@ -194,9 +194,9 @@ Plans:
   4. Batch status transitions are enforced: Draft to Generated to Active to Closed -- invalid transitions are rejected
 **Plans:** 3 plans
 Plans:
-- [ ] 34-01-PLAN.md — Export Log child table, Batch schema additions, and voucher service module (crypto + generator)
-- [ ] 34-02-PLAN.md — Generation background job with bulk insert and Generate Cards button
-- [ ] 34-03-PLAN.md — Export for Print download, batch/card void operations, and cleanup task
+- [x] 34-01-PLAN.md — Export Log child table, Batch schema additions, and voucher service module (crypto + generator)
+- [x] 34-02-PLAN.md — Generation background job with bulk insert and Generate Cards button
+- [x] 34-03-PLAN.md — Export for Print download, batch/card void operations, and cleanup task
 
 ### Phase 35: Allocation & Distribution
 **Goal**: Admin can allocate cards to libraries, manage approval workflows, re-allocate cards between libraries, and process card returns.
@@ -283,10 +283,10 @@ Plans:
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 4/4 | Complete | 2026-02-12 |
 | 32. Event Handler & API Migration | v2.0 | 3/3 | Complete | 2026-02-12 |
 | 33. DocType Foundation | v3.0 | 3/3 | Complete | 2026-02-14 |
-| 34. Batch Generation & Void | v3.0 | 0/3 | Not started | - |
+| 34. Batch Generation & Void | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 35. Allocation & Distribution | v3.0 | 0/TBD | Not started | - |
 | 36. Redemption API | v3.0 | 0/TBD | Not started | - |
 | 37. Financial Integration | v3.0 | 0/TBD | Not started | - |
 | 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
 
-**Total:** 38 phases (97 plans complete, v3.0 TBD) across 13 milestones
+**Total:** 38 phases (102 plans complete, v3.0 in progress) across 13 milestones
