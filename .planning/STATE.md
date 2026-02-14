@@ -5,21 +5,21 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v3.0 Voucher Management System — Phase 37 complete, Phase 38 next
+**Current focus:** v3.0 Voucher Management System — Phase 38 in progress (plan 01 of 02 complete)
 
 ## Current Position
 
-Phase: 37 of 38 (Financial Integration)
-Plan: 2 of 2 complete
-Status: Phase Complete (verified)
-Last activity: 2026-02-14 — Phase 37 verified, 6/6 must-haves passed
+Phase: 38 of 38 (Reports & Season Expiration)
+Plan: 1 of 2 complete
+Status: In Progress
+Last activity: 2026-02-14 — Plan 01 (Script Reports) complete
 
-Progress: [#####################################.......] 97% (37/38 phases)
+Progress: [######################################......] 98% (37.5/38 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 106
+- Total plans completed: 107
 - Milestones shipped: 12
 
 **By Milestone:**
@@ -85,6 +85,9 @@ Recent decisions affecting current work:
 - [37-01]: Credit notes grouped by original invoice for returns spanning multiple invoices
 - [37-02]: Invoice failure logged but does not block allocation completion (non-critical financial path)
 - [37-02]: str() conversion for frappe.utils date return values before string concatenation
+- [38-01]: Sales by Library groups by library+batch+sale_model+invoice_status for granular commission calculation
+- [38-01]: Batch Performance uses MIN subquery for season end to handle multi-grant batches conservatively
+- [38-01]: add_total_row=0 for Batch Performance since totaling percentages and days_until_end is meaningless
 
 ### Pending Todos
 
@@ -98,6 +101,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Phase 37 verified and complete — all FIN + SCHED-02 requirements satisfied
+Stopped at: Completed 38-01-PLAN.md (Script Reports)
 Resume file: None
-Next action: Begin Phase 38 planning (Reports & Season Expiration)
+Next action: Execute 38-02-PLAN.md (remaining reports + season expiration)
