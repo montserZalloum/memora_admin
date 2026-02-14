@@ -63,7 +63,7 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 					notes = ps.notes
 				else:
 					# Fall back to subject's own title
-					alias_title = frappe.get_value("Memora Subject", comp.target_name, "title")
+					alias_title = frappe.get_value("Memora Subject", comp.target_name, "subject_title")
 					notes = None
 
 				subjects.append({

@@ -1,10 +1,13 @@
 """Product catalog endpoint."""
 
 import redis.asyncio as redis
+import structlog
 from fastapi import APIRouter, HTTPException, status
 
 from fastapi_app.api.deps import CatalogServiceDep, CurrentUser
 from fastapi_app.models.catalog import CatalogResponse
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/catalog", tags=["catalog"])
 
@@ -32,9 +35,16 @@ async def get_catalog(
 			player_id=user.sub,
 		)
 	except redis.RedisError:
+		logger.error("catalog_redis_error", player_id=user.sub, plan_id=user.plan)
 		raise HTTPException(
 			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
 			detail="Service temporarily unavailable",
+		)
+	except Exception:
+		logger.exception("catalog_unexpected_error", player_id=user.sub, plan_id=user.plan)
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail="Internal server error",
 		)
 
 	return CatalogResponse(products=products)
