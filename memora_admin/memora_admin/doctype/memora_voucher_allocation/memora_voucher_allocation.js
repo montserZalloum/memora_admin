@@ -3,13 +3,102 @@
 
 frappe.ui.form.on("Memora Voucher Allocation", {
 	refresh(frm) {
-		// Make type and batch read-only after Draft
+		// Make fields read-only after Draft
 		if (frm.doc.status !== "Draft") {
 			frm.set_df_property("allocation_type", "read_only", 1);
 			frm.set_df_property("batch", "read_only", 1);
 			frm.set_df_property("customer", "read_only", 1);
 			frm.set_df_property("sale_model", "read_only", 1);
 			frm.set_df_property("allocation_cards", "read_only", 1);
+		}
+
+		// Fill Cards button: only on saved Draft allocations
+		if (frm.doc.status === "Draft" && !frm.is_new()) {
+			frm.add_custom_button(
+				__("Fill Cards"),
+				function () {
+					frappe.prompt(
+						[
+							{
+								fieldname: "quantity",
+								fieldtype: "Int",
+								label: __("Number of Cards"),
+								reqd: 1,
+								description: __(
+									"Enter the number of cards to fill. Leave 0 to fill all available."
+								),
+								default: 0,
+							},
+						],
+						function (values) {
+							frappe.call({
+								method: "memora_admin.memora_admin.api.allocation.fill_cards",
+								args: {
+									allocation_name: frm.doc.name,
+									quantity: values.quantity || 0,
+								},
+								freeze: true,
+								freeze_message: __("Filling cards..."),
+								callback: function (r) {
+									if (r.message) {
+										frappe.show_alert({
+											message: __("{0} cards filled.", [
+												r.message.filled_count,
+											]),
+											indicator: "green",
+										});
+										frm.reload_doc();
+									}
+								},
+							});
+						},
+						__("Fill Cards"),
+						__("Fill")
+					);
+				},
+				__("Actions")
+			);
+		}
+
+		// Submit Allocation button: only on saved Draft allocations with cards
+		if (
+			frm.doc.status === "Draft" &&
+			!frm.is_new() &&
+			frm.doc.allocation_cards &&
+			frm.doc.allocation_cards.length > 0
+		) {
+			frm.add_custom_button(
+				__("Submit Allocation"),
+				function () {
+					frappe.confirm(
+						__(
+							"Submit allocation of {0} cards to {1}? This will start the approval process.",
+							[frm.doc.allocation_cards.length, frm.doc.customer]
+						),
+						function () {
+							frappe.call({
+								method: "memora_admin.memora_admin.api.allocation.submit_allocation",
+								args: { allocation_name: frm.doc.name },
+								freeze: true,
+								freeze_message: __("Submitting allocation..."),
+								callback: function (r) {
+									if (r.message) {
+										let indicator =
+											r.message.status === "Completed" ? "green" : "blue";
+										frappe.show_alert({
+											message: __("Allocation {0}.", [r.message.status]),
+											indicator: indicator,
+										});
+										frm.reload_doc();
+									}
+								},
+							});
+						}
+					);
+				},
+				__("Actions")
+			);
+			frm.change_custom_button_type(__("Submit Allocation"), __("Actions"), "primary");
 		}
 	},
 });
