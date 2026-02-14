@@ -207,7 +207,10 @@ Plans:
   2. Libraries with `requires_approval=Yes` go through Pending Approval then Approved flow; others auto-approve on submit -- on approval, each card updates to Allocated with library, allocation, and sale_model fields set
   3. Admin can re-allocate cards from one library to another (Allocated cards can be moved to a different allocation)
   4. Admin can process returns: Allocated cards return to Available status with library, allocation, and sale_model fields cleared, and return_allocation reference set
-**Plans**: TBD
+**Plans:** 2 plans
+Plans:
+- [ ] 35-01-PLAN.md — Allocation API methods + controller on_update side effects
+- [ ] 35-02-PLAN.md — JS form buttons (Fill Cards, Submit, Approve, Reject)
 
 ### Phase 36: Redemption API
 **Goal**: Students can enter a PIN in the app to preview what a voucher unlocks and then redeem it -- content unlocks instantly via the existing subscription pipeline, with full security protections.
