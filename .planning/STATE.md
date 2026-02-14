@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 34 of 38 (Batch Generation & Void)
-Plan: 2 of 3 complete
-Status: In Progress
-Last activity: 2026-02-14 — Completed 34-02 (Batch Generation Workflow)
+Plan: 3 of 3 complete
+Status: Phase Complete
+Last activity: 2026-02-14 — Completed 34-03 (Export, Void & Cleanup)
 
-Progress: [#################################.........] 87% (33/38 phases)
+Progress: [##################################........] 89% (34/38 phases)
 
 ## Performance Metrics
 
@@ -65,6 +65,9 @@ Recent decisions affecting current work:
 - [34-02]: Single bulk_insert for all cards (no chunking) since max batch quantity is 1000
 - [34-02]: Document name = serial_no via bulk_insert, bypassing autoname VCH-.#####. pattern
 - [34-02]: grant_label from Product Grant used for CSV export product_names column
+- [34-03]: Direct SQL UPDATE for void_batch instead of ORM per-card save (performance for up to 1000 cards)
+- [34-03]: File doc deletion via frappe.delete_doc handles both DB record and physical file cleanup
+- [34-03]: 30-day TTL for encrypted exports as security/storage tradeoff
 
 ### Pending Todos
 
@@ -79,6 +82,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 34-02-PLAN.md (Batch Generation Workflow)
+Stopped at: Completed 34-03-PLAN.md (Export, Void & Cleanup)
 Resume file: None
-Next action: Execute 34-03-PLAN.md
+Next action: Begin Phase 35
