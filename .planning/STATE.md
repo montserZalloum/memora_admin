@@ -5,16 +5,16 @@
 See: .planning/PROJECT.md (updated 2026-02-13)
 
 **Core value:** Students can track their learning progress and earn rewards (XP, streaks) with instant feedback and sub-second response times, even at 100K concurrent users.
-**Current focus:** v3.0 Voucher Management System — Phase 36 in progress
+**Current focus:** v3.0 Voucher Management System — Phase 37 in progress
 
 ## Current Position
 
-Phase: 36 of 38 (Redemption API)
-Plan: 2 of 2 complete
-Status: Phase Complete
-Last activity: 2026-02-14 — Completed 36-02 (FastAPI Voucher Endpoints)
+Phase: 37 of 38 (Financial Integration)
+Plan: 1 of 2 complete
+Status: In Progress
+Last activity: 2026-02-14 — Completed 37-01 (Financial Services)
 
-Progress: [####################################........] 95% (36/38 phases)
+Progress: [#####################################.......] 97% (37/38 phases)
 
 ## Performance Metrics
 
@@ -80,6 +80,9 @@ Recent decisions affecting current work:
 - [36-02]: ERROR_STATUS_MAP: 404 INVALID_PIN, 409 conflict, 410 gone, 422 validation, 429 rate limit
 - [36-02]: VoucherService factory takes SettingsDep (needs HMAC secret from config, unlike other services)
 - [36-02]: SERVICE_ERROR returned on FrappeAPIError (generic error, full details logged via structlog)
+- [37-01]: First batch grant with commission_type set wins priority chain (not per-grant resolution)
+- [37-01]: Decimal-to-float conversion only at ERPNext rate assignment point
+- [37-01]: Credit notes grouped by original invoice for returns spanning multiple invoices
 
 ### Pending Todos
 
@@ -88,11 +91,11 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-- ERPNext Sales Invoice availability needs verification during Phase 37 (if not installed, may need lightweight custom invoice DocType)
+- (resolved) ERPNext Sales Invoice confirmed available -- ERPNext 15.93.0 installed, 46+ existing invoices
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 36-02-PLAN.md (FastAPI Voucher Endpoints) — Phase 36 complete
+Stopped at: Completed 37-01-PLAN.md (Financial Services) — Plan 01 complete, Plan 02 remaining
 Resume file: None
-Next action: Begin Phase 37 planning
+Next action: Execute 37-02-PLAN.md (allocation hooks, consignment billing cron)
