@@ -158,7 +158,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 
 ### Phase Overview
 
-- [ ] **Phase 33: DocType Foundation** — All voucher schema definitions, state machine enforcement, and security configuration
+- [x] **Phase 33: DocType Foundation** — All voucher schema definitions, state machine enforcement, and security configuration (completed 2026-02-14)
 - [ ] **Phase 34: Batch Generation & Void** — Secure PIN generation, encrypted export for printing, batch/card void operations
 - [ ] **Phase 35: Allocation & Distribution** — Card allocation to libraries, approval flow, re-allocation, and returns
 - [ ] **Phase 36: Redemption API** — Frappe whitelisted methods + FastAPI proxy with rate limiting, triggering existing access pipeline
@@ -179,9 +179,9 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
   5. Customer DocType has custom fields for per-library voucher settings (voucher_requires_approval, commission type/value) and `voucher_hmac_secret` is documented as a site_config.json requirement
 **Plans:** 3 plans
 Plans:
-- [ ] 33-01-PLAN.md — Voucher Batch + Batch Grant child table with state machine
-- [ ] 33-02-PLAN.md — Voucher Card + Voucher Allocation + Allocation Card with state machines
-- [ ] 33-03-PLAN.md — Voucher Redemption Log + Customer custom fields + composite index
+- [x] 33-01-PLAN.md — Voucher Batch + Batch Grant child table with state machine
+- [x] 33-02-PLAN.md — Voucher Card + Voucher Allocation + Allocation Card with state machines
+- [x] 33-03-PLAN.md — Voucher Redemption Log + Customer custom fields + composite index
 
 ### Phase 34: Batch Generation & Void
 **Goal**: Admin can create a batch, generate all cards with cryptographically secure PINs via background job, download a decrypted CSV for physical card printing, and void batches or individual cards.
@@ -278,11 +278,11 @@ Plans:
 | 30. Frappe Auth API Bridge | v2.0 | 1/1 | Complete | 2026-02-12 |
 | 31. FastAPI Auth Endpoints + OTP System | v2.0 | 4/4 | Complete | 2026-02-12 |
 | 32. Event Handler & API Migration | v2.0 | 3/3 | Complete | 2026-02-12 |
-| 33. DocType Foundation | v3.0 | 0/3 | Not started | - |
+| 33. DocType Foundation | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 34. Batch Generation & Void | v3.0 | 0/TBD | Not started | - |
 | 35. Allocation & Distribution | v3.0 | 0/TBD | Not started | - |
 | 36. Redemption API | v3.0 | 0/TBD | Not started | - |
 | 37. Financial Integration | v3.0 | 0/TBD | Not started | - |
 | 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
 
-**Total:** 38 phases (94 plans complete, v3.0 TBD) across 13 milestones
+**Total:** 38 phases (97 plans complete, v3.0 TBD) across 13 milestones

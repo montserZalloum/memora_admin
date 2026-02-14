@@ -9,7 +9,7 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 
 ### Batch Management (BATCH)
 
-- [ ] **BATCH-01**: Admin can create a Voucher Batch with quantity, pin_length (12/14/16), face_value, and one or more allowed Product Grants
+- [x] **BATCH-01**: Admin can create a Voucher Batch with quantity, pin_length (12/14/16), face_value, and one or more allowed Product Grants
 - [ ] **BATCH-02**: Admin can click "Generate" to produce all Voucher Cards for a batch (background job with chunked processing)
 - [ ] **BATCH-03**: Each generated card gets a sequential serial number (VCH-000001) and HMAC-SHA256 hashed PIN
 - [ ] **BATCH-04**: PIN generation uses `secrets` module for cryptographic randomness; HMAC uses secret key from `site_config.json`
@@ -17,26 +17,26 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 - [ ] **BATCH-06**: Admin can click "Export for Print" to download the decrypted CSV (serial_no, pin, product_names, face_value)
 - [ ] **BATCH-07**: Every export is logged in an append-only export_log child table (exported_by, exported_at, card_count)
 - [ ] **BATCH-08**: Admin can void an entire batch (all non-final cards → Void, batch → Closed, void_reason required)
-- [ ] **BATCH-09**: Batch status transitions: Draft → Generated → Active → Closed (enforced)
+- [x] **BATCH-09**: Batch status transitions: Draft → Generated → Active → Closed (enforced)
 
 ### Voucher Card (CARD)
 
-- [ ] **CARD-01**: Voucher Card DocType with serial_no (unique), pin_hmac (indexed, hidden), batch, library, allocation, status, and redemption fields
-- [ ] **CARD-02**: State machine enforced in code: Available → Allocated → Redeemed/Void/Expired; Redeemed/Void/Expired are final states
-- [ ] **CARD-03**: pin_hmac has a database index for fast lookup during redemption
+- [x] **CARD-01**: Voucher Card DocType with serial_no (unique), pin_hmac (indexed, hidden), batch, library, allocation, status, and redemption fields
+- [x] **CARD-02**: State machine enforced in code: Available → Allocated → Redeemed/Void/Expired; Redeemed/Void/Expired are final states
+- [x] **CARD-03**: pin_hmac has a database index for fast lookup during redemption
 - [ ] **CARD-04**: Admin can void a single card (Available or Allocated → Void, void_reason required)
-- [ ] **CARD-05**: Redemption fields (redeemed_by, redeemed_at, redeemed_grant, subscription_transaction) are read-only in Desk
+- [x] **CARD-05**: Redemption fields (redeemed_by, redeemed_at, redeemed_grant, subscription_transaction) are read-only in Desk
 
 ### Allocation & Distribution (ALLOC)
 
-- [ ] **ALLOC-01**: Voucher Allocation DocType supporting both Allocate and Return types
+- [x] **ALLOC-01**: Voucher Allocation DocType supporting both Allocate and Return types
 - [ ] **ALLOC-02**: Admin can auto-fill cards into allocation by clicking "Fill Cards" (queries available/allocated cards by batch and quantity)
 - [ ] **ALLOC-03**: Admin can manually add/remove cards from the allocation child table before submitting
 - [ ] **ALLOC-04**: Allocation approval flow: libraries with `requires_approval=Yes` go through Pending Approval → Approved; others auto-approve on submit
 - [ ] **ALLOC-05**: On approved allocation: each card updates to Allocated with library, allocation, and sale_model fields set
 - [ ] **ALLOC-06**: Re-allocation supported: Allocated cards can be re-allocated to a different library
 - [ ] **ALLOC-07**: Return flow: Allocated cards return to Available (library, allocation, sale_model cleared; return_allocation set)
-- [ ] **ALLOC-08**: Custom fields on Customer DocType for per-library settings (voucher_requires_approval, commission type/value)
+- [x] **ALLOC-08**: Custom fields on Customer DocType for per-library settings (voucher_requires_approval, commission type/value)
 
 ### Redemption API (REDEEM)
 
@@ -53,11 +53,11 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 ### Security & Audit (SEC)
 
 - [ ] **SEC-01**: Rate limiting on redemption endpoints: 5 attempts/hour per player, 20 attempts/hour per IP (Redis-based)
-- [ ] **SEC-02**: Voucher Redemption Log DocType — immutable audit trail of every attempt (success + failure)
-- [ ] **SEC-03**: Redemption log captures: player, masked PIN (last 4 digits), card, library, batch, requested grant, status, failure_reason, IP, timestamp
-- [ ] **SEC-04**: Redemption Log is read-only after creation (no write, no delete permissions)
-- [ ] **SEC-05**: PINs never visible in Desk UI; pin_hmac field hidden from all views
-- [ ] **SEC-06**: `voucher_hmac_secret` stored in site_config.json (not in database or version control)
+- [x] **SEC-02**: Voucher Redemption Log DocType — immutable audit trail of every attempt (success + failure)
+- [x] **SEC-03**: Redemption log captures: player, masked PIN (last 4 digits), card, library, batch, requested grant, status, failure_reason, IP, timestamp
+- [x] **SEC-04**: Redemption Log is read-only after creation (no write, no delete permissions)
+- [x] **SEC-05**: PINs never visible in Desk UI; pin_hmac field hidden from all views
+- [x] **SEC-06**: `voucher_hmac_secret` stored in site_config.json (not in database or version control)
 
 ### Financial (FIN)
 
@@ -115,7 +115,7 @@ Deferred to future milestone.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BATCH-01 | Phase 33 | Pending |
+| BATCH-01 | Phase 33 | Complete |
 | BATCH-02 | Phase 34 | Pending |
 | BATCH-03 | Phase 34 | Pending |
 | BATCH-04 | Phase 34 | Pending |
@@ -123,20 +123,20 @@ Deferred to future milestone.
 | BATCH-06 | Phase 34 | Pending |
 | BATCH-07 | Phase 34 | Pending |
 | BATCH-08 | Phase 34 | Pending |
-| BATCH-09 | Phase 33 | Pending |
-| CARD-01 | Phase 33 | Pending |
-| CARD-02 | Phase 33 | Pending |
-| CARD-03 | Phase 33 | Pending |
+| BATCH-09 | Phase 33 | Complete |
+| CARD-01 | Phase 33 | Complete |
+| CARD-02 | Phase 33 | Complete |
+| CARD-03 | Phase 33 | Complete |
 | CARD-04 | Phase 34 | Pending |
-| CARD-05 | Phase 33 | Pending |
-| ALLOC-01 | Phase 33 | Pending |
+| CARD-05 | Phase 33 | Complete |
+| ALLOC-01 | Phase 33 | Complete |
 | ALLOC-02 | Phase 35 | Pending |
 | ALLOC-03 | Phase 35 | Pending |
 | ALLOC-04 | Phase 35 | Pending |
 | ALLOC-05 | Phase 35 | Pending |
 | ALLOC-06 | Phase 35 | Pending |
 | ALLOC-07 | Phase 35 | Pending |
-| ALLOC-08 | Phase 33 | Pending |
+| ALLOC-08 | Phase 33 | Complete |
 | REDEEM-01 | Phase 36 | Pending |
 | REDEEM-02 | Phase 36 | Pending |
 | REDEEM-03 | Phase 36 | Pending |
@@ -147,11 +147,11 @@ Deferred to future milestone.
 | REDEEM-08 | Phase 36 | Pending |
 | REDEEM-09 | Phase 36 | Pending |
 | SEC-01 | Phase 36 | Pending |
-| SEC-02 | Phase 33 | Pending |
-| SEC-03 | Phase 33 | Pending |
-| SEC-04 | Phase 33 | Pending |
-| SEC-05 | Phase 33 | Pending |
-| SEC-06 | Phase 33 | Pending |
+| SEC-02 | Phase 33 | Complete |
+| SEC-03 | Phase 33 | Complete |
+| SEC-04 | Phase 33 | Complete |
+| SEC-05 | Phase 33 | Complete |
+| SEC-06 | Phase 33 | Complete |
 | FIN-01 | Phase 37 | Pending |
 | FIN-02 | Phase 37 | Pending |
 | FIN-03 | Phase 37 | Pending |
