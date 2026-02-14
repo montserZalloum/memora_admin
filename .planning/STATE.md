@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 36 of 38 (Redemption API)
-Plan: 1 of 2 complete
-Status: In Progress
-Last activity: 2026-02-14 — Completed 36-01 (Frappe Voucher Redemption API)
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-02-14 — Completed 36-02 (FastAPI Voucher Endpoints)
 
-Progress: [###################################.........] 92% (35/38 phases)
+Progress: [####################################........] 95% (36/38 phases)
 
 ## Performance Metrics
 
@@ -77,6 +77,9 @@ Recent decisions affecting current work:
 - [36-01]: Redemption Log status uses DocType Select options (Success, Invalid PIN, etc.) not generic Success/Failed
 - [36-01]: Season validation uses player plan -> season chain (Voucher Batch has no season field)
 - [36-01]: Module-level dicts for error code mapping (_CARD_STATUS_ERRORS, _ERROR_TO_LOG_STATUS)
+- [36-02]: ERROR_STATUS_MAP: 404 INVALID_PIN, 409 conflict, 410 gone, 422 validation, 429 rate limit
+- [36-02]: VoucherService factory takes SettingsDep (needs HMAC secret from config, unlike other services)
+- [36-02]: SERVICE_ERROR returned on FrappeAPIError (generic error, full details logged via structlog)
 
 ### Pending Todos
 
@@ -86,11 +89,10 @@ Recent decisions affecting current work:
 ### Blockers/Concerns
 
 - ERPNext Sales Invoice availability needs verification during Phase 37 (if not installed, may need lightweight custom invoice DocType)
-- _handle_approval() commit behavior needs integration test in Phase 36 (on_update vs after_insert for status=Completed)
 
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 36-01-PLAN.md (Frappe Voucher Redemption API)
+Stopped at: Completed 36-02-PLAN.md (FastAPI Voucher Endpoints) — Phase 36 complete
 Resume file: None
-Next action: Execute 36-02-PLAN.md (FastAPI Voucher Endpoints)
+Next action: Begin Phase 37 planning
