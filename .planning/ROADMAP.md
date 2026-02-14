@@ -161,7 +161,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 - [x] **Phase 33: DocType Foundation** — All voucher schema definitions, state machine enforcement, and security configuration (completed 2026-02-14)
 - [x] **Phase 34: Batch Generation & Void** — Secure PIN generation, encrypted export for printing, batch/card void operations (completed 2026-02-14)
 - [x] **Phase 35: Allocation & Distribution** — Card allocation to libraries, approval flow, re-allocation, and returns (completed 2026-02-14)
-- [ ] **Phase 36: Redemption API** — Frappe whitelisted methods + FastAPI proxy with rate limiting, triggering existing access pipeline
+- [x] **Phase 36: Redemption API** — Frappe whitelisted methods + FastAPI proxy with rate limiting, triggering existing access pipeline (completed 2026-02-14)
 - [ ] **Phase 37: Financial Integration** — Prepaid invoicing, credit notes, commission calculation, and consignment billing
 - [ ] **Phase 38: Reports & Season Expiration** — Admin reports and season-end card expiration job
 
@@ -224,8 +224,8 @@ Plans:
   5. Rate limit keys auto-expire via Redis TTL with no cleanup job needed
 **Plans:** 2 plans
 Plans:
-- [ ] 36-01-PLAN.md — Frappe whitelisted methods (preview_voucher + redeem_voucher) and purchase_sync Voucher bypass
-- [ ] 36-02-PLAN.md — FastAPI layer (VoucherService, Pydantic models, endpoints, rate limiting, config)
+- [x] 36-01-PLAN.md — Frappe whitelisted methods (preview_voucher + redeem_voucher) and purchase_sync Voucher bypass
+- [x] 36-02-PLAN.md — FastAPI layer (VoucherService, Pydantic models, endpoints, rate limiting, config)
 
 ### Phase 37: Financial Integration
 **Goal**: Admins can generate invoices for library allocations, process credit notes for returns, and track commission at product and library level -- including automated monthly consignment billing.
@@ -291,8 +291,8 @@ Plans:
 | 33. DocType Foundation | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 34. Batch Generation & Void | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 35. Allocation & Distribution | v3.0 | 2/2 | Complete | 2026-02-14 |
-| 36. Redemption API | v3.0 | 0/2 | Not started | - |
+| 36. Redemption API | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 37. Financial Integration | v3.0 | 0/TBD | Not started | - |
 | 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
 
-**Total:** 38 phases (104 plans complete, v3.0 in progress) across 13 milestones
+**Total:** 38 phases (106 plans complete, v3.0 in progress) across 13 milestones

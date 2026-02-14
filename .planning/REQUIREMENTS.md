@@ -40,19 +40,19 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 
 ### Redemption API (REDEEM)
 
-- [ ] **REDEEM-01**: FastAPI `POST /api/v1/voucher/preview` endpoint — validates PIN, returns available grants (filters out already-owned)
-- [ ] **REDEEM-02**: FastAPI `POST /api/v1/voucher/redeem` endpoint — redeems card for a chosen product grant
-- [ ] **REDEEM-03**: Frappe whitelisted method `preview_voucher(pin_hmac, player_id)` with full validation chain
-- [ ] **REDEEM-04**: Frappe whitelisted method `redeem_voucher(pin_hmac, player_id, product_grant_id, ip_address)` with SELECT FOR UPDATE locking
-- [ ] **REDEEM-05**: Redemption creates a Subscription Transaction (payment_method="Voucher", status="Completed") triggering existing Phase 23 hook
-- [ ] **REDEEM-06**: Content unlocks instantly via existing on_subscription_change → SADD to memora:access:{player_id}
-- [ ] **REDEEM-07**: All error codes return Arabic messages (INVALID_PIN, NOT_ALLOCATED, ALREADY_REDEEMED, EXPIRED, VOID, BATCH_INACTIVE, SEASON_INACTIVE, ALL_GRANTS_OWNED, GRANT_NOT_IN_BATCH, ALREADY_OWNED, RATE_LIMITED)
-- [ ] **REDEEM-08**: ALREADY_OWNED does not consume the card (stays Allocated — student can give card to someone else)
-- [ ] **REDEEM-09**: HMAC comparison uses `hmac.compare_digest()` (timing-attack safe)
+- [x] **REDEEM-01**: FastAPI `POST /api/v1/voucher/preview` endpoint — validates PIN, returns available grants (filters out already-owned)
+- [x] **REDEEM-02**: FastAPI `POST /api/v1/voucher/redeem` endpoint — redeems card for a chosen product grant
+- [x] **REDEEM-03**: Frappe whitelisted method `preview_voucher(pin_hmac, player_id)` with full validation chain
+- [x] **REDEEM-04**: Frappe whitelisted method `redeem_voucher(pin_hmac, player_id, product_grant_id, ip_address)` with SELECT FOR UPDATE locking
+- [x] **REDEEM-05**: Redemption creates a Subscription Transaction (payment_method="Voucher", status="Completed") triggering existing Phase 23 hook
+- [x] **REDEEM-06**: Content unlocks instantly via existing on_subscription_change → SADD to memora:access:{player_id}
+- [x] **REDEEM-07**: All error codes return machine-readable codes (INVALID_PIN, NOT_ALLOCATED, ALREADY_REDEEMED, EXPIRED, VOID, BATCH_INACTIVE, SEASON_INACTIVE, ALL_GRANTS_OWNED, GRANT_NOT_IN_BATCH, ALREADY_OWNED, RATE_LIMITED) — English per user decision
+- [x] **REDEEM-08**: ALREADY_OWNED does not consume the card (stays Allocated — student can give card to someone else)
+- [x] **REDEEM-09**: HMAC comparison uses `hmac.compare_digest()` (timing-attack safe)
 
 ### Security & Audit (SEC)
 
-- [ ] **SEC-01**: Rate limiting on redemption endpoints: 5 attempts/hour per player, 20 attempts/hour per IP (Redis-based)
+- [x] **SEC-01**: Rate limiting on redemption endpoints: 5 attempts/hour per player, 20 attempts/hour per IP (Redis-based)
 - [x] **SEC-02**: Voucher Redemption Log DocType — immutable audit trail of every attempt (success + failure)
 - [x] **SEC-03**: Redemption log captures: player, masked PIN (last 4 digits), card, library, batch, requested grant, status, failure_reason, IP, timestamp
 - [x] **SEC-04**: Redemption Log is read-only after creation (no write, no delete permissions)
@@ -73,7 +73,7 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 
 - [ ] **SCHED-01**: Daily job: expire cards linked to ended/unpublished seasons (Available/Allocated → Expired, void_reason="Season Ended")
 - [ ] **SCHED-02**: Monthly job (1st): generate consignment invoices for redeemed cards from previous month
-- [ ] **SCHED-03**: Rate limit keys auto-expire via Redis TTL (no cleanup job needed)
+- [x] **SCHED-03**: Rate limit keys auto-expire via Redis TTL (no cleanup job needed)
 
 ### Reports (RPT)
 
@@ -137,16 +137,16 @@ Deferred to future milestone.
 | ALLOC-06 | Phase 35 | Complete |
 | ALLOC-07 | Phase 35 | Complete |
 | ALLOC-08 | Phase 33 | Complete |
-| REDEEM-01 | Phase 36 | Pending |
-| REDEEM-02 | Phase 36 | Pending |
-| REDEEM-03 | Phase 36 | Pending |
-| REDEEM-04 | Phase 36 | Pending |
-| REDEEM-05 | Phase 36 | Pending |
-| REDEEM-06 | Phase 36 | Pending |
-| REDEEM-07 | Phase 36 | Pending |
-| REDEEM-08 | Phase 36 | Pending |
-| REDEEM-09 | Phase 36 | Pending |
-| SEC-01 | Phase 36 | Pending |
+| REDEEM-01 | Phase 36 | Complete |
+| REDEEM-02 | Phase 36 | Complete |
+| REDEEM-03 | Phase 36 | Complete |
+| REDEEM-04 | Phase 36 | Complete |
+| REDEEM-05 | Phase 36 | Complete |
+| REDEEM-06 | Phase 36 | Complete |
+| REDEEM-07 | Phase 36 | Complete |
+| REDEEM-08 | Phase 36 | Complete |
+| REDEEM-09 | Phase 36 | Complete |
+| SEC-01 | Phase 36 | Complete |
 | SEC-02 | Phase 33 | Complete |
 | SEC-03 | Phase 33 | Complete |
 | SEC-04 | Phase 33 | Complete |
@@ -161,7 +161,7 @@ Deferred to future milestone.
 | FIN-07 | Phase 37 | Pending |
 | SCHED-01 | Phase 38 | Pending |
 | SCHED-02 | Phase 37 | Pending |
-| SCHED-03 | Phase 36 | Pending |
+| SCHED-03 | Phase 36 | Complete |
 | RPT-01 | Phase 38 | Pending |
 | RPT-02 | Phase 38 | Pending |
 | RPT-03 | Phase 38 | Pending |
@@ -174,4 +174,4 @@ Deferred to future milestone.
 
 ---
 *Requirements defined: 2026-02-13*
-*Last updated: 2026-02-13 after roadmap creation — all requirements mapped to phases*
+*Last updated: 2026-02-14 — Phase 36 requirements marked Complete*
