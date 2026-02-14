@@ -1,0 +1,165 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "VCH-.#####.",
+ "creation": "2026-02-14 08:13:44.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "serial_no",
+  "pin_hmac",
+  "batch",
+  "status",
+  "column_break_1",
+  "library",
+  "allocation",
+  "return_allocation",
+  "sale_model",
+  "section_redemption",
+  "redeemed_by",
+  "redeemed_at",
+  "redeemed_grant",
+  "subscription_transaction",
+  "section_void",
+  "void_reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "serial_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Serial No",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "pin_hmac",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "PIN HMAC",
+   "print_hide": 1,
+   "report_hide": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "batch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Batch",
+   "options": "Memora Voucher Batch",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "default": "Available",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Available\nAllocated\nRedeemed\nVoid\nExpired",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "library",
+   "fieldtype": "Link",
+   "in_standard_filter": 1,
+   "label": "Library",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "allocation",
+   "fieldtype": "Link",
+   "label": "Allocation",
+   "options": "Memora Voucher Allocation"
+  },
+  {
+   "fieldname": "return_allocation",
+   "fieldtype": "Link",
+   "label": "Return Allocation",
+   "options": "Memora Voucher Allocation"
+  },
+  {
+   "fieldname": "sale_model",
+   "fieldtype": "Select",
+   "label": "Sale Model",
+   "options": "\nPrepaid\nConsignment"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.status=='Redeemed'",
+   "fieldname": "section_redemption",
+   "fieldtype": "Section Break",
+   "label": "Redemption Details"
+  },
+  {
+   "fieldname": "redeemed_by",
+   "fieldtype": "Link",
+   "label": "Redeemed By",
+   "options": "Memora Player Profile",
+   "read_only": 1
+  },
+  {
+   "fieldname": "redeemed_at",
+   "fieldtype": "Datetime",
+   "label": "Redeemed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "redeemed_grant",
+   "fieldtype": "Link",
+   "label": "Redeemed Grant",
+   "options": "Memora Product Grant",
+   "read_only": 1
+  },
+  {
+   "fieldname": "subscription_transaction",
+   "fieldtype": "Link",
+   "label": "Subscription Transaction",
+   "options": "Memora Subscription Transaction",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.status=='Void' || doc.status=='Expired'",
+   "fieldname": "section_void",
+   "fieldtype": "Section Break",
+   "label": "Void Information"
+  },
+  {
+   "fieldname": "void_reason",
+   "fieldtype": "Small Text",
+   "label": "Void Reason"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-02-14 08:13:44.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Voucher Card",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
