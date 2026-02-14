@@ -3,22 +3,23 @@
 from fastapi import APIRouter
 
 from fastapi_app.api.v1.endpoints import (
-    access,
-    auth,
-    catalog,
-    health,
-    leaderboard,
-    notifications,
-    plans,
-    profile,
-    progress,
-    purchase,
-    reviews,
-    sessions,
-    settings,
-    subscriptions,
-    wallet,
-    webhooks,
+	access,
+	auth,
+	catalog,
+	health,
+	leaderboard,
+	notifications,
+	plans,
+	profile,
+	progress,
+	purchase,
+	reviews,
+	sessions,
+	settings,
+	subscriptions,
+	voucher,
+	wallet,
+	webhooks,
 )
 
 router = APIRouter(prefix="/api/v1")
@@ -39,3 +40,4 @@ router.include_router(webhooks.router)
 router.include_router(notifications.router)
 router.include_router(reviews.router)
 router.include_router(profile.router)
+router.include_router(voucher.router)

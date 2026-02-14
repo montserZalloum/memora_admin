@@ -29,6 +29,7 @@ from fastapi_app.services.review import ReviewService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.stats import StatsService
+from fastapi_app.services.voucher import VoucherService
 from fastapi_app.services.wallet import WalletService
 
 logger = structlog.get_logger()
@@ -309,6 +310,15 @@ async def get_review_service(redis_client: RedisClient) -> ReviewService:
 
 
 ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
+
+
+async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) -> VoucherService:
+	"""Get VoucherService with Redis, FrappeClient, and HMAC secret."""
+	frappe_client = await get_frappe_client()
+	return VoucherService(redis_client, frappe_client, settings.voucher_hmac_secret)
+
+
+VoucherServiceDep = Annotated[VoucherService, Depends(get_voucher_service)]
 
 
 # --- Double-Gate Dependencies ---
