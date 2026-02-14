@@ -1,0 +1,51 @@
+{
+ "actions": [],
+ "creation": "2026-02-14 08:13:44.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "voucher_card",
+  "serial_no",
+  "card_status"
+ ],
+ "fields": [
+  {
+   "fieldname": "voucher_card",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Voucher Card",
+   "options": "Memora Voucher Card",
+   "reqd": 1
+  },
+  {
+   "fetch_from": "voucher_card.serial_no",
+   "fieldname": "serial_no",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Serial No",
+   "read_only": 1
+  },
+  {
+   "fetch_from": "voucher_card.status",
+   "fieldname": "card_status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Card Status",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-02-14 08:13:44.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Voucher Allocation Card",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

@@ -1,0 +1,147 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "VALLOC-.#####.",
+ "creation": "2026-02-14 08:13:44.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "allocation_type",
+  "batch",
+  "customer",
+  "status",
+  "column_break_1",
+  "sale_model",
+  "quantity",
+  "allocation_date",
+  "section_cards",
+  "allocation_cards",
+  "section_notes",
+  "notes",
+  "section_return",
+  "return_reason"
+ ],
+ "fields": [
+  {
+   "default": "Allocate",
+   "fieldname": "allocation_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Type",
+   "options": "Allocate\nReturn",
+   "reqd": 1
+  },
+  {
+   "fieldname": "batch",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Batch",
+   "options": "Memora Voucher Batch",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Library",
+   "options": "Customer",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nPending Approval\nApproved\nRejected\nCompleted\nCancelled",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "sale_model",
+   "fieldtype": "Select",
+   "label": "Sale Model",
+   "options": "Prepaid\nConsignment",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "quantity",
+   "fieldtype": "Int",
+   "label": "Quantity",
+   "read_only": 1
+  },
+  {
+   "fieldname": "allocation_date",
+   "fieldtype": "Date",
+   "label": "Allocation Date"
+  },
+  {
+   "fieldname": "section_cards",
+   "fieldtype": "Section Break",
+   "label": "Cards"
+  },
+  {
+   "fieldname": "allocation_cards",
+   "fieldtype": "Table",
+   "label": "Cards",
+   "options": "Memora Voucher Allocation Card"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.allocation_type=='Return'",
+   "fieldname": "section_return",
+   "fieldtype": "Section Break",
+   "label": "Return Information"
+  },
+  {
+   "fieldname": "return_reason",
+   "fieldtype": "Small Text",
+   "label": "Return Reason"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-14 08:13:44.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Voucher Allocation",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
