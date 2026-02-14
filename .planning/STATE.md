@@ -10,16 +10,16 @@ See: .planning/PROJECT.md (updated 2026-02-13)
 ## Current Position
 
 Phase: 35 of 38 (Allocation & Distribution)
-Plan: 1 of 2 complete
-Status: In Progress
-Last activity: 2026-02-14 — Completed 35-01 (Allocation API & Controller)
+Plan: 2 of 2 complete
+Status: Phase Complete
+Last activity: 2026-02-14 — Completed 35-02 (Form Buttons & UI)
 
-Progress: [##################################........] 89% (34/38 phases)
+Progress: [###################################.........] 92% (35/38 phases)
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 100
+- Total plans completed: 102
 - Milestones shipped: 12
 
 **By Milestone:**
@@ -72,6 +72,8 @@ Recent decisions affecting current work:
 - [35-01]: status IN ('Available', 'Allocated') in _apply_allocation for re-allocation support without return-first
 - [35-01]: frappe.db.count for batch allocated_count (recount, not increment/decrement) to avoid counter drift
 - [35-01]: Card-batch validation in both API layer and controller validate() for defense-in-depth
+- [35-02]: Dynamic submit indicator color (green=Completed auto-approve, blue=Pending Approval)
+- [35-02]: Optional reject reason (not required) to allow quick rejections
 
 ### Pending Todos
 
@@ -86,6 +88,6 @@ Recent decisions affecting current work:
 ## Session Continuity
 
 Last session: 2026-02-14
-Stopped at: Completed 35-01-PLAN.md (Allocation API & Controller)
+Stopped at: Completed 35-02-PLAN.md (Form Buttons & UI) — Phase 35 complete
 Resume file: None
-Next action: Execute 35-02-PLAN.md (Form Buttons & UI)
+Next action: Begin Phase 36 (Redemption)
