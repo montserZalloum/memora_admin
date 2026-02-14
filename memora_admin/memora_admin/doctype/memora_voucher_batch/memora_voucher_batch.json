@@ -1,0 +1,172 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "VBATCH-.#####.",
+ "creation": "2026-02-14 08:08:21.637330",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "batch_name",
+  "status",
+  "column_break_1",
+  "quantity",
+  "pin_length",
+  "face_value",
+  "section_grants",
+  "batch_grants",
+  "section_generation",
+  "generated_count",
+  "allocated_count",
+  "redeemed_count",
+  "voided_count",
+  "section_void",
+  "void_reason",
+  "section_notes",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "batch_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Batch Name",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Draft\nGenerated\nActive\nClosed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "quantity",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Quantity",
+   "reqd": 1
+  },
+  {
+   "default": "12",
+   "fieldname": "pin_length",
+   "fieldtype": "Select",
+   "label": "PIN Length",
+   "options": "12\n14\n16",
+   "reqd": 1
+  },
+  {
+   "fieldname": "face_value",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Face Value",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_grants",
+   "fieldtype": "Section Break",
+   "label": "Product Grants"
+  },
+  {
+   "fieldname": "batch_grants",
+   "fieldtype": "Table",
+   "label": "Product Grants",
+   "options": "Memora Voucher Batch Grant",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_generation",
+   "fieldtype": "Section Break",
+   "label": "Generation"
+  },
+  {
+   "default": "0",
+   "fieldname": "generated_count",
+   "fieldtype": "Int",
+   "label": "Generated Count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "allocated_count",
+   "fieldtype": "Int",
+   "label": "Allocated Count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "redeemed_count",
+   "fieldtype": "Int",
+   "label": "Redeemed Count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "voided_count",
+   "fieldtype": "Int",
+   "label": "Voided Count",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.status=='Closed'",
+   "fieldname": "section_void",
+   "fieldtype": "Section Break",
+   "label": "Void Information"
+  },
+  {
+   "fieldname": "void_reason",
+   "fieldtype": "Small Text",
+   "label": "Void Reason"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_notes",
+   "fieldtype": "Section Break",
+   "label": "Notes"
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Small Text",
+   "label": "Notes"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-14 08:08:21.637330",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Voucher Batch",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "batch_name",
+ "show_title_field_in_link": 1
+}
