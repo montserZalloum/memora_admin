@@ -100,5 +100,84 @@ frappe.ui.form.on("Memora Voucher Allocation", {
 			);
 			frm.change_custom_button_type(__("Submit Allocation"), __("Actions"), "primary");
 		}
+
+		// Approve button: only on Pending Approval allocations
+		if (frm.doc.status === "Pending Approval") {
+			frm.add_custom_button(
+				__("Approve"),
+				function () {
+					frappe.confirm(
+						__(
+							"Approve this allocation? {0} cards will be allocated to {1}.",
+							[frm.doc.allocation_cards.length, frm.doc.customer]
+						),
+						function () {
+							frappe.call({
+								method: "memora_admin.memora_admin.api.allocation.approve_allocation",
+								args: { allocation_name: frm.doc.name },
+								freeze: true,
+								freeze_message: __("Approving allocation..."),
+								callback: function (r) {
+									if (r.message) {
+										frappe.show_alert({
+											message: __("Allocation approved and completed."),
+											indicator: "green",
+										});
+										frm.reload_doc();
+									}
+								},
+							});
+						}
+					);
+				},
+				__("Actions")
+			);
+			frm.change_custom_button_type(__("Approve"), __("Actions"), "primary");
+		}
+
+		// Reject button: only on Pending Approval allocations
+		if (frm.doc.status === "Pending Approval") {
+			frm.add_custom_button(
+				__("Reject"),
+				function () {
+					frappe.prompt(
+						[
+							{
+								fieldname: "reject_reason",
+								fieldtype: "Small Text",
+								label: __("Rejection Reason"),
+								description: __(
+									"Optionally provide a reason for rejecting this allocation."
+								),
+							},
+						],
+						function (values) {
+							frappe.call({
+								method: "memora_admin.memora_admin.api.allocation.reject_allocation",
+								args: {
+									allocation_name: frm.doc.name,
+									reject_reason: values.reject_reason || "",
+								},
+								freeze: true,
+								freeze_message: __("Rejecting allocation..."),
+								callback: function (r) {
+									if (r.message) {
+										frappe.show_alert({
+											message: __("Allocation rejected."),
+											indicator: "orange",
+										});
+										frm.reload_doc();
+									}
+								},
+							});
+						},
+						__("Reject Allocation"),
+						__("Reject")
+					);
+				},
+				__("Actions")
+			);
+			frm.change_custom_button_type(__("Reject"), __("Actions"), "danger");
+		}
 	},
 });
