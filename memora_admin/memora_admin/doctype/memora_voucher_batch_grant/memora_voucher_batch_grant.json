@@ -1,0 +1,50 @@
+{
+ "actions": [],
+ "creation": "2026-02-14 08:08:21.637330",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "product_grant",
+  "commission_type",
+  "commission_value"
+ ],
+ "fields": [
+  {
+   "fieldname": "product_grant",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Product Grant",
+   "options": "Memora Product Grant",
+   "reqd": 1
+  },
+  {
+   "fieldname": "commission_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Commission Type",
+   "options": "\nPercentage\nFixed Amount"
+  },
+  {
+   "fieldname": "commission_value",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Commission Value"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "istable": 1,
+ "links": [],
+ "modified": "2026-02-14 08:08:21.637330",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Voucher Batch Grant",
+ "owner": "Administrator",
+ "permissions": [],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}
