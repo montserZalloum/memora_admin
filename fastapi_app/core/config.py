@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     frappe_api_key: str = ""
     frappe_api_secret: str = ""
 
+    # Voucher Configuration
+    # IMPORTANT: Must match voucher_hmac_secret in Frappe site_config.json
+    voucher_hmac_secret: str = ""
+
 
 @lru_cache
 def get_settings() -> Settings:
