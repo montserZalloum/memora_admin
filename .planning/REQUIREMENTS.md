@@ -30,12 +30,12 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 ### Allocation & Distribution (ALLOC)
 
 - [x] **ALLOC-01**: Voucher Allocation DocType supporting both Allocate and Return types
-- [ ] **ALLOC-02**: Admin can auto-fill cards into allocation by clicking "Fill Cards" (queries available/allocated cards by batch and quantity)
-- [ ] **ALLOC-03**: Admin can manually add/remove cards from the allocation child table before submitting
-- [ ] **ALLOC-04**: Allocation approval flow: libraries with `requires_approval=Yes` go through Pending Approval → Approved; others auto-approve on submit
-- [ ] **ALLOC-05**: On approved allocation: each card updates to Allocated with library, allocation, and sale_model fields set
-- [ ] **ALLOC-06**: Re-allocation supported: Allocated cards can be re-allocated to a different library
-- [ ] **ALLOC-07**: Return flow: Allocated cards return to Available (library, allocation, sale_model cleared; return_allocation set)
+- [x] **ALLOC-02**: Admin can auto-fill cards into allocation by clicking "Fill Cards" (queries available/allocated cards by batch and quantity)
+- [x] **ALLOC-03**: Admin can manually add/remove cards from the allocation child table before submitting
+- [x] **ALLOC-04**: Allocation approval flow: libraries with `requires_approval=Yes` go through Pending Approval → Approved; others auto-approve on submit
+- [x] **ALLOC-05**: On approved allocation: each card updates to Allocated with library, allocation, and sale_model fields set
+- [x] **ALLOC-06**: Re-allocation supported: Allocated cards can be re-allocated to a different library
+- [x] **ALLOC-07**: Return flow: Allocated cards return to Available (library, allocation, sale_model cleared; return_allocation set)
 - [x] **ALLOC-08**: Custom fields on Customer DocType for per-library settings (voucher_requires_approval, commission type/value)
 
 ### Redemption API (REDEEM)
@@ -130,12 +130,12 @@ Deferred to future milestone.
 | CARD-04 | Phase 34 | Complete |
 | CARD-05 | Phase 33 | Complete |
 | ALLOC-01 | Phase 33 | Complete |
-| ALLOC-02 | Phase 35 | Pending |
-| ALLOC-03 | Phase 35 | Pending |
-| ALLOC-04 | Phase 35 | Pending |
-| ALLOC-05 | Phase 35 | Pending |
-| ALLOC-06 | Phase 35 | Pending |
-| ALLOC-07 | Phase 35 | Pending |
+| ALLOC-02 | Phase 35 | Complete |
+| ALLOC-03 | Phase 35 | Complete |
+| ALLOC-04 | Phase 35 | Complete |
+| ALLOC-05 | Phase 35 | Complete |
+| ALLOC-06 | Phase 35 | Complete |
+| ALLOC-07 | Phase 35 | Complete |
 | ALLOC-08 | Phase 33 | Complete |
 | REDEEM-01 | Phase 36 | Pending |
 | REDEEM-02 | Phase 36 | Pending |

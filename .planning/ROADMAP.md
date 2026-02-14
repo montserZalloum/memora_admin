@@ -160,7 +160,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 
 - [x] **Phase 33: DocType Foundation** — All voucher schema definitions, state machine enforcement, and security configuration (completed 2026-02-14)
 - [x] **Phase 34: Batch Generation & Void** — Secure PIN generation, encrypted export for printing, batch/card void operations (completed 2026-02-14)
-- [ ] **Phase 35: Allocation & Distribution** — Card allocation to libraries, approval flow, re-allocation, and returns
+- [x] **Phase 35: Allocation & Distribution** — Card allocation to libraries, approval flow, re-allocation, and returns (completed 2026-02-14)
 - [ ] **Phase 36: Redemption API** — Frappe whitelisted methods + FastAPI proxy with rate limiting, triggering existing access pipeline
 - [ ] **Phase 37: Financial Integration** — Prepaid invoicing, credit notes, commission calculation, and consignment billing
 - [ ] **Phase 38: Reports & Season Expiration** — Admin reports and season-end card expiration job
@@ -209,8 +209,8 @@ Plans:
   4. Admin can process returns: Allocated cards return to Available status with library, allocation, and sale_model fields cleared, and return_allocation reference set
 **Plans:** 2 plans
 Plans:
-- [ ] 35-01-PLAN.md — Allocation API methods + controller on_update side effects
-- [ ] 35-02-PLAN.md — JS form buttons (Fill Cards, Submit, Approve, Reject)
+- [x] 35-01-PLAN.md — Allocation API methods + controller on_update side effects
+- [x] 35-02-PLAN.md — JS form buttons (Fill Cards, Submit, Approve, Reject)
 
 ### Phase 36: Redemption API
 **Goal**: Students can enter a PIN in the app to preview what a voucher unlocks and then redeem it -- content unlocks instantly via the existing subscription pipeline, with full security protections.
@@ -287,9 +287,9 @@ Plans:
 | 32. Event Handler & API Migration | v2.0 | 3/3 | Complete | 2026-02-12 |
 | 33. DocType Foundation | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 34. Batch Generation & Void | v3.0 | 3/3 | Complete | 2026-02-14 |
-| 35. Allocation & Distribution | v3.0 | 0/TBD | Not started | - |
+| 35. Allocation & Distribution | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 36. Redemption API | v3.0 | 0/TBD | Not started | - |
 | 37. Financial Integration | v3.0 | 0/TBD | Not started | - |
 | 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
 
-**Total:** 38 phases (102 plans complete, v3.0 in progress) across 13 milestones
+**Total:** 38 phases (104 plans complete, v3.0 in progress) across 13 milestones
