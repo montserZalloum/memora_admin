@@ -162,7 +162,7 @@ See: `.planning/milestones/v2.0-ROADMAP.md` for full details
 - [x] **Phase 34: Batch Generation & Void** — Secure PIN generation, encrypted export for printing, batch/card void operations (completed 2026-02-14)
 - [x] **Phase 35: Allocation & Distribution** — Card allocation to libraries, approval flow, re-allocation, and returns (completed 2026-02-14)
 - [x] **Phase 36: Redemption API** — Frappe whitelisted methods + FastAPI proxy with rate limiting, triggering existing access pipeline (completed 2026-02-14)
-- [ ] **Phase 37: Financial Integration** — Prepaid invoicing, credit notes, commission calculation, and consignment billing
+- [x] **Phase 37: Financial Integration** — Prepaid invoicing, credit notes, commission calculation, and consignment billing (completed 2026-02-14)
 - [ ] **Phase 38: Reports & Season Expiration** — Admin reports and season-end card expiration job
 
 ---
@@ -238,8 +238,8 @@ Plans:
   4. Monthly scheduled job (1st of month) generates invoices for redeemed consignment cards from the previous month
 **Plans:** 2 plans
 Plans:
-- [ ] 37-01-PLAN.md — Commission calculation, invoice service, custom fields, and service Item
-- [ ] 37-02-PLAN.md — Allocation financial hooks and consignment billing cron job
+- [x] 37-01-PLAN.md — Commission calculation, invoice service, custom fields, and service Item
+- [x] 37-02-PLAN.md — Allocation financial hooks and consignment billing cron job
 
 ### Phase 38: Reports & Season Expiration
 **Goal**: Admins have operational visibility into voucher performance, library sales, consignment reconciliation, and security -- and cards automatically expire when their linked season ends.
@@ -295,7 +295,7 @@ Plans:
 | 34. Batch Generation & Void | v3.0 | 3/3 | Complete | 2026-02-14 |
 | 35. Allocation & Distribution | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 36. Redemption API | v3.0 | 2/2 | Complete | 2026-02-14 |
-| 37. Financial Integration | v3.0 | 0/2 | Not started | - |
+| 37. Financial Integration | v3.0 | 2/2 | Complete | 2026-02-14 |
 | 38. Reports & Season Expiration | v3.0 | 0/TBD | Not started | - |
 
 **Total:** 38 phases (106 plans complete, v3.0 in progress) across 13 milestones

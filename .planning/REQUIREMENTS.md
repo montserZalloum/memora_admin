@@ -61,18 +61,18 @@ Requirements for v3.0 milestone. Each maps to roadmap phases.
 
 ### Financial (FIN)
 
-- [ ] **FIN-01**: Prepaid allocation creates a Sales Invoice for the library (quantity × face_value minus commission)
-- [ ] **FIN-02**: Return of prepaid cards creates a Credit Note (negative Sales Invoice)
-- [ ] **FIN-03**: Commission calculation: product-level override (Voucher Batch Grant) → library default (Customer fields) → zero
-- [ ] **FIN-04**: Commission types: Percentage (face_value × rate / 100) or Fixed Amount per card
-- [ ] **FIN-05**: Consignment monthly billing: scheduled job invoices redeemed consignment cards from the previous month
-- [ ] **FIN-06**: Consignment returns require no financial action (cards were never invoiced)
-- [ ] **FIN-07**: Each card tracks its invoice link (for both prepaid and consignment)
+- [x] **FIN-01**: Prepaid allocation creates a Sales Invoice for the library (quantity × face_value minus commission)
+- [x] **FIN-02**: Return of prepaid cards creates a Credit Note (negative Sales Invoice)
+- [x] **FIN-03**: Commission calculation: product-level override (Voucher Batch Grant) → library default (Customer fields) → zero
+- [x] **FIN-04**: Commission types: Percentage (face_value × rate / 100) or Fixed Amount per card
+- [x] **FIN-05**: Consignment monthly billing: scheduled job invoices redeemed consignment cards from the previous month
+- [x] **FIN-06**: Consignment returns require no financial action (cards were never invoiced)
+- [x] **FIN-07**: Each card tracks its invoice link (for both prepaid and consignment)
 
 ### Scheduled Jobs (SCHED)
 
 - [ ] **SCHED-01**: Daily job: expire cards linked to ended/unpublished seasons (Available/Allocated → Expired, void_reason="Season Ended")
-- [ ] **SCHED-02**: Monthly job (1st): generate consignment invoices for redeemed cards from previous month
+- [x] **SCHED-02**: Monthly job (1st): generate consignment invoices for redeemed cards from previous month
 - [x] **SCHED-03**: Rate limit keys auto-expire via Redis TTL (no cleanup job needed)
 
 ### Reports (RPT)
@@ -152,15 +152,15 @@ Deferred to future milestone.
 | SEC-04 | Phase 33 | Complete |
 | SEC-05 | Phase 33 | Complete |
 | SEC-06 | Phase 33 | Complete |
-| FIN-01 | Phase 37 | Pending |
-| FIN-02 | Phase 37 | Pending |
-| FIN-03 | Phase 37 | Pending |
-| FIN-04 | Phase 37 | Pending |
-| FIN-05 | Phase 37 | Pending |
-| FIN-06 | Phase 37 | Pending |
-| FIN-07 | Phase 37 | Pending |
+| FIN-01 | Phase 37 | Complete |
+| FIN-02 | Phase 37 | Complete |
+| FIN-03 | Phase 37 | Complete |
+| FIN-04 | Phase 37 | Complete |
+| FIN-05 | Phase 37 | Complete |
+| FIN-06 | Phase 37 | Complete |
+| FIN-07 | Phase 37 | Complete |
 | SCHED-01 | Phase 38 | Pending |
-| SCHED-02 | Phase 37 | Pending |
+| SCHED-02 | Phase 37 | Complete |
 | SCHED-03 | Phase 36 | Complete |
 | RPT-01 | Phase 38 | Pending |
 | RPT-02 | Phase 38 | Pending |
@@ -174,4 +174,4 @@ Deferred to future milestone.
 
 ---
 *Requirements defined: 2026-02-13*
-*Last updated: 2026-02-14 — Phase 36 requirements marked Complete*
+*Last updated: 2026-02-14 — Phase 37 requirements marked Complete*
