@@ -247,6 +247,8 @@ scheduler_events = {
 		"0 */6 * * *": ["memora_admin.tasks.plan_sync.sync_all_plan_subjects_to_redis"],
 		# Daily at 02:30: Delete encrypted voucher exports older than 30 days
 		"30 2 * * *": ["memora_admin.tasks.voucher_cleanup.cleanup_expired_exports"],
+		# Monthly on 1st at 02:00: Generate consignment invoices for previous month
+		"0 2 1 * *": ["memora_admin.tasks.consignment_billing.generate_monthly_invoices"],
 	}
 }
 
