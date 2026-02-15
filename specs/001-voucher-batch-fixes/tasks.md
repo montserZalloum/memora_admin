@@ -31,10 +31,10 @@ memora_admin/memora_admin/
 
 **Purpose**: Add `expired_count` field to the Voucher Batch DocType and apply the migration.
 
-- [ ] T001 Add `expired_count` field (Int, read_only, default "0") to `memora_admin/memora_admin/doctype/memora_voucher_batch/memora_voucher_batch.json` — insert after `voided_count` in both `field_order` array (after index of `voided_count`) and in the `fields` array (matching the pattern of `voided_count`: `fieldtype: "Int"`, `read_only: 1`, `default: "0"`, `label: "Expired Count"`, `fieldname: "expired_count"`)
-- [ ] T002 Run `bench --site x.conanacademy.com migrate` to apply the schema change and verify with `bench --site x.conanacademy.com console` that `frappe.get_meta("Memora Voucher Batch").has_field("expired_count")` returns `True`
+- [x] T001 Add `expired_count` field (Int, read_only, default "0") to `memora_admin/memora_admin/doctype/memora_voucher_batch/memora_voucher_batch.json` — insert after `voided_count` in both `field_order` array (after index of `voided_count`) and in the `fields` array (matching the pattern of `voided_count`: `fieldtype: "Int"`, `read_only: 1`, `default: "0"`, `label: "Expired Count"`, `fieldname: "expired_count"`)
+- [x] T002 Run `bench --site x.conanacademy.com migrate` to apply the schema change and verify with `bench --site x.conanacademy.com console` that `frappe.get_meta("Memora Voucher Batch").has_field("expired_count")` returns `True`
 
-**Checkpoint**: Schema ready — `expired_count` field exists on Memora Voucher Batch.
+**Checkpoint**: Schema ready — `expired_count` field exists on Memora Voucher Batch. ✓ COMPLETE
 
 ---
 

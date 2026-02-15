@@ -20,6 +20,7 @@
   "allocated_count",
   "redeemed_count",
   "voided_count",
+  "expired_count",
   "encrypted_file_url",
   "section_export_history",
   "export_log",
@@ -116,6 +117,13 @@
    "fieldname": "voided_count",
    "fieldtype": "Int",
    "label": "Voided Count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "expired_count",
+   "fieldtype": "Int",
+   "label": "Expired Count",
    "read_only": 1
   },
   {
