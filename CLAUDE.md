@@ -194,6 +194,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 ## Active Technologies
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, background jobs, hooks), MariaDB (001-voucher-batch-fixes)
 - MariaDB via Frappe ORM, direct SQL for bulk updates (001-voucher-batch-fixes)
+- Python 3.11+ (Frappe v15) + Frappe Framework (ORM, `frappe.tests.utils.FrappeTestCase`, background jobs) (002-voucher-test-infra)
+- MariaDB via Frappe ORM; `tabSeries` for atomic serial reservation (002-voucher-test-infra)
 
 ## Recent Changes
 - 001-voucher-batch-fixes: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, background jobs, hooks), MariaDB
