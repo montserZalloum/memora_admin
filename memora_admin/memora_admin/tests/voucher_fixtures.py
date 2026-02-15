@@ -130,6 +130,7 @@ def _make_plan(grade: str | None = None, season: str | None = None):
 
 	doc = frappe.get_doc({
 		"doctype": "Memora Academic Plan",
+		"plan_name": f"Test Plan {random_string(8)}",
 		"grade": grade,
 		"season": season,
 	})
@@ -341,6 +342,7 @@ def make_player(
 		"major": major,
 		"season": season,
 		"avatar": "pre",
+		"mobile": "201000000000",
 	})
 	doc.insert(ignore_permissions=True)
 	return doc

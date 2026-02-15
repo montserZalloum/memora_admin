@@ -197,5 +197,23 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, `frappe.tests.utils.FrappeTestCase`, background jobs) (002-voucher-test-infra)
 - MariaDB via Frappe ORM; `tabSeries` for atomic serial reservation (002-voucher-test-infra)
 
+## Test Environment Configuration
+
+**⚠️ TEST ENVIRONMENT ONLY**: The following are real database records used for testing:
+- **Existing Season ID**: `SEAS-00027` (use this for voucher test infrastructure)
+  - Reason: Test fixtures that create new seasons encounter MySQL partitioning constraints
+  - Solution: Reuse existing season instead of creating new ones
+  - Used in: `memora_admin/memora_admin/tests/test_voucher_quickstart.py`
+
+Example usage in tests:
+```python
+from memora_admin.memora_admin.tests.voucher_fixtures import make_product_grant, make_player
+
+# Use existing test season instead of creating new one
+grant = make_product_grant(season="SEAS-00027")
+player = make_player(season="SEAS-00027")
+```
+
 ## Recent Changes
 - 001-voucher-batch-fixes: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, background jobs, hooks), MariaDB
+- 002-voucher-test-infra: Added test fixtures, helpers, and prerequisite validation (Phase 5 & 6 complete)

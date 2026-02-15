@@ -23,8 +23,9 @@ class TestVoucherQuickstartExample(VoucherTestCase):
 
     def test_batch_generation(self):
         """Test basic batch generation workflow."""
-        # Create a product grant (auto-creates plan, season, grade)
-        grant = make_product_grant()
+        # Create a product grant using existing season from test environment
+        # See CLAUDE.md for test environment season ID
+        grant = make_product_grant(season="SEAS-00027")
 
         # Create a batch with that grant
         batch = make_batch(grants=[grant.name])
@@ -39,11 +40,11 @@ class TestVoucherQuickstartExample(VoucherTestCase):
 
     def test_full_voucher_lifecycle(self):
         """Test full voucher lifecycle from setup to allocation."""
-        # Setup
-        grant = make_product_grant()
+        # Setup using existing season from test environment
+        grant = make_product_grant(season="SEAS-00027")
         batch = make_batch(grants=[grant.name], quantity=10)
         library = make_customer()
-        player = make_player()
+        player = make_player(season="SEAS-00027")
 
         # Generate
         generate_batch_sync(batch.name)
