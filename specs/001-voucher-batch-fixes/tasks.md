@@ -42,7 +42,7 @@ memora_admin/memora_admin/
 
 **Purpose**: Create the shared `recount_and_maybe_close()` helper that ALL user story call sites will use. MUST complete before any wiring.
 
-- [ ] T003 Create `memora_admin/memora_admin/services/voucher/batch_utils.py` implementing `recount_and_maybe_close(batch_name: str) -> dict` per the contract in `contracts/batch-counters.md`:
+- [x] T003 Create `memora_admin/memora_admin/services/voucher/batch_utils.py` implementing `recount_and_maybe_close(batch_name: str) -> dict` per the contract in `contracts/batch-counters.md`:
   1. Count cards by status using 4 `frappe.db.count("Memora Voucher Card", {"batch": batch_name, "status": X})` queries for Allocated, Redeemed, Void, Expired
   2. Update all 4 counter fields (`allocated_count`, `redeemed_count`, `voided_count`, `expired_count`) on the batch via single `frappe.db.set_value()` call with `update_modified=True`
   3. Check auto-close: if batch `status == "Active"` AND zero cards remain with status in `["Available", "Allocated"]` (use `frappe.db.count()`), set `status = "Closed"` via `frappe.db.set_value()`
@@ -50,7 +50,7 @@ memora_admin/memora_admin/
   5. Do NOT call `frappe.db.commit()` — caller manages transactions
   6. Do NOT modify `void_reason` or `generated_count`
 
-**Checkpoint**: Helper exists and can be imported. All user story wiring can now begin.
+**Checkpoint**: Helper exists and can be imported. All user story wiring can now begin. ✓ COMPLETE
 
 ---
 
