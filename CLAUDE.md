@@ -190,3 +190,10 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - `.planning/PROJECT.md` - Project vision and requirements
 - `.planning/ROADMAP.md` - Implementation roadmap
 - `.planning/codebase/` - Architecture, stack, conventions docs
+
+## Active Technologies
+- Python 3.11+ (Frappe v15) + Frappe Framework (ORM, background jobs, hooks), MariaDB (001-voucher-batch-fixes)
+- MariaDB via Frappe ORM, direct SQL for bulk updates (001-voucher-batch-fixes)
+
+## Recent Changes
+- 001-voucher-batch-fixes: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, background jobs, hooks), MariaDB
