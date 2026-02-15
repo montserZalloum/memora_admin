@@ -93,7 +93,7 @@
 
 > **Note**: The core `VoucherTestCase` base class was created in Phase 2 (T002). This phase validates it works correctly and ensures the skip messages are clear and actionable.
 
-- [ ] T018 [US3] Validate `VoucherTestCase` prerequisite messages are descriptive and actionable in `memora_admin/memora_admin/tests/voucher_test_base.py`. Review the skip messages from T002: (1) HMAC secret message must include the `bench --site <site> set-config voucher_hmac_secret <secret>` command, (2) Item message must name the exact Item (`MEMORA-VOUCHER-CARD`) and state it needs to be created. Ensure both messages are formatted as single-line strings (no newlines that break test runner output). Adjust if needed.
+- [x] T018 [US3] Validate `VoucherTestCase` prerequisite messages are descriptive and actionable in `memora_admin/memora_admin/tests/voucher_test_base.py`. Review the skip messages from T002: (1) HMAC secret message must include the `bench --site <site> set-config voucher_hmac_secret <secret>` command, (2) Item message must name the exact Item (`MEMORA-VOUCHER-CARD`) and state it needs to be created. Ensure both messages are formatted as single-line strings (no newlines that break test runner output). Adjust if needed.
 
 **Checkpoint**: Running a test extending `VoucherTestCase` on a configured site proceeds normally. On a misconfigured site, tests are skipped with clear, actionable messages.
 
@@ -103,8 +103,8 @@
 
 **Purpose**: Ensure all modules are importable, consistent, and documented inline
 
-- [ ] T019 Verify all 3 modules are importable without errors by running `python -c "from memora_admin.memora_admin.tests.voucher_fixtures import *; from memora_admin.memora_admin.tests.voucher_helpers import *; from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase"` from bench root
-- [ ] T020 Run quickstart.md validation: create a minimal test file that follows the quickstart.md usage pattern (import all fixtures/helpers, extend `VoucherTestCase`, call `make_batch()` + `generate_batch_sync()` + `assert_batch_counters()`) and run it via `bench run-tests`
+- [x] T019 Verify all 3 modules are importable without errors by running `python -c "from memora_admin.memora_admin.tests.voucher_fixtures import *; from memora_admin.memora_admin.tests.voucher_helpers import *; from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase"` from bench root
+- [x] T020 Run quickstart.md validation: create a minimal test file that follows the quickstart.md usage pattern (import all fixtures/helpers, extend `VoucherTestCase`, call `make_batch()` + `generate_batch_sync()` + `assert_batch_counters()`) and run it via `bench run-tests`
 
 ---
 
