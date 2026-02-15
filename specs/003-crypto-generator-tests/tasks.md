@@ -69,7 +69,7 @@
 
 ### Implementation
 
-- [ ] T005 [US2] Implement 5 test methods in `TestComputeHmac` class in `memora_admin/memora_admin/tests/test_generator.py`:
+- [x] T005 [US2] Implement 5 test methods in `TestComputeHmac` class in `memora_admin/memora_admin/tests/test_generator.py`:
   1. `test_hmac_is_deterministic` (FR-005): Compute HMAC of `"ABCDEF123456"` with secret `"test-secret"` twice, assert both results are identical
   2. `test_different_pins_produce_different_hmacs` (FR-006): Compute HMACs of `"ABCDEF123456"` and `"ZYXWVU987654"` with same secret `"test-secret"`, assert results differ
   3. `test_different_secrets_produce_different_hmacs` (FR-007): Compute HMACs of same PIN `"ABCDEF123456"` with secrets `"secret-a"` and `"secret-b"`, assert results differ
@@ -88,7 +88,7 @@
 
 ### Implementation
 
-- [ ] T006 [US3] Implement 5 test methods in `TestReserveSerialBlock(FrappeTestCase)` class in `memora_admin/memora_admin/tests/test_generator.py`. This class uses `FrappeTestCase` (not `unittest.TestCase`) because it requires DB access to `tabSeries`. Add a `setUp` method that deletes any existing `VCH-SERIAL` row from `tabSeries` (via `frappe.db.sql("DELETE FROM tabSeries WHERE name = 'VCH-SERIAL'")`) to ensure a clean series state for each test. Tests:
+- [x] T006 [US3] Implement 5 test methods in `TestReserveSerialBlock(FrappeTestCase)` class in `memora_admin/memora_admin/tests/test_generator.py`. This class uses `FrappeTestCase` (not `unittest.TestCase`) because it requires DB access to `tabSeries`. Add a `setUp` method that deletes any existing `VCH-SERIAL` row from `tabSeries` (via `frappe.db.sql("DELETE FROM tabSeries WHERE name = 'VCH-SERIAL'")`) to ensure a clean series state for each test. Tests:
   1. `test_first_block_starts_at_one` (FR-009): Call `reserve_serial_block(3)`, assert first serial is `"VCH-000001"`
   2. `test_consecutive_blocks_are_contiguous` (FR-010): Reserve block of 3, then block of 2; assert second block starts at `"VCH-000004"` (immediately after first block's last serial `"VCH-000003"`)
   3. `test_serial_format` (FR-011): Reserve a block, assert every serial matches regex `^VCH-\d{6}$`
@@ -107,7 +107,7 @@
 
 ### Implementation
 
-- [ ] T007 [US4] Implement 4 test methods in `TestBuildExportCsv` class in `memora_admin/memora_admin/tests/test_generator.py`. Use `csv.reader` on `io.StringIO` to parse the UTF-8 decoded output of `build_export_csv()`. Test data: 2 cards with `[{"serial_no": "VCH-000001", "pin": "ABCDEF123456"}, {"serial_no": "VCH-000002", "pin": "GHJKMN234567"}]`, product_names `"Test Product"`, face_value `"10.00"`. Tests:
+- [x] T007 [US4] Implement 4 test methods in `TestBuildExportCsv` class in `memora_admin/memora_admin/tests/test_generator.py`. Use `csv.reader` on `io.StringIO` to parse the UTF-8 decoded output of `build_export_csv()`. Test data: 2 cards with `[{"serial_no": "VCH-000001", "pin": "ABCDEF123456"}, {"serial_no": "VCH-000002", "pin": "GHJKMN234567"}]`, product_names `"Test Product"`, face_value `"10.00"`. Tests:
   1. `test_csv_header_row` (FR-013): Parse CSV output, assert first row equals `["serial_no", "pin", "product_names", "face_value"]`
   2. `test_csv_row_count` (FR-014): Build CSV from 2 cards, parse all rows, assert total row count is 3 (1 header + 2 data)
   3. `test_csv_content_matches_input` (FR-015): Parse CSV data rows, assert row[0] serial and PIN match input card data, assert product_names and face_value columns match
@@ -125,7 +125,7 @@
 
 ### Implementation
 
-- [ ] T008 [P] [US5] Implement 3 test methods in `TestCrypto` class in `memora_admin/memora_admin/tests/test_crypto.py`. Test data: `plaintext = b"serial_no,pin\nVCH-000001,ABCDEF123456"`, `secret = "test-secret"`, `wrong_secret = "wrong-secret"`. Tests:
+- [x] T008 [P] [US5] Implement 3 test methods in `TestCrypto` class in `memora_admin/memora_admin/tests/test_crypto.py`. Test data: `plaintext = b"serial_no,pin\nVCH-000001,ABCDEF123456"`, `secret = "test-secret"`, `wrong_secret = "wrong-secret"`. Tests:
   1. `test_encrypt_decrypt_roundtrip` (FR-016): Encrypt plaintext with secret, decrypt result with same secret, assert decrypted bytes equal original plaintext
   2. `test_ciphertext_differs_from_plaintext` (FR-017): Encrypt plaintext, assert encrypted bytes `!=` plaintext bytes
   3. `test_wrong_secret_raises_error` (FR-018): Encrypt with `secret`, then `assertRaises(InvalidToken)` when decrypting with `wrong_secret`
@@ -138,8 +138,8 @@
 
 **Purpose**: Full suite validation, performance check, and final cleanup
 
-- [ ] T009 Run full Phase 3 test suite: execute both `test_generator` and `test_crypto` modules via `bench --site x.conanacademy.com run-tests --app memora_admin --module memora_admin.memora_admin.tests.test_generator` and `bench --site x.conanacademy.com run-tests --app memora_admin --module memora_admin.memora_admin.tests.test_crypto`. Verify all 22 tests pass (SC-001). Verify execution completes in under 30 seconds (SC-003). Fix any failures.
-- [ ] T010 Run quickstart.md validation: follow the exact commands in `specs/003-crypto-generator-tests/quickstart.md` to verify all documented run commands work correctly (full suite, single class, single test). Ensure the troubleshooting scenarios in quickstart.md are accurate.
+- [x] T009 Run full Phase 3 test suite: execute both `test_generator` and `test_crypto` modules via `bench --site x.conanacademy.com run-tests --app memora_admin --module memora_admin.memora_admin.tests.test_generator` and `bench --site x.conanacademy.com run-tests --app memora_admin --module memora_admin.memora_admin.tests.test_crypto`. Verify all 22 tests pass (SC-001). Verify execution completes in under 30 seconds (SC-003). Fix any failures.
+- [x] T010 Run quickstart.md validation: follow the exact commands in `specs/003-crypto-generator-tests/quickstart.md` to verify all documented run commands work correctly (full suite, single class, single test). Ensure the troubleshooting scenarios in quickstart.md are accurate.
 
 ---
 
