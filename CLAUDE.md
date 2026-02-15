@@ -196,6 +196,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM, direct SQL for bulk updates (001-voucher-batch-fixes)
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, `frappe.tests.utils.FrappeTestCase`, background jobs) (002-voucher-test-infra)
 - MariaDB via Frappe ORM; `tabSeries` for atomic serial reservation (002-voucher-test-infra)
+- Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `cryptography 3.4.8` (Fernet, HKDF) (003-crypto-generator-tests)
+- MariaDB via Frappe ORM (serial reservation only; all other tests are DB-free) (003-crypto-generator-tests)
 
 ## Test Environment Configuration
 
@@ -215,5 +217,6 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 003-crypto-generator-tests: Added Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `cryptography 3.4.8` (Fernet, HKDF)
 - 001-voucher-batch-fixes: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, background jobs, hooks), MariaDB
 - 002-voucher-test-infra: Added test fixtures, helpers, and prerequisite validation (Phase 5 & 6 complete)
