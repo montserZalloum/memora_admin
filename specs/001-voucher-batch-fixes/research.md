@@ -6,7 +6,7 @@
 
 ### R-1: Where are batch counters currently updated?
 
-**Finding**: Counter updates are scattered across 3 locations, each using the recount pattern (`frappe.db.count()`):
+**Finding**: Counter updates are scattered across 5 locations, each using the recount pattern (`frappe.db.count()`):
 
 | Location | File:Line | Counter Updated | Trigger |
 |----------|-----------|-----------------|---------|

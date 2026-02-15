@@ -83,7 +83,7 @@ for route in app.routes:
 
 - **Formatter**: Ruff with tabs, double quotes, 110 char line length
 - **Linters**: Ruff (Python), ESLint (JavaScript), Prettier
-- **Python target**: 3.10+
+- **Python target**: 3.11+
 - Run `pre-commit run --all-files` to check formatting
 
 ## Architecture
