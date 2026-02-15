@@ -5,14 +5,19 @@ Provides helper functions to execute common multi-step test operations:
 - get_card_statuses: Query card counts by status
 - fill_and_complete_allocation: Full allocation workflow
 - redeem_card_by_pin: Redeem with plaintext PIN (computes HMAC)
+- get_pins_from_export: Extract plaintext PINs from batch export
 - assert_batch_counters: Assert batch counter fields
 """
 
+import csv
+import io
 import frappe
 
 from memora_admin.memora_admin.api.voucher import (
 	generate_cards_job,
 	redeem_voucher,
+	export_for_print,
+	preview_voucher,
 )
 from memora_admin.memora_admin.api.allocation import (
 	fill_cards,
@@ -165,6 +170,49 @@ def fill_and_complete_allocation(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# T014b: get_pins_from_export() helper
+# ─────────────────────────────────────────────────────────────────────────────
+
+def get_pins_from_export(batch_name: str) -> dict[str, str]:
+	"""Extract serial_no → plaintext PIN mapping from batch export.
+
+	Calls export_for_print() to generate the encrypted CSV export,
+	decrypts it, and parses the CSV to extract serial numbers and PINs.
+
+	Args:
+		batch_name: The Voucher Batch name.
+
+	Returns:
+		Dict mapping serial_no to plaintext PIN, e.g.,
+		``{"VCR-001": "ABCD1234EFGH", "VCR-002": "WXYZ9876STUV"}``.
+
+	Preconditions:
+		- Batch must be in Generated or Active status
+		- Batch must have encrypted export file attached
+		- voucher_hmac_secret must be configured in site config
+
+	Example:
+		pins = get_pins_from_export(batch.name)
+		pin = pins["VCR-001"]
+		result = redeem_card_by_pin(pin, player.name, grant.name)
+	"""
+	# Export requires System Manager role
+	frappe.set_user("Administrator")
+
+	# Call export API — writes CSV to frappe.local.response.filecontent
+	export_for_print(batch_name)
+
+	# Read and decode CSV content
+	csv_content = frappe.local.response.filecontent
+	if isinstance(csv_content, bytes):
+		csv_content = csv_content.decode("utf-8")
+
+	# Parse CSV and build serial_no → PIN mapping
+	reader = csv.DictReader(io.StringIO(csv_content))
+	return {row["serial_no"]: row["pin"] for row in reader}
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # T015: redeem_card_by_pin() helper
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -205,6 +253,45 @@ def redeem_card_by_pin(
 		player_id=player_id,
 		product_grant_id=grant_id,
 		ip_address=ip_address,
+	)
+
+	return result
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# T015b: preview_card_by_pin() helper
+# ─────────────────────────────────────────────────────────────────────────────
+
+def preview_card_by_pin(pin: str, player_id: str) -> dict:
+	"""Preview a voucher card using plaintext PIN.
+
+	Computes HMAC-SHA256 from the plaintext PIN and calls the preview API
+	to retrieve available grants and face value without consuming the card.
+
+	Args:
+		pin: Plaintext PIN (from decrypted export).
+		player_id: Memora Player Profile name.
+
+	Returns:
+		Result dict from preview_voucher():
+		- ``{"face_value": 100, "grants": [...]}`` on success
+		- ``{"error": "ERROR_CODE"}`` on failure
+
+	Preconditions:
+		- Card must be Allocated
+		- Batch must be Active
+
+	Example:
+		preview = preview_card_by_pin("ABCD1234EFGH", player.name)
+		assert "face_value" in preview
+		assert len(preview["grants"]) > 0
+	"""
+	hmac_secret = frappe.conf.get("voucher_hmac_secret")
+	pin_hmac = compute_hmac(pin, hmac_secret)
+
+	result = preview_voucher(
+		pin_hmac=pin_hmac,
+		player_id=player_id,
 	)
 
 	return result
@@ -291,6 +378,8 @@ __all__ = [
 	"generate_batch_sync",
 	"get_card_statuses",
 	"fill_and_complete_allocation",
+	"get_pins_from_export",
 	"redeem_card_by_pin",
+	"preview_card_by_pin",
 	"assert_batch_counters",
 ]

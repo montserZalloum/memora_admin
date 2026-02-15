@@ -148,6 +148,7 @@ def make_product_grant(
 	is_published: bool = True,
 	season: str | None = None,
 	grade: str | None = None,
+	grant_components: list[dict] | None = None,
 ):
 	"""Create a Memora Product Grant document.
 
@@ -160,6 +161,7 @@ def make_product_grant(
 		is_published: Published status (default True)
 		season: Used when auto-creating plan (optional)
 		grade: Used when auto-creating plan (optional)
+		grant_components: List of {"target_doctype": str, "target_name": str} dicts (optional)
 
 	Returns:
 		Saved Memora Product Grant document.
@@ -167,11 +169,21 @@ def make_product_grant(
 	if plan is None:
 		plan = _make_plan(grade=grade, season=season).name
 
+	# Build grant_components child table rows if provided
+	components = []
+	if grant_components:
+		for component in grant_components:
+			components.append({
+				"target_doctype": component["target_doctype"],
+				"target_name": component["target_name"],
+			})
+
 	doc = frappe.get_doc({
 		"doctype": "Memora Product Grant",
 		"item_code": item_code,
 		"plan": plan,
 		"is_published": 1 if is_published else 0,
+		"grant_components": components,
 	})
 	doc.insert(ignore_permissions=True)
 	return doc
