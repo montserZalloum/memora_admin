@@ -1,5 +1,7 @@
 """Base test case for voucher system tests with prerequisite checks."""
 
+import unittest
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
@@ -21,14 +23,14 @@ class VoucherTestCase(FrappeTestCase):
 
 		# Check 1: HMAC secret configured
 		if not frappe.conf.get("voucher_hmac_secret"):
-			cls.skipTest(
+			raise unittest.SkipTest(
 				"voucher_hmac_secret not configured in site config. "
 				"Run: bench --site <site> set-config voucher_hmac_secret <secret>"
 			)
 
 		# Check 2: MEMORA-VOUCHER-CARD Item exists
 		if not frappe.db.exists("Item", "MEMORA-VOUCHER-CARD"):
-			cls.skipTest(
+			raise unittest.SkipTest(
 				"MEMORA-VOUCHER-CARD Item not found. "
 				"Create it in the test site before running voucher tests."
 			)

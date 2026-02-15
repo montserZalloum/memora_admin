@@ -36,7 +36,7 @@
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete
 
-- [x] T002 Implement `VoucherTestCase` base class in `memora_admin/memora_admin/tests/voucher_test_base.py`. Extends `FrappeTestCase`. In `setUpClass()`: call `super().setUpClass()`, then check `frappe.conf.get("voucher_hmac_secret")` exists — if missing, call `cls.skipTest("voucher_hmac_secret not configured in site config. Run: bench --site <site> set-config voucher_hmac_secret <secret>")`. Then check `frappe.db.exists("Item", "MEMORA-VOUCHER-CARD")` — if missing, call `cls.skipTest("MEMORA-VOUCHER-CARD Item not found. Create it in the test site before running voucher tests.")`. Follow contract in `contracts/factory-api.md` exactly.
+- [x] T002 Implement `VoucherTestCase` base class in `memora_admin/memora_admin/tests/voucher_test_base.py`. Extends `FrappeTestCase`. In `setUpClass()`: call `super().setUpClass()`, then check `frappe.conf.get("voucher_hmac_secret")` exists — if missing, raise `unittest.SkipTest("voucher_hmac_secret not configured in site config. Run: bench --site <site> set-config voucher_hmac_secret <secret>")`. Then check `frappe.db.exists("Item", "MEMORA-VOUCHER-CARD")` — if missing, raise `unittest.SkipTest("MEMORA-VOUCHER-CARD Item not found. Create it in the test site before running voucher tests.")`. Import `unittest` at module level. Follow contract in `contracts/factory-api.md` exactly.
 
 **Checkpoint**: Base class ready — US1/US2/US3 implementation can begin
 
