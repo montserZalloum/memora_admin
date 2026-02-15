@@ -15,7 +15,7 @@ from frappe.utils import today, add_days, random_string
 
 def make_season(
 	season_title: str | None = None,
-	season_seq: int = 1,
+	season_seq: int | None = None,
 	start_date: str | None = None,
 	end_date: str | None = None,
 	is_published: bool = True,
@@ -24,7 +24,7 @@ def make_season(
 
 	Args:
 		season_title: Auto-generated if None
-		season_seq: Sequence number (default 1)
+		season_seq: Sequence number (auto-generated if None)
 		start_date: Defaults to today()
 		end_date: Defaults to today() + 365 days
 		is_published: Published status (default True)
@@ -34,6 +34,13 @@ def make_season(
 	"""
 	if season_title is None:
 		season_title = f"Test Season {random_string(8)}"
+
+	if season_seq is None:
+		# Generate unique sequence number to avoid constraint violations
+		import hashlib
+		import time
+		unique_suffix = hashlib.md5(f"{time.time()}{random_string(8)}".encode()).hexdigest()[:6]
+		season_seq = int(unique_suffix, 16) % 10000 + 1
 
 	if start_date is None:
 		start_date = today()
