@@ -62,7 +62,7 @@ memora_admin/memora_admin/
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Wire `expire_season_cards()` in `memora_admin/memora_admin/tasks/season_expiration.py` to call `recount_and_maybe_close()` after expiring cards in each batch. In the loop that processes batches (around line 49-57), after the SQL UPDATE that sets card status to "Expired", add: `from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close` and call `recount_and_maybe_close(batch_name)` for each affected batch.
+- [x] T004 [US1] Wire `expire_season_cards()` in `memora_admin/memora_admin/tasks/season_expiration.py` to call `recount_and_maybe_close()` after expiring cards in each batch. In the loop that processes batches (around line 49-57), after the SQL UPDATE that sets card status to "Expired", add: `from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close` and call `recount_and_maybe_close(batch_name)` for each affected batch.
 
 **Checkpoint**: Expired card tracking works — `expired_count` and `allocated_count` are accurate after expiration job. Acceptance scenarios US1-SC1 through US1-SC4 pass.
 
@@ -76,8 +76,8 @@ memora_admin/memora_admin/
 
 ### Implementation for User Story 2
 
-- [ ] T005 [P] [US2] Replace manual `redeemed_count` recount in `redeem_voucher()` at `memora_admin/memora_admin/api/voucher.py` (lines 685-689) with a call to `recount_and_maybe_close(card.batch)`. Remove the existing `frappe.db.count` + `frappe.db.set_value` for `redeemed_count` and replace with: `from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close` then `recount_and_maybe_close(card.batch)`
-- [ ] T006 [P] [US2] Replace manual `voided_count` recount in `void_card()` at `memora_admin/memora_admin/api/voucher.py` (lines 354-356) with a call to `recount_and_maybe_close(card.batch)`. Remove the existing `frappe.db.count` + `frappe.db.set_value` for `voided_count` and replace with: `from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close` then `recount_and_maybe_close(card.batch)`
+- [x] T005 [P] [US2] Replace manual `redeemed_count` recount in `redeem_voucher()` at `memora_admin/memora_admin/api/voucher.py` (lines 685-689) with a call to `recount_and_maybe_close(card.batch)`. Remove the existing `frappe.db.count` + `frappe.db.set_value` for `redeemed_count` and replace with: `from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close` then `recount_and_maybe_close(card.batch)`
+- [x] T006 [P] [US2] Replace manual `voided_count` recount in `void_card()` at `memora_admin/memora_admin/api/voucher.py` (lines 354-356) with a call to `recount_and_maybe_close(card.batch)`. Remove the existing `frappe.db.count` + `frappe.db.set_value` for `voided_count` and replace with: `from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close` then `recount_and_maybe_close(card.batch)`
 
 **Checkpoint**: Auto-close works from all 3 paths (redeem, void, expire). Acceptance scenarios US2-SC1 through US2-SC6 pass.
 
@@ -87,9 +87,9 @@ memora_admin/memora_admin/
 
 **Purpose**: End-to-end validation and edge case verification.
 
-- [ ] T007 Run quickstart.md verification: `bench --site x.conanacademy.com console` → confirm `expired_count` field exists, create test scenario per quickstart.md, verify counters and auto-close behavior
-- [ ] T008 Verify idempotency: run `expire_season_cards()` twice for the same batch and confirm counter values are identical on both runs (recount, not increment)
-- [ ] T009 Verify `void_batch()` in `memora_admin/memora_admin/api/voucher.py` (line ~274-326) is NOT affected — confirm it still sets `void_reason` and handles its own closure path independently of `recount_and_maybe_close()`
+- [x] T007 Run quickstart.md verification: `bench --site x.conanacademy.com console` → confirm `expired_count` field exists, create test scenario per quickstart.md, verify counters and auto-close behavior
+- [x] T008 Verify idempotency: run `expire_season_cards()` twice for the same batch and confirm counter values are identical on both runs (recount, not increment)
+- [x] T009 Verify `void_batch()` in `memora_admin/memora_admin/api/voucher.py` (line ~274-326) is NOT affected — confirm it still sets `void_reason` and handles its own closure path independently of `recount_and_maybe_close()`
 
 ---
 

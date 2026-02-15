@@ -351,9 +351,9 @@ def void_card(card_name: str, void_reason: str) -> dict:
 	card.void_reason = void_reason
 	card.save(ignore_permissions=True)
 
-	# Update parent batch voided_count
-	new_voided = frappe.db.count("Memora Voucher Card", {"batch": card.batch, "status": "Void"})
-	frappe.db.set_value("Memora Voucher Batch", card.batch, "voided_count", new_voided)
+	# Update parent batch counters and check auto-close
+	from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close
+	recount_and_maybe_close(card.batch)
 	frappe.db.commit()
 
 	return {"status": "Void", "card": card_name}
@@ -682,11 +682,9 @@ def redeem_voucher(
 		product_grant_id, "Success", "", ip_address,
 	)
 
-	# 14. Update batch redeemed_count
-	redeemed = frappe.db.count("Memora Voucher Card", {"batch": card.batch, "status": "Redeemed"})
-	frappe.db.set_value(
-		"Memora Voucher Batch", card.batch, "redeemed_count", redeemed, update_modified=True
-	)
+	# 14. Update batch counters and check auto-close
+	from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close
+	recount_and_maybe_close(card.batch)
 
 	frappe.db.commit()
 
