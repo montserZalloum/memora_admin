@@ -200,6 +200,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM (serial reservation only; all other tests are DB-free) (003-crypto-generator-tests)
 - Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `decimal.Decimal`, ERPNext Sales Invoice (004-commission-invoice-tests)
 - MariaDB via Frappe ORM (for resolution and invoice tests); N/A for pure commission math tests (004-commission-invoice-tests)
+- Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `cryptography 3.4.8` (Fernet/HKDF for export verification) (005-batch-lifecycle-tests)
+- MariaDB via Frappe ORM (card records, batch state, export audit log) (005-batch-lifecycle-tests)
 
 ## Test Environment Configuration
 
@@ -219,6 +221,6 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 005-batch-lifecycle-tests: Added Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `cryptography 3.4.8` (Fernet/HKDF for export verification)
 - 004-commission-invoice-tests: Added Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `decimal.Decimal`, ERPNext Sales Invoice
 - 003-crypto-generator-tests: Added Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `cryptography 3.4.8` (Fernet, HKDF)
-- 001-voucher-batch-fixes: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, background jobs, hooks), MariaDB
