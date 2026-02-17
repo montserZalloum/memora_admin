@@ -49,6 +49,7 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 
 		# Enrich subjects with plan-level metadata (alias_title, notes)
 		subjects = []
+		tracks = []
 		for comp in components:
 			if comp.target_doctype == "Memora Subject":
 				# Try plan-specific metadata first
@@ -72,11 +73,30 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 					"notes": notes,
 				})
 
+			elif comp.target_doctype == "Memora Track":
+				track = frappe.get_value(
+					"Memora Track",
+					comp.target_name,
+					["track_title", "subject", "description", "image"],
+					as_dict=True,
+				)
+				if track:
+					tracks.append({
+						"track_id": comp.target_name,
+						"track_title": track.track_title,
+						"subject_id": track.subject,
+						"description": track.description or None,
+						"image": track.image or None,
+					})
+				else:
+					frappe.logger().warning(f"Track not found: {comp.target_name}, skipping component in grant {grant.name}")
+
 		products.append({
 			"product_grant_id": grant.name,
 			"bundle_name": item_name,
 			"price": float(price) if price else 0.0,
 			"subjects": subjects,
+			"tracks": tracks,
 		})
 
 	return products

@@ -11,6 +11,16 @@ class CatalogSubject(BaseModel):
 	notes: str | None = None
 
 
+class CatalogTrack(BaseModel):
+	"""Separately-sold track within a product bundle."""
+
+	track_id: str
+	track_title: str
+	subject_id: str
+	description: str | None = None
+	image: str | None = None
+
+
 class CatalogProduct(BaseModel):
 	"""A purchasable product in the catalog."""
 
@@ -18,6 +28,7 @@ class CatalogProduct(BaseModel):
 	bundle_name: str = Field(..., description="Item name from ERPNext")
 	price: float = Field(..., description="Raw price_list_rate number")
 	subjects: list[CatalogSubject] = Field(default_factory=list)
+	tracks: list[CatalogTrack] = Field(default_factory=list)
 
 
 class CatalogResponse(BaseModel):
