@@ -17,7 +17,7 @@
 
 **Purpose**: Confirm existing test infrastructure is healthy before adding new tests
 
-- [ ] T001 Verify existing Phase 1-3 tests pass by running `python3 -m pytest fastapi_app/tests/ -v --tb=short` and confirming all 91 tests pass with zero failures
+- [X] T001 Verify existing Phase 1-3 tests pass by running `python3 -m pytest fastapi_app/tests/ -v --tb=short` and confirming all 85 tests pass with zero failures
 
 **Checkpoint**: Baseline confirmed — all existing tests green, safe to add new test files
 
@@ -33,7 +33,7 @@
 
 ### Implementation
 
-- [ ] T002 [US1] Create `fastapi_app/tests/test_voucher_service.py` with 7 tests:
+- [X] T002 [US1] Create `fastapi_app/tests/test_voucher_service.py` with 7 tests:
   - `voucher_svc` fixture: `VoucherService(redis_client, frappe_client=mock_frappe, hmac_secret="test-hmac-secret")`
   - Autouse cleanup fixture: SCAN+DELETE `memora:voucher_fail:player:*` and `memora:voucher_fail:ip:*`
   - TC-VCH-01: `_compute_hmac` determinism — call twice with same PIN, verify identical hex digest matching `hmac.new()`
@@ -59,7 +59,7 @@
 
 ### Implementation
 
-- [ ] T003 [P] [US2] Create `fastapi_app/tests/test_leaderboard_service.py` with 5 tests:
+- [X] T003 [P] [US2] Create `fastapi_app/tests/test_leaderboard_service.py` with 5 tests:
   - `lb_svc` fixture: `LeaderboardService(redis_client)`
   - Autouse cleanup fixture: SCAN+DELETE `memora:lb:*` keys
   - TC-LB-01: `update_leaderboards("P1", 50, 50)` — alltime/daily/weekly sorted sets populated
@@ -69,7 +69,7 @@
   - TC-LB-05: `compute_composite_score(100, ts)` — integer part is 100, earlier timestamp yields higher fractional part
   - Reference: contracts/test-contracts.md Section 2, research.md R-003/R-004/R-005
 
-- [ ] T004 [P] [US2] Create `fastapi_app/tests/test_stats_service.py` with 6 tests:
+- [X] T004 [P] [US2] Create `fastapi_app/tests/test_stats_service.py` with 6 tests:
   - `stats_svc` fixture: `StatsService(redis_client, key_prefix=test_prefix)`
   - TC-STS-01: `get_stats` cache hit — pre-seed via `set_stats`, verify returns same data
   - TC-STS-02: `get_stats` cache miss — empty Redis, returns `None`
@@ -93,7 +93,7 @@
 
 ### Implementation
 
-- [ ] T005 [P] [US3] Create `fastapi_app/tests/test_hierarchy_service.py` with 4 tests:
+- [X] T005 [P] [US3] Create `fastapi_app/tests/test_hierarchy_service.py` with 4 tests:
   - `hierarchy_svc` fixture: `HierarchyService(redis_client, frappe_client=mock_frappe, key_prefix=test_prefix)`
   - TC-HIR-01: Cache hit — pre-seed `{prefix}hierarchy:{subj}`, verify Frappe NOT called
   - TC-HIR-02: Cache miss — Frappe called, result cached with TTL ~3600s
@@ -101,14 +101,14 @@
   - TC-HIR-04: Cache miss with free content — `subjects_with_free_content` set updated
   - Reference: contracts/test-contracts.md Section 4, research.md R-007
 
-- [ ] T006 [P] [US3] Create `fastapi_app/tests/test_plan_service.py` with 3 tests:
+- [X] T006 [P] [US3] Create `fastapi_app/tests/test_plan_service.py` with 3 tests:
   - `plan_svc` fixture: `PlanService(redis_client, frappe_client=mock_frappe, key_prefix=test_prefix)`
   - TC-PLN-01: Cache hit — pre-seed `{prefix}plan:{plan}:manifest`, verify Frappe NOT called
   - TC-PLN-02: Cache miss — Frappe called, result cached with TTL ~3600s
   - TC-PLN-03: `invalidate(plan)` — Redis key deleted
   - Reference: contracts/test-contracts.md Section 7
 
-- [ ] T007 [P] [US3] Create `fastapi_app/tests/test_settings_service.py` with 3 tests:
+- [X] T007 [P] [US3] Create `fastapi_app/tests/test_settings_service.py` with 3 tests:
   - `settings_svc` fixture: `SettingsService(redis_client, frappe_client=mock_frappe)`
   - Autouse cleanup fixture: DELETE `memora:settings:gamification`
   - TC-SET-01: Cache hit — pre-seed hardcoded key, verify Frappe NOT called
@@ -116,7 +116,7 @@
   - TC-SET-03 (edge): Frappe returns `None` — returns default `GamificationSettings()` with `base_lesson_xp=100`
   - Reference: contracts/test-contracts.md Section 8, research.md R-007/R-008
 
-- [ ] T008 [P] [US3] Create `fastapi_app/tests/test_catalog_service.py` with 4 tests:
+- [X] T008 [P] [US3] Create `fastapi_app/tests/test_catalog_service.py` with 4 tests:
   - `catalog_svc` fixture: `CatalogService(redis_client, frappe_client=mock_frappe, key_prefix=test_prefix)`
   - TC-CAT-01: Cache hit — pre-seed `{prefix}catalog:{plan}`, verify Frappe NOT called
   - TC-CAT-02: Cache miss — Frappe called, result cached with NO TTL (infinite)
@@ -124,7 +124,7 @@
   - TC-CAT-04: `get_player_catalog` excludes purchased — SADD access set with ALL subjects, verify filtered
   - Reference: contracts/test-contracts.md Section 5, research.md R-009
 
-- [ ] T009 [P] [US3] Create `fastapi_app/tests/test_profile_service.py` with 4 tests:
+- [X] T009 [P] [US3] Create `fastapi_app/tests/test_profile_service.py` with 4 tests:
   - `profile_svc` fixture: `ProfileService(redis_client, frappe_client=mock_frappe, key_prefix=test_prefix)`
   - TC-PRF-01: Batch cache hit — pre-seed 2 profiles, verify Frappe NOT called
   - TC-PRF-02: Partial miss — 1 cached + 1 missing, Frappe called for missing
@@ -146,7 +146,7 @@
 
 ### Implementation
 
-- [ ] T010 [P] [US4] Create `fastapi_app/tests/test_purchase_service.py` with 4 tests:
+- [X] T010 [P] [US4] Create `fastapi_app/tests/test_purchase_service.py` with 4 tests:
   - `purchase_svc` fixture: `PurchaseService(redis_client, frappe_client=mock_frappe)`
   - Autouse cleanup fixture: DELETE `memora:pending:*` for test user
   - TC-PUR-01: `submit_purchase` success — Frappe called, grant ID added to `memora:pending:{user}` set
@@ -155,7 +155,7 @@
   - TC-PUR-04: Frappe raises `FrappeAPIError(404, "Not Found")` — raises `HTTPException(404)`
   - Reference: contracts/test-contracts.md Section 9, research.md R-011
 
-- [ ] T011 [P] [US4] Create `fastapi_app/tests/test_review_service.py` with 4 tests:
+- [X] T011 [P] [US4] Create `fastapi_app/tests/test_review_service.py` with 4 tests:
   - `review_svc` fixture: `ReviewService(redis_client, frappe_client=mock_frappe)`
   - Autouse cleanup fixture: DELETE `memora:reviews_overview:*` for test player
   - TC-REV-01: `get_overview` cache hit — pre-seed overview key, verify Frappe NOT called
@@ -172,7 +172,7 @@
 
 **Purpose**: Full suite validation and performance check
 
-- [ ] T012 Run full test suite `python3 -m pytest fastapi_app/tests/ -v --tb=short` and verify:
+- [X] T012 Run full test suite `python3 -m pytest fastapi_app/tests/ -v --tb=short` and verify:
   - All Phase 1-3 tests still pass (SC-003: no regressions)
   - All 44 new Phase 4 tests pass (SC-001: 30+ minimum exceeded)
   - All 10 test files present with 2+ tests each (SC-002)
