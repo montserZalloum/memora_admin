@@ -87,6 +87,10 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 	Yields:
 		None after test completes, cleanup runs in teardown.
 	"""
+	# Reset global _frappe_client so each test gets a fresh override
+	import fastapi_app.api.deps as deps_module
+	deps_module._frappe_client = None
+
 	yield
 
 	# Cleanup: Scan and delete all keys matching test prefix and memora:* test keys
@@ -234,7 +238,13 @@ async def app_client(redis_client: redis.Redis, mock_frappe: AsyncMock) -> Async
 	"""
 	# Override dependencies to use test instances
 	app.dependency_overrides[get_redis] = lambda: redis_client
-	app.dependency_overrides[get_frappe_client] = lambda: mock_frappe
+
+	# Override async get_frappe_client with a function that returns the mock
+	# Must be callable (not AsyncMock directly) so FastAPI can call it
+	async def get_mock_frappe_client() -> AsyncMock:
+		return mock_frappe
+
+	app.dependency_overrides[get_frappe_client] = get_mock_frappe_client
 
 	transport = ASGITransport(app=app)
 	client = AsyncClient(transport=transport, base_url="http://test")
