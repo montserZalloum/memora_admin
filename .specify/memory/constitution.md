@@ -1,263 +1,271 @@
 <!--
 SYNC IMPACT REPORT
 ==================
-Version change: N/A → 1.0.0 (initial ratification)
-Modified principles: N/A (initial)
+Version change: Voucher 1.0.0 → Testing 1.0.0 (scope replacement)
+Scope change: Voucher-only → All memora_admin (excluding Voucher & Library)
+Previous constitution: Moved to .specify/memory/voucher-constitution.md
+
+Modified principles:
+  - I. Cryptographic Security → I. Source-of-Truth Awareness (NON-NEGOTIABLE)
+  - II. Auditable Lifecycle → II. Atomic Operation Integrity (NON-NEGOTIABLE)
+  - III. Financial Precision → III. Edge-Case-First Design
+  - IV. Self-Healing Architecture → IV. Test Isolation (NON-NEGOTIABLE)
+  - V. Test-First Coverage → V. Business Flow Completeness
+
 Added sections:
-  - Core Principles (5): Cryptographic Security, Auditable Lifecycle,
-    Financial Precision, Self-Healing Architecture, Test-First Coverage
-  - Architecture & Constraints (domain glossary, DocType hierarchy,
-    service layer, integration points, hard constraints)
-  - Known Gaps & Remediation (10 identified gaps with severity ratings)
+  - Core Principles (5): Source-of-Truth Awareness, Atomic Operation
+    Integrity, Edge-Case-First Design, Test Isolation, Business Flow
+    Completeness
+  - Excluded Scope (Voucher System, Library System)
+  - Architecture Constraints (tech stack, Redis key patterns, DocTypes)
+  - Known Risks & Required Test Coverage (10 risks with severity)
+  - Quality Gates (3 gates: Pre-Merge, Coverage Threshold, Risk Coverage)
   - Governance
-Removed sections: N/A (initial)
+
+Removed sections:
+  - All voucher-specific sections (moved to voucher-constitution.md)
+
 Templates requiring updates:
   - .specify/templates/plan-template.md — Constitution Check gates
-    derivable from principles ✅ (no update needed, gates are filled at
+    derivable from principles ✅ (no update needed, gates filled at
     plan time)
   - .specify/templates/spec-template.md — FR-XXX format compatible ✅
   - .specify/templates/tasks-template.md — phase-based structure
     compatible ✅
+  - .specify/templates/commands/ — no command files exist, N/A ✅
+
 Follow-up TODOs: None
 -->
 
-# Memora Voucher System Constitution
+# Memora Testing Constitution
 
 ## Core Principles
 
-### I. Cryptographic Security (NON-NEGOTIABLE)
+### I. Source-of-Truth Awareness (NON-NEGOTIABLE)
 
-Every voucher PIN MUST be generated using `secrets.choice()` from a
-30-character unambiguous alphabet. The `random` module is FORBIDDEN for
-any security-sensitive operation.
+Every test MUST understand the dual-storage architecture: **Redis is
+hot cache, MariaDB is source of truth**. Tests that only validate one
+layer are incomplete.
 
-- **PIN storage**: HMAC-SHA256 hash only. Plaintext MUST NEVER be
-  persisted in the database.
-- **PIN verification**: MUST use `hmac.compare_digest()` (timing-safe
-  comparison) to prevent timing attacks.
-- **Export encryption**: Fernet (AES-128-CBC + HMAC-SHA256) with
-  HKDF-SHA256-derived key from `site_config.json` secret. Export
-  access requires System Manager role and produces an audit log entry
-  in the Batch Export Log child table.
-- **HMAC secret**: Stored in `site_config.json` as
-  `voucher_hmac_secret`. MUST NOT exist in the database or version
-  control.
-- **Card locking**: Redemption flow MUST use `SELECT ... FOR UPDATE`
-  to prevent race conditions.
-- **Serial numbers**: Atomic `tabSeries` reservation with
-  `FOR UPDATE` guarantees no gaps under concurrency.
+- **Write paths**: MUST verify BOTH Redis state AND MariaDB state (or
+  dirty-queue membership for async sync).
+- **Read paths**: MUST verify hydration behavior — when Redis is empty,
+  the system MUST self-heal from MariaDB.
+- **Dirty sets**: Any operation that modifies Redis wallet/progress
+  MUST add the player to the corresponding dirty set
+  (`memora:dirty:wallets`, `memora:dirty:progress`).
+- **Cache invalidation**: Tests for admin operations (product grant
+  changes, settings updates) MUST verify that Redis caches are
+  invalidated.
 
-**Rationale**: Voucher PINs are bearer credentials with monetary value.
-Any weakness in generation, storage, or verification creates direct
-financial exposure.
+**Rationale**: 100k+ concurrent students depend on Redis-MariaDB
+consistency. A test that validates only the API response without
+checking underlying state is a false positive waiting to happen.
 
-### II. Auditable Lifecycle
+### II. Atomic Operation Integrity (NON-NEGOTIABLE)
 
-Every Batch, Card, and Allocation MUST follow its defined state machine
-exactly. No state transition may occur outside the documented paths.
+Every Lua script and Redis pipeline MUST be tested as an atomic unit.
+Tests MUST NOT decompose atomic operations into sequential steps.
 
-**Batch states**:
-`Draft` -> `Generated` -> `Active` -> `Closed`
+- **Lua scripts**: `SESSION_COMPLETE_SCRIPT`, `START_SESSION_SCRIPT`,
+  `STREAK_UPDATE_SCRIPT`, `REGISTER_DEVICE_SCRIPT` — each MUST be
+  tested with its exact key/argument patterns.
+- **Pipelines**: The lesson completion pipeline (HINCRBY xp -> SADD
+  dirty -> HINCRBY stats -> EXPIRE) MUST be validated as a single
+  transaction.
+- **Return values**: Lua script return values (e.g., `is_replay` from
+  SETBIT, `streak_updated` from streak script) MUST be asserted —
+  they drive downstream business logic.
 
-**Card states**:
-`Available` -> `Allocated` -> `Redeemed` | `Void` | `Expired`
-(with `Allocated` -> `Available` on return allocation)
+**Rationale**: Decomposing atomic operations into individual Redis
+commands in tests masks race conditions that only appear under
+concurrency.
 
-**Allocation states**:
-`Draft` -> `Pending Approval` -> `Approved` -> `Completed` | `Rejected`
-(auto-approve path: `Draft` -> `Approved` -> `Completed` when library
-does not require approval)
+### III. Edge-Case-First Design
 
-- The `Memora Voucher Redemption Log` is IMMUTABLE. Every redemption
-  attempt (success or failure) MUST be recorded with its outcome code.
-- Terminal card states (`Redeemed`, `Void`, `Expired`) are
-  irreversible.
-- Batch counters (`available_count`, `allocated_count`,
-  `redeemed_count`, `void_count`, `expired_count`) MUST stay
-  consistent with actual card states at all times.
+Every test module MUST include edge case tests proportional to the
+happy path tests. Minimum ratio: 1 edge case per 2 happy paths.
 
-**Rationale**: Vouchers represent financial instruments. Missing or
-inconsistent audit trails create reconciliation failures and potential
-fraud vectors.
+- **Registration**: duplicate phone, expired OTP, max attempts,
+  pending reservation collision, missing X-Device-ID.
+- **Session lifecycle**: end without start, double-end, session TTL
+  expiry, force-close on new start.
+- **XP calculation**: zero streak, max streak cap, replay vs fresh,
+  zero hearts, negative edge.
+- **Access control**: no grants, expired grants, plan-only access,
+  track-level fallback, free content bypass.
+- **Hydration**: empty Redis (cold start), partial Redis (some keys
+  missing), MariaDB unreachable during hydration.
 
-### III. Financial Precision
+**Rationale**: At 100k+ students, every edge case WILL occur. A 0.01%
+edge case at this scale means 10+ affected users per event.
 
-All monetary calculations MUST use `decimal.Decimal` with
-`ROUND_HALF_UP` to two decimal places. Float conversion is permitted
-ONLY at the ERPNext ORM boundary (`float(result)`).
+### IV. Test Isolation (NON-NEGOTIABLE)
 
-**Commission priority chain (FIN-03)**:
-1. Batch Grant override (per-product commission on child row)
-2. Library default (`voucher_commission_type` /
-   `voucher_commission_value` on Customer)
-3. Zero (no commission; full face value invoiced)
+Every test MUST create its own data and clean up after itself. No test
+may depend on another test's side effects.
 
-**Invoicing rules**:
+- **Player creation**: Use factory functions that generate unique
+  `PLAYER-TEST-{uuid}` identifiers.
+- **Redis keys**: All test Redis keys MUST use a test-specific prefix
+  or be cleaned in teardown.
+- **MariaDB records**: Use `frappe.db.rollback()` or explicit cleanup
+  in teardown.
+- **Deterministic time**: Tests involving streak logic, OTP expiry, or
+  session TTL MUST mock `datetime.now()` — never rely on wall clock.
+- **No shared state**: Tests MUST NOT read from or write to production
+  Redis keys without a test prefix.
 
-| Sale Model     | Invoice Trigger         | Amount Formula                       | Credit Note Trigger          |
-|----------------|-------------------------|--------------------------------------|------------------------------|
-| **Prepaid**    | Allocation completes    | `(face_value - commission) * qty`    | Return allocation completes  |
-| **Consignment**| Card redeemed           | `(face_value - commission) * 1`      | N/A                          |
+**Rationale**: Non-isolated tests create flaky CI runs that erode
+confidence in the test suite. A flaky test is worse than no test.
 
-- All invoices MUST use the `MEMORA-VOUCHER-CARD` item code.
-- Sales Invoices MUST be created via Frappe ORM to ensure GL entries,
-  tax calculation, and JoFotara e-invoicing hooks fire correctly.
+### V. Business Flow Completeness
 
-**Rationale**: Jordanian Dinar (JOD) amounts require precise decimal
-handling. Float arithmetic introduces rounding drift that compounds
-across batch-scale operations.
+Tests MUST cover complete user journeys, not just individual functions.
+Every business flow MUST have at least one end-to-end integration test.
 
-### IV. Self-Healing Architecture
+- **Registration flow**: Register -> OTP -> Verify -> Auto-login ->
+  Wallet seeded -> Session created -> JWT valid.
+- **Lesson flow**: Start session -> Validate access -> End session ->
+  XP awarded -> Streak updated -> Leaderboard updated -> Stats cached
+  -> Dirty set populated.
+- **Sync flow**: Dirty wallet -> sync_dirty_wallets() -> MariaDB
+  updated -> dirty set cleared.
+- **Hydration flow**: FLUSHDB -> API call -> self-heals from MariaDB
+  -> correct response.
 
-Redis is a hot cache. MariaDB (via Frappe ORM) is the source of truth.
-All Redis-cached data MUST implement the `ensure_hydrated()` pattern:
-on cache miss, automatically restore from MariaDB.
+**Rationale**: Unit tests prove components work; integration tests
+prove the system works. Both are required.
 
-- `FrappeClient` MUST be injected via `deps.py` into every service
-  that performs hydration. Without it, `ensure_hydrated()` silently
-  skips with a `no_frappe_client` warning.
-- **Cross-cache invalidation**: When DocType A's data feeds into
-  Cache B (e.g., Plan Subject `meta_data` -> hierarchy
-  `free_units`/`free_topics`), the event hook for A MUST invalidate
-  ALL affected caches using the two-pronged pattern: direct
-  `r.delete()` + pubsub publish.
-- Denormalized fields (e.g., `free_units`, `free_topics`) MUST be
-  populated by ALL producer code paths. Consumer code MUST NOT assume
-  these fields are pre-populated.
+## Excluded Scope
 
-**Rationale**: Redis data can be lost via FLUSHDB, restart, or eviction.
-The system MUST remain correct after any cache loss event without manual
-intervention.
+The following systems are **permanently excluded** from this testing
+constitution. No test file, fixture, or helper may reference them:
 
-### V. Test-First Coverage (NON-NEGOTIABLE)
+| System | Reason |
+|--------|--------|
+| **Voucher System** | Separate constitution exists (`.specify/memory/voucher-constitution.md`). Includes: voucher endpoints, batches, cards, allocations, PINs, redemption, commission, invoice generation. |
+| **Library System** | Out of scope per product decision. |
 
-Every feature MUST have corresponding tests before or alongside
-implementation. The project starts from zero test infrastructure.
+**Enforcement**: Any test file importing from `services/voucher/`,
+`api/voucher.py`, `api/allocation.py`, or referencing DocTypes
+`Memora Voucher Batch`, `Memora Voucher Card`,
+`Memora Voucher Allocation`, or `Memora Voucher Redemption Log`
+MUST be rejected in code review.
 
-- Every state transition MUST have both a positive test (valid
-  transition succeeds) and a negative test (invalid transition is
-  rejected).
-- Every error code in the redemption flow MUST have a dedicated test.
-- Financial calculations MUST be tested with `Decimal` precision
-  assertions (not float comparisons).
-- Concurrency scenarios MUST be tested where atomic operations exist
-  (serial reservation, card locking during redemption).
-- Integration tests MUST follow the full lifecycle:
-  `Batch -> Generate -> Allocate -> Redeem -> Invoice`.
-- Fixtures MUST create minimal, isolated data. Each test MUST clean
-  up after itself.
+## Architecture Constraints
 
-**Test framework**: Frappe's `frappe.tests.utils.FrappeTestCase` with
-pytest runner. Test environment: `x.conanacademy.com`.
+### Technology Stack
 
-**Rationale**: The voucher system handles monetary transactions. Untested
-state transitions and financial calculations create direct business risk.
+| Layer | Technology | Test Framework |
+|-------|-----------|---------------|
+| FastAPI endpoints | Python 3.11+, FastAPI, Pydantic v2 | `pytest` + `httpx.AsyncClient` |
+| Frappe business logic | Frappe v15, Document hooks | `frappe.tests.utils.FrappeTestCase` |
+| Redis operations | `redis.asyncio`, Lua scripts | `pytest` + real Redis (test DB) |
+| Background jobs | Frappe scheduler, `sync.py` | `pytest` + direct function calls |
+| MariaDB | Frappe ORM, raw SQL | `FrappeTestCase` (auto-rollback) |
 
-## Architecture & Constraints
+### Redis Key Patterns Under Test
 
-### Domain Glossary
+| Pattern | Type | Service |
+|---------|------|---------|
+| `memora:wallet:{player_id}` | Hash (xp, streak, streak_date) | WalletService |
+| `memora:session:{player_id}` | String (JSON: fid, plan) | SessionService |
+| `memora:gamesession:{player_id}` | Hash (session fields) | GameSessionService |
+| `memora:progress:{player_id}:{subject}:v{ver}` | Bitmap | ProgressService |
+| `memora:access:{player_id}` | Set (content keys) | AccessService |
+| `memora:devices:{player_id}` | Hash (device fields) | DeviceService |
+| `memora:stats:{player_id}:{subject}:v{ver}` | Hash (completion counts) | StatsService |
+| `memora:lb:{type}:{scope}` | Sorted Set | LeaderboardService |
+| `memora:dirty:wallets` | Set (player IDs) | Sync tasks |
+| `memora:dirty:progress` | Set (player:subject:version) | Sync tasks |
+| `memora:buffer:interactions` | List (JSON strings) | Sync tasks |
+| `memora:hierarchy:{subject}` | String (JSON) | HierarchyService |
+| `memora:catalog:{plan_id}` | String (JSON) | CatalogService |
+| `memora:settings:gamification` | String (JSON) | SettingsService |
+| `memora:plan:{plan_id}:free_subjects` | Set | AccessService |
+| `memora:pending:{pending_id}` | String (JSON) | OTPService |
+| `memora:phone_reserved:{mobile}` | String | OTPService |
+| `memora:ratelimit:*` | String (counter) | RateLimiter |
 
-| Term              | Definition                                                    | Frappe DocType                      |
-|-------------------|---------------------------------------------------------------|-------------------------------------|
-| **Batch**         | Generation order: quantity, PIN length, face value, grants    | `Memora Voucher Batch`              |
-| **Card**          | Individual voucher with serial number and HMAC-hashed PIN     | `Memora Voucher Card`               |
-| **Library**       | B2B customer (bookstore, school, distributor)                 | `Customer` (Frappe core)            |
-| **Allocation**    | Formal transfer of cards from batch to library                | `Memora Voucher Allocation`         |
-| **Player**        | End-user who redeems a voucher PIN                            | `Memora Player Profile`             |
-| **Product Grant** | Digital product/subscription a voucher unlocks                | `Memora Product Grant`              |
-| **Season**        | Time-bounded academic period; expired seasons expire cards     | `Memora Season`                     |
-| **Redemption Log**| Immutable audit trail of every redemption attempt             | `Memora Voucher Redemption Log`     |
-| **Sale Model**    | Payment method: Prepaid (at allocation) or Consignment (at redemption) | Field on Allocation + Card |
-| **Commission**    | Library's cut via priority chain                              | Calculated at invoice time          |
-| **Face Value**    | Monetary value per card, set at batch level                   | Currency field on Batch             |
+### DocTypes Under Test
 
-### DocType Hierarchy
+| DocType | Role | Key Fields |
+|---------|------|------------|
+| Memora Player Profile | Player identity | mobile, plan, grade, major, season, display_name, avatar, gender |
+| Memora Player Wallet | MariaDB wallet mirror | player, total_xp, current_streak, dirty_flag |
+| Memora Subject | Content root | subject_title, version, last_bit_index, is_linear |
+| Memora Track | Subject child | subject, is_linear, is_sold_separately |
+| Memora Unit | Track child | track, is_linear, is_free |
+| Memora Topic | Unit child | unit, is_linear, is_free |
+| Memora Lesson | Topic child | topic, bit_index, base_xp, max_hearts, is_reviewable |
+| Memora Player Subscription | Access grant | player, access_key, is_active |
+| Memora Structure Progress | Progress snapshot | player, subject, passed_lessons_bitset |
+| Memora Interaction Log | Interaction record | player, lesson, stage_id, item_id, event_type |
+| Memora Sync Log | Sync audit | job_id, sync_type, records_processed, status |
+| Memora Settings | Gamification config | base_lesson_xp, replay_xp, max_hearts, xp_per_heart, max_streak_multiplier_percent |
+| Memora Plan | Subscription plan | plan subjects (child table) |
+| Memora Season | Time boundary | status, season_seq |
+| Memora Memory State | FSRS state | player, subject, item_id, stage_id, stability, difficulty, next_review |
+| Memora Grade | Academic grade | grade_title, majors (child table) |
+| Memora Major | Academic major | major_title |
 
-```
-Memora Voucher Batch (parent)
-+-- Memora Voucher Batch Grant (child table)
-+-- Memora Voucher Batch Export Log (child table)
-+-- Memora Voucher Card (linked via batch field)
+## Known Risks & Required Test Coverage
 
-Memora Voucher Allocation (parent)
-+-- Memora Voucher Allocation Card (child table)
+| ID | Risk | Severity | Required Test |
+|----|------|----------|---------------|
+| RISK-01 | Redis FLUSHDB resets all XP/progress to zero | CRITICAL | Hydration tests for Wallet, Access, Progress services — verify self-heal from MariaDB |
+| RISK-02 | Lesson completion Lua script fails mid-execution | HIGH | Test SESSION_COMPLETE_SCRIPT with missing session, already-completed bit, empty interactions |
+| RISK-03 | Dirty wallet sync fails -> XP permanently lost | CRITICAL | Test sync_dirty_wallets with: Redis down mid-sync, partial sync, duplicate dirty entries |
+| RISK-04 | Streak reset on timezone boundary | HIGH | Test streak update Lua with: same-day replay, consecutive-day, missed-day, timezone edge (23:59 -> 00:00 Amman) |
+| RISK-05 | Session family_id mismatch -> false 401 | HIGH | Test single-session enforcement: login device A -> login device B -> device A gets 401 |
+| RISK-06 | XP HINCRBY on empty wallet starts from 0 | CRITICAL | Test ensure_hydrated before HINCRBY — verify XP is correct after Redis flush |
+| RISK-07 | Stats cache cold start double-counts | HIGH | Test stats initialization from bitmap vs HINCRBY path — verify no double-counting |
+| RISK-08 | Access check returns false after Redis flush | CRITICAL | Test AccessService.ensure_hydrated -> verify grants restored from Memora Player Subscription |
+| RISK-09 | Interaction buffer partial flush leaves duplicates | MEDIUM | Test flush_interaction_buffer with: parse errors mid-batch, DB commit failure |
+| RISK-10 | OTP rate limit bypass via IP rotation | MEDIUM | Test rate limiter with: IP limit, account limit, cooldown, boundary conditions |
 
-Memora Voucher Redemption Log (standalone, immutable)
-```
+## Quality Gates
 
-### Service Layer
+### Gate 1: Pre-Merge
 
-| Module          | Path                              | Responsibility                            |
-|-----------------|-----------------------------------|-------------------------------------------|
-| `generator.py`  | `services/voucher/generator.py`   | PIN generation, HMAC, serial reservation  |
-| `crypto.py`     | `services/voucher/crypto.py`      | HKDF key derivation, Fernet encrypt/decrypt|
-| `commission.py` | `services/voucher/commission.py`  | Commission chain resolution, Decimal math |
-| `invoice.py`    | `services/voucher/invoice.py`     | Sales Invoice/Credit Note creation        |
+- All tests pass (`pytest` exit code 0)
+- No test uses `time.sleep()` (use mocked time)
+- No test imports from excluded scope (Voucher/Library)
+- Every new endpoint has >=1 happy path + >=1 error path test
 
-### API Layer
+### Gate 2: Coverage Threshold
 
-| Module          | Path                | Key Endpoints                                            |
-|-----------------|---------------------|----------------------------------------------------------|
-| `voucher.py`    | `api/voucher.py`    | `generate_batch`, `export_for_print`, `void_batch`, `void_card`, `preview_voucher`, `redeem_voucher` |
-| `allocation.py` | `api/allocation.py` | `fill_cards`, `submit_allocation`, `approve_allocation`, `reject_allocation` |
+- Business logic services: >=80% line coverage
+- API endpoints: 100% of routes have >=1 test
+- Lua scripts: 100% of scripts have dedicated tests
+- Background sync jobs: 100% of sync functions tested
 
-### Integration Points
+### Gate 3: Risk Coverage
 
-| System                 | Direction          | Mechanism                                                |
-|------------------------|--------------------|----------------------------------------------------------|
-| Subscription Pipeline  | Voucher -> Subscription | `redeem_voucher` creates `Memora Subscription Transaction` (two-step save) |
-| ERPNext Accounting     | Voucher -> Sales Invoice | ORM-based creation ensures GL entries + JoFotara hooks |
-| Redis                  | Subscription sync  | Access keys pushed via `SADD`                            |
-| Frappe Background Jobs | Generation         | `frappe.enqueue` with 600s timeout                       |
-
-### Hard Constraints
-
-- **Tech Stack**: Frappe Framework (Python 3.11+, MariaDB, Redis)
-- **Max Batch Size**: 1,000 cards (enforced in `generate_batch`)
-- **PIN Lengths**: 12, 14, or 16 characters (Select field)
-- **Currency**: JOD (Jordanian Dinar)
-- **Invoice Item Code**: `MEMORA-VOUCHER-CARD`
-- **Permissions**: System Manager role for all admin operations
-- **Test Environment**: x.conanacademy.com
-- **Scheduled Jobs**: `expire_season_cards` runs daily at 01:05
-
-## Known Gaps & Remediation
-
-| ID     | Gap                                                              | Severity | Area       |
-|--------|------------------------------------------------------------------|----------|------------|
-| GAP-01 | Rate limiting referenced in Redemption Log but not implemented   | High     | Security   |
-| GAP-02 | Consignment invoicing not implemented (only Prepaid exists)      | High     | Financial  |
-| GAP-03 | Batch auto-close logic missing (no auto-transition to Closed)    | Medium   | Lifecycle  |
-| GAP-04 | `Memora Voucher Allocation Card` child table DocType not found   | Medium   | Schema     |
-| GAP-05 | `sales_invoice` field in invoice.py but not in Card DocType JSON | Medium   | Schema     |
-| GAP-06 | Customer commission custom fields assumed but not verified        | Medium   | Schema     |
-| GAP-07 | No test infrastructure exists (zero unit or integration tests)   | Critical | QA         |
-| GAP-08 | `bulk_insert` comment says max 1000 but code passes 10,000      | Low      | Code       |
-| GAP-09 | Season expiration does not update batch counters                 | Medium   | Counters   |
-| GAP-10 | Card autoname vs generator serial_no format potential conflict   | Medium   | Schema     |
-
-Each gap MUST be addressed with a specification, implementation, and
-test before the voucher system is considered production-ready.
-GAP-07 (test infrastructure) is the highest priority as it blocks
-validation of all other gap remediations.
+- All RISK-01 through RISK-10 items have explicit test cases
+- Each risk test includes both the failure scenario AND the
+  recovery/fix validation
 
 ## Governance
 
-- This constitution is the authoritative reference for all voucher
-  system development. It supersedes ad-hoc decisions and informal
-  agreements.
+- This constitution is the authoritative reference for all
+  memora_admin testing (excluding Voucher and Library systems).
+  It supersedes ad-hoc testing practices and informal agreements.
 - **Amendments** require: (1) documented rationale, (2) impact
-  assessment on existing code, (3) updated version number following
+  assessment on existing tests, (3) updated version number following
   SemVer (MAJOR for principle removals/redefinitions, MINOR for new
   principles/sections, PATCH for clarifications).
-- **Compliance review**: Every PR touching voucher code MUST be
+- **Compliance review**: Every PR touching tested code MUST be
   verified against the relevant principles before merge. The
   Constitution Check gate in `plan-template.md` enforces this at
   design time.
-- **Gap tracking**: New gaps discovered during development MUST be
-  added to the Known Gaps table with severity rating and area
-  classification.
+- **Voucher system**: Has its own constitution at
+  `.specify/memory/voucher-constitution.md` — there is no overlap.
+- **Gap tracking**: New risks discovered during development MUST be
+  added to the Known Risks table with severity rating and required
+  test description.
 - **Runtime guidance**: See `CLAUDE.md` for development commands,
   Redis key reference, and operational procedures.
 
-**Version**: 1.0.0 | **Ratified**: 2026-02-15 | **Last Amended**: 2026-02-15
+**Version**: 1.0.0 | **Ratified**: 2026-02-17 | **Last Amended**: 2026-02-17
