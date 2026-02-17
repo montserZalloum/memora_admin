@@ -192,10 +192,18 @@ def on_plan_updated(doc, method):
 	- If key doesn't exist: set key with TTL, queue build
 	- If key exists: skip (build already pending)
 
-	Also invalidates plan_season_seq cache when the season field changes,
-	so FastAPI resolves the updated season_seq on next request.
+	Also invalidates:
+	- plan_season_seq cache when the season field changes
+	- catalog cache always (Plan Subject child rows like alias_title/notes are
+	  saved via the parent plan, and Frappe does not reliably fire child on_update
+	  events from editable_grid saves)
 	"""
 	plan_id = doc.name
+
+	# Always invalidate catalog cache when plan is saved.
+	# Plan Subject rows (alias_title, notes) are edited inline via the parent plan form,
+	# and Frappe's editable_grid does not reliably fire child doc on_update hooks.
+	_invalidate_catalog_cache(plan_id)
 
 	# Invalidate season_seq cache when plan's season assignment changes
 	if doc.has_value_changed("season"):
@@ -247,10 +255,12 @@ def on_plan_subject_changed(doc, method):
 	"""
 	Queue a build when Plan Subject is added/modified/removed.
 
-	Triggers rebuild of the parent plan AND invalidates the hierarchy cache
-	for the affected subject. Hierarchy cache contains free_units/free_topics
-	which are derived from Plan Subject meta_data, so it must be invalidated
-	when Plan Subject changes (e.g., is_premium or free content metadata).
+	Triggers rebuild of the parent plan AND invalidates both:
+	- Hierarchy cache for the affected subject (free_units/free_topics)
+	- Catalog cache for the plan (alias_title, notes in products.subjects)
+
+	Plan Subject changes affect both hierarchies (free content metadata) and
+	catalog (alias_title, notes displayed in products).
 	"""
 	plan_id = doc.parent
 	subject_id = doc.subject
@@ -258,11 +268,13 @@ def on_plan_subject_changed(doc, method):
 	if not plan_id:
 		return
 
-	# Invalidate hierarchy cache for the affected subject immediately.
-	# free_units/free_topics in hierarchy are populated from Plan Subject meta_data,
-	# so hierarchy cache must be refreshed when Plan Subject changes.
+	# Invalidate both caches immediately when Plan Subject changes.
+	# Hierarchy cache: free_units/free_topics derived from Plan Subject meta_data
+	# Catalog cache: alias_title/notes in product subjects come from Plan Subject
 	if subject_id:
 		_invalidate_hierarchy_cache(subject_id)
+
+	_invalidate_catalog_cache(plan_id)
 
 	# Reuse plan debounce logic
 	cache = frappe.cache
@@ -328,6 +340,43 @@ def _invalidate_hierarchy_cache(subject_id: str):
 		frappe.log_error(
 			f"Failed to invalidate hierarchy cache for {subject_id}: {e}",
 			"Hierarchy Cache Invalidation Error",
+		)
+
+
+def _invalidate_catalog_cache(plan_id: str):
+	"""Invalidate catalog cache for a plan via direct delete + pubsub.
+
+	Two-pronged approach (same pattern as catalog_sync.py):
+	1. Direct Redis DEL for immediate effect
+	2. Pubsub publish so FastAPI sidecar's in-process CatalogService also invalidates
+
+	Called when Plan Subject changes (alias_title, notes, etc.) affect catalog products.
+	"""
+	import json
+
+	from memora_admin.events.access_sync import get_fastapi_redis
+
+	try:
+		r = get_fastapi_redis()
+
+		# 1. Direct cache delete
+		r.delete(f"memora:catalog:{plan_id}")
+
+		# 2. Pubsub notification for FastAPI sidecar
+		r.publish(
+			"memora:cache:invalidate",
+			json.dumps({
+				"type": "catalog",
+				"plan_id": plan_id,
+				"timestamp": str(frappe.utils.now()),
+			}),
+		)
+
+		frappe.logger().info(f"Catalog cache invalidated for plan {plan_id}")
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to invalidate catalog cache for {plan_id}: {e}",
+			"Catalog Cache Invalidation Error",
 		)
 
 
