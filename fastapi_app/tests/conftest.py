@@ -240,7 +240,6 @@ async def authed_client(
 	app_client: AsyncClient,
 	redis_client: redis.Redis,
 	make_player_token,
-	test_prefix: str,
 ) -> AsyncGenerator[tuple[AsyncClient, str, str, str], None]:
 	"""
 	FastAPI test client authenticated as a regular player.
@@ -255,7 +254,6 @@ async def authed_client(
 		app_client: Test client fixture with dependency overrides
 		redis_client: Test Redis fixture
 		make_player_token: Token factory fixture
-		test_prefix: Test-specific Redis key prefix
 
 	Yields:
 		Tuple of (client, token_str, player_id, family_id) for use
@@ -263,10 +261,10 @@ async def authed_client(
 	"""
 	# Create player token and family_id
 	token, family_id = make_player_token()
-	player_id = "PLAYER-TEST-001"
+	player_id = f"PLAYER-TEST-{uuid4().hex[:8]}"
 
 	# Seed session in Redis for auth validation
-	session_key = f"{test_prefix}memora:session:{player_id}"
+	session_key = f"memora:session:{player_id}"
 	await redis_client.set(session_key, json.dumps({"fid": family_id}))
 
 	# Set Authorization header
@@ -274,9 +272,10 @@ async def authed_client(
 
 	yield (app_client, token, player_id, family_id)
 
-	# Cleanup: Remove Authorization header
+	# Cleanup: Remove Authorization header and session key
 	if "Authorization" in app_client.headers:
 		del app_client.headers["Authorization"]
+	await redis_client.delete(session_key)
 
 
 @pytest.fixture
@@ -284,7 +283,6 @@ async def admin_client(
 	app_client: AsyncClient,
 	redis_client: redis.Redis,
 	make_admin_token,
-	test_prefix: str,
 ) -> AsyncGenerator[tuple[AsyncClient, str, str, str], None]:
 	"""
 	FastAPI test client authenticated as an admin.
@@ -299,7 +297,6 @@ async def admin_client(
 		app_client: Test client fixture with dependency overrides
 		redis_client: Test Redis fixture
 		make_admin_token: Admin token factory fixture
-		test_prefix: Test-specific Redis key prefix
 
 	Yields:
 		Tuple of (client, token_str, email, family_id) for use
@@ -307,10 +304,10 @@ async def admin_client(
 	"""
 	# Create admin token and family_id
 	token, family_id = make_admin_token()
-	email = "admin@test.local"
+	email = f"admin-test-{uuid4().hex[:8]}@test.local"
 
 	# Seed session in Redis for auth validation
-	session_key = f"{test_prefix}memora:session:{email}"
+	session_key = f"memora:session:{email}"
 	await redis_client.set(session_key, json.dumps({"fid": family_id}))
 
 	# Set Authorization header
@@ -318,6 +315,218 @@ async def admin_client(
 
 	yield (app_client, token, email, family_id)
 
-	# Cleanup: Remove Authorization header
+	# Cleanup: Remove Authorization header and session key
 	if "Authorization" in app_client.headers:
 		del app_client.headers["Authorization"]
+	await redis_client.delete(session_key)
+
+
+# === Redis Seeding Helpers (plain async functions, not fixtures) ===
+
+
+def make_hierarchy_json(
+	subject_id: str,
+	has_free_content: bool = False,
+	lesson_count: int = 1,
+	**overrides,
+) -> dict:
+	"""
+	Build a minimal hierarchy JSON structure for tests.
+
+	Args:
+		subject_id: Subject ID (e.g., "SUB-TEST-001")
+		has_free_content: If True, mark lessons as free (free_units/free_topics non-empty)
+		lesson_count: Number of lessons to generate
+		**overrides: Override any top-level keys
+
+	Returns:
+		Dict matching MinimalHierarchy schema from data-model.md
+	"""
+	lessons = [
+		{
+			"lesson_id": f"LESSON-TEST-{i:03d}",
+			"bit_index": i,
+			"xp": 10,
+			"max_hearts": 3,
+			"is_reviewable": True,
+		}
+		for i in range(lesson_count)
+	]
+
+	data = {
+		"subject_id": subject_id,
+		"version": 1,
+		"is_linear": False,
+		"bit_range": lesson_count,
+		"excluded_bits": [],
+		"free_units": ["UNIT-TEST-001"] if has_free_content else [],
+		"free_topics": ["TOPIC-TEST-001"] if has_free_content else [],
+		"tracks": [
+			{
+				"track_id": "TRK-TEST-001",
+				"is_linear": False,
+				"units": [
+					{
+						"unit_id": "UNIT-TEST-001",
+						"is_linear": False,
+						"is_free": has_free_content,
+						"topics": [
+							{
+								"topic_id": "TOPIC-TEST-001",
+								"is_linear": False,
+								"is_free": has_free_content,
+								"lessons": lessons,
+							}
+						],
+					}
+				],
+			}
+		],
+	}
+
+	data.update(overrides)
+	return data
+
+
+async def seed_hierarchy(
+	redis: redis.Redis,
+	subject_id: str,
+	hierarchy_json: dict | None = None,
+	**overrides,
+) -> None:
+	"""
+	Seed hierarchy cache in Redis.
+
+	Args:
+		redis: Redis async client
+		subject_id: Subject ID
+		hierarchy_json: Pre-built hierarchy dict (if None, make_hierarchy_json called)
+		**overrides: Overrides for make_hierarchy_json if hierarchy_json is None
+	"""
+	if hierarchy_json is None:
+		hierarchy_json = make_hierarchy_json(subject_id, **overrides)
+
+	key = f"memora:hierarchy:{subject_id}"
+	await redis.set(key, json.dumps(hierarchy_json), ex=3600)
+
+
+async def seed_game_session(
+	redis: redis.Redis,
+	user_id: str,
+	lesson_id: str,
+	subject_id: str,
+	**overrides,
+) -> None:
+	"""
+	Seed active game session hash in Redis.
+
+	Args:
+		redis: Redis async client
+		user_id: User/player ID
+		lesson_id: Lesson ID in active session
+		subject_id: Subject ID
+		**overrides: Additional fields to merge into session data
+	"""
+	session_data = {
+		"user_id": user_id,
+		"lesson_id": lesson_id,
+		"subject_id": subject_id,
+		"session_id": f"SESSION-{uuid4().hex[:16]}",
+		"started_at": "2026-02-17T00:00:00",
+	}
+	session_data.update(overrides)
+
+	key = f"memora:gamesession:{user_id}"
+	await redis.hset(key, mapping=session_data)
+
+
+async def seed_settings(redis: redis.Redis) -> None:
+	"""
+	Seed gamification settings cache in Redis.
+
+	Uses defaults from data-model.md GamificationSettings.
+	"""
+	settings = {
+		"base_lesson_xp": 10,
+		"replay_xp": 3,
+		"max_hearts": 3,
+		"xp_per_heart": 2,
+		"max_streak_multiplier_percent": 50,
+		"session_timeout_days": 30,
+		"max_devices_per_player": 3,
+	}
+
+	key = "memora:settings:gamification"
+	await redis.set(key, json.dumps(settings))
+
+
+async def seed_wallet(
+	redis: redis.Redis,
+	player_id: str,
+	xp: int = 0,
+	streak: int = 0,
+) -> None:
+	"""
+	Seed wallet hash in Redis.
+
+	Args:
+		redis: Redis async client
+		player_id: Player ID
+		xp: XP balance (default 0)
+		streak: Streak count (default 0)
+	"""
+	wallet_data = {
+		"xp": str(xp),
+		"streak": str(streak),
+	}
+
+	key = f"memora:wallet:{player_id}"
+	await redis.hset(key, mapping=wallet_data)
+
+
+async def seed_access_grants(
+	redis: redis.Redis,
+	player_id: str,
+	keys: list[str],
+) -> None:
+	"""
+	Seed access grant set in Redis.
+
+	Args:
+		redis: Redis async client
+		player_id: Player ID
+		keys: List of content keys to grant access to (e.g., ["SUB-MATH", "SUB-SCIENCE"])
+	"""
+	if keys:
+		key = f"memora:access:{player_id}"
+		await redis.sadd(key, *keys)
+
+
+async def cleanup_player_keys(
+	redis: redis.Redis,
+	player_id: str,
+) -> None:
+	"""
+	Delete all memora:* Redis keys for a player.
+
+	Scans and deletes:
+	- memora:session:{player_id}
+	- memora:wallet:{player_id}
+	- memora:access:{player_id}
+	- memora:progress:{player_id}:*
+	- memora:stats:{player_id}:*
+	- memora:gamesession:{player_id}
+	- etc.
+
+	Args:
+		redis: Redis async client
+		player_id: Player ID
+	"""
+	pattern = f"memora:*{player_id}*"
+	cursor = 0
+	while True:
+		cursor, keys = await redis.scan(cursor, match=pattern, count=100)
+		if keys:
+			await redis.delete(*keys)
+		if cursor == 0:
+			break
