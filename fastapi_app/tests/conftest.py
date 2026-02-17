@@ -89,18 +89,29 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 	"""
 	yield
 
-	# Cleanup: Scan and delete all keys matching test prefix
-	cursor = 0
-	while True:
-		cursor, keys = await redis_client.scan(
-			cursor,
-			match=f"{test_prefix}*",
-			count=1000,
-		)
-		if keys:
-			await redis_client.delete(*keys)
-		if cursor == 0:
-			break
+	# Cleanup: Scan and delete all keys matching test prefix and memora:* test keys
+	# (tests create memora:catalog:* keys and other memora:* keys using settings.redis_key_prefix)
+	patterns_to_clean = [
+		f"{test_prefix}*",
+		"memora:catalog:*",
+		"memora:session:PLAYER-TEST-*",
+		"memora:settings:gamification",  # Clear cached settings between tests
+		"memora:access:PLAYER-TEST-*",
+		"memora:wallet:PLAYER-TEST-*",
+	]
+
+	for pattern in patterns_to_clean:
+		cursor = 0
+		while True:
+			cursor, keys = await redis_client.scan(
+				cursor,
+				match=pattern,
+				count=1000,
+			)
+			if keys:
+				await redis_client.delete(*keys)
+			if cursor == 0:
+				break
 
 
 @pytest.fixture
