@@ -142,16 +142,22 @@
   - Service integration tests need Redis seeding or mock refinement
 
 - [X] T013 Run full test suite (all phases 1-6) and verify no regressions via `python3 -m pytest fastapi_app/tests/ -v --tb=short`
-  - **Result**: 20 passing now (up from initial 19)
-  - Fixed: Test isolation (cleanup_keys expanded), URL trailing slashes, WebSocket async marks
-  - **Remaining**: Service mock issues (ProfilePageService, Plans endpoint), auth redirect edge cases
+  - **Result**: 23/41 tests passing (56%)
+  - Initial state: 20/41 passing (was 19/41, WebSocket tests fixed)
+  - Key fixes: Test isolation, URL trailing slashes, WebSocket async marks, dependency reset
 
 - [X] T014 Fix any test isolation failures, flaky tests, or Redis key leaks discovered in T012/T013
   - **Fixes applied**:
-    1. Expanded cleanup_keys to clean all memora:* test keys, not just test_prefix
+    1. Expanded cleanup_keys to clean all memora:* test keys (catalog, session, settings, access, wallet)
     2. Fixed trailing slash mismatches between test URLs and actual endpoint paths
     3. Removed @pytest.mark.asyncio from WebSocket test class (tests are sync)
-    4. Removed hardcoded settings.redis_key_prefix usage - will use cached values properly
+    4. Changed dependency override to async function for get_frappe_client
+    5. Reset global _frappe_client before each test to prevent caching
+
+  - **Result**: 23/41 tests passing (56%)
+  - **Tests passing**: Catalog, Notifications, Auth/validation (401, 422, 429, 404), Logout, Avatar invalid
+  - **Tests failing**: Service-dependent endpoints (18) - mock FrappeClient not propagating to service layer
+  - **Root cause**: FastAPI async dependency override system with nested dependencies needs investigation
 
 ---
 
