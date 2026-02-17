@@ -233,6 +233,6 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 015-characterization-tests: Added Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, redis.asyncio, unittest.mock.AsyncMock
 - 014-remaining-endpoint-tests: Added Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, httpx 0.28.1, redis.asyncio (all pre-installed)
 - 013-core-endpoint-tests: Added Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, httpx 0.28.1, redis.asyncio (all pre-installed)
-- 012-remaining-service-tests: Added Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, redis.asyncio, unittest.mock.AsyncMock
