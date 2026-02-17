@@ -214,6 +214,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, redis.asyncio, unittest.mock.AsyncMock, user-agents (for DeviceService fingerprinting) (011-session-auth-tests)
 - Redis at `redis://127.0.0.1:13000` (real, shared with Frappe — prefix isolation mandatory) (013-core-endpoint-tests)
 - Redis at `redis://127.0.0.1:13000` (real, shared with Frappe -- prefix isolation mandatory) (014-remaining-endpoint-tests)
+- Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `redis` (synchronous), `unittest.mock` (016-sync-task-tests)
+- MariaDB via Frappe ORM (Player Wallet, Structure Progress, Interaction Log, Sync Log); Redis at `redis://127.0.0.1:13000` (dirty sets, wallet hashes, progress bitmaps, interaction buffer) (016-sync-task-tests)
 
 ## Test Environment Configuration
 
@@ -233,6 +235,7 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 016-sync-task-tests: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `redis` (synchronous), `unittest.mock`
 - 015-characterization-tests: Added Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, redis.asyncio, unittest.mock.AsyncMock
 - 014-remaining-endpoint-tests: Added Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, httpx 0.28.1, redis.asyncio (all pre-installed)
-- 013-core-endpoint-tests: Added Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, httpx 0.28.1, redis.asyncio (all pre-installed)
+- 016-sync-task-tests (Phase 4): Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `redis` (synchronous), `unittest.mock`
