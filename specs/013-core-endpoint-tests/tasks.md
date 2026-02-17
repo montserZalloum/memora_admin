@@ -88,7 +88,7 @@
 
 ### Implementation
 
-- [ ] T005 [P] [US5] Create `fastapi_app/tests/test_wallet_endpoints.py` with 4 tests
+- [x] T005 [P] [US5] Create `fastapi_app/tests/test_wallet_endpoints.py` with 4 tests
   - `test_get_own_wallet`: Seed wallet hash via `seed_wallet(redis, player_id, xp=150, streak=3)` → GET `/api/v1/wallet` → 200, verify xp=150, streak=3
   - `test_empty_wallet_defaults`: No wallet seeded → GET `/api/v1/wallet` → 200, xp=0, streak=0 (default hydration)
   - `test_admin_get_player_wallet`: Seed wallet for target player → admin GET `/api/v1/wallet/{player_id}` → 200

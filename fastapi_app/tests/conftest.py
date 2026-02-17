@@ -259,9 +259,9 @@ async def authed_client(
 		Tuple of (client, token_str, player_id, family_id) for use
 		in player endpoint tests.
 	"""
-	# Create player token and family_id
-	token, family_id = make_player_token()
+	# Create player token and family_id with unique player ID
 	player_id = f"PLAYER-TEST-{uuid4().hex[:8]}"
+	token, family_id = make_player_token(player_id=player_id)
 
 	# Seed session in Redis for auth validation
 	session_key = f"memora:session:{player_id}"
@@ -302,9 +302,9 @@ async def admin_client(
 		Tuple of (client, token_str, email, family_id) for use
 		in admin endpoint tests.
 	"""
-	# Create admin token and family_id
-	token, family_id = make_admin_token()
+	# Create admin token and family_id with unique email
 	email = f"admin-test-{uuid4().hex[:8]}@test.local"
+	token, family_id = make_admin_token(email=email)
 
 	# Seed session in Redis for auth validation
 	session_key = f"memora:session:{email}"
