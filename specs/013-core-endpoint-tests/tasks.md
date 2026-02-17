@@ -109,7 +109,7 @@
 
 ### Implementation
 
-- [ ] T006 [P] [US6] Create `fastapi_app/tests/test_access_endpoints.py` with 6 tests
+- [x] T006 [P] [US6] Create `fastapi_app/tests/test_access_endpoints.py` with 6 tests
   - `test_admin_grant_access`: Admin POST `/api/v1/access/grants` with `{"player_id": "...", "content_keys": ["SUB-MATH"]}` → 200, `granted=1`
   - `test_grant_idempotent`: Grant same key twice → second returns `granted=0`
   - `test_grant_empty_keys`: Admin POST with empty `content_keys: []` → 400
@@ -132,7 +132,7 @@
 
 ### Implementation
 
-- [ ] T007 [US2] Create `fastapi_app/tests/test_auth_endpoints.py` with player login tests (7 tests)
+- [x] T007 [US2] Create `fastapi_app/tests/test_auth_endpoints.py` with player login tests (7 tests)
   - File setup: imports, `pytestmark = pytest.mark.asyncio`, helper constants
   - `test_player_login_success`: Mock `get_frappe_client` → mock `.call()` returns player profile dict → POST `/api/v1/auth/player/login` with `X-Device-ID` header → 200, verify `access_token`, `refresh_token`, `profile`
   - `test_player_login_bad_credentials`: Mock `.call()` raises `FrappeAPIError` → 401
@@ -145,7 +145,7 @@
   - Cleanup: Rate limit keys (`memora:rate:*`), session keys, device keys for test player
   - Reference: contracts/endpoint-test-contracts.md §2 (POST /auth/player/login), research.md R-002
 
-- [ ] T008 [US2] Add admin login and token refresh tests (5 tests) to `fastapi_app/tests/test_auth_endpoints.py`
+- [x] T008 [US2] Add admin login and token refresh tests (5 tests) to `fastapi_app/tests/test_auth_endpoints.py`
   - `test_admin_login_success`: `@patch("fastapi_app.api.v1.endpoints.auth.FrappeAuthService")` → mock `.verify_credentials()` returns `(FrappeUser, {})` → POST `/api/v1/auth/admin/login` → 200 + tokens
   - `test_admin_login_invalid_credentials`: Mock `.verify_credentials()` returns `(None, None)` → 401
   - `test_refresh_valid_token`: Create refresh token + seed Redis session with matching `fid` → POST `/api/v1/auth/refresh` → 200 + new tokens
@@ -154,7 +154,7 @@
   - Mock pattern: `@patch("fastapi_app.api.v1.endpoints.auth.FrappeAuthService")` for admin, real Redis session for refresh
   - Reference: contracts/endpoint-test-contracts.md §2 (POST /auth/admin/login, POST /auth/refresh)
 
-- [ ] T009 [US2] Add registration flow tests (6 tests) to `fastapi_app/tests/test_auth_endpoints.py`
+- [x] T009 [US2] Add registration flow tests (6 tests) to `fastapi_app/tests/test_auth_endpoints.py`
   - `test_registration_options`: Mock `get_frappe_client` → `.call()` returns options dict → GET `/api/v1/auth/registration-options` → 200
   - `test_register_success`: Mock `.call()` for `check_phone_exists` → `{exists: false}` → POST `/api/v1/auth/player/register` → 200, verify `pending_id`
   - `test_register_duplicate_phone`: Mock `check_phone_exists` → `{exists: true}` → 409
@@ -165,7 +165,7 @@
   - Cleanup: OTP keys, pending registration keys, session keys if created
   - Reference: contracts/endpoint-test-contracts.md §2 (registration routes), research.md R-002
 
-- [ ] T010 [US2] Add password reset flow tests (5 tests) to `fastapi_app/tests/test_auth_endpoints.py`
+- [x] T010 [US2] Add password reset flow tests (5 tests) to `fastapi_app/tests/test_auth_endpoints.py`
   - `test_password_reset_request_anti_enumeration`: Mock `check_phone_exists` for both existing and non-existing phone → POST `/api/v1/auth/player/password-reset/request` → both return 200 (anti-enumeration)
   - `test_password_reset_verify_valid`: Pre-seed reset OTP in Redis → POST `/api/v1/auth/player/password-reset/verify` → 200 + `reset_token`
   - `test_password_reset_verify_invalid`: Wrong OTP → error
