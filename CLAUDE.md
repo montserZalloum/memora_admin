@@ -206,6 +206,7 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM (card records, batch state, allocation state, Sales Invoice) (006-allocation-flow-tests)
 - Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `hmac` module, `csv`/`io` (for PIN extraction) (007-redemption-flow-tests)
 - MariaDB via Frappe ORM (card records, batch state, redemption logs, subscription transactions) (007-redemption-flow-tests)
+- Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `hmac`, `decimal.Decimal`, `csv`/`io`, ERPNext Sales Invoice (008-voucher-audit-tests)
 
 ## Test Environment Configuration
 
@@ -225,6 +226,6 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 008-voucher-audit-tests: Added Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `hmac`, `decimal.Decimal`, `csv`/`io`, ERPNext Sales Invoice
 - 007-redemption-flow-tests: Added Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `hmac` module, `csv`/`io` (for PIN extraction)
 - 006-allocation-flow-tests: Added Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), ERPNext Sales Invoice, `decimal.Decimal`
-- 005-batch-lifecycle-tests: Added Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `cryptography 3.4.8` (Fernet/HKDF for export verification)

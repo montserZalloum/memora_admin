@@ -311,6 +311,7 @@ def make_player(
 	grade: str | None = None,
 	major: str | None = None,
 	season: str | None = None,
+	mobile: str | None = None,
 ):
 	"""Create a Memora Player Profile document with all required dependencies.
 
@@ -354,7 +355,7 @@ def make_player(
 		"major": major,
 		"season": season,
 		"avatar": "pre",
-		"mobile": "201000000000",
+		"mobile": mobile or f"20{str(abs(hash(random_string(16))))[:10]}",
 	})
 	doc.insert(ignore_permissions=True)
 	return doc
