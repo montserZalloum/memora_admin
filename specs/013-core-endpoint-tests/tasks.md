@@ -187,14 +187,14 @@
 
 ### Implementation
 
-- [ ] T011 [US4] Create `fastapi_app/tests/test_progress_endpoints.py` with summary and auth tests (2 tests)
+- [x] T011 [US4] Create `fastapi_app/tests/test_progress_endpoints.py` with summary and auth tests (2 tests)
   - File setup: imports, `pytestmark = pytest.mark.asyncio`, import helpers from conftest
   - `test_progress_summary`: Seed access grants + hierarchy for 1 subject → GET `/api/v1/progress/` → 200, verify list with `subject_id`, `percentage`, `completed`, `total`
   - `test_unauthenticated`: No Bearer token → GET `/api/v1/progress/` → 401
   - Uses: `authed_client`, `app_client`, `redis_client`, `seed_hierarchy`, `seed_access_grants`
   - Reference: contracts/endpoint-test-contracts.md §4
 
-- [ ] T012 [US4] Add subject progress and access control tests (4 tests) to `fastapi_app/tests/test_progress_endpoints.py`
+- [x] T012 [US4] Add subject progress and access control tests (4 tests) to `fastapi_app/tests/test_progress_endpoints.py`
   - `test_subject_progress`: Seed hierarchy + access grant → GET `/api/v1/progress/{subject_id}` → 200, verify tracks array
   - `test_subject_not_found`: No hierarchy seeded → GET `/api/v1/progress/SUB-NONEXIST` → 404
   - `test_access_denied`: Seed hierarchy (no free content) + no access grant → GET → 403 `NO_ACCESS`
@@ -202,7 +202,7 @@
   - Each test seeds `memora:hierarchy:{subject_id}` and optionally `memora:access:{player_id}`
   - Reference: contracts/endpoint-test-contracts.md §4, research.md R-004
 
-- [ ] T013 [US4] Add track, unit, and lesson detail tests (4 tests) to `fastapi_app/tests/test_progress_endpoints.py`
+- [x] T013 [US4] Add track, unit, and lesson detail tests (4 tests) to `fastapi_app/tests/test_progress_endpoints.py`
   - `test_track_listing`: Seed hierarchy + access → GET `/api/v1/progress/{subject}/tracks` → 200, verify list with `track_id`
   - `test_track_detail`: Seed hierarchy + access → GET `/api/v1/progress/{subject}/tracks/{track_id}` → 200, verify units list
   - `test_unit_detail`: Seed hierarchy + access → GET `/api/v1/progress/{subject}/tracks/{track_id}/units/{unit_id}` → 200, verify topics list
@@ -223,7 +223,7 @@
 
 ### Implementation
 
-- [ ] T014 [US3] Create `fastapi_app/tests/test_session_endpoints.py` with get current and unauthenticated tests (3 tests)
+- [x] T014 [US3] Create `fastapi_app/tests/test_session_endpoints.py` with get current and unauthenticated tests (3 tests)
   - File setup: imports, `pytestmark = pytest.mark.asyncio`, import helpers from conftest
   - `test_get_current_active`: Seed game session hash via `seed_game_session()` → GET `/api/v1/sessions/current` → 200, verify `session_id`, `lesson_id`, `subject_id`
   - `test_get_current_none`: No game session → GET `/api/v1/sessions/current` → 404 `NO_ACTIVE_SESSION`
@@ -231,7 +231,7 @@
   - Uses: `authed_client`, `app_client`, `redis_client`, `seed_game_session`, `cleanup_player_keys`
   - Reference: contracts/endpoint-test-contracts.md §3 (GET /sessions/current)
 
-- [ ] T015 [US3] Add session start tests (5 tests) to `fastapi_app/tests/test_session_endpoints.py`
+- [x] T015 [US3] Add session start tests (5 tests) to `fastapi_app/tests/test_session_endpoints.py`
   - `test_start_success`: Seed hierarchy + access grant → POST `/api/v1/sessions/start` with `{"lesson_id": "...", "subject_id": "..."}` → 200, verify `session_id`
   - `test_start_nonexistent_subject`: No hierarchy → POST → 404
   - `test_start_no_access`: Seed hierarchy (no free content) + no grant → POST → 403 `NO_ACCESS`
@@ -242,7 +242,7 @@
   - Cleanup: game session keys, hierarchy keys, access keys
   - Reference: contracts/endpoint-test-contracts.md §3 (POST /sessions/start), research.md R-004
 
-- [ ] T016 [US3] Add session end tests (7 tests) to `fastapi_app/tests/test_session_endpoints.py`
+- [x] T016 [US3] Add session end tests (7 tests) to `fastapi_app/tests/test_session_endpoints.py`
   - Full state seeding required for each end test: game session hash + hierarchy + gamification settings + wallet hash + optionally progress bitmap
   - `test_end_success`: Seed full state → POST `/api/v1/sessions/end` with stages array → 200, verify `xp_awarded > 0`
   - `test_end_no_session`: No game session → POST → 403
@@ -263,8 +263,8 @@
 
 **Purpose**: Final validation across all test files.
 
-- [ ] T017 Run full test suite `python3 -m pytest fastapi_app/tests/ -v --tb=short` and verify all ~195 tests pass (131 existing + ~64 new)
-- [ ] T018 Verify compliance: no `time.sleep` in endpoint tests, no imports from excluded scope (voucher/allocation), total runtime under 30 seconds
+- [x] T017 Run full test suite `python3 -m pytest fastapi_app/tests/ -v --tb=short` and verify all ~195 tests pass (131 existing + ~64 new)
+- [x] T018 Verify compliance: no `time.sleep` in endpoint tests, no imports from excluded scope (voucher/allocation), total runtime under 30 seconds
 
 ---
 

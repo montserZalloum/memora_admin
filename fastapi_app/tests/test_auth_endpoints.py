@@ -85,8 +85,9 @@ class TestPlayerLogin:
 
 				assert resp.status_code == 401
 		finally:
-			# Clean up rate limit keys
-			await redis_client.delete(f"memora:rate:login:{mobile}")
+			# Clean up rate limit keys (IP and account based)
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
 
 	async def test_player_login_missing_device_id(self, app_client):
 		"""Missing X-Device-ID header returns 400."""
@@ -172,7 +173,8 @@ class TestPlayerLogin:
 				assert "fid" in session_obj  # family_id
 		finally:
 			await redis_client.delete(f"memora:session:{player_id}")
-			await redis_client.delete(f"memora:rate:login:{mobile}")
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
 
 	async def test_player_login_kicks_old_session(self, app_client, redis_client):
 		"""Second login replaces old session's family_id."""
@@ -215,7 +217,8 @@ class TestPlayerLogin:
 				assert old_fid != new_fid
 		finally:
 			await redis_client.delete(f"memora:session:{player_id}")
-			await redis_client.delete(f"memora:rate:login:{mobile}")
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
 
 	async def test_player_login_registers_device(self, app_client, redis_client):
 		"""Successful login registers device hash in Redis."""
@@ -252,7 +255,8 @@ class TestPlayerLogin:
 		finally:
 			await redis_client.delete(f"memora:session:{player_id}")
 			await redis_client.delete(f"memora:device:{player_id}:{device_id}")
-			await redis_client.delete(f"memora:rate:login:{mobile}")
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
 
 
 @pytest.mark.asyncio
@@ -269,10 +273,11 @@ class TestAdminLoginAndRefresh:
 				mock_instance = MagicMock()
 				mock_auth_service_class.return_value = mock_instance
 
-				# Mock the verify_credentials method
+				# Mock the verify_credentials method with all required attributes
 				mock_frappe_user = MagicMock()
+				mock_frappe_user.user_id = email  # FrappeUser uses user_id, not name
 				mock_frappe_user.email = email
-				mock_frappe_user.name = email
+				mock_frappe_user.full_name = "Test Admin"
 				mock_instance.verify_credentials = AsyncMock(return_value=(mock_frappe_user, {}))
 
 				resp = await app_client.post(
@@ -286,7 +291,9 @@ class TestAdminLoginAndRefresh:
 				assert "refresh_token" in data
 				assert data["token_type"] == "bearer"
 		finally:
-			await redis_client.delete(f"memora:rate:login:{email}")
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{email.lower()}")
+			await redis_client.delete(f"memora:session:{email}")
 
 	async def test_admin_login_invalid_credentials(self, app_client, redis_client):
 		"""Invalid admin credentials return 401."""
@@ -306,7 +313,8 @@ class TestAdminLoginAndRefresh:
 
 				assert resp.status_code == 401
 		finally:
-			await redis_client.delete(f"memora:rate:login:{email}")
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{email.lower()}")
 
 	async def test_refresh_valid_token(self, app_client, redis_client):
 		"""Valid refresh token returns new access token."""
@@ -330,9 +338,12 @@ class TestAdminLoginAndRefresh:
 				family_id=family_id,
 			)
 
-			# Seed session with matching family_id
+			# Seed session with matching family_id AND plan_id
 			session_key = f"memora:session:{player_id}"
-			await redis_client.set(session_key, json.dumps({"fid": family_id}))
+			await redis_client.set(session_key, json.dumps({
+				"fid": family_id,
+				"plan": plan_id,
+			}))
 
 			resp = await app_client.post(
 				"/api/v1/auth/refresh",
@@ -425,6 +436,30 @@ class TestRegistration:
 		mobile = "201000000010"
 
 		try:
+			# Clean up any pending registrations and rate limits from previous test runs
+			# Scan and delete ALL OTP rate limit keys (IP and phone) to reset counters
+			cursor = 0
+			while True:
+				cursor, keys = await redis_client.scan(cursor, match="memora:ratelimit:otp:*", count=100)
+				if keys:
+					await redis_client.delete(*keys)
+				if cursor == 0:
+					break
+
+			# Scan and delete all pending registration keys for this mobile
+			cursor = 0
+			while True:
+				cursor, keys = await redis_client.scan(cursor, match="memora:pending:*", count=100)
+				for key in keys:
+					pending_data = await redis_client.get(key)
+					if pending_data and mobile in pending_data:
+						await redis_client.delete(key)
+				if cursor == 0:
+					break
+
+			# Also check for phone reserved keys that might block registration
+			await redis_client.delete(f"memora:phone_reserved:{mobile}")
+
 			with patch("fastapi_app.api.v1.endpoints.auth.get_frappe_client") as mock_get_frappe:
 				mock_frappe_client = AsyncMock()
 				mock_get_frappe.return_value = mock_frappe_client
@@ -448,7 +483,11 @@ class TestRegistration:
 				assert "pending_id" in data
 				assert "message" in data
 		finally:
-			await redis_client.delete(f"memora:rate:register:{mobile}")
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
+			await redis_client.delete(f"memora:ratelimit:otp:phone:{mobile}")
+			await redis_client.delete("memora:ratelimit:otp:ip:127.0.0.1")
+			await redis_client.delete(f"memora:phone_reserved:{mobile}")
 
 	async def test_register_duplicate_phone(self, app_client):
 		"""Registering with existing phone returns 409."""
@@ -479,26 +518,60 @@ class TestRegistration:
 		player_id = f"PLAYER-REG-{uuid4().hex[:8]}"
 		pending_id = f"PENDING-{uuid4().hex[:8]}"
 		device_id = f"device-{uuid4().hex[:8]}"
+		mobile = "201000000012"
 		otp = "123456"
 
 		try:
-			# Pre-seed OTP and pending registration
-			await redis_client.set(f"memora:otp:{pending_id}", otp, ex=600)
+			# Clear registration options cache to ensure fresh fetch
+			await redis_client.delete("memora:registration_options")
+
+			# Pre-seed registration options in Redis
 			await redis_client.set(
-				f"memora:pending_reg:{pending_id}",
-				json.dumps({"mobile": "201000000012", "plan": "PLAN-FREE"}),
+				"memora:registration_options",
+				json.dumps({
+					"grades": [{"name": "1", "majors": []}],
+					"plans": [{"name": "PLAN-FREE", "label": "Free Plan"}],
+					"seasons": [{"name": "SEAS-00027", "label": "2024-2025"}],
+				}),
+				ex=300,
+			)
+
+			# Pre-seed pending registration with all required fields
+			await redis_client.set(
+				f"memora:pending:{pending_id}",
+				json.dumps({
+					"mobile": mobile,
+					"plan": "PLAN-FREE",
+					"otp": otp,
+					"attempts": 0,
+					"password": "pass123",
+					"display_name": "Test Player",
+					"gender": "M",
+					"grade": "1",
+				}),
 				ex=3600,
 			)
 
 			with patch("fastapi_app.api.v1.endpoints.auth.get_frappe_client") as mock_get_frappe:
 				mock_frappe_client = AsyncMock()
 				mock_get_frappe.return_value = mock_frappe_client
-				# Register player
-				mock_frappe_client.call.return_value = {
-					"player_id": player_id,
-					"mobile": "201000000012",
-					"plan": "PLAN-FREE",
-				}
+				# Configure mock to return different values based on the method called
+				async def mock_call(method, *args, **kwargs):
+					if "register_player" in method or "create" in method:
+						return {
+							"player_id": player_id,
+							"mobile": mobile,
+							"plan": "PLAN-FREE",
+						}
+					elif "registration_options" in method:
+						return {
+							"grades": [{"name": "1", "majors": []}],
+							"plans": [{"name": "PLAN-FREE", "label": "Free Plan"}],
+							"seasons": [{"name": "SEAS-00027", "label": "2024-2025"}],
+						}
+					return {}
+
+				mock_frappe_client.call = AsyncMock(side_effect=mock_call)
 
 				resp = await app_client.post(
 					"/api/v1/auth/player/register/verify",
@@ -514,9 +587,15 @@ class TestRegistration:
 				assert "access_token" in data
 				assert "refresh_token" in data
 		finally:
-			await redis_client.delete(f"memora:otp:{pending_id}")
-			await redis_client.delete(f"memora:pending_reg:{pending_id}")
+			await redis_client.delete(f"memora:pending:{pending_id}")
 			await redis_client.delete(f"memora:session:{player_id}")
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
+			await redis_client.delete(f"memora:ratelimit:otp:phone:{mobile}")
+			await redis_client.delete("memora:ratelimit:otp:ip:127.0.0.1")
+			await redis_client.delete("memora:registration_options")
+			# Clean up phone reserved key if it was created
+			await redis_client.delete(f"memora:phone_reserved:{mobile}")
 
 	async def test_register_verify_invalid_otp(self, app_client, redis_client):
 		"""Invalid OTP returns error."""
@@ -579,6 +658,11 @@ class TestPasswordReset:
 		nonexisting_phone = "201999999999"
 
 		try:
+			# Clean up OTP rate limit keys for these phones and IP
+			await redis_client.delete(f"memora:ratelimit:otp:phone:{existing_phone}")
+			await redis_client.delete(f"memora:ratelimit:otp:phone:{nonexisting_phone}")
+			await redis_client.delete("memora:ratelimit:otp:ip:127.0.0.1")
+
 			with patch("fastapi_app.api.v1.endpoints.auth.get_frappe_client") as mock_get_frappe:
 				mock_frappe_client = AsyncMock()
 				mock_get_frappe.return_value = mock_frappe_client
@@ -599,8 +683,12 @@ class TestPasswordReset:
 				)
 				assert resp2.status_code == 200  # Still 200 for anti-enumeration
 		finally:
-			await redis_client.delete(f"memora:rate:reset:{existing_phone}")
-			await redis_client.delete(f"memora:rate:reset:{nonexisting_phone}")
+			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
+			await redis_client.delete(f"memora:ratelimit:account:{existing_phone.lower()}")
+			await redis_client.delete(f"memora:ratelimit:account:{nonexisting_phone.lower()}")
+			await redis_client.delete(f"memora:ratelimit:otp:phone:{existing_phone}")
+			await redis_client.delete(f"memora:ratelimit:otp:phone:{nonexisting_phone}")
+			await redis_client.delete("memora:ratelimit:otp:ip:127.0.0.1")
 
 	async def test_password_reset_verify_valid(self, app_client, redis_client):
 		"""Valid reset OTP returns reset token."""
