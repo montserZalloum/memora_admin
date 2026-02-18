@@ -28,8 +28,8 @@
 
 **Purpose**: Add the 3 missing columns to the partitioned `tabMemora Memory State` table via the existing `setup.py` migration pattern.
 
-- [ ] T001 [US4] Add `_ensure_fsrs_state_columns()` function to `memora_admin/setup.py` that checks `INFORMATION_SCHEMA.COLUMNS` for existence of `state`, `step`, `last_review` columns on `tabMemora Memory State`, and adds each missing column via `frappe.db.sql_ddl()` — `state` TINYINT DEFAULT NULL, `step` TINYINT DEFAULT NULL, `last_review` DATETIME(6) DEFAULT NULL. Follow the `_ensure_item_id_binary_column()` idempotent pattern. Reference: `contracts/memory-state-sql.md` DDL section.
-- [ ] T002 [US4] Register `_ensure_fsrs_state_columns()` call in the `after_migrate()` function of `memora_admin/setup.py`, after existing column-ensuring calls.
+- [X] T001 [US4] Add `_ensure_fsrs_state_columns()` function to `memora_admin/setup.py` that checks `INFORMATION_SCHEMA.COLUMNS` for existence of `state`, `step`, `last_review` columns on `tabMemora Memory State`, and adds each missing column via `frappe.db.sql_ddl()` — `state` TINYINT DEFAULT NULL, `step` TINYINT DEFAULT NULL, `last_review` DATETIME(6) DEFAULT NULL. Follow the `_ensure_item_id_binary_column()` idempotent pattern. Reference: `contracts/memory-state-sql.md` DDL section.
+- [X] T002 [US4] Register `_ensure_fsrs_state_columns()` call in the `after_migrate()` function of `memora_admin/setup.py`, after existing column-ensuring calls.
 
 **Checkpoint**: Run `bench migrate` and verify columns exist via `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = 'tabMemora Memory State' AND COLUMN_NAME IN ('state','step','last_review')`.
 
@@ -39,7 +39,7 @@
 
 **Purpose**: Add virtual field definitions so the new columns are visible in the Frappe admin panel without triggering schema drift guards.
 
-- [ ] T003 [P] [US4] Add three `is_virtual: 1` field definitions (`state` as Int, `step` as Int, `last_review` as Datetime) to `memora_admin/doctype/memora_memory_state/memora_memory_state.json`. These are display-only fields — `is_virtual=1` prevents Frappe from managing the DB column and bypasses `_verify_no_schema_drift()`.
+- [X] T003 [P] [US4] Add three `is_virtual: 1` field definitions (`state` as Int, `step` as Int, `last_review` as Datetime) to `memora_admin/doctype/memora_memory_state/memora_memory_state.json`. These are display-only fields — `is_virtual=1` prevents Frappe from managing the DB column and bypasses `_verify_no_schema_drift()`.
 
 **Checkpoint**: `bench migrate` completes without schema drift errors. Fields appear in Memory State admin form as read-only.
 
@@ -53,11 +53,11 @@
 
 ### Implementation
 
-- [ ] T004 [US1] [US4] Update `_lookup_memory_state()` SELECT query in `memora_admin/tasks/fsrs_processor.py` to include `state, step, last_review` columns. Reference: `contracts/memory-state-sql.md` Lookup section.
-- [ ] T005 [US1] [US4] Update card reconstruction logic in `memora_admin/tasks/fsrs_processor.py` to restore `state`, `step`, and `last_review` from DB row onto the `fsrs.Card` object. NULL `state` → leave as Card() default (Learning). NULL `step` → leave as 0. NULL `last_review` → leave as None. Non-NULL `last_review` → add `tzinfo=timezone.utc`. Non-NULL `state` → `State(int(value))`. Reference: `contracts/card-reconstruction.md` Reconstruction section.
-- [ ] T006 [US1] Update card persistence in `_update_memory_state()` of `memora_admin/tasks/fsrs_processor.py` to write `state` (as `card.state.value`), `step` (as `card.step`, may be None), and `last_review` (as `card.last_review.replace(tzinfo=None)` if not None, else None) alongside existing stability/difficulty/next_review. Update SQL UPDATE statement per `contracts/memory-state-sql.md` Update section.
-- [ ] T007 [US1] Update card persistence in `_insert_memory_state()` of `memora_admin/tasks/fsrs_processor.py` to include `state`, `step`, and `last_review` in the INSERT statement and parameter dict. Reference: `contracts/memory-state-sql.md` Insert section.
-- [ ] T008 [US1] Update Redis cache write in `memora_admin/tasks/fsrs_processor.py` to include `state` (int), `step` (int or None), and `last_review` (ISO 8601 string or None) in the JSON payload written to `memora:fsrs:{player}:{item_id}`. Reference: `contracts/card-reconstruction.md` Redis Cache section.
+- [X] T004 [US1] [US4] Update `_lookup_memory_state()` SELECT query in `memora_admin/tasks/fsrs_processor.py` to include `state, step, last_review` columns. Reference: `contracts/memory-state-sql.md` Lookup section.
+- [X] T005 [US1] [US4] Update card reconstruction logic in `memora_admin/tasks/fsrs_processor.py` to restore `state`, `step`, and `last_review` from DB row onto the `fsrs.Card` object. NULL `state` → leave as Card() default (Learning). NULL `step` → leave as 0. NULL `last_review` → leave as None. Non-NULL `last_review` → add `tzinfo=timezone.utc`. Non-NULL `state` → `State(int(value))`. Reference: `contracts/card-reconstruction.md` Reconstruction section.
+- [X] T006 [US1] Update card persistence in `_update_memory_state()` of `memora_admin/tasks/fsrs_processor.py` to write `state` (as `card.state.value`), `step` (as `card.step`, may be None), and `last_review` (as `card.last_review.replace(tzinfo=None)` if not None, else None) alongside existing stability/difficulty/next_review. Update SQL UPDATE statement per `contracts/memory-state-sql.md` Update section.
+- [X] T007 [US1] Update card persistence in `_insert_memory_state()` of `memora_admin/tasks/fsrs_processor.py` to include `state`, `step`, and `last_review` in the INSERT statement and parameter dict. Reference: `contracts/memory-state-sql.md` Insert section.
+- [X] T008 [US1] Update Redis cache write in `memora_admin/tasks/fsrs_processor.py` to include `state` (int), `step` (int or None), and `last_review` (ISO 8601 string or None) in the JSON payload written to `memora:fsrs:{player}:{item_id}`. Reference: `contracts/card-reconstruction.md` Redis Cache section.
 
 **Checkpoint**: Process an interaction via the background processor. Query `tabMemora Memory State` and verify `state`, `step`, `last_review` are populated (not NULL) for the processed record.
 
@@ -71,9 +71,9 @@
 
 ### Implementation
 
-- [ ] T009 [US1] [US4] Update the inline SELECT query in `submit_reviews()` of `memora_admin/api/reviews.py` to include `state, step, last_review` columns. Reference: `contracts/memory-state-sql.md` Lookup section.
-- [ ] T010 [US1] [US4] Update card reconstruction logic in `submit_reviews()` of `memora_admin/api/reviews.py` to restore `state`, `step`, and `last_review` from DB row onto the `fsrs.Card` object. Same NULL-handling rules as T005. Reference: `contracts/card-reconstruction.md` Reconstruction section.
-- [ ] T011 [US1] [US2] Update card persistence (inline UPDATE) in `submit_reviews()` of `memora_admin/api/reviews.py` to write `state`, `step`, and `last_review` alongside existing fields. Same extraction logic as T006. Reference: `contracts/memory-state-sql.md` Update section.
+- [X] T009 [US1] [US4] Update the inline SELECT query in `submit_reviews()` of `memora_admin/api/reviews.py` to include `state, step, last_review` columns. Reference: `contracts/memory-state-sql.md` Lookup section.
+- [X] T010 [US1] [US4] Update card reconstruction logic in `submit_reviews()` of `memora_admin/api/reviews.py` to restore `state`, `step`, and `last_review` from DB row onto the `fsrs.Card` object. Same NULL-handling rules as T005. Reference: `contracts/card-reconstruction.md` Reconstruction section.
+- [X] T011 [US1] [US2] Update card persistence (inline UPDATE) in `submit_reviews()` of `memora_admin/api/reviews.py` to write `state`, `step`, and `last_review` alongside existing fields. Same extraction logic as T006. Reference: `contracts/memory-state-sql.md` Update section.
 
 **Checkpoint**: Call `submit_reviews` API endpoint. Query the updated Memory State record and verify all 6 FSRS fields are persisted.
 
@@ -83,9 +83,9 @@
 
 **Purpose**: End-to-end validation and deployment prep.
 
-- [ ] T012 Verify that `_verify_no_schema_drift()` in `memora_admin/setup.py` does NOT flag the new columns (they must be `is_virtual=1` in JSON). Run `bench migrate` and confirm no drift errors.
-- [ ] T013 Run quickstart.md verification queries against the live database: confirm new columns exist, confirm a processed record has non-NULL state/step/last_review, confirm review state cards have future `next_review` dates.
-- [ ] T014 Restart Frappe workers (`bench restart`) and FastAPI server (`pkill -f "uvicorn fastapi_app.main:app"`) to activate all changes. Verify health check passes.
+- [X] T012 Verify that `_verify_no_schema_drift()` in `memora_admin/setup.py` does NOT flag the new columns (they must be `is_virtual=1` in JSON). Run `bench migrate` and confirm no drift errors.
+- [X] T013 Run quickstart.md verification queries against the live database: confirm new columns exist, confirm a processed record has non-NULL state/step/last_review, confirm review state cards have future `next_review` dates.
+- [X] T014 Restart Frappe workers (`bench restart`) and FastAPI server (`pkill -f "uvicorn fastapi_app.main:app"`) to activate all changes. Verify health check passes.
 
 ---
 

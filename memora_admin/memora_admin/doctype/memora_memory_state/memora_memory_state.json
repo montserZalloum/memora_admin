@@ -16,7 +16,10 @@
   "stability",
   "difficulty",
   "next_review",
-  "lesson"
+  "lesson",
+  "state",
+  "step",
+  "last_review"
  ],
  "fields": [
   {
@@ -81,12 +84,33 @@
    "label": "Lesson",
    "options": "Memora Lesson",
    "reqd": 1
+  },
+  {
+   "fieldname": "state",
+   "fieldtype": "Int",
+   "is_virtual": 1,
+   "label": "State",
+   "read_only": 1
+  },
+  {
+   "fieldname": "step",
+   "fieldtype": "Int",
+   "is_virtual": 1,
+   "label": "Step",
+   "read_only": 1
+  },
+  {
+   "fieldname": "last_review",
+   "fieldtype": "Datetime",
+   "is_virtual": 1,
+   "label": "Last Review",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-11 09:35:48.000000",
+ "modified": "2026-02-18 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Memory State",

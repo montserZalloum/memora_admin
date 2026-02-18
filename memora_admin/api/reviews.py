@@ -22,7 +22,7 @@ IMPORTANT -- RAW SQL ONLY:
 from __future__ import annotations
 
 import json
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 
 import frappe
 
@@ -146,7 +146,7 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 
 	Returns: {"processed": int, "remaining_due": int, "has_more": bool}
 	"""
-	from fsrs import Card, Rating
+	from fsrs import Card, Rating, State
 
 	if isinstance(items, str):
 		items_list = json.loads(items)
@@ -165,7 +165,7 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 		# Look up existing Memory State by (player, item_id, season_seq)
 		memory_state = frappe.db.sql(
 			"""
-			SELECT name, stability, difficulty, next_review
+			SELECT name, stability, difficulty, next_review, state, step, last_review
 			FROM `tabMemora Memory State`
 			WHERE player = %(player)s
 			  AND item_id = UUID_TO_BIN(%(item_id)s)
@@ -187,9 +187,29 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 
 		# Reconstruct FSRS Card from stored state
 		card = Card()
-		card.stability = ms.stability or 0
-		card.difficulty = ms.difficulty or 0
-		card.due = ms.next_review if ms.next_review else now
+		if ms.stability and ms.stability > 0:
+			card.stability = ms.stability
+			card.difficulty = ms.difficulty
+			if ms.next_review:
+				if isinstance(ms.next_review, date) and not isinstance(ms.next_review, datetime):
+					card.due = datetime.combine(ms.next_review, time.min, tzinfo=timezone.utc)
+				else:
+					card.due = ms.next_review
+			else:
+				card.due = now
+
+			# Restore state (NULL = Learning, same as Card() default)
+			if ms.state is not None:
+				card.state = State(int(ms.state))
+			# Restore step (NULL preserved as-is)
+			if ms.step is not None:
+				card.step = int(ms.step)
+			# Restore last_review (NULL = never reviewed)
+			if ms.last_review is not None:
+				lr = ms.last_review
+				if lr.tzinfo is None:
+					lr = lr.replace(tzinfo=timezone.utc)
+				card.last_review = lr
 
 		# Map fail_count to FSRS rating
 		if fail_count == 0:
@@ -208,6 +228,11 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 			next_date = tomorrow
 		next_review_date = next_date
 
+		# Extract new FSRS state fields for persistence
+		card_state = card.state.value
+		card_step = card.step  # int or None
+		card_last_review = card.last_review.replace(tzinfo=None) if card.last_review else None
+
 		# Update via raw SQL (partition-aware)
 		frappe.db.sql(
 			"""
@@ -215,6 +240,9 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 			SET stability = %(stability)s,
 			    difficulty = %(difficulty)s,
 			    next_review = %(next_review)s,
+			    state = %(state)s,
+			    step = %(step)s,
+			    last_review = %(last_review)s,
 			    modified = NOW(6)
 			WHERE name = %(name)s
 			  AND season_seq = %(season_seq)s
@@ -225,6 +253,9 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 				"stability": card.stability,
 				"difficulty": card.difficulty,
 				"next_review": next_review_date,
+				"state": card_state,
+				"step": card_step,
+				"last_review": card_last_review,
 			},
 		)
 

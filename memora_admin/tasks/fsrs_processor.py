@@ -135,7 +135,7 @@ def _lookup_memory_state(player: str, item_id: str, season_seq: int) -> dict | N
 	"""
 	rows = frappe.db.sql(
 		"""
-		SELECT name, stability, difficulty, next_review
+		SELECT name, stability, difficulty, next_review, state, step, last_review
 		FROM `tabMemora Memory State`
 		WHERE player = %(player)s
 			AND item_id = UUID_TO_BIN(%(item_id)s)
@@ -153,7 +153,14 @@ def _lookup_memory_state(player: str, item_id: str, season_seq: int) -> dict | N
 
 
 def _update_memory_state(
-	name: int, season_seq: int, stability: float, difficulty: float, next_review: date
+	name: int,
+	season_seq: int,
+	stability: float,
+	difficulty: float,
+	next_review: date,
+	state: int,
+	step: int | None,
+	last_review: datetime | None,
 ) -> None:
 	"""Update existing Memory State via raw SQL for partition-aware queries."""
 	frappe.db.sql(
@@ -162,6 +169,9 @@ def _update_memory_state(
 		SET stability = %(stability)s,
 			difficulty = %(difficulty)s,
 			next_review = %(next_review)s,
+			state = %(state)s,
+			step = %(step)s,
+			last_review = %(last_review)s,
 			modified = NOW(6)
 		WHERE name = %(name)s
 			AND season_seq = %(season_seq)s
@@ -172,6 +182,9 @@ def _update_memory_state(
 			"stability": stability,
 			"difficulty": difficulty,
 			"next_review": next_review,
+			"state": state,
+			"step": step,
+			"last_review": last_review,
 		},
 	)
 
@@ -187,6 +200,9 @@ def _insert_memory_state(
 	stability: float,
 	difficulty: float,
 	next_review: date,
+	state: int,
+	step: int | None,
+	last_review: datetime | None,
 ) -> int:
 	"""Insert new Memory State via raw SQL with BIGINT sequence PK and UUID_TO_BIN.
 
@@ -202,12 +218,12 @@ def _insert_memory_state(
 		"""
 		INSERT INTO `tabMemora Memory State`
 		(name, season, season_seq, subject, player, item_id, stage_id, lesson,
-		 stability, difficulty, next_review,
+		 stability, difficulty, next_review, state, step, last_review,
 		 creation, modified, owner, modified_by, docstatus, idx)
 		VALUES
 		(%(name)s, %(season)s, %(season_seq)s, %(subject)s, %(player)s,
 		 UUID_TO_BIN(%(item_id)s), %(stage_id)s, %(lesson)s,
-		 %(stability)s, %(difficulty)s, %(next_review)s,
+		 %(stability)s, %(difficulty)s, %(next_review)s, %(state)s, %(step)s, %(last_review)s,
 		 NOW(6), NOW(6), 'Administrator', 'Administrator', 0, 0)
 		""",
 		{
@@ -222,6 +238,9 @@ def _insert_memory_state(
 			"stability": stability,
 			"difficulty": difficulty,
 			"next_review": next_review,
+			"state": state,
+			"step": step,
+			"last_review": last_review,
 		},
 	)
 	return next_name
@@ -279,7 +298,7 @@ def process_fsrs_reviews():
 	skipped = 0
 	errors_list = []
 
-	from fsrs import Card
+	from fsrs import Card, State
 
 	for interaction in interactions:
 		stage_id = interaction.stage_id
@@ -376,6 +395,19 @@ def process_fsrs_reviews():
 				else:
 					card.due = now
 
+				# T005: Restore state (NULL = Learning, same as Card() default)
+				if existing.state is not None:
+					card.state = State(int(existing.state))
+				# Restore step (NULL preserved as-is)
+				if existing.step is not None:
+					card.step = int(existing.step)
+				# Restore last_review (NULL = never reviewed)
+				if existing.last_review is not None:
+					lr = existing.last_review
+					if lr.tzinfo is None:
+						lr = lr.replace(tzinfo=timezone.utc)
+					card.last_review = lr
+
 				card, _review_log = scheduler.review_card(card, rating, now)
 			else:
 				# New card -- first review
@@ -389,6 +421,11 @@ def process_fsrs_reviews():
 				next_date = tomorrow
 			next_review_date = next_date
 
+			# Extract new FSRS state fields for persistence
+			card_state = card.state.value
+			card_step = card.step  # int or None
+			card_last_review = card.last_review.replace(tzinfo=None) if card.last_review else None
+
 			# Persist to Memora Memory State via raw SQL
 			if existing:
 				_update_memory_state(
@@ -397,6 +434,9 @@ def process_fsrs_reviews():
 					stability=card.stability,
 					difficulty=card.difficulty,
 					next_review=next_review_date,
+					state=card_state,
+					step=card_step,
+					last_review=card_last_review,
 				)
 			else:
 				_insert_memory_state(
@@ -410,15 +450,21 @@ def process_fsrs_reviews():
 					stability=card.stability,
 					difficulty=card.difficulty,
 					next_review=next_review_date,
+					state=card_state,
+					step=card_step,
+					last_review=card_last_review,
 				)
 
-			# Cache in Redis for fast access (keyed by item_id, not stage_id)
+			# T008: Cache in Redis for fast access (keyed by item_id, not stage_id)
 			redis_key = f"memora:fsrs:{player}:{item_id}"
 			fsrs_data = json.dumps(
 				{
 					"stability": card.stability,
 					"difficulty": card.difficulty,
 					"next_review": next_review_date.isoformat(),
+					"state": card_state,
+					"step": card_step,
+					"last_review": card_last_review.isoformat() if card_last_review else None,
 					"lesson": lesson,
 					"stage_id": stage_id,
 				}

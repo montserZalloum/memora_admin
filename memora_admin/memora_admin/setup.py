@@ -157,6 +157,11 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Partitioning setup failed: {e}")
 
+	try:
+		_ensure_fsrs_state_columns()
+	except Exception as e:
+		print(f"[after_migrate] FSRS state columns setup failed: {e}")
+
 	# Voucher schema extensions
 	try:
 		_setup_voucher_schema()
@@ -473,6 +478,47 @@ def _ensure_memory_state_indexes():
 	if _existing_all:
 		frappe.db.sql_ddl("ALTER TABLE `tabMemora Memory State` DROP INDEX idx_mastery")
 		print("[after_migrate] Dropped idx_mastery (write amplification risk at scale)")
+
+
+def _ensure_fsrs_state_columns():
+	"""Ensure state, step, last_review columns exist on tabMemora Memory State.
+
+	These 3 columns store the full FSRS card state, enabling intervals to grow
+	correctly across review sessions. Added here (not via JSON) because this is
+	a 10B-row RANGE-partitioned table managed exclusively by setup.py.
+
+	Idempotent: checks INFORMATION_SCHEMA before adding each column.
+	Instant operation: MariaDB InnoDB ADD COLUMN with DEFAULT NULL is metadata-only.
+	"""
+	# Check which of the 3 columns already exist
+	existing = frappe.db.sql("""
+		SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		AND TABLE_NAME = 'tabMemora Memory State'
+		AND COLUMN_NAME IN ('state', 'step', 'last_review')
+	""")
+	existing_cols = {row[0] for row in existing}
+
+	if "state" not in existing_cols:
+		frappe.db.sql_ddl("""
+			ALTER TABLE `tabMemora Memory State`
+			ADD COLUMN `state` TINYINT DEFAULT NULL
+		""")
+		print("[after_migrate] Created state TINYINT column on tabMemora Memory State")
+
+	if "step" not in existing_cols:
+		frappe.db.sql_ddl("""
+			ALTER TABLE `tabMemora Memory State`
+			ADD COLUMN `step` TINYINT DEFAULT NULL
+		""")
+		print("[after_migrate] Created step TINYINT column on tabMemora Memory State")
+
+	if "last_review" not in existing_cols:
+		frappe.db.sql_ddl("""
+			ALTER TABLE `tabMemora Memory State`
+			ADD COLUMN `last_review` DATETIME(6) DEFAULT NULL
+		""")
+		print("[after_migrate] Created last_review DATETIME(6) column on tabMemora Memory State")
 
 
 def _setup_voucher_schema():
