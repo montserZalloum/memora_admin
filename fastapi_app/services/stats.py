@@ -215,5 +215,6 @@ def compute_stats_from_hierarchy(
 
 	stats["completed"] = str(subject_completed)
 	stats["total"] = str(subject_total)
+	stats["_content_hash"] = hierarchy.content_hash
 
 	return stats

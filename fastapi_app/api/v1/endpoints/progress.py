@@ -277,9 +277,9 @@ async def get_subject_tracks(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats (cold start or incomplete stats handled)
+	# Get or initialize stats (cold start, incomplete, or stale stats handled)
 	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats:
+	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
 		completed_bits = await progress_service.get_completed_bits(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
@@ -367,9 +367,9 @@ async def get_track_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats (cold start or incomplete stats handled)
+	# Get or initialize stats (cold start, incomplete, or stale stats handled)
 	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats:
+	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
 		completed_bits = await progress_service.get_completed_bits(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
@@ -476,9 +476,9 @@ async def get_unit_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats (cold start or incomplete stats handled)
+	# Get or initialize stats (cold start, incomplete, or stale stats handled)
 	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats:
+	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
 		completed_bits = await progress_service.get_completed_bits(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
@@ -677,8 +677,8 @@ async def get_subject_progress(
 		version=hierarchy.version,
 	)
 
-	if stats is None or "total" not in stats:
-		# Cold start or incomplete stats (missing "total" field from partial HINCRBY):
+	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
+		# Cold start, incomplete stats, or stale stats (content hash mismatch):
 		# Recompute from bitmap and cache with all fields including totals.
 		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
 		await stats_service.set_stats(

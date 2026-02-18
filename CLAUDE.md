@@ -165,6 +165,19 @@ Redis is a **hot cache**, MariaDB is source of truth. After FLUSHDB/restart/evic
 | Plan Overrider changed | Plan cache | `on_plan_overrider_changed` |
 | Product Grant changed | Catalog cache | `catalog_sync.py` |
 
+### Stats Cache Staleness (Content Hash)
+
+**Known issue:** When lessons are added/removed, per-user stats caches (`memora:stats:{user}:{subject}:v{version}`) retain stale totals until TTL expires (1h). The `completion_percentage` in MariaDB is also stale.
+
+**Planned fix (PRD: `.planning/prd/stats-hash-staleness.md`):** Embed a `_content_hash` field in the stats hash derived from hierarchy structure. On read, compare with current hierarchy's `content_hash`. Mismatch triggers lazy recompute (~4ms). Zero writes on content change — fully scalable at 100k+ users.
+
+**Key rules for implementation:**
+- `content_hash` must be deterministic and change IFF stats totals would change
+- Hash only structural fields (bit_range, excluded_bits, lesson IDs, bit_indices) — NOT `is_linear`, `xp`, etc.
+- HINCRBY warm path (lesson completion) must NOT be modified
+- Pre-migration stats without `_content_hash` must self-heal (mismatch → recompute)
+- When hierarchy version bumps, content hash is redundant but harmless (both mechanisms coexist)
+
 ### Free Content Access Model
 
 A **premium subject** (`is_premium=1`) can contain **individual free topics/units** as samples. The hierarchy API reads `free_units`/`free_topics` from Plan Subject `meta_data` across ALL Plan Subject records (regardless of `is_premium` flag). The progress endpoint allows access if `hierarchy.has_any_free_content()` is true, even without explicit grants.
@@ -218,6 +231,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM (Player Wallet, Structure Progress, Interaction Log, Sync Log); Redis at `redis://127.0.0.1:13000` (dirty sets, wallet hashes, progress bitmaps, interaction buffer) (016-sync-task-tests)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM-blocked, raw SQL only), `fsrs` 6.3.0 (FSRS library), `redis` (synchronous, for background processor) (018-fsrs-card-state)
 - MariaDB 10.6 via `frappe.db.sql()` (RANGE-partitioned `tabMemora Memory State`), Redis at `redis://127.0.0.1:13000` (card state cache) (018-fsrs-card-state)
+- Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, whitelist API), FastAPI, Pydantic v2, `redis.asyncio`, `hashlib` (stdlib) (019-stats-content-hash)
+- Redis at `redis://127.0.0.1:13000` (stats hash, hierarchy JSON cache), MariaDB via Frappe ORM (hierarchy source data) (019-stats-content-hash)
 
 ## Test Environment Configuration
 
@@ -237,6 +252,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 019-stats-content-hash: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, whitelist API), FastAPI, Pydantic v2, `redis.asyncio`, `hashlib` (stdlib)
 - 018-fsrs-card-state: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM-blocked, raw SQL only), `fsrs` 6.3.0 (FSRS library), `redis` (synchronous, for background processor)
 - 016-sync-task-tests: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `redis` (synchronous), `unittest.mock`
-- 015-characterization-tests: Added Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, redis.asyncio, unittest.mock.AsyncMock
+
+## Important Notes for dev
+- this project must handle 100k concurrent users

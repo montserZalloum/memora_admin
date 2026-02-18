@@ -67,6 +67,7 @@ class SubjectHierarchy(BaseModel):
 	is_linear: bool = True  # If true, tracks must complete in order
 	free_units: list[str] = []  # Unit IDs that are marked as free
 	free_topics: list[str] = []  # Topic IDs that are marked as free
+	content_hash: str = ""  # Structural fingerprint (8 hex chars); "" = pre-migration
 	tracks: list[TrackInfo]
 
 	def find_lesson(self, lesson_id: str) -> LessonInfo | None:

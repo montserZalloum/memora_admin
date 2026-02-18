@@ -1,8 +1,38 @@
 """Frappe API for subject hierarchy operations."""
 
+import hashlib
 import json
 
 import frappe
+
+
+def _compute_content_hash(hierarchy: dict) -> str:
+	"""Compute a structural fingerprint for the hierarchy.
+
+	Hashes only fields that affect stats totals (bit_range, excluded_bits,
+	track/unit/topic/lesson IDs, lesson counts and bit_indices).
+	Ignores is_linear, is_free, xp, max_hearts — they don't affect totals.
+
+	Returns:
+	    8-character hex string (32 bits, MD5 truncated).
+	"""
+	h = hashlib.md5()
+	h.update(str(hierarchy["bit_range"]).encode())
+	excluded = hierarchy.get("excluded_bits", [])
+	h.update(str(len(excluded)).encode())
+	for eb in sorted(excluded):
+		h.update(str(eb).encode())
+	for track in hierarchy["tracks"]:
+		h.update(track["track_id"].encode())
+		for unit in track["units"]:
+			h.update(unit["unit_id"].encode())
+			for topic in unit["topics"]:
+				h.update(topic["topic_id"].encode())
+				h.update(str(len(topic["lessons"])).encode())
+				for lesson in topic["lessons"]:
+					h.update(lesson["lesson_id"].encode())
+					h.update(str(lesson["bit_index"]).encode())
+	return h.hexdigest()[:8]
 
 
 def _get_free_content_from_plan(subject_id: str) -> tuple[list[str], list[str]]:
@@ -182,5 +212,6 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 	)
 	hierarchy["free_units"] = free_units
 	hierarchy["free_topics"] = free_topics
+	hierarchy["content_hash"] = _compute_content_hash(hierarchy)
 
 	return hierarchy
