@@ -9,7 +9,9 @@ void_batch() for bulk voiding, void_card() for single card voiding,
 and preview_voucher() / redeem_voucher() for PIN-based redemption.
 """
 
+import csv
 import hmac as hmac_module
+import io
 
 import frappe
 from frappe.utils import now as frappe_now
@@ -256,11 +258,34 @@ def export_for_print(batch_name: str):
 
 	csv_bytes = decrypt_data(encrypted_bytes, hmac_secret)
 
+	# Filter CSV to only include Available cards
+	available_serials = set(
+		row[0]
+		for row in frappe.db.sql(
+			"SELECT serial_no FROM `tabMemora Voucher Card` WHERE batch = %s AND status = 'Available'",
+			(batch_name,),
+		)
+	)
+
+	csv_text = csv_bytes.decode("utf-8")
+	reader = csv.DictReader(io.StringIO(csv_text))
+	filtered_rows = [row for row in reader if row["serial_no"] in available_serials]
+
+	if not filtered_rows:
+		frappe.throw("No available cards to export for this batch.")
+
+	# Rebuild CSV with same format
+	output = io.StringIO()
+	writer = csv.DictWriter(output, fieldnames=["serial_no", "pin", "product_names", "face_value"])
+	writer.writeheader()
+	writer.writerows(filtered_rows)
+	csv_bytes = output.getvalue().encode("utf-8")
+
 	# Log the export in the child table
 	batch.append("export_log", {
 		"exported_by": frappe.session.user,
 		"exported_at": frappe.utils.now(),
-		"card_count": batch.generated_count,
+		"card_count": len(filtered_rows),
 	})
 	batch.save(ignore_permissions=True)
 	frappe.db.commit()
