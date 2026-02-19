@@ -1,33 +1,60 @@
 # Copyright (c) 2026, corex and Contributors
 # See license.txt
 
+from unittest.mock import patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 from frappe.utils import today, add_days, random_string
+
+TEST_PREFIX = "ZTest Season "
+
+
+def _cleanup_test_seasons():
+	"""Delete all test seasons by prefix. Uses raw SQL to bypass ORM side effects."""
+	names = frappe.db.sql_list(
+		"SELECT name FROM `tabMemora Season` WHERE season_title LIKE %s",
+		f"{TEST_PREFIX}%",
+	)
+	for name in names:
+		frappe.delete_doc("Memora Season", name, force=True, ignore_permissions=True)
+	if names:
+		frappe.db.commit()
 
 
 class TestMemoraSeason(FrappeTestCase):
 	"""Tests for Memora Season auto-increment season_seq behaviour."""
 
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		_cleanup_test_seasons()
+
+	@classmethod
+	def tearDownClass(cls):
+		_cleanup_test_seasons()
+		super().tearDownClass()
+
 	def _make_season(self, **kwargs):
-		"""Helper: create and insert a season, track for cleanup."""
+		"""Create a season with partition creation mocked out (DDL can't rollback)."""
 		defaults = {
 			"doctype": "Memora Season",
-			"season_title": f"Test Season {random_string(8)}",
+			"season_title": f"{TEST_PREFIX}{random_string(8)}",
 			"start_date": today(),
 			"end_date": add_days(today(), 90),
 			"is_published": 0,
 		}
 		defaults.update(kwargs)
 		doc = frappe.get_doc(defaults)
-		doc.insert(ignore_permissions=True)
+		with patch.object(type(doc), "_ensure_memory_state_partition"):
+			doc.insert(ignore_permissions=True)
 		return doc
 
 	# ── Auto-increment ────────────────────────────────────────────────
 
 	def test_season_seq_auto_assigned_when_blank(self):
 		"""season_seq must be auto-assigned by before_insert when left blank."""
-		doc = self._make_season()  # no season_seq passed
+		doc = self._make_season()
 		self.assertIsNotNone(doc.season_seq)
 		self.assertGreater(doc.season_seq, 0)
 
@@ -39,8 +66,9 @@ class TestMemoraSeason(FrappeTestCase):
 
 	def test_season_seq_explicit_value_respected(self):
 		"""Programmatic creation with explicit season_seq must keep that value."""
-		# Use a very high number unlikely to collide
-		explicit_seq = 99990 + int(random_string(3), 36) % 9
+		from memora_admin.memora_admin.doctype.memora_season.memora_season import _get_next_season_seq
+		next_seq = _get_next_season_seq()
+		explicit_seq = next_seq + 2
 		doc = self._make_season(season_seq=explicit_seq)
 		self.assertEqual(doc.season_seq, explicit_seq)
 
