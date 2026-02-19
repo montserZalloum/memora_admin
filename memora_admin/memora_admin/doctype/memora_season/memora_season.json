@@ -21,12 +21,12 @@
    "reqd": 1
   },
   {
-   "description": "Sequential integer for partitioning (1, 2, 3...)",
+   "description": "Auto-generated sequential integer for partitioning. Cannot be changed after creation.",
    "fieldname": "season_seq",
    "fieldtype": "Int",
    "in_list_view": 1,
    "label": "Season Seq",
-   "reqd": 1,
+   "read_only": 1,
    "unique": 1
   },
   {

@@ -23,8 +23,10 @@ def get_next_season_seq():
 
 class MemoraSeason(Document):
 	def before_insert(self):
+		# Always auto-assign if blank (field is read_only in UI)
 		if not self.season_seq:
 			self.season_seq = _get_next_season_seq()
+		frappe.msgprint(f"Season Seq auto-assigned: {self.season_seq}", indicator="green", alert=True)
 
 	def after_insert(self):
 		self._ensure_memory_state_partition()
