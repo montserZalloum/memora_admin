@@ -9,16 +9,11 @@
   "cdn_section",
   "cdn_enabled",
   "cdn_base_url",
-  "local_fallback_mode",
   "storage_provider",
   "cloudflare_zone_id",
   "column_break_cdn",
   "json_version",
   "access_key",
-  "secret_key",
-  "batch_interval_minutes",
-  "batch_threshold",
-  "signed_url_expiry_hours",
   "gamification_section",
   "default_max_hearts",
   "xp_per_heart",
@@ -52,17 +47,10 @@
    "label": "CDN Base URL"
   },
   {
-   "default": "1",
-   "description": "\u0627\u0644\u0633\u062d\u0628 \u0645\u0646 \u0627\u0644\u0633\u064a\u0631\u0641\u0631 \u0627\u0644\u0645\u062d\u0644\u064a \u0641\u064a \u062d\u0627\u0644 \u062a\u0639\u0637\u0644 \u0627\u0644\u0640 CDN",
-   "fieldname": "local_fallback_mode",
-   "fieldtype": "Check",
-   "label": "Local Fallback Mode"
-  },
-  {
    "fieldname": "storage_provider",
    "fieldtype": "Select",
    "label": "Storage Provider",
-   "options": "Local Only\nCloudflare CDN"
+   "options": "Cloudflare CDN"
   },
   {
    "depends_on": "eval:doc.cdn_enabled && doc.storage_provider=='Cloudflare CDN'",
@@ -85,29 +73,6 @@
    "fieldname": "access_key",
    "fieldtype": "Password",
    "label": "Cloudflare API Token"
-  },
-  {
-   "fieldname": "secret_key",
-   "fieldtype": "Password",
-   "label": "Secret Key"
-  },
-  {
-   "default": "5",
-   "fieldname": "batch_interval_minutes",
-   "fieldtype": "Int",
-   "label": "Batch Interval (minutes)"
-  },
-  {
-   "default": "50",
-   "fieldname": "batch_threshold",
-   "fieldtype": "Int",
-   "label": "Batch Threshold"
-  },
-  {
-   "default": "4",
-   "fieldname": "signed_url_expiry_hours",
-   "fieldtype": "Int",
-   "label": "Signed URL Expiry (hours)"
   },
   {
    "fieldname": "gamification_section",
