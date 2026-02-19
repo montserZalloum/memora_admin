@@ -11,6 +11,7 @@
   "cdn_base_url",
   "local_fallback_mode",
   "storage_provider",
+  "cloudflare_zone_id",
   "column_break_cdn",
   "json_version",
   "access_key",
@@ -45,6 +46,7 @@
    "label": "CDN Enabled"
   },
   {
+   "depends_on": "eval:doc.cdn_enabled",
    "fieldname": "cdn_base_url",
    "fieldtype": "Data",
    "label": "CDN Base URL"
@@ -60,7 +62,13 @@
    "fieldname": "storage_provider",
    "fieldtype": "Select",
    "label": "Storage Provider",
-   "options": "AWS S3\nCloudflare R2"
+   "options": "Local Only\nCloudflare CDN"
+  },
+  {
+   "depends_on": "eval:doc.cdn_enabled && doc.storage_provider=='Cloudflare CDN'",
+   "fieldname": "cloudflare_zone_id",
+   "fieldtype": "Data",
+   "label": "Cloudflare Zone ID"
   },
   {
    "fieldname": "column_break_cdn",
@@ -73,9 +81,10 @@
    "label": "JSON Version"
   },
   {
+   "depends_on": "eval:doc.cdn_enabled && doc.storage_provider=='Cloudflare CDN'",
    "fieldname": "access_key",
    "fieldtype": "Password",
-   "label": "Access Key"
+   "label": "Cloudflare API Token"
   },
   {
    "fieldname": "secret_key",
@@ -179,7 +188,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-02-01 11:14:20.088486",
+ "modified": "2026-02-19 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Settings",

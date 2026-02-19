@@ -235,6 +235,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - Redis at `redis://127.0.0.1:13000` (stats hash, hierarchy JSON cache), MariaDB via Frappe ORM (hierarchy source data) (019-stats-content-hash)
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API), `csv` (stdlib), `io` (stdlib) (020-fix-export-redeemed-cards)
 - MariaDB via Frappe ORM (card status lookup), encrypted file on disk (PIN source) (020-fix-export-redeemed-cards)
+- Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API, background jobs), `requests` (HTTP client, already available) (021-cdn-cache-purge)
+- MariaDB via Frappe ORM (Memora Settings singleton), no new tables (021-cdn-cache-purge)
 
 ## Test Environment Configuration
 
@@ -254,9 +256,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 021-cdn-cache-purge: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API, background jobs), `requests` (HTTP client, already available)
 - 020-fix-export-redeemed-cards: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API), `csv` (stdlib), `io` (stdlib)
 - 019-stats-content-hash: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, whitelist API), FastAPI, Pydantic v2, `redis.asyncio`, `hashlib` (stdlib)
-- 018-fsrs-card-state: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM-blocked, raw SQL only), `fsrs` 6.3.0 (FSRS library), `redis` (synchronous, for background processor)
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

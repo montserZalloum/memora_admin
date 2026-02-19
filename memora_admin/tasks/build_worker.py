@@ -126,6 +126,9 @@ def _process_single_build(build: dict):
 			# Clear retry count
 			_clear_retry_count(build_name)
 
+			# Purge CDN cache for published files (best-effort, never fails build)
+			_purge_cdn_cache(files)
+
 			entity_type = "plan" if target_type == "Memora Academic Plan" else "subject"
 			logger.info(f"Build {build_name} completed successfully for {entity_type} {target_name}, {len(files)} files published")
 		else:
@@ -320,3 +323,46 @@ def _clear_retry_count(build_name: str):
 		frappe.cache.delete(retry_key)
 	except Exception as e:
 		logger.debug(f"Failed to clear retry key {retry_key}: {e}")
+
+
+def _purge_cdn_cache(files: list) -> None:
+	"""
+	Purge published files from Cloudflare edge cache after a successful build.
+
+	Best-effort: failures are logged but never raise or affect build outcome.
+
+	Args:
+		files: Nested file list from the generator (same structure passed to publish_to_cdn).
+	"""
+	try:
+		from memora_admin.memora_admin.services.cdn.utils import get_purge_service
+
+		purge_service = get_purge_service()
+		if purge_service is None:
+			# CDN not configured — skip silently
+			return
+
+		# Flatten nested structure to extract all filenames
+		def _collect_filenames(file_list: list) -> list[str]:
+			names: list[str] = []
+			for f in file_list:
+				if isinstance(f, dict) and "filename" in f:
+					names.append(f["filename"])
+					if "children" in f and isinstance(f["children"], list):
+						names.extend(_collect_filenames(f["children"]))
+			return names
+
+		filenames = _collect_filenames(files)
+
+		if not filenames:
+			logger.debug("No filenames to purge from CDN")
+			return
+
+		success = purge_service.purge_files(filenames)
+		if success:
+			logger.info(f"CDN cache purged for {len(filenames)} files")
+		else:
+			logger.warning(f"CDN cache purge partially failed for {len(filenames)} files (see Error Log)")
+
+	except Exception as e:
+		logger.error(f"CDN cache purge error (build unaffected): {e}")
