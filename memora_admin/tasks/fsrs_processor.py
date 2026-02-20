@@ -281,7 +281,7 @@ def process_fsrs_reviews():
 		},
 		fields=["player", "lesson", "stage_id", "item_id", "errors_count", "time_spent", "creation"],
 		order_by="creation asc",
-		limit_page_length=500,
+		limit_page_length=2000,
 	)
 
 	logger.info(f"FSRS: Found {len(interactions)} recent interactions (cutoff: {cutoff})")
@@ -289,10 +289,67 @@ def process_fsrs_reviews():
 		logger.debug("No recent interactions for FSRS processing")
 		return
 
-	# Batch-resolve season info for all players in this batch (single JOIN query)
+	# Batch-resolve season info for all players (chunked to avoid huge IN clauses)
 	unique_players = list({i.player for i in interactions})
-	player_seasons = _resolve_player_seasons(unique_players)
+	player_seasons: dict[str, tuple[str, int]] = {}
+	for chunk_start in range(0, len(unique_players), 500):
+		chunk = unique_players[chunk_start : chunk_start + 500]
+		player_seasons.update(_resolve_player_seasons(chunk))
 	logger.info(f"FSRS: Resolved seasons for {len(player_seasons)}/{len(unique_players)} players")
+
+	# --- Batch-fetch all metadata BEFORE the loop (eliminates N+1 queries) ---
+
+	# 1. Batch-fetch lesson metadata (subject, is_reviewable, topic)
+	unique_lessons = list({i.lesson for i in interactions})
+	lessons_data = frappe.get_all(
+		"Memora Lesson",
+		filters={"name": ["in", unique_lessons]},
+		fields=["name", "subject", "is_reviewable", "topic"],
+	)
+	lesson_map = {l.name: l for l in lessons_data}
+
+	# 2. Batch-fetch stage metadata (stage_type, is_skippable)
+	unique_stages = list({i.stage_id for i in interactions if i.stage_id})
+	if unique_stages:
+		stages_data = frappe.get_all(
+			"Memora Lesson Stage",
+			filters={"name": ["in", unique_stages]},
+			fields=["name", "stage_type", "is_skippable", "parent"],
+		)
+		stage_map = {s.name: s for s in stages_data}
+	else:
+		stage_map = {}
+
+	# 3. For lessons missing subject, batch-resolve via hierarchy chain
+	missing_subject_ids = [lid for lid in unique_lessons if lid in lesson_map and not lesson_map[lid].get("subject")]
+	if missing_subject_ids:
+		topic_ids = list({lesson_map[lid].topic for lid in missing_subject_ids if lesson_map[lid].get("topic")})
+		topic_map: dict[str, dict] = {}
+		unit_map: dict[str, dict] = {}
+		track_map: dict[str, dict] = {}
+		if topic_ids:
+			topics_data = frappe.get_all("Memora Topic", filters={"name": ["in", topic_ids]}, fields=["name", "unit"])
+			topic_map = {t.name: t for t in topics_data}
+			unit_ids = list({t.unit for t in topics_data if t.unit})
+			if unit_ids:
+				units_data = frappe.get_all("Memora Unit", filters={"name": ["in", unit_ids]}, fields=["name", "track"])
+				unit_map = {u.name: u for u in units_data}
+				track_ids = list({u.track for u in units_data if u.track})
+				if track_ids:
+					tracks_data = frappe.get_all(
+						"Memora Track", filters={"name": ["in", track_ids]}, fields=["name", "subject"]
+					)
+					track_map = {t.name: t for t in tracks_data}
+
+		# Resolve subject for each lesson with missing subject
+		for lid in missing_subject_ids:
+			topic = lesson_map[lid].get("topic")
+			if topic and topic in topic_map:
+				unit = topic_map[topic].get("unit")
+				if unit and unit in unit_map:
+					track = unit_map[unit].get("track")
+					if track and track in track_map:
+						lesson_map[lid]["subject"] = track_map[track].get("subject")
 
 	processed = 0
 	skipped = 0
@@ -313,15 +370,8 @@ def process_fsrs_reviews():
 			continue
 		player_season, player_season_seq = season_info
 
-		# Look up stage_type from the lesson's child table (Memora Lesson Stage)
-		# stage_id is the child table row name, not stage_title
-		stage_row = frappe.db.get_value(
-			"Memora Lesson Stage",
-			{"name": stage_id, "parent": lesson},
-			["stage_type", "is_skippable"],
-			as_dict=True,
-		)
-
+		# Look up stage metadata from pre-fetched dict (was N+1: 1 query per interaction)
+		stage_row = stage_map.get(stage_id)
 		if stage_row:
 			# Per-stage override takes priority over global setting
 			if stage_row.is_skippable:
@@ -332,26 +382,15 @@ def process_fsrs_reviews():
 				skipped += 1
 				continue
 
-		# Resolve subject from lesson (direct field on Memora Lesson)
-		subject = frappe.db.get_value("Memora Lesson", lesson, "subject")
-
-		if not subject:
-			# Safety net: resolve via hierarchy chain
-			topic = frappe.db.get_value("Memora Lesson", lesson, "topic")
-			if topic:
-				unit = frappe.db.get_value("Memora Topic", topic, "unit")
-				if unit:
-					track = frappe.db.get_value("Memora Unit", unit, "track")
-					if track:
-						subject = frappe.db.get_value("Memora Track", track, "subject")
+		# Resolve subject and reviewable from pre-fetched dict (was N+1: 2-6 queries per interaction)
+		lesson_data = lesson_map.get(lesson)
+		subject = lesson_data.get("subject") if lesson_data else None
 
 		if not subject:
 			logger.warning(f"Could not determine subject for lesson {lesson}")
 			continue
 
-		# Check if lesson is reviewable before creating Memory State
-		is_reviewable = frappe.db.get_value("Memora Lesson", lesson, "is_reviewable")
-		if not is_reviewable:
+		if not (lesson_data and lesson_data.get("is_reviewable")):
 			skipped += 1
 			continue
 

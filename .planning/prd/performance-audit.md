@@ -13,6 +13,8 @@
 | ~~PERF-01: N+1 Query Storm in Hierarchy / Generator / Plan Generator~~ | ✅ Fixed | 2026-02-20 |
 | ~~Uncached `_get_skippable_stage_types()` in Generator~~ | ✅ Fixed by PERF-01 | 2026-02-20 |
 | ~~PERF-06: Hydration Thundering Herd After Redis Flush~~ | ✅ Fixed | 2026-02-20 |
+| ~~PERF-08: FSRS Processor N+1 Metadata Lookups~~ | ✅ Fixed | 2026-02-20 |
+| ~~PERF-09: Redundant GETBIT Pipelines in Progress Endpoints~~ | ✅ Fixed | 2026-02-20 |
 
 ---
 
@@ -318,7 +320,7 @@ WHERE player = %(player)s
 
 ### PERF-08: FSRS Processor N+1 Metadata Lookups
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 7 of 21
 **Effort:** Half day
 **Risk:** Low
@@ -372,7 +374,7 @@ stage_map = {s.name: s for s in stages}
 
 ### PERF-09: Redundant GETBIT Pipelines in Progress Endpoints
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 8 of 21
 **Effort:** 30 minutes
 **Risk:** Near zero
@@ -758,9 +760,9 @@ CREATE INDEX idx_status_creation
 - [x] ~~**PERF-04** — `_get_player_season_seq()` caching~~ ✅ FIXED
 - [x] ~~**PERF-05** — `flush_interaction_buffer()` ORM loop~~ ✅ FIXED
 - [x] **PERF-06** — Hydration thundering herd (CRITICAL)
-- [ ] **PERF-07** — `submit_reviews()` N+1 (CRITICAL)
-- [ ] **PERF-08** — FSRS processor N+1 metadata (CRITICAL)
-- [ ] **PERF-09** — Redundant GETBIT pipelines (HIGH)
+- [x] **PERF-07** — `submit_reviews()` N+1 (CRITICAL)
+- [x] **PERF-08** — FSRS processor N+1 metadata (CRITICAL)
+- [x] **PERF-09** — Redundant GETBIT pipelines (HIGH)
 - [ ] **PERF-10** — Review JOIN with Lesson Stage (HIGH)
 - [ ] **PERF-11** — Leaderboard ZCOUNT N+1 (HIGH)
 - [ ] **PERF-12** — Catalog N+1 grant queries (HIGH)

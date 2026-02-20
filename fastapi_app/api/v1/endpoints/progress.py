@@ -277,19 +277,16 @@ async def get_subject_tracks(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats (cold start, incomplete, or stale stats handled)
-	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
-		completed_bits = await progress_service.get_completed_bits(
-			user.sub, subject, hierarchy.bit_range, hierarchy.version
-		)
-		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
-
-	# Get completed bits for unlock calculation
+	# Get completed bits once (used for both stats recompute and unlock calculation)
 	completed_bits = await progress_service.get_completed_bits(
 		user.sub, subject, hierarchy.bit_range, hierarchy.version
 	)
+
+	# Get or initialize stats (cold start, incomplete, or stale stats handled)
+	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
+	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
+		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
 
 	# Build track summaries
 	tracks_summary = []
@@ -367,19 +364,16 @@ async def get_track_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats (cold start, incomplete, or stale stats handled)
-	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
-		completed_bits = await progress_service.get_completed_bits(
-			user.sub, subject, hierarchy.bit_range, hierarchy.version
-		)
-		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
-
-	# Get completed bits for unlock calculation
+	# Get completed bits once (used for both stats recompute and unlock calculation)
 	completed_bits = await progress_service.get_completed_bits(
 		user.sub, subject, hierarchy.bit_range, hierarchy.version
 	)
+
+	# Get or initialize stats (cold start, incomplete, or stale stats handled)
+	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
+	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
+		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
 
 	# Check track unlock state
 	track_unlocked = track_idx == 0 or not hierarchy.is_linear
@@ -476,19 +470,16 @@ async def get_unit_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get or initialize stats (cold start, incomplete, or stale stats handled)
-	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
-		completed_bits = await progress_service.get_completed_bits(
-			user.sub, subject, hierarchy.bit_range, hierarchy.version
-		)
-		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
-
-	# Get completed bits for unlock calculation
+	# Get completed bits once (used for both stats recompute and unlock calculation)
 	completed_bits = await progress_service.get_completed_bits(
 		user.sub, subject, hierarchy.bit_range, hierarchy.version
 	)
+
+	# Get or initialize stats (cold start, incomplete, or stale stats handled)
+	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
+	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
+		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
 
 	# Check unit unlock state
 	unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
