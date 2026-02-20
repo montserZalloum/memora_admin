@@ -232,6 +232,12 @@ StatsServiceDep = Annotated[StatsService, Depends(get_stats_service)]
 _frappe_client: FrappeClient | None = None
 
 
+def set_frappe_client(client: FrappeClient) -> None:
+	"""Set the shared FrappeClient instance (called by lifespan)."""
+	global _frappe_client
+	_frappe_client = client
+
+
 async def get_frappe_client() -> FrappeClient:
 	"""Get singleton FrappeClient instance."""
 	global _frappe_client

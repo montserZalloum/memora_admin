@@ -36,6 +36,7 @@ class FrappeClient:
                     "Host": self.settings.frappe_site,
                 },
                 timeout=30.0,
+                limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
             )
         return self._client
 

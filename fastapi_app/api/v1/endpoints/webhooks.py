@@ -5,7 +5,7 @@ import json
 import structlog
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
-from fastapi_app.api.deps import RedisClient
+from fastapi_app.api.deps import RedisClient, get_frappe_client
 from fastapi_app.models.access import WebhookPayload, WebhookResponse
 from fastapi_app.services.frappe_client import FrappeAPIError, FrappeClient
 
@@ -17,18 +17,6 @@ router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 IDEMPOTENCY_PREFIX = "memora:webhook:"
 RETRY_QUEUE_KEY = "memora:webhook:retry_queue"
 IDEMPOTENCY_TTL = 86400  # 24 hours
-
-# Module-level client (singleton pattern for connection reuse)
-_frappe_client: FrappeClient | None = None
-
-
-def get_frappe_client() -> FrappeClient:
-    """Get or create FrappeClient singleton."""
-    global _frappe_client
-    if _frappe_client is None:
-        _frappe_client = FrappeClient()
-    return _frappe_client
-
 
 async def process_payment_webhook(
     payload: WebhookPayload,
@@ -170,7 +158,7 @@ async def payment_webhook(
     await redis.set(idempotency_key, "processing", ex=IDEMPOTENCY_TTL)
 
     # Process in background for fast acknowledgment
-    frappe_client = get_frappe_client()
+    frappe_client = await get_frappe_client()
     background_tasks.add_task(process_payment_webhook, payload, redis, frappe_client)
 
     return WebhookResponse(status="accepted", message="Webhook received and queued for processing")
