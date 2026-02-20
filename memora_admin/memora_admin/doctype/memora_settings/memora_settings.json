@@ -12,7 +12,6 @@
   "storage_provider",
   "cloudflare_zone_id",
   "column_break_cdn",
-  "json_version",
   "access_key",
   "gamification_section",
   "default_max_hearts",
@@ -25,8 +24,7 @@
   "max_devices_per_player",
   "session_timeout_days",
   "fsrs_section",
-  "fsrs_weights",
-  "request_retention_days"
+  "fsrs_weights"
  ],
  "fields": [
   {
@@ -61,12 +59,6 @@
   {
    "fieldname": "column_break_cdn",
    "fieldtype": "Column Break"
-  },
-  {
-   "description": "\u0631\u0642\u0645 \u0625\u0635\u062f\u0627\u0631 \u0627\u0644\u0645\u062d\u062a\u0648\u0649 \u0644\u0643\u0633\u0631 \u0627\u0644\u0643\u0627\u0634",
-   "fieldname": "json_version",
-   "fieldtype": "Int",
-   "label": "JSON Version"
   },
   {
    "depends_on": "eval:doc.cdn_enabled && doc.storage_provider=='Cloudflare CDN'",
@@ -141,12 +133,6 @@
    "fieldname": "fsrs_weights",
    "fieldtype": "Small Text",
    "label": "FSRS Weights"
-  },
-  {
-   "description": "\u0645\u062f\u0629 \u0627\u0644\u0627\u062d\u062a\u0641\u0627\u0638 \u0628\u0633\u062c\u0644\u0627\u062a \u0627\u0644\u062a\u0641\u0627\u0639\u0644 \u0642\u0628\u0644 \u0627\u0644\u0623\u0631\u0634\u0641\u0629",
-   "fieldname": "request_retention_days",
-   "fieldtype": "Int",
-   "label": "Request Retention (Days)"
   }
  ],
  "grid_page_length": 50,

@@ -11,10 +11,8 @@
   "description",
   "in_linear",
   "is_published",
-  "redis_key_prefix",
   "last_bit_index",
   "sort_order",
-  "json_version",
   "json_generated_at",
   "sb_stats",
   "total_tracks",
@@ -55,23 +53,10 @@
    "label": "Is Published"
   },
   {
-   "description": "Prefix for Redis Bitmaps tracking",
-   "fieldname": "redis_key_prefix",
-   "fieldtype": "Int",
-   "label": "Redis Key Prefix"
-  },
-  {
    "default": "0",
    "fieldname": "sort_order",
    "fieldtype": "Int",
    "label": "Sort Order"
-  },
-  {
-   "default": "0",
-   "description": "\u0646\u0633\u062e\u0629 \u0645\u0644\u0641 \u0627\u0644\u0640 JSON \u0644\u0644\u0645\u0627\u062f\u0629",
-   "fieldname": "json_version",
-   "fieldtype": "Int",
-   "label": "JSON Version"
   },
   {
    "fieldname": "json_generated_at",
