@@ -168,6 +168,12 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Voucher schema setup failed: {e}")
 
+	# Composite indexes on hot tables (PERF-03)
+	try:
+		_ensure_hot_table_indexes()
+	except Exception as e:
+		print(f"[after_migrate] Hot table indexes setup failed: {e}")
+
 
 def _ensure_uuid_polyfill_functions():
 	"""Create UUID_TO_BIN and BIN_TO_UUID polyfill stored functions.
@@ -594,3 +600,45 @@ def _ensure_voucher_card_indexes():
 			ADD INDEX idx_batch_status (batch, status)
 		""")
 		print("[after_migrate] Created INDEX idx_batch_status on tabMemora Voucher Card")
+
+
+def _ensure_hot_table_indexes():
+	"""Create composite indexes on high-traffic tables (PERF-03).
+
+	These indexes eliminate index intersection overhead on hot query paths:
+	- idx_lesson_subject: hierarchy builds, stage JOINs
+	- idx_event_creation: FSRS processor cutoff query (every 1 min)
+	- idx_player_subject: every progress lookup (sync.py, FastAPI)
+	- idx_player_access: every access check (access_sync.py)
+
+	idx_batch_status on Voucher Card is handled separately by _ensure_voucher_card_indexes().
+	"""
+	tables = frappe.db.get_tables()
+
+	indexes = [
+		("tabMemora Lesson", "idx_lesson_subject", "(subject)"),
+		("tabMemora Interaction Log", "idx_event_creation", "(event_type, creation)"),
+		("tabMemora Structure Progress", "idx_player_subject", "(player, subject)"),
+		("tabMemora Player Subscription", "idx_player_access", "(player, access_key)"),
+	]
+
+	for table, index_name, columns in indexes:
+		if table not in tables:
+			continue
+
+		existing = frappe.db.sql(
+			"""
+			SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+			WHERE TABLE_SCHEMA = DATABASE()
+			AND TABLE_NAME = %s
+			AND INDEX_NAME = %s
+			LIMIT 1
+		""",
+			(table, index_name),
+		)
+
+		if not existing:
+			frappe.db.sql_ddl(f"""
+				CREATE INDEX `{index_name}` ON `{table}` {columns}
+			""")
+			print(f"[after_migrate] Created INDEX {index_name} on {table}")

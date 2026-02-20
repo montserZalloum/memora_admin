@@ -14,25 +14,7 @@ All queries include season_seq for partition pruning. See setup.py for details.
 
 import frappe
 
-
-def _get_player_season_seq(player_id: str) -> int:
-	"""Get the season_seq for a player's plan.
-
-	Resolves: Player Profile -> Academic Plan -> Season -> season_seq.
-	Single JOIN query. Falls back to 1 if player has no plan/season assigned.
-	"""
-	result = frappe.db.sql(
-		"""
-		SELECT s.season_seq
-		FROM `tabMemora Player Profile` pp
-		INNER JOIN `tabMemora Academic Plan` ap ON ap.name = pp.plan
-		INNER JOIN `tabMemora Season` s ON s.name = ap.season
-		WHERE pp.name = %(player)s
-		LIMIT 1
-		""",
-		{"player": player_id},
-	)
-	return int(result[0][0]) if result else 1
+from memora_admin.api.utils import get_player_season_seq as _get_player_season_seq
 
 
 @frappe.whitelist(allow_guest=False)

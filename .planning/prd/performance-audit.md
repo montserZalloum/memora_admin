@@ -69,7 +69,7 @@ class FrappeClient:
 
 ### PERF-03: Missing Composite Indexes on Hot Tables
 
-**Status:** `[ ] Not Started`
+**Status:** `[X] Not Started`
 **Priority:** 2 of 21
 **Effort:** 1 hour
 **Risk:** Near zero — read-only, no schema changes
@@ -753,7 +753,7 @@ CREATE INDEX idx_status_creation
 - [x] ~~**PERF-01** — N+1 hierarchy/plan/generator builds~~ ✅ FIXED
 - [ ] **PERF-02** — FrappeClient connection pooling (CRITICAL)
 - [ ] **PERF-03** — Missing composite indexes (CRITICAL)
-- [ ] **PERF-04** — `_get_player_season_seq()` caching (CRITICAL)
+- [x] ~~**PERF-04** — `_get_player_season_seq()` caching~~ ✅ FIXED
 - [ ] **PERF-05** — `flush_interaction_buffer()` ORM loop (CRITICAL)
 - [ ] **PERF-06** — Hydration thundering herd (CRITICAL)
 - [ ] **PERF-07** — `submit_reviews()` N+1 (CRITICAL)

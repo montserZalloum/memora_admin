@@ -12,6 +12,7 @@ import time
 
 import frappe
 
+from memora_admin.api.utils import invalidate_player_season_seq
 from memora_admin.events.access_sync import get_fastapi_redis
 
 
@@ -28,6 +29,9 @@ def on_player_profile_plan_changed(doc, method):
     # Only act if plan field actually changed
     if not doc.has_value_changed("plan"):
         return
+
+    # Invalidate cached season_seq (Frappe-side cache)
+    invalidate_player_season_seq(doc.name)
 
     r = get_fastapi_redis()
 
