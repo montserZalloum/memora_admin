@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi_app.api.deps import (
 	CurrentUser,
 	ProfilePageServiceDep,
+	evict_session_cache,
 )
 from fastapi_app.models.profile import (
 	AvatarUpdateRequest,
@@ -108,4 +109,5 @@ async def logout(
 	"""
 	device_id = request.headers.get("X-Device-ID")
 	result = await profile_page_service.logout(user.sub, device_id)
+	evict_session_cache(user.sub)
 	return LogoutResponse(**result)

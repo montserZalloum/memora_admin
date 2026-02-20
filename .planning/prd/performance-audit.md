@@ -609,7 +609,7 @@ frappe.db.sql("""
 
 ### PERF-16: `get_memory_mastery()` — Full Partition Scan for Stability Classification
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Not Started`
 **Priority:** 15 of 21
 **Effort:** 1 day
 **Risk:** Medium
@@ -625,25 +625,6 @@ The codebase already acknowledges this in `setup.py`:
 Maintain Redis counters (`mature`, `learning`, `new`) per player-subject. Increment/decrement on each review submission (already touch the Memory State row, so the classification change is known). Cache miss falls back to the SQL scan.
 
 **Impact:** Eliminates most expensive profile query. 5-min cache → real-time counters.
-
----
-
-### PERF-17: Full CSV Decryption for Voucher Export
-
-**Status:** `[ ] Not Started`
-**Priority:** 16 of 21
-**Effort:** 2 hours
-**Risk:** Near zero
-**File:** `memora_admin/memora_admin/api/voucher.py:261-282`
-
-**Problem:**
-Export loads entire encrypted CSV into memory, decrypts fully, parses all rows, then filters to "Available" cards. For a 10k-card batch = ~500KB+ per export request. Available serial numbers are queried **after** decryption — should be queried first for early exit.
-
-**Fix:**
-1. Query available serials first (early exit if none)
-2. Consider streaming CSV parsing instead of full list comprehension
-
-**Impact:** Memory reduction + potential early exit on empty batches.
 
 ---
 

@@ -8,7 +8,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
-from fastapi_app.api.deps import RedisClient, SettingsDep, get_frappe_client
+from fastapi_app.api.deps import RedisClient, SettingsDep, evict_session_cache, get_frappe_client
 from fastapi_app.core.security import create_access_token, create_refresh_token, decode_token
 from fastapi_app.core.ws_manager import ConnectionManager
 from fastapi_app.models.auth import (
@@ -198,6 +198,7 @@ async def player_login(
 		plan_id=profile["plan"],
 		ttl_days=session_ttl_days,
 	)
+	evict_session_cache(player_id)
 
 	# 10. Create tokens (player: mobile claim, no email)
 	access_token = create_access_token(
@@ -277,6 +278,7 @@ async def admin_login(
 		plan_id="",
 		ttl_days=settings.jwt_refresh_token_expire_days,
 	)
+	evict_session_cache(user.user_id)
 
 	# 4. Create tokens (admin: email claim, no mobile, role included)
 	access_token = create_access_token(
@@ -590,6 +592,7 @@ async def player_register_verify(
 		plan_id=profile["plan"],
 		ttl_days=session_ttl_days,
 	)
+	evict_session_cache(player_id)
 
 	# Create tokens (player: mobile claim, no email)
 	access_token = create_access_token(

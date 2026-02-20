@@ -87,9 +87,10 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 	Yields:
 		None after test completes, cleanup runs in teardown.
 	"""
-	# Reset global _frappe_client so each test gets a fresh override
+	# Reset global state so each test gets a clean slate
 	import fastapi_app.api.deps as deps_module
 	deps_module._frappe_client = None
+	deps_module._session_fid_cache.clear()
 
 	yield
 
@@ -116,6 +117,8 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 				await redis_client.delete(*keys)
 			if cursor == 0:
 				break
+
+	deps_module._session_fid_cache.clear()
 
 
 @pytest.fixture

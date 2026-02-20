@@ -6,6 +6,7 @@ from typing import Annotated
 import jwt
 import redis.asyncio as redis
 import structlog
+from cachetools import TTLCache
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
 
@@ -39,6 +40,15 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 # HTTP Bearer security scheme
 security = HTTPBearer()
+
+# PERF-18: In-process TTL cache for session family_id validation.
+# Each uvicorn worker has its own instance. TTL=5s, maxsize=10k users/worker.
+_session_fid_cache: TTLCache[str, str] = TTLCache(maxsize=10_000, ttl=5)
+
+
+def evict_session_cache(user_id: str) -> None:
+	"""Remove cached session fid after login/logout (best-effort, same-worker only)."""
+	_session_fid_cache.pop(user_id, None)
 
 
 async def get_redis(request: Request) -> redis.Redis:
@@ -98,6 +108,11 @@ async def get_current_user(
 		# Catch-all for any validation errors (e.g., missing fields in TokenPayload)
 		raise credentials_exception
 
+	# PERF-18: Check in-process cache first (avoids Redis roundtrip ~90% of the time)
+	cached_fid = _session_fid_cache.get(token_payload.sub)
+	if cached_fid is not None and cached_fid == token_payload.fid:
+		return token_payload
+
 	# Validate session family_id against Redis (single-session enforcement)
 	session_key = f"{settings.redis_key_prefix}session:{token_payload.sub}"
 	try:
@@ -125,6 +140,9 @@ async def get_current_user(
 				current_fid=current_fid,
 			)
 			raise session_expired_exception
+
+		# PERF-18: Redis confirmed valid — cache for next ~5 seconds
+		_session_fid_cache[token_payload.sub] = current_fid
 
 	except HTTPException:
 		raise
