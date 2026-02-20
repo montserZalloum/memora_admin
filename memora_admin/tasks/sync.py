@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 # Debug file for troubleshooting sync issues
 DEBUG_LOG_FILE = "/tmp/memora_sync_debug.log"
 
+# Maximum items to process per DB transaction (chunk)
+SYNC_CHUNK_SIZE = 500
+
 def _write_debug_log(message: str):
 	"""Write to debug log file for troubleshooting"""
 	try:
@@ -73,15 +76,265 @@ def get_redis():
 	return redis.from_url(frappe.conf.redis_cache)
 
 
+# ---------------------------------------------------------------------------
+# Shared batch helpers
+# ---------------------------------------------------------------------------
+
+def _chunks(lst, size):
+	"""Split list into chunks of given size."""
+	for i in range(0, len(lst), size):
+		yield lst[i:i + size]
+
+
+def _batch_srem(r, set_key, members):
+	"""Pipeline SREM to remove multiple members from a set in one round-trip."""
+	if not members:
+		return
+	pipe = r.pipeline(transaction=False)
+	for member in members:
+		pipe.srem(set_key, member)
+	pipe.execute()
+
+
+# ---------------------------------------------------------------------------
+# Wallet batch helpers
+# ---------------------------------------------------------------------------
+
+def _batch_hgetall_wallets(r, player_ids):
+	"""Pipeline HGETALL for multiple wallet keys. Returns {player_id: hash_dict}."""
+	pipe = r.pipeline(transaction=False)
+	for pid in player_ids:
+		pipe.hgetall(f"memora:wallet:{pid}")
+	results = pipe.execute()
+	return dict(zip(player_ids, results))
+
+
+def _bulk_lookup_wallet_names(player_ids):
+	"""Single SELECT ... WHERE IN to map player_id -> wallet record name."""
+	if not player_ids:
+		return {}
+	placeholders = ", ".join(["%s"] * len(player_ids))
+	rows = frappe.db.sql(
+		f"SELECT name, player FROM `tabMemora Player Wallet` WHERE player IN ({placeholders})",
+		tuple(player_ids),
+		as_dict=True,
+	)
+	return {row["player"]: row["name"] for row in rows}
+
+
+def _batch_update_wallets(updates):
+	"""CASE/WHEN UPDATE for multiple wallets in one query.
+
+	Args:
+		updates: list of (wallet_name, xp, streak)
+	"""
+	if not updates:
+		return
+
+	now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+	xp_when = " ".join(["WHEN %s THEN %s"] * len(updates))
+	streak_when = " ".join(["WHEN %s THEN %s"] * len(updates))
+	in_placeholders = ", ".join(["%s"] * len(updates))
+
+	xp_params = []
+	streak_params = []
+	names = []
+	for wallet_name, xp, streak in updates:
+		xp_params.extend([wallet_name, xp])
+		streak_params.extend([wallet_name, streak])
+		names.append(wallet_name)
+
+	sql = f"""
+		UPDATE `tabMemora Player Wallet`
+		SET total_xp = CASE name {xp_when} END,
+			current_streak = CASE name {streak_when} END,
+			dirty_flag = 0,
+			last_sync_at = %s
+		WHERE name IN ({in_placeholders})
+	"""
+
+	all_params = xp_params + streak_params + [now_str] + names
+	frappe.db.sql(sql, tuple(all_params))
+
+
+# ---------------------------------------------------------------------------
+# Progress batch helpers
+# ---------------------------------------------------------------------------
+
+def _batch_get_bitmaps(r, bitmap_keys):
+	"""Pipeline GET + BITCOUNT for multiple bitmap keys.
+
+	Returns: {bitmap_key: (hex_string, completed_count)}
+	"""
+	if not bitmap_keys:
+		return {}
+	pipe = r.pipeline(transaction=False)
+	for key in bitmap_keys:
+		pipe.get(key)
+		pipe.bitcount(key)
+	results = pipe.execute()
+
+	out = {}
+	for i, key in enumerate(bitmap_keys):
+		bitmap_bytes = results[i * 2]
+		bitcount = results[i * 2 + 1]
+		hex_string = bitmap_bytes.hex() if bitmap_bytes else ""
+		completed_count = bitcount if bitmap_bytes else 0
+		out[key] = (hex_string, completed_count)
+	return out
+
+
+def _batch_get_subject_lesson_counts(r, subject_ids):
+	"""Get lesson counts for multiple subjects via pipeline + single DB fallback.
+
+	Returns: {subject_id: lesson_count}
+	"""
+	if not subject_ids:
+		return {}
+
+	# Pipeline GET for all cache keys
+	unique_ids = list(set(subject_ids))
+	cache_keys = [f"memora:subject:total_lessons:{sid}" for sid in unique_ids]
+	pipe = r.pipeline(transaction=False)
+	for key in cache_keys:
+		pipe.get(key)
+	results = pipe.execute()
+
+	counts = {}
+	missing_subjects = []
+	for sid, val in zip(unique_ids, results):
+		if val is not None:
+			counts[sid] = int(val.decode() if isinstance(val, bytes) else val)
+		else:
+			missing_subjects.append(sid)
+
+	# Single DB query for cache misses
+	if missing_subjects:
+		placeholders = ", ".join(["%s"] * len(missing_subjects))
+		rows = frappe.db.sql(
+			f"SELECT subject, COUNT(*) as cnt FROM `tabMemora Lesson` WHERE subject IN ({placeholders}) GROUP BY subject",
+			tuple(missing_subjects),
+			as_dict=True,
+		)
+		db_counts = {row["subject"]: row["cnt"] for row in rows}
+
+		# Cache results and fill in missing (subjects not in DB get 0)
+		pipe = r.pipeline(transaction=False)
+		for sid in missing_subjects:
+			count = db_counts.get(sid, 0)
+			counts[sid] = count
+			pipe.setex(f"memora:subject:total_lessons:{sid}", 3600, count)
+		pipe.execute()
+
+	return counts
+
+
+def _bulk_lookup_progress_records(items):
+	"""Single SELECT for existing progress records.
+
+	Args:
+		items: list of (user_id, subject_id)
+	Returns:
+		{(user_id, subject_id): record_name}
+	"""
+	if not items:
+		return {}
+	conditions = " OR ".join(["(player = %s AND subject = %s)"] * len(items))
+	params = []
+	for user_id, subject_id in items:
+		params.extend([user_id, subject_id])
+
+	rows = frappe.db.sql(
+		f"SELECT name, player, subject FROM `tabMemora Structure Progress` WHERE {conditions}",
+		tuple(params),
+		as_dict=True,
+	)
+	return {(row["player"], row["subject"]): row["name"] for row in rows}
+
+
+def _batch_update_progress(updates):
+	"""CASE/WHEN UPDATE for existing progress records.
+
+	Args:
+		updates: list of (record_name, hex_string, percentage)
+	"""
+	if not updates:
+		return
+
+	bitset_when = " ".join(["WHEN %s THEN %s"] * len(updates))
+	pct_when = " ".join(["WHEN %s THEN %s"] * len(updates))
+	in_placeholders = ", ".join(["%s"] * len(updates))
+
+	bitset_params = []
+	pct_params = []
+	names = []
+	for record_name, hex_string, percentage in updates:
+		bitset_params.extend([record_name, hex_string])
+		pct_params.extend([record_name, percentage])
+		names.append(record_name)
+
+	sql = f"""
+		UPDATE `tabMemora Structure Progress`
+		SET passed_lessons_bitset = CASE name {bitset_when} END,
+			completion_percentage = CASE name {pct_when} END
+		WHERE name IN ({in_placeholders})
+	"""
+
+	all_params = bitset_params + pct_params + names
+	frappe.db.sql(sql, tuple(all_params))
+
+
+def _batch_insert_progress(inserts):
+	"""Multi-row INSERT for new progress records.
+
+	Args:
+		inserts: list of (user_id, subject_id, hex_string, percentage)
+	"""
+	if not inserts:
+		return
+
+	n = len(inserts)
+	start = _reserve_name_block("PROG-", n)
+	now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+	flat_values = []
+	for i, (user_id, subject_id, hex_string, percentage) in enumerate(inserts):
+		name = f"PROG-{start + i + 1:05d}"
+		flat_values.extend([
+			name, user_id, subject_id, hex_string, percentage,
+			0,  # docstatus
+			now_str, now_str, "Administrator", "Administrator",
+		])
+
+	placeholders = ", ".join(
+		[f"({', '.join(['%s'] * 10)})"] * n
+	)
+
+	frappe.db.sql(
+		f"""
+		INSERT INTO `tabMemora Structure Progress`
+		(name, player, subject, passed_lessons_bitset, completion_percentage,
+		 docstatus, creation, modified, modified_by, owner)
+		VALUES {placeholders}
+		""",
+		tuple(flat_values),
+	)
+
+
+# ---------------------------------------------------------------------------
+# Main sync functions
+# ---------------------------------------------------------------------------
+
 def sync_dirty_progress():
 	"""
-	Sync progress bitmaps from Redis to MariaDB.
+	Sync progress bitmaps from Redis to MariaDB (batch processing).
 
-	Processes items from dirty:progress set:
-	1. Parse dirty member (user_id:subject_id:v{version})
-	2. Get bitmap from Redis and convert to hex
-	3. Update or insert Structure Progress record
-	4. Remove from dirty set AFTER successful DB write
+	Processes items from dirty:progress set in chunks of SYNC_CHUNK_SIZE:
+	1. SMEMBERS + parse all dirty members upfront
+	2. Per chunk: pipeline GET+BITCOUNT, batch lesson counts,
+	   single SELECT for existing records, CASE/WHEN UPDATE + multi-row INSERT
+	3. Pipeline SREM after successful DB commit
 
 	Scheduled: every 1 minute via hooks.py
 	"""
@@ -94,83 +347,87 @@ def sync_dirty_progress():
 		logger.debug("No dirty progress to sync")
 		return
 
+	# Phase 1: Parse all members upfront, skip invalid formats
+	parsed_items = []  # list of (raw_member, user_id, subject_id, version)
+	for item in dirty_items:
+		item_str = item.decode() if isinstance(item, bytes) else item
+
+		parts = item_str.rsplit(":v", 1)
+		if len(parts) != 2:
+			logger.warning(f"Invalid dirty progress format: {item_str}")
+			continue
+
+		user_subject = parts[0].rsplit(":", 1)
+		if len(user_subject) != 2:
+			logger.warning(f"Invalid user:subject format: {item_str}")
+			continue
+
+		try:
+			version = int(parts[1])
+		except ValueError:
+			logger.warning(f"Invalid version in dirty progress: {item_str}")
+			continue
+
+		user_id, subject_id = user_subject
+		parsed_items.append((item, user_id, subject_id, version))
+
+	if not parsed_items:
+		return
+
 	synced = 0
 	errors = []
 
-	for item in dirty_items:
-		# Decode bytes if needed (redis-py returns bytes by default)
-		item_str = item.decode() if isinstance(item, bytes) else item
-
+	# Phase 2: Process in chunks
+	for chunk in _chunks(parsed_items, SYNC_CHUNK_SIZE):
 		try:
-			# Parse: user_id:subject_id:v{version}
-			# Example: "USER-001:MATH-G5:v1"
-			parts = item_str.rsplit(":v", 1)
-			if len(parts) != 2:
-				logger.warning(f"Invalid dirty progress format: {item_str}")
-				continue
+			# 1. Pipeline GET + BITCOUNT for all bitmap keys
+			bitmap_keys = [
+				f"memora:progress:{uid}:{sid}:v{ver}"
+				for _, uid, sid, ver in chunk
+			]
+			bitmap_data = _batch_get_bitmaps(r, bitmap_keys)
 
-			user_subject = parts[0].rsplit(":", 1)
-			if len(user_subject) != 2:
-				logger.warning(f"Invalid user:subject format: {item_str}")
-				continue
+			# 2. Batch get subject lesson counts
+			subject_ids = list({sid for _, _, sid, _ in chunk})
+			lesson_counts = _batch_get_subject_lesson_counts(r, subject_ids)
 
-			user_id, subject_id = user_subject
-			version = int(parts[1])
+			# 3. Build per-item data (hex_string, percentage)
+			item_data = []  # (raw_member, user_id, subject_id, hex_string, percentage)
+			for (raw_member, uid, sid, ver), bkey in zip(chunk, bitmap_keys):
+				hex_string, completed_count = bitmap_data[bkey]
+				total_lessons = lesson_counts.get(sid, 0)
+				percentage = (completed_count / max(total_lessons, 1)) * 100
+				item_data.append((raw_member, uid, sid, hex_string, percentage))
 
-			# Get bitmap from Redis
-			bitmap_key = f"memora:progress:{user_id}:{subject_id}:v{version}"
-			bitmap_bytes = r.get(bitmap_key)
+			# 4. Single SELECT for existing records
+			lookup_pairs = [(uid, sid) for _, uid, sid, _, _ in item_data]
+			existing_records = _bulk_lookup_progress_records(lookup_pairs)
 
-			# Convert to hex string (empty string if no bitmap)
-			# IMPORTANT: Redis bit ordering convention
-			# - Bit 0 = leftmost bit of first byte (0x80 = 0b10000000)
-			# - Bit 7 = rightmost bit of first byte (0x01 = 0b00000001)
-			# Example: hex "80" means bit 0 is set (lesson at index 0 completed)
-			hex_string = bitmap_bytes.hex() if bitmap_bytes else ""
+			# 5. Partition into UPDATE vs INSERT
+			updates = []  # (record_name, hex_string, percentage)
+			inserts = []  # (user_id, subject_id, hex_string, percentage)
+			for _, uid, sid, hex_string, percentage in item_data:
+				record_name = existing_records.get((uid, sid))
+				if record_name:
+					updates.append((record_name, hex_string, percentage))
+				else:
+					inserts.append((uid, sid, hex_string, percentage))
 
-			# Calculate completion stats
-			completed_count = r.bitcount(bitmap_key) if bitmap_bytes else 0
-			total_lessons = _get_subject_lesson_count(r, subject_id)
-			percentage = (completed_count / max(total_lessons, 1)) * 100
+			# 6. Execute batch DB operations
+			_batch_update_progress(updates)
+			_batch_insert_progress(inserts)
 
-			# Upsert Structure Progress record
-			existing = frappe.db.get_value(
-				"Memora Structure Progress",
-				{"player": user_id, "subject": subject_id},
-				"name"
-			)
+			# 7. Commit chunk
+			frappe.db.commit()
+			synced += len(chunk)
 
-			if existing:
-				frappe.db.set_value(
-					"Memora Structure Progress",
-					existing,
-					{
-						"passed_lessons_bitset": hex_string,
-						"completion_percentage": percentage
-					},
-					update_modified=False
-				)
-			else:
-				frappe.get_doc({
-					"doctype": "Memora Structure Progress",
-					"player": user_id,
-					"subject": subject_id,
-					"passed_lessons_bitset": hex_string,
-					"completion_percentage": percentage
-				}).insert(ignore_permissions=True)
-
-			# Remove from dirty set AFTER successful DB operation
-			# Per RESEARCH.md: SREM after success prevents lost updates on crash
-			r.srem(DIRTY_PROGRESS_KEY, item)
-			synced += 1
+			# 8. Pipeline SREM for all processed items
+			raw_members = [raw for raw, _, _, _, _ in item_data]
+			_batch_srem(r, DIRTY_PROGRESS_KEY, raw_members)
 
 		except Exception as e:
-			errors.append(f"{item_str}: {str(e)}")
-			frappe.log_error(f"Progress sync failed for {item_str}: {e}")
-
-	# Commit all changes
-	if synced > 0:
-		frappe.db.commit()
+			errors.append(f"chunk of {len(chunk)}: {str(e)}")
+			frappe.log_error(f"Progress sync failed for chunk: {e}")
 
 	# Log sync result
 	status = "Success" if not errors else "Failed"
@@ -181,12 +438,13 @@ def sync_dirty_progress():
 
 def sync_dirty_wallets():
 	"""
-	Sync wallets from Redis to MariaDB.
+	Sync wallets from Redis to MariaDB (batch processing).
 
-	Processes items from dirty:wallets set:
-	1. Get wallet hash from Redis (xp, streak, streak_date)
-	2. Update Player Wallet record
-	3. Remove from dirty set AFTER successful DB write
+	Processes items from dirty:wallets set in chunks of SYNC_CHUNK_SIZE:
+	1. SMEMBERS + decode all player IDs upfront
+	2. Per chunk: pipeline HGETALL, single SELECT for wallet names,
+	   CASE/WHEN UPDATE, commit, pipeline SREM
+	3. Players without Redis data removed from dirty set immediately
 
 	Scheduled: every 1 minute via hooks.py
 	"""
@@ -198,61 +456,70 @@ def sync_dirty_wallets():
 		logger.debug("No dirty wallets to sync")
 		return
 
+	# Decode all player IDs upfront
+	player_ids = [
+		pid.decode() if isinstance(pid, bytes) else pid
+		for pid in dirty_players
+	]
+
 	synced = 0
 	errors = []
 
-	for player_id in dirty_players:
-		# Decode bytes if needed
-		player_id = player_id.decode() if isinstance(player_id, bytes) else player_id
-
+	for chunk in _chunks(player_ids, SYNC_CHUNK_SIZE):
 		try:
-			# Get wallet data from Redis hash
-			wallet_key = f"memora:wallet:{player_id}"
-			wallet_data = r.hgetall(wallet_key)
+			# 1. Pipeline HGETALL for all wallets in chunk
+			wallet_data = _batch_hgetall_wallets(r, chunk)
 
-			if not wallet_data:
-				# No wallet data in Redis - remove from dirty set
-				r.srem(DIRTY_WALLETS_KEY, player_id)
+			# 2. Filter out players with no Redis wallet data
+			players_with_data = []
+			players_without_data = []
+			for pid in chunk:
+				if wallet_data.get(pid):
+					players_with_data.append(pid)
+				else:
+					players_without_data.append(pid)
+
+			# Remove players without data from dirty set immediately
+			if players_without_data:
+				_batch_srem(r, DIRTY_WALLETS_KEY, players_without_data)
+
+			if not players_with_data:
 				continue
 
-			# Parse wallet values (handle bytes from Redis)
-			xp_raw = wallet_data.get(b"xp") or wallet_data.get("xp")
-			streak_raw = wallet_data.get(b"streak") or wallet_data.get("streak")
+			# 3. Single SELECT to get wallet names
+			wallet_names = _bulk_lookup_wallet_names(players_with_data)
 
-			xp = int(xp_raw) if xp_raw else 0
-			streak = int(streak_raw) if streak_raw else 0
+			# 4. Build update list
+			updates = []
+			missing_wallets = []
+			for pid in players_with_data:
+				wallet_name = wallet_names.get(pid)
+				if not wallet_name:
+					logger.warning(f"No wallet record found for player {pid}")
+					missing_wallets.append(pid)
+					continue
 
-			# Find existing wallet record
-			wallet_name = frappe.db.get_value("Memora Player Wallet", {"player": player_id}, "name")
+				data = wallet_data[pid]
+				xp_raw = data.get(b"xp") or data.get("xp")
+				streak_raw = data.get(b"streak") or data.get("streak")
+				xp = int(xp_raw) if xp_raw else 0
+				streak = int(streak_raw) if streak_raw else 0
 
-			if wallet_name:
-				# Update existing wallet
-				frappe.db.set_value(
-					"Memora Player Wallet",
-					wallet_name,
-					{
-						"total_xp": xp,
-						"current_streak": streak,
-						"dirty_flag": 0,
-						"last_sync_at": datetime.now(),
-					},
-					update_modified=False,
-				)
-				synced += 1
-			else:
-				# Player wallet should exist - log warning but continue
-				logger.warning(f"No wallet record found for player {player_id}")
+				updates.append((wallet_name, xp, streak))
 
-			# Remove from dirty set AFTER successful operation
-			r.srem(DIRTY_WALLETS_KEY, player_id)
+			# 5. Single CASE/WHEN UPDATE
+			_batch_update_wallets(updates)
+			synced += len(updates)
+
+			# 6. Commit chunk
+			frappe.db.commit()
+
+			# 7. Pipeline SREM for all processed players (including missing wallets)
+			_batch_srem(r, DIRTY_WALLETS_KEY, players_with_data)
 
 		except Exception as e:
-			errors.append(f"{player_id}: {str(e)}")
-			frappe.log_error(f"Wallet sync failed for {player_id}: {e}")
-
-	# Commit all changes
-	if synced > 0:
-		frappe.db.commit()
+			errors.append(f"chunk of {len(chunk)}: {str(e)}")
+			frappe.log_error(f"Wallet sync failed for chunk: {e}")
 
 	# Log sync result
 	status = "Success" if not errors else "Failed"

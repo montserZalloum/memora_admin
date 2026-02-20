@@ -27,8 +27,6 @@ from fastapi_app.models.progress import (
 	UnitProgress,
 	UnitSummary,
 )
-from fastapi_app.services.stats import compute_stats_from_hierarchy
-
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/progress", tags=["progress"])
@@ -282,11 +280,12 @@ async def get_subject_tracks(
 		user.sub, subject, hierarchy.bit_range, hierarchy.version
 	)
 
-	# Get or initialize stats (cold start, incomplete, or stale stats handled)
-	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
-		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
+	# Get or recompute stats (semaphore-throttled on content hash mismatch)
+	stats = await stats_service.get_or_recompute(
+		user_id=user.sub, subject_id=subject, version=hierarchy.version,
+		content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+		hierarchy=hierarchy,
+	)
 
 	# Build track summaries
 	tracks_summary = []
@@ -369,11 +368,12 @@ async def get_track_detail(
 		user.sub, subject, hierarchy.bit_range, hierarchy.version
 	)
 
-	# Get or initialize stats (cold start, incomplete, or stale stats handled)
-	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
-		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
+	# Get or recompute stats (semaphore-throttled on content hash mismatch)
+	stats = await stats_service.get_or_recompute(
+		user_id=user.sub, subject_id=subject, version=hierarchy.version,
+		content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+		hierarchy=hierarchy,
+	)
 
 	# Check track unlock state
 	track_unlocked = track_idx == 0 or not hierarchy.is_linear
@@ -475,11 +475,12 @@ async def get_unit_detail(
 		user.sub, subject, hierarchy.bit_range, hierarchy.version
 	)
 
-	# Get or initialize stats (cold start, incomplete, or stale stats handled)
-	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
-	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
-		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-		await stats_service.set_stats(user.sub, subject, hierarchy.version, stats)
+	# Get or recompute stats (semaphore-throttled on content hash mismatch)
+	stats = await stats_service.get_or_recompute(
+		user_id=user.sub, subject_id=subject, version=hierarchy.version,
+		content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+		hierarchy=hierarchy,
+	)
 
 	# Check unit unlock state
 	unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
@@ -653,13 +654,6 @@ async def get_subject_progress(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Try to get cached stats (O(1) read)
-	stats = await stats_service.get_stats(
-		user_id=user.sub,
-		subject_id=subject,
-		version=hierarchy.version,
-	)
-
 	# Always need completed_bits for unlock state calculation
 	completed_bits = await progress_service.get_completed_bits(
 		user_id=user.sub,
@@ -668,16 +662,12 @@ async def get_subject_progress(
 		version=hierarchy.version,
 	)
 
-	if stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash:
-		# Cold start, incomplete stats, or stale stats (content hash mismatch):
-		# Recompute from bitmap and cache with all fields including totals.
-		stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-		await stats_service.set_stats(
-			user_id=user.sub,
-			subject_id=subject,
-			version=hierarchy.version,
-			stats=stats,
-		)
+	# Get or recompute stats (semaphore-throttled on content hash mismatch)
+	stats = await stats_service.get_or_recompute(
+		user_id=user.sub, subject_id=subject, version=hierarchy.version,
+		content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+		hierarchy=hierarchy,
+	)
 
 	# Build response with nested progress using cached stats
 	tracks_progress = []

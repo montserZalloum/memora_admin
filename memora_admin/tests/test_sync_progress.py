@@ -54,7 +54,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		Test: Bitmap bits are correctly converted to hex and Structure Progress is upserted.
 
 		- Seed Redis bitmap with bits 0 and 7 set
-		- Mock _get_subject_lesson_count to return 10
+		- Mock _batch_get_subject_lesson_counts to return 10
 		- Call sync_dirty_progress()
 		- Assert: Structure Progress record has correct hex string
 		- Assert: completion_percentage is 20.0 (2 bits / 10 lessons * 100)
@@ -70,7 +70,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self.assertIsNotNone(bitmap_bytes, "Bitmap should be set in Redis")
 
 		# Mock _get_subject_lesson_count to return 10
-		with patch("memora_admin.tasks.sync._get_subject_lesson_count", return_value=10):
+		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}):
 			# Run sync
 			sync_dirty_progress()
 
@@ -101,7 +101,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 
 		- Ensure no existing Structure Progress for this player/subject
 		- Seed Redis bitmap with bit 0
-		- Mock _get_subject_lesson_count to return 5
+		- Mock _batch_get_subject_lesson_counts to return 5
 		- Call sync_dirty_progress()
 		- Assert: a new Structure Progress record exists
 		"""
@@ -117,7 +117,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self._seed_redis_progress(self.player_id, self.subject_id, 1, [0])
 
 		# Mock _get_subject_lesson_count to return 5
-		with patch("memora_admin.tasks.sync._get_subject_lesson_count", return_value=5):
+		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 5}):
 			# Run sync
 			sync_dirty_progress()
 
@@ -143,7 +143,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 
 		- Create an existing Structure Progress record with passed_lessons_bitset="00"
 		- Seed Redis bitmap with bits 0, 1, 2
-		- Mock _get_subject_lesson_count to return 10
+		- Mock _batch_get_subject_lesson_counts to return 10
 		- Call sync_dirty_progress()
 		- Assert: the existing record's bitset is updated
 		"""
@@ -171,7 +171,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self._seed_redis_progress(self.player_id, self.subject_id, 1, [0, 1, 2])
 
 		# Mock _get_subject_lesson_count to return 10
-		with patch("memora_admin.tasks.sync._get_subject_lesson_count", return_value=10):
+		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}):
 			# Run sync
 			sync_dirty_progress()
 
@@ -189,7 +189,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 
 		- Manually SADD invalid member (missing :v{version})
 		- Manually SADD valid member
-		- Mock _get_subject_lesson_count
+		- Mock _batch_get_subject_lesson_counts
 		- Call sync_dirty_progress()
 		- Assert: valid member was processed, invalid was skipped (no crash)
 		"""
@@ -206,7 +206,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self._seed_redis_progress(self.player_id, self.subject_id, 1, [0])
 
 		# Mock _get_subject_lesson_count
-		with patch("memora_admin.tasks.sync._get_subject_lesson_count", return_value=10):
+		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}):
 			# Run sync - should not crash
 			try:
 				sync_dirty_progress()
@@ -231,7 +231,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		Test: Empty bitmap (no bits set) results in empty hex string and 0% completion.
 
 		- Add player to dirty progress set but do NOT set any bitmap bits
-		- Mock _get_subject_lesson_count to return 10
+		- Mock _batch_get_subject_lesson_counts to return 10
 		- Call sync_dirty_progress()
 		- Assert: Structure Progress record has passed_lessons_bitset=""
 		- Assert: completion_percentage == 0
@@ -248,7 +248,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self.assertIsNone(bitmap_bytes, "Bitmap should not exist")
 
 		# Mock _get_subject_lesson_count to return 10
-		with patch("memora_admin.tasks.sync._get_subject_lesson_count", return_value=10):
+		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}):
 			# Run sync
 			sync_dirty_progress()
 

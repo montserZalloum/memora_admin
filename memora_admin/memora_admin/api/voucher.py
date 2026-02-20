@@ -533,17 +533,27 @@ def preview_voucher(pin_hmac: str, player_id: str) -> dict:
 
 	# 6. Build available grants (filter out already-owned)
 	batch = frappe.get_doc("Memora Voucher Batch", card.batch)
-	available_grants = []
 
+	# PERF-14: Collect all access keys across all grants, check ownership in one query
+	grant_key_map = {}  # product_grant -> [access_keys]
+	all_keys = []
 	for bg in batch.batch_grants:
-		grant_keys = get_grant_keys(bg.product_grant)
-		all_owned = all(
-			frappe.db.exists(
-				"Memora Player Subscription", {"player": player_id, "access_key": key}
-			)
-			for key in grant_keys
+		keys = get_grant_keys(bg.product_grant)
+		grant_key_map[bg.product_grant] = keys
+		all_keys.extend(keys)
+
+	owned_keys = set(
+		frappe.get_all(
+			"Memora Player Subscription",
+			filters={"player": player_id, "access_key": ["in", all_keys]},
+			pluck="access_key",
 		)
-		if not all_owned:
+	) if all_keys else set()
+
+	available_grants = []
+	for bg in batch.batch_grants:
+		keys = grant_key_map[bg.product_grant]
+		if not all(k in owned_keys for k in keys):
 			display_name = (
 				frappe.db.get_value("Memora Product Grant", bg.product_grant, "item_code")
 				or bg.product_grant
@@ -651,13 +661,16 @@ def redeem_voucher(
 		return {"error": "GRANT_NOT_IN_BATCH"}
 
 	# 7. Check ALREADY_OWNED (does NOT consume card)
+	# PERF-14: single query instead of N exists() calls
 	grant_keys = get_grant_keys(product_grant_id)
-	all_owned = all(
-		frappe.db.exists(
-			"Memora Player Subscription", {"player": player_id, "access_key": key}
+	owned_keys = set(
+		frappe.get_all(
+			"Memora Player Subscription",
+			filters={"player": player_id, "access_key": ["in", grant_keys]},
+			pluck="access_key",
 		)
-		for key in grant_keys
-	)
+	) if grant_keys else set()
+	all_owned = len(owned_keys) == len(grant_keys)
 	if all_owned:
 		_log_attempt(
 			player_id, pin_hmac[-4:], card.name, None, card.batch,

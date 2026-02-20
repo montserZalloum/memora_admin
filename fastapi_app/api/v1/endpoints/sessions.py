@@ -1,7 +1,9 @@
 # Copyright (c) 2026, corex and contributors
 """Session management endpoints for game lesson flow."""
 
+import asyncio
 import json
+import random
 
 import structlog
 from fastapi import APIRouter, Header, HTTPException, status
@@ -26,7 +28,11 @@ from fastapi_app.models.game_session import (
 	StartSessionRequest,
 	StartSessionResponse,
 )
-from fastapi_app.services.stats import compute_stats_from_hierarchy
+from fastapi_app.services.stats import (
+	StatsService,
+	compute_stats_from_hierarchy,
+	get_stats_recompute_semaphore,
+)
 from fastapi_app.services.wallet import calculate_xp_award
 
 logger = structlog.get_logger()
@@ -330,26 +336,44 @@ async def end_session(
 				# Cold start: bitmap already has the new bit set, so
 				# compute_stats_from_hierarchy will include this lesson.
 				# No HINCRBY needed -- stats are already accurate.
-				completed_bits = await progress_service.get_completed_bits(
-					user_id=user.sub,
-					subject_id=session.subject_id,
-					bit_range=hierarchy.bit_range,
-					version=hierarchy.version,
-				)
-				stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-				await stats_service.set_stats(
-					user_id=user.sub,
-					subject_id=session.subject_id,
-					version=hierarchy.version,
-					stats=stats,
-				)
+				# Wrap in semaphore to throttle concurrent recomputes.
+				sem = get_stats_recompute_semaphore()
+				acquired = False
+				try:
+					await asyncio.wait_for(sem.acquire(), timeout=StatsService.RECOMPUTE_TIMEOUT)
+					acquired = True
+				except asyncio.TimeoutError:
+					logger.warning(
+						"stats_recompute_semaphore_timeout",
+						user_id=user.sub,
+						subject_id=session.subject_id,
+						path="end_session_cold_start",
+					)
+
+				try:
+					completed_bits = await progress_service.get_completed_bits(
+						user_id=user.sub,
+						subject_id=session.subject_id,
+						bit_range=hierarchy.bit_range,
+						version=hierarchy.version,
+					)
+					stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+					await stats_service.set_stats(
+						user_id=user.sub,
+						subject_id=session.subject_id,
+						version=hierarchy.version,
+						stats=stats,
+					)
+				finally:
+					if acquired:
+						sem.release()
 			else:
 				# Stats hash exists: increment completed counters
 				pipe.hincrby(stats_key, "completed", 1)
 				pipe.hincrby(stats_key, f"{lesson_path.track_id}:completed", 1)
 				pipe.hincrby(stats_key, f"{lesson_path.unit_id}:completed", 1)
 				pipe.hincrby(stats_key, f"{lesson_path.topic_id}:completed", 1)
-				pipe.expire(stats_key, 3600)
+				pipe.expire(stats_key, StatsService.CACHE_TTL + random.randint(0, StatsService.JITTER_RANGE))
 			stats_updated = True
 
 	pipe_results = await pipe.execute()

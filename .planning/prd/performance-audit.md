@@ -543,7 +543,7 @@ If 10 users hit the same subject simultaneously = 10 identical recomputes. At 10
 
 ### PERF-14: `frappe.db.exists()` Loops in Subscription/Voucher Code
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 13 of 21
 **Effort:** 2 hours
 **Risk:** Near zero
@@ -578,7 +578,7 @@ for bg in batch.batch_grants:
 
 ### PERF-15: `sync_dirty_progress` and `sync_dirty_wallets` — Sequential Processing
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Not Started`
 **Priority:** 14 of 21
 **Effort:** 1 day
 **Risk:** Medium
@@ -767,7 +767,7 @@ CREATE INDEX idx_status_creation
 - [x] **PERF-11** — Leaderboard ZCOUNT N+1 (HIGH)
 - [x] **PERF-12** — Catalog N+1 grant queries (HIGH)
 - [ ] **PERF-13** — Stats recompute storm (HIGH)
-- [ ] **PERF-14** — `exists()` loops in subscription/voucher (MEDIUM)
+- [x] **PERF-14** — `exists()` loops in subscription/voucher (MEDIUM)
 - [ ] **PERF-15** — Sequential dirty sync processing (MEDIUM)
 - [ ] **PERF-16** — `get_memory_mastery()` partition scan (MEDIUM)
 - [ ] **PERF-17** — Full CSV decryption for export (MEDIUM)

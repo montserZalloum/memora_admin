@@ -1,8 +1,28 @@
 """Stats caching service for pre-computed progress statistics."""
 
+import asyncio
+import random
+
 import redis.asyncio as redis
+import structlog
 
 from fastapi_app.models.progress import SubjectHierarchy
+
+logger = structlog.get_logger()
+
+# Process-local semaphore. With N uvicorn workers, effective system-wide
+# limit is N × MAX_CONCURRENT_STATS_RECOMPUTES (e.g., 4 workers × 30 = 120).
+# Sufficient for single-server deployment.
+MAX_CONCURRENT_STATS_RECOMPUTES = 30
+_stats_recompute_semaphore: asyncio.Semaphore | None = None
+
+
+def get_stats_recompute_semaphore() -> asyncio.Semaphore:
+	"""Get or create the per-process stats recompute semaphore."""
+	global _stats_recompute_semaphore
+	if _stats_recompute_semaphore is None:
+		_stats_recompute_semaphore = asyncio.Semaphore(MAX_CONCURRENT_STATS_RECOMPUTES)
+	return _stats_recompute_semaphore
 
 
 class StatsService:
@@ -30,6 +50,8 @@ class StatsService:
 	"""
 
 	CACHE_TTL = 3600  # 1 hour, matches HierarchyService
+	JITTER_RANGE = 120  # +0-120s spread to prevent synchronized TTL expiry
+	RECOMPUTE_TIMEOUT = 2.0  # seconds to wait for semaphore before bypassing
 
 	def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:"):
 		self.redis = redis_client
@@ -141,7 +163,7 @@ class StatsService:
 
 		# HSET with mapping for batch initialization
 		await self.redis.hset(key, mapping=stats)
-		await self.redis.expire(key, self.CACHE_TTL)
+		await self.redis.expire(key, self.CACHE_TTL + random.randint(0, self.JITTER_RANGE))
 
 	async def invalidate_stats(
 		self,
@@ -158,6 +180,66 @@ class StatsService:
 		"""
 		key = self._stats_key(user_id, subject_id, version)
 		await self.redis.delete(key)
+
+	async def get_or_recompute(
+		self,
+		user_id: str,
+		subject_id: str,
+		version: int,
+		content_hash: str,
+		completed_bits: set[int],
+		hierarchy: SubjectHierarchy,
+	) -> dict[str, str]:
+		"""Get cached stats or recompute under semaphore throttle.
+
+		Fast path: returns cached stats if hash matches (no semaphore).
+		Slow path: acquires semaphore → double-checks cache → recomputes.
+		Timeout: if semaphore can't be acquired within RECOMPUTE_TIMEOUT,
+		proceeds without throttle (a few extra concurrent recomputes are
+		better than blocking requests for seconds).
+
+		Args:
+			user_id: Player's user ID
+			subject_id: Subject identifier
+			version: Bitmap version
+			content_hash: Current hierarchy content hash
+			completed_bits: Set of completed bit indexes
+			hierarchy: Subject hierarchy for recompute
+
+		Returns:
+			Dict of field->value stats (always valid)
+		"""
+		# Fast path: cache hit with matching hash
+		stats = await self.get_stats(user_id, subject_id, version)
+		if stats is not None and "total" in stats and stats.get("_content_hash") == content_hash:
+			return stats
+
+		sem = get_stats_recompute_semaphore()
+		acquired = False
+		try:
+			await asyncio.wait_for(sem.acquire(), timeout=self.RECOMPUTE_TIMEOUT)
+			acquired = True
+		except asyncio.TimeoutError:
+			logger.warning(
+				"stats_recompute_semaphore_timeout",
+				user_id=user_id,
+				subject_id=subject_id,
+				version=version,
+			)
+
+		try:
+			if acquired:
+				# Double-check: another coroutine may have filled this while we waited
+				stats = await self.get_stats(user_id, subject_id, version)
+				if stats is not None and "total" in stats and stats.get("_content_hash") == content_hash:
+					return stats
+
+			stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+			await self.set_stats(user_id, subject_id, version, stats)
+			return stats
+		finally:
+			if acquired:
+				sem.release()
 
 
 def compute_stats_from_hierarchy(

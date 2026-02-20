@@ -218,14 +218,12 @@ class TestSyncDirtyWallets(SyncTestCase):
 
 	def test_partial_failure(self):
 		"""
-		Test: Partial failure handling - some players sync, others fail.
+		Test: Chunk-level failure handling - entire chunk fails and retries next cycle.
 
-		- Create 3 players + wallets + seed Redis for all 3
-		- Mock frappe.db.set_value to raise Exception on 2nd player
-		- Call sync_dirty_wallets()
-		- Assert: Players 1 and 3 removed from dirty set (synced)
-		- Assert: Player 2 remains in dirty set (failed)
-		- Assert: Players 1 and 3 have updated xp values
+		With batch CASE/WHEN processing, failure is per-chunk (not per-item).
+		When a chunk's DB update fails:
+		- All items in that chunk remain in the dirty set (for retry)
+		- No DB records are updated for that chunk
 		"""
 		# Create 2 more players
 		player2_doc = make_player(season="SEAS-00027")
@@ -243,32 +241,19 @@ class TestSyncDirtyWallets(SyncTestCase):
 		self._seed_redis_wallet(player2_id, xp=200, streak=2)
 		self._seed_redis_wallet(player3_id, xp=300, streak=3)
 
-		# Mock frappe.db.set_value to fail on 2nd player's wallet
-		original_set_value = frappe.db.set_value
-		wallet_names = {
-			self.player_id: frappe.db.get_value("Memora Player Wallet", {"player": self.player_id}, "name"),
-			player2_id: frappe.db.get_value("Memora Player Wallet", {"player": player2_id}, "name"),
-			player3_id: frappe.db.get_value("Memora Player Wallet", {"player": player3_id}, "name"),
-		}
-
-		def mock_set_value(doctype, name, fields_dict, update_modified=False):
-			# Fail only on player2's wallet update
-			if doctype == "Memora Player Wallet" and name == wallet_names[player2_id]:
-				raise Exception("DB error on player 2")
-			return original_set_value(doctype, name, fields_dict, update_modified=update_modified)
-
-		with patch("frappe.db.set_value", side_effect=mock_set_value):
+		# Mock _batch_update_wallets to raise — simulates chunk-level DB failure
+		with patch("memora_admin.tasks.sync._batch_update_wallets", side_effect=Exception("DB error on batch update")):
 			sync_dirty_wallets()
 
-		# Verify players 1 and 3 have updated xp
-		xp1 = frappe.db.get_value("Memora Player Wallet", {"player": self.player_id}, "total_xp")
-		xp3 = frappe.db.get_value("Memora Player Wallet", {"player": player3_id}, "total_xp")
-		self.assertEqual(xp1, 100, f"Player 1 should have xp=100")
-		self.assertEqual(xp3, 300, f"Player 3 should have xp=300")
+		# All 3 players should remain in dirty set (chunk failed, no SREMs)
+		for pid in [self.player_id, player2_id, player3_id]:
+			is_dirty = self.r.sismember("memora:dirty:wallets", pid.encode() if isinstance(pid, str) else pid)
+			self.assertTrue(is_dirty, f"Player {pid} should remain in dirty set after chunk failure")
 
-		# Verify player 2 xp remains unchanged (DB set_value failed)
-		xp2 = frappe.db.get_value("Memora Player Wallet", {"player": player2_id}, "total_xp")
-		self.assertEqual(xp2, 0, f"Player 2 xp should remain 0 (update failed)")
+		# No xp values should be updated (batch update was mocked to raise)
+		for pid in [self.player_id, player2_id, player3_id]:
+			xp = frappe.db.get_value("Memora Player Wallet", {"player": pid}, "total_xp")
+			self.assertEqual(xp, 0, f"Player {pid} xp should remain 0 (chunk update failed)")
 
 	def test_dirty_flag_cleared(self):
 		"""

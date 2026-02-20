@@ -34,14 +34,19 @@ class MemoraSubscriptionTransaction(Document):
 		expires_at = self._get_expires_at()
 
 		# All-or-nothing subscription creation
+		# Batch-check existing subscriptions (PERF-14: single query instead of N exists() calls)
+		existing_keys = set(
+			frappe.get_all(
+				"Memora Player Subscription",
+				filters={"player": self.player, "access_key": ["in", grant_keys]},
+				pluck="access_key",
+			)
+		)
+
 		created_subs = []
 		try:
 			for access_key in grant_keys:
-				existing = frappe.db.exists(
-					"Memora Player Subscription",
-					{"player": self.player, "access_key": access_key},
-				)
-				if existing:
+				if access_key in existing_keys:
 					continue  # Skip duplicates (overlapping subscriptions OK)
 
 				sub = frappe.get_doc(
