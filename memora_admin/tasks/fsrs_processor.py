@@ -395,12 +395,9 @@ def process_fsrs_reviews():
 				else:
 					card.due = now
 
-				# T005: Restore state (NULL = Learning, same as Card() default)
-				if existing.state is not None:
-					card.state = State(int(existing.state))
-				# Restore step (NULL preserved as-is)
-				if existing.step is not None:
-					card.step = int(existing.step)
+				# T005: Restore state and step unconditionally (step=None for Review cards)
+				card.state = State(int(existing.state)) if existing.state is not None else State.Learning
+				card.step = int(existing.step) if existing.step is not None else None
 				# Restore last_review (NULL = never reviewed)
 				if existing.last_review is not None:
 					lr = existing.last_review
@@ -471,8 +468,8 @@ def process_fsrs_reviews():
 			)
 			r.setex(redis_key, 86400, fsrs_data)  # 24hr TTL
 
-			# Mark as processed (idempotency key, 5 min TTL)
-			r.setex(idem_key, 300, "1")
+			# Mark as processed (idempotency key, must exceed the 10-min fetch window)
+			r.setex(idem_key, 720, "1")
 
 			processed += 1
 

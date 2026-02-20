@@ -198,12 +198,9 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 			else:
 				card.due = now
 
-			# Restore state (NULL = Learning, same as Card() default)
-			if ms.state is not None:
-				card.state = State(int(ms.state))
-			# Restore step (NULL preserved as-is)
-			if ms.step is not None:
-				card.step = int(ms.step)
+			# Restore state and step unconditionally (step=None for Review cards)
+			card.state = State(int(ms.state)) if ms.state is not None else State.Learning
+			card.step = int(ms.step) if ms.step is not None else None
 			# Restore last_review (NULL = never reviewed)
 			if ms.last_review is not None:
 				lr = ms.last_review
