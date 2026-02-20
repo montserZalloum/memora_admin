@@ -28,6 +28,10 @@ AMMAN_TZ = ZoneInfo("Asia/Amman")
 # Key prefix for all leaderboard keys
 LB_PREFIX = "memora:lb"
 
+# TTLs for periodic leaderboard keys (prevents unbounded accumulation after Redis data loss)
+DAILY_KEY_TTL = 30 * 86400  # 30 days
+WEEKLY_KEY_TTL = 90 * 86400  # 90 days
+
 
 def compute_composite_score(xp: int, timestamp: float | None = None) -> float:
 	"""Compute composite score for leaderboard ranking with tie-breaking.
@@ -340,37 +344,39 @@ class LeaderboardService:
 		timestamp = time.time()
 		composite_score = compute_composite_score(new_total_xp, timestamp)
 
-		# All-time: Use composite score (total XP with tie-breaking)
 		alltime_key = self._get_key("alltime")
-		await self.redis.zadd(alltime_key, {player_id: composite_score})
-
-		# Daily: Increment by amount (tracks today's earnings)
 		daily_key = self._get_key("daily")
-		await self.redis.zincrby(daily_key, xp_amount, player_id)
-
-		# Weekly: Increment by amount (tracks this week's earnings)
 		weekly_key = self._get_key("weekly")
-		await self.redis.zincrby(weekly_key, xp_amount, player_id)
+
+		# Single pipeline for all leaderboard updates (1 RTT instead of 3-6)
+		pipe = self.redis.pipeline()
+
+		# All-time: composite score (no TTL — persistent)
+		pipe.zadd(alltime_key, {player_id: composite_score})
+
+		# Daily: increment + TTL
+		pipe.zincrby(daily_key, xp_amount, player_id)
+		pipe.expire(daily_key, DAILY_KEY_TTL)
+
+		# Weekly: increment + TTL
+		pipe.zincrby(weekly_key, xp_amount, player_id)
+		pipe.expire(weekly_key, WEEKLY_KEY_TTL)
 
 		# Subject-specific leaderboards (if context available)
 		if subject_id:
-			# All-time for subject
-			await self.redis.zadd(
-				self._get_key("alltime", subject_id),
-				{player_id: composite_score},
-			)
-			# Daily for subject
-			await self.redis.zincrby(
-				self._get_key("daily", subject_id),
-				xp_amount,
-				player_id,
-			)
-			# Weekly for subject
-			await self.redis.zincrby(
-				self._get_key("weekly", subject_id),
-				xp_amount,
-				player_id,
-			)
+			alltime_subj_key = self._get_key("alltime", subject_id)
+			daily_subj_key = self._get_key("daily", subject_id)
+			weekly_subj_key = self._get_key("weekly", subject_id)
+
+			pipe.zadd(alltime_subj_key, {player_id: composite_score})
+
+			pipe.zincrby(daily_subj_key, xp_amount, player_id)
+			pipe.expire(daily_subj_key, DAILY_KEY_TTL)
+
+			pipe.zincrby(weekly_subj_key, xp_amount, player_id)
+			pipe.expire(weekly_subj_key, WEEKLY_KEY_TTL)
+
+		await pipe.execute()
 
 		logger.debug(
 			"leaderboards_updated",

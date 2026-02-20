@@ -218,6 +218,30 @@ class ProfilePageService:
 		# Single round-trip for all 7 ZSCORE calls
 		scores = await pipe.execute()
 
+		# Phase 2: Check archive keys for past days that returned None.
+		# The archive task (leaderboard_reset.py) copies yesterday's data to
+		# memora:lb:archive:daily:{date} at 00:10 AM daily. After Redis data loss,
+		# today's key is recreated on lesson completion, but past days are lost.
+		today_str = today.strftime("%Y-%m-%d")
+		archive_indices = []
+		for i, score in enumerate(scores):
+			if score is None and days[i]["date"] != today_str:
+				archive_indices.append(i)
+
+		if archive_indices:
+			archive_pipe = self.redis.pipeline()
+			for i in archive_indices:
+				date_str = days[i]["date"]
+				if subject_id:
+					archive_key = f"{self.prefix}lb:archive:daily:{date_str}:subject:{subject_id}"
+				else:
+					archive_key = f"{self.prefix}lb:archive:daily:{date_str}"
+				archive_pipe.zscore(archive_key, player_id)
+			archive_scores = await archive_pipe.execute()
+			for j, i in enumerate(archive_indices):
+				if archive_scores[j] is not None:
+					scores[i] = archive_scores[j]
+
 		total_xp = 0
 		for i, score in enumerate(scores):
 			xp = int(score) if score is not None else 0
