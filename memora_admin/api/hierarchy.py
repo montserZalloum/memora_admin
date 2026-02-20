@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+from collections import defaultdict
 
 import frappe
 
@@ -131,17 +132,53 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 		"tracks": [],
 	}
 
-	# Get tracks ordered by idx (published only)
-	tracks = frappe.get_all(
+	# --- Bulk-fetch all entities in 4 queries (was N+1 nested loops) ---
+	all_tracks = frappe.get_all(
 		"Memora Track",
 		filters={"subject": subject_id, "is_published": 1},
 		fields=["name", "is_linear", "is_sold_separately"],
 		order_by="idx asc",
 	)
 
-	max_bit_index = -1  # Track highest bit_index seen
+	all_units = frappe.get_all(
+		"Memora Unit",
+		filters={"subject": subject_id, "is_published": 1},
+		fields=["name", "track", "is_linear", "is_free"],
+		order_by="idx asc",
+	)
 
-	for track in tracks:
+	all_topics = frappe.get_all(
+		"Memora Topic",
+		filters={"subject": subject_id, "is_published": 1},
+		fields=["name", "unit", "is_linear", "is_free"],
+		order_by="idx asc",
+	)
+
+	# ALL lessons (published + unpublished) in one query — split in Python
+	all_lessons = frappe.get_all(
+		"Memora Lesson",
+		filters={"subject": subject_id},
+		fields=["name", "topic", "base_xp", "max_hearts", "bit_index", "is_published"],
+		order_by="idx asc",
+	)
+
+	# --- Group by parent ---
+	units_by_track = defaultdict(list)
+	for u in all_units:
+		units_by_track[u.track].append(u)
+
+	topics_by_unit = defaultdict(list)
+	for t in all_topics:
+		topics_by_unit[t.unit].append(t)
+
+	lessons_by_topic = defaultdict(list)
+	for l in all_lessons:
+		lessons_by_topic[l.topic].append(l)
+
+	# --- Single-pass assemble ---
+	max_bit_index = -1
+
+	for track in all_tracks:
 		track_info = {
 			"track_id": track.name,
 			"is_linear": track.is_linear if track.is_linear is not None else True,
@@ -149,15 +186,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 			"units": [],
 		}
 
-		# Get units ordered by idx (published only)
-		units = frappe.get_all(
-			"Memora Unit",
-			filters={"track": track.name, "is_published": 1},
-			fields=["name", "is_linear", "is_free"],
-			order_by="idx asc",
-		)
-
-		for unit in units:
+		for unit in units_by_track[track.name]:
 			unit_info = {
 				"unit_id": unit.name,
 				"is_linear": unit.is_linear if unit.is_linear is not None else True,
@@ -165,53 +194,30 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 				"topics": [],
 			}
 
-			# Get topics ordered by idx (published only)
-			topics = frappe.get_all(
-				"Memora Topic",
-				filters={"unit": unit.name, "is_published": 1},
-				fields=["name", "is_linear", "is_free"],
-				order_by="idx asc",
-			)
-
-			for topic in topics:
+			for topic in topics_by_unit[unit.name]:
 				topic_info = {
 					"topic_id": topic.name,
-					"is_linear": (topic.is_linear if topic.is_linear is not None else True),
+					"is_linear": topic.is_linear if topic.is_linear is not None else True,
 					"is_free": topic.is_free if topic.is_free is not None else False,
 					"lessons": [],
 				}
 
-				# Get published lessons ordered by idx, reading persisted bit_index from DB
-				lessons = frappe.get_all(
-					"Memora Lesson",
-					filters={"topic": topic.name, "is_published": 1},
-					fields=["name", "base_xp", "max_hearts", "bit_index"],
-					order_by="idx asc",
-				)
-
-				for lesson in lessons:
+				for lesson in lessons_by_topic[topic.name]:
 					lesson_bit_index = lesson.bit_index or 0
-					lesson_info = {
-						"lesson_id": lesson.name,
-						"bit_index": lesson_bit_index,
-						"xp": lesson.base_xp if lesson.base_xp else default_base_xp,
-						"max_hearts": lesson.max_hearts if lesson.max_hearts else default_max_hearts,
-					}
-					topic_info["lessons"].append(lesson_info)
+					if lesson.is_published:
+						topic_info["lessons"].append(
+							{
+								"lesson_id": lesson.name,
+								"bit_index": lesson_bit_index,
+								"xp": lesson.base_xp if lesson.base_xp else default_base_xp,
+								"max_hearts": lesson.max_hearts if lesson.max_hearts else default_max_hearts,
+							}
+						)
+					else:
+						if lesson.bit_index is not None:
+							hierarchy["excluded_bits"].append(lesson_bit_index)
 					if lesson_bit_index > max_bit_index:
 						max_bit_index = lesson_bit_index
-
-				# Collect excluded_bits from unpublished lessons
-				unpublished_lessons = frappe.get_all(
-					"Memora Lesson",
-					filters={"topic": topic.name, "is_published": 0},
-					fields=["bit_index"],
-				)
-				for ul in unpublished_lessons:
-					if ul.bit_index is not None:
-						hierarchy["excluded_bits"].append(ul.bit_index)
-						if ul.bit_index > max_bit_index:
-							max_bit_index = ul.bit_index
 
 				unit_info["topics"].append(topic_info)
 

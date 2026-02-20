@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import json
 import logging
+from collections import defaultdict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -22,6 +24,91 @@ import frappe
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
+
+
+@dataclass
+class SubjectTree:
+	"""Pre-fetched subject tree data to avoid N+1 queries."""
+
+	tracks: list = field(default_factory=list)
+	units_by_track: dict = field(default_factory=dict)
+	topics_by_unit: dict = field(default_factory=dict)
+	lessons_by_topic: dict = field(default_factory=dict)
+	stages_by_lesson: dict = field(default_factory=dict)
+	skippable_types: set = field(default_factory=set)
+
+
+def _prefetch_subject_tree(subject_id: str) -> SubjectTree:
+	"""Bulk-fetch entire subject tree in 6 queries (was N+1 nested loops)."""
+	tree = SubjectTree()
+
+	# Query 1: tracks
+	tree.tracks = frappe.get_all(
+		"Memora Track",
+		filters={"subject": subject_id, "is_published": 1},
+		fields=["name", "track_title", "image", "is_linear"],
+		order_by="sort_order asc",
+	)
+
+	# Query 2: units
+	all_units = frappe.get_all(
+		"Memora Unit",
+		filters={"subject": subject_id, "is_published": 1},
+		fields=["name", "track", "unit_title", "is_linear", "is_free"],
+		order_by="sort_order asc",
+	)
+	units_by_track = defaultdict(list)
+	for u in all_units:
+		units_by_track[u.track].append(u)
+	tree.units_by_track = units_by_track
+
+	# Query 3: topics
+	all_topics = frappe.get_all(
+		"Memora Topic",
+		filters={"subject": subject_id, "is_published": 1},
+		fields=["name", "unit", "topic_title", "is_linear", "is_free"],
+		order_by="sort_order asc",
+	)
+	topics_by_unit = defaultdict(list)
+	for t in all_topics:
+		topics_by_unit[t.unit].append(t)
+	tree.topics_by_unit = topics_by_unit
+
+	# Query 4: lessons (published only)
+	all_lessons = frappe.get_all(
+		"Memora Lesson",
+		filters={"subject": subject_id, "is_published": 1},
+		fields=["name", "topic", "lesson_title", "bit_index", "base_xp", "max_hearts", "is_reviewable"],
+		order_by="name asc",
+	)
+	lessons_by_topic = defaultdict(list)
+	for l in all_lessons:
+		lessons_by_topic[l.topic].append(l)
+	tree.lessons_by_topic = lessons_by_topic
+
+	# Query 5: stages via JOIN (avoids IN clause on massive child table)
+	raw_stages = frappe.db.sql(
+		"""
+		SELECT ls.parent, ls.name, ls.stage_type, ls.idx,
+		       ls.is_skippable, ls.config_json
+		FROM `tabMemora Lesson Stage` ls
+		INNER JOIN `tabMemora Lesson` l
+		    ON ls.parent = l.name AND ls.parenttype = 'Memora Lesson'
+		WHERE l.subject = %(subject)s AND l.is_published = 1
+		ORDER BY ls.parent, ls.idx
+		""",
+		{"subject": subject_id},
+		as_dict=True,
+	)
+	stages_by_lesson = defaultdict(list)
+	for s in raw_stages:
+		stages_by_lesson[s.parent].append(s)
+	tree.stages_by_lesson = stages_by_lesson
+
+	# Query 6: skippable stage types (single small query)
+	tree.skippable_types = _get_skippable_stage_types()
+
+	return tree
 
 
 def generate_subject_json(subject_id: str) -> list[dict]:
@@ -45,6 +132,9 @@ def generate_subject_json(subject_id: str) -> list[dict]:
 		logger.warning(f"Subject {subject_id} not found, skipping")
 		return files
 
+	# Pre-fetch entire subject tree in bulk queries
+	tree = _prefetch_subject_tree(subject_id)
+
 	# Generate _subjects.json (subject level index)
 	subjects_data = _generate_subjects_index(subject_doc)
 	files.append(
@@ -55,20 +145,12 @@ def generate_subject_json(subject_id: str) -> list[dict]:
 		}
 	)
 
-	# Get tracks for this subject
-	tracks = frappe.get_all(
-		"Memora Track",
-		filters={"subject": subject_id, "is_published": 1},
-		fields=["name", "track_title", "image", "is_linear"],
-		order_by="sort_order asc",
-	)
-
 	track_ids = []
-	for track in tracks:
+	for track in tree.tracks:
 		track_ids.append(track.name)
 
 		# Generate track_{id}.json
-		track_files = _generate_track_json(track)
+		track_files = _generate_track_json(track, tree)
 		files.extend(track_files)
 
 	# Update subjects data with track_ids
@@ -105,7 +187,7 @@ def _generate_subjects_index(subject_doc: Any) -> dict:
 	}
 
 
-def _generate_track_json(track: dict) -> list[dict]:
+def _generate_track_json(track: dict, tree: SubjectTree) -> list[dict]:
 	"""
 	Generate track_{id}.json and all child unit/topic/lesson files.
 
@@ -114,14 +196,7 @@ def _generate_track_json(track: dict) -> list[dict]:
 	files: list[dict] = []
 	track_id = track["name"]
 
-	# Get units for this track
-	units = frappe.get_all(
-		"Memora Unit",
-		filters={"track": track_id, "is_published": 1},
-		fields=["name", "unit_title", "is_linear", "is_free"],
-		order_by="sort_order asc",
-	)
-
+	units = tree.units_by_track[track_id]
 	unit_ids = [unit["name"] for unit in units]
 
 	# Track JSON
@@ -144,13 +219,13 @@ def _generate_track_json(track: dict) -> list[dict]:
 
 	# Generate unit files and their descendants
 	for unit in units:
-		unit_files = _generate_unit_json(unit)
+		unit_files = _generate_unit_json(unit, tree)
 		files.extend(unit_files)
 
 	return files
 
 
-def _generate_unit_json(unit: dict) -> list[dict]:
+def _generate_unit_json(unit: dict, tree: SubjectTree) -> list[dict]:
 	"""
 	Generate unit_{id}.json with full topic and lesson metadata (content JSON).
 
@@ -162,26 +237,13 @@ def _generate_unit_json(unit: dict) -> list[dict]:
 	files: list[dict] = []
 	unit_id = unit["name"]
 
-	# Get topics for this unit
-	topics = frappe.get_all(
-		"Memora Topic",
-		filters={"unit": unit_id, "is_published": 1},
-		fields=["name", "topic_title", "is_linear", "is_free"],
-		order_by="sort_order asc",
-	)
+	topics = tree.topics_by_unit[unit_id]
 
 	# Build topics array with full lesson metadata for unit JSON
 	topics_with_lessons = []
 	for topic in topics:
 		topic_id = topic["name"]
-
-		# Get lessons for this topic (only published)
-		lessons = frappe.get_all(
-			"Memora Lesson",
-			filters={"topic": topic_id, "is_published": 1},
-			fields=["name", "lesson_title", "bit_index"],
-			order_by="name asc",
-		)
+		lessons = tree.lessons_by_topic[topic_id]
 
 		# Topic with nested lesson metadata
 		topic_with_lessons = {
@@ -204,9 +266,9 @@ def _generate_unit_json(unit: dict) -> list[dict]:
 		topic_files = _generate_topic_json(topic, lessons)
 		files.extend(topic_files)
 
-		# Generate lesson_{id}.json for each lesson
+		# Generate lesson_{id}.json for each lesson (from pre-fetched stages)
 		for lesson in lessons:
-			lesson_file = _generate_lesson_json(lesson["name"])
+			lesson_file = _generate_lesson_json_from_tree(lesson, tree)
 			if lesson_file:
 				files.append(lesson_file)
 
@@ -331,6 +393,45 @@ def _generate_lesson_json(lesson_name: str) -> dict | None:
 
 	return {
 		"filename": f"lesson_{lesson_doc.name}.json",
+		"content": _to_json(lesson_data),
+		"subject_id": None,
+	}
+
+
+def _generate_lesson_json_from_tree(lesson: dict, tree: SubjectTree) -> dict | None:
+	"""Generate lesson JSON from pre-fetched tree data (no get_doc calls)."""
+	lesson_name = lesson["name"]
+	stages_raw = tree.stages_by_lesson.get(lesson_name, [])
+
+	stages = []
+	for stage in stages_raw:
+		effective_skippable = bool(stage.is_skippable) or (stage.stage_type in tree.skippable_types)
+
+		config = _parse_stage_config(stage.config_json)
+		if effective_skippable:
+			_strip_item_ids(config)
+
+		stage_data = {
+			"stage_id": stage.name,
+			"stage_type": stage.stage_type,
+			"is_skippable": effective_skippable,
+			"config": config,
+		}
+		stages.append(stage_data)
+
+	lesson_data = {
+		"schema_version": SCHEMA_VERSION,
+		"lesson_id": lesson_name,
+		"title": lesson["lesson_title"],
+		"base_xp": lesson.get("base_xp") or 10,
+		"max_hearts": lesson.get("max_hearts") or 3,
+		"bit_index": lesson.get("bit_index") or 0,
+		"is_reviewable": bool(lesson.get("is_reviewable")),
+		"stages": stages,
+	}
+
+	return {
+		"filename": f"lesson_{lesson_name}.json",
 		"content": _to_json(lesson_data),
 		"subject_id": None,
 	}
