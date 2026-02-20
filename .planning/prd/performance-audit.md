@@ -661,7 +661,7 @@ Session invalidation happens via `family_id` mismatch, so a 5s staleness window 
 
 ### PERF-19: Access Sync Redundant Queries for Free-Content Detection
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 18 of 21
 **Effort:** 1 hour
 **Risk:** Near zero
@@ -689,7 +689,7 @@ SELECT EXISTS(
 
 ### PERF-20: Missing Index on Subscription Transaction Time Queries
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 19 of 21
 **Effort:** 10 minutes
 **Risk:** Near zero
@@ -702,6 +702,8 @@ Reporting and reconciliation queries filter by `(status, creation)` but no compo
 CREATE INDEX idx_status_creation
   ON `tabMemora Subscription Transaction` (status, creation);
 ```
+
+Added to `_ensure_hot_table_indexes()` in `setup.py` for idempotent creation on migrate.
 
 **Impact:** 60-80% improvement on time-range transaction queries.
 
@@ -753,5 +755,5 @@ CREATE INDEX idx_status_creation
 - [ ] **PERF-16** — `get_memory_mastery()` partition scan (MEDIUM)
 - [ ] **PERF-17** — Full CSV decryption for export (MEDIUM)
 - [ ] **PERF-18** — Session Redis GET per request (MEDIUM)
-- [ ] **PERF-19** — Free-content detection redundant queries (MEDIUM)
-- [ ] **PERF-20** — Subscription transaction index (MEDIUM)
+- [x] **PERF-19** — Free-content detection redundant queries (MEDIUM)
+- [x] **PERF-20** — Subscription transaction index (MEDIUM)

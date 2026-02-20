@@ -610,6 +610,7 @@ def _ensure_hot_table_indexes():
 	- idx_event_creation: FSRS processor cutoff query (every 1 min)
 	- idx_player_subject: every progress lookup (sync.py, FastAPI)
 	- idx_player_access: every access check (access_sync.py)
+	- idx_status_creation: reporting/reconciliation time-range queries (PERF-20)
 
 	idx_batch_status on Voucher Card is handled separately by _ensure_voucher_card_indexes().
 	"""
@@ -620,6 +621,7 @@ def _ensure_hot_table_indexes():
 		("tabMemora Interaction Log", "idx_event_creation", "(event_type, creation)"),
 		("tabMemora Structure Progress", "idx_player_subject", "(player, subject)"),
 		("tabMemora Player Subscription", "idx_player_access", "(player, access_key)"),
+		("tabMemora Subscription Transaction", "idx_status_creation", "(status, creation)"),
 	]
 
 	for table, index_name, columns in indexes:

@@ -236,48 +236,37 @@ def on_topic_free_changed(doc, method):
 def _update_subject_free_content_status(subject_id: str, r, redis_key: str):
     """Check if subject still has any free units or topics and update Redis.
 
+    Single SQL with EXISTS for early exit — replaces 4 ORM queries.
+
     Args:
         subject_id: The subject to check
         r: Redis connection (from get_fastapi_redis())
         redis_key: The Redis key for subjects_with_free_content set
     """
-    # Check for free units
-    tracks = frappe.get_all("Memora Track", filters={"subject": subject_id}, pluck="name")
-    if not tracks:
-        r.srem(redis_key, subject_id)
-        return
+    has_free = frappe.db.sql(
+        """
+        SELECT EXISTS(
+            SELECT 1 FROM `tabMemora Unit` u
+            INNER JOIN `tabMemora Track` t ON t.name = u.track
+            WHERE t.subject = %(subject)s AND u.is_free = 1
+            LIMIT 1
+        ) OR EXISTS(
+            SELECT 1 FROM `tabMemora Topic` tp
+            INNER JOIN `tabMemora Unit` u ON u.name = tp.unit
+            INNER JOIN `tabMemora Track` t ON t.name = u.track
+            WHERE t.subject = %(subject)s AND tp.is_free = 1
+            LIMIT 1
+        ) AS has_free
+        """,
+        {"subject": subject_id},
+    )[0][0]
 
-    free_units = frappe.db.count(
-        "Memora Unit",
-        filters={
-            "track": ["in", tracks],
-            "is_free": 1,
-        },
-    )
-
-    if free_units > 0:
-        r.sadd(redis_key, subject_id)
-        return
-
-    # Check for free topics
-    units = frappe.get_all("Memora Unit", filters={"track": ["in", tracks]}, pluck="name")
-    if not units:
-        r.srem(redis_key, subject_id)
-        return
-
-    free_topics = frappe.db.count(
-        "Memora Topic",
-        filters={"unit": ["in", units], "is_free": 1},
-    )
-
-    if free_topics > 0:
+    if has_free:
         r.sadd(redis_key, subject_id)
     else:
         r.srem(redis_key, subject_id)
 
-    frappe.logger().info(
-        f"Subject {subject_id} free content status: {free_units} free units, {free_topics} free topics"
-    )
+    frappe.logger().info(f"Subject {subject_id} free content status: {'yes' if has_free else 'no'}")
 
 
 def rebuild_subjects_with_free_content():
