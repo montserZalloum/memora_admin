@@ -268,8 +268,8 @@ def _calculate_subject_stats(subject_id: str, overrides: dict) -> dict:
 				if topic_is_free:
 					is_free_preview = True
 
-				# Count lessons in topic
-				lesson_count = frappe.db.count("Memora Lesson", filters={"topic": topic["name"]})
+				# Count published lessons in topic
+				lesson_count = frappe.db.count("Memora Lesson", filters={"topic": topic["name"], "is_published": 1})
 				total_lessons += lesson_count
 
 	return {
@@ -342,7 +342,7 @@ def _generate_subject_files(plan_id: str, subject_id: str, overrides: dict) -> l
 
 				lessons = frappe.get_all(
 					"Memora Lesson",
-					filters={"topic": topic["name"]},
+					filters={"topic": topic["name"], "is_published": 1},
 					fields=["name"],
 				)
 
@@ -489,7 +489,7 @@ def _generate_unit_content(unit_id: str, overrides: dict) -> dict:
 
 		lessons = frappe.get_all(
 			"Memora Lesson",
-			filters={"topic": topic["name"]},
+			filters={"topic": topic["name"], "is_published": 1},
 			fields=["name", "lesson_title", "bit_index"],
 			order_by="name asc",
 		)

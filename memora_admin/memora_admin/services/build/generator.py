@@ -175,10 +175,10 @@ def _generate_unit_json(unit: dict) -> list[dict]:
 	for topic in topics:
 		topic_id = topic["name"]
 
-		# Get lessons for this topic
+		# Get lessons for this topic (only published)
 		lessons = frappe.get_all(
 			"Memora Lesson",
-			filters={"topic": topic_id},
+			filters={"topic": topic_id, "is_published": 1},
 			fields=["name", "lesson_title", "bit_index"],
 			order_by="name asc",
 		)
@@ -344,22 +344,25 @@ def _generate_bitmap_json(subject_id: str, subject_doc: Any) -> dict:
 	Excluded bits are lesson bit_index values that should not count toward completion.
 	"""
 	# Get all lessons for this subject to calculate bit_range
-	lessons = frappe.get_all(
+	all_lessons = frappe.get_all(
 		"Memora Lesson",
 		filters={"subject": subject_id},
-		fields=["bit_index"],
+		fields=["bit_index", "is_published"],
 	)
 
-	# Calculate bit_range (highest bit_index + 1, or use last_bit_index from subject)
-	bit_indices = [lesson.get("bit_index") or 0 for lesson in lessons]
+	# Calculate bit_range from ALL lessons (published + unpublished)
+	bit_indices = [lesson.get("bit_index") or 0 for lesson in all_lessons]
 	if bit_indices:
 		bit_range = max(bit_indices) + 1
 	else:
 		bit_range = subject_doc.last_bit_index or 0
 
-	# excluded_bits: currently empty, can be populated based on lesson flags
-	# or other criteria in the future
-	excluded_bits: list[int] = []
+	# Collect excluded_bits from unpublished lessons
+	excluded_bits: list[int] = [
+		lesson.get("bit_index") or 0
+		for lesson in all_lessons
+		if not lesson.get("is_published") and lesson.get("bit_index") is not None
+	]
 
 	return {
 		"schema_version": SCHEMA_VERSION,

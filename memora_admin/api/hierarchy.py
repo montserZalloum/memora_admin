@@ -111,6 +111,9 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 
 	subject = frappe.get_doc("Memora Subject", subject_id)
 
+	if not subject.is_published:
+		return None
+
 	# Load Memora Settings defaults for fallback
 	settings = frappe.get_single("Memora Settings")
 	default_base_xp = settings.base_lesson_xp or 100
@@ -128,10 +131,10 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 		"tracks": [],
 	}
 
-	# Get tracks ordered by idx
+	# Get tracks ordered by idx (published only)
 	tracks = frappe.get_all(
 		"Memora Track",
-		filters={"subject": subject_id},
+		filters={"subject": subject_id, "is_published": 1},
 		fields=["name", "is_linear", "is_sold_separately"],
 		order_by="idx asc",
 	)
@@ -146,10 +149,10 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 			"units": [],
 		}
 
-		# Get units ordered by idx
+		# Get units ordered by idx (published only)
 		units = frappe.get_all(
 			"Memora Unit",
-			filters={"track": track.name},
+			filters={"track": track.name, "is_published": 1},
 			fields=["name", "is_linear", "is_free"],
 			order_by="idx asc",
 		)
@@ -162,10 +165,10 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 				"topics": [],
 			}
 
-			# Get topics ordered by idx
+			# Get topics ordered by idx (published only)
 			topics = frappe.get_all(
 				"Memora Topic",
-				filters={"unit": unit.name},
+				filters={"unit": unit.name, "is_published": 1},
 				fields=["name", "is_linear", "is_free"],
 				order_by="idx asc",
 			)
@@ -178,10 +181,10 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 					"lessons": [],
 				}
 
-				# Get lessons ordered by idx, reading persisted bit_index from DB
+				# Get published lessons ordered by idx, reading persisted bit_index from DB
 				lessons = frappe.get_all(
 					"Memora Lesson",
-					filters={"topic": topic.name},
+					filters={"topic": topic.name, "is_published": 1},
 					fields=["name", "base_xp", "max_hearts", "bit_index"],
 					order_by="idx asc",
 				)
@@ -197,6 +200,18 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 					topic_info["lessons"].append(lesson_info)
 					if lesson_bit_index > max_bit_index:
 						max_bit_index = lesson_bit_index
+
+				# Collect excluded_bits from unpublished lessons
+				unpublished_lessons = frappe.get_all(
+					"Memora Lesson",
+					filters={"topic": topic.name, "is_published": 0},
+					fields=["bit_index"],
+				)
+				for ul in unpublished_lessons:
+					if ul.bit_index is not None:
+						hierarchy["excluded_bits"].append(ul.bit_index)
+						if ul.bit_index > max_bit_index:
+							max_bit_index = ul.bit_index
 
 				unit_info["topics"].append(topic_info)
 

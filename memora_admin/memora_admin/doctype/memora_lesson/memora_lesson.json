@@ -14,6 +14,7 @@
   "base_xp",
   "is_reviewable",
   "max_hearts",
+  "is_published",
   "content_hash",
   "stages",
   "bit_index",
@@ -65,6 +66,12 @@
    "fieldname": "max_hearts",
    "fieldtype": "Int",
    "label": "Max Hearts"
+  },
+  {
+   "default": "1",
+   "fieldname": "is_published",
+   "fieldtype": "Check",
+   "label": "Is Published"
   },
   {
    "description": "\u064a\u0633\u062a\u062e\u062f\u0645 \u0644\u0644\u062a\u062d\u0642\u0642 \u0645\u0646 \u0627\u0644\u0646\u0633\u062e\u0629 \u0648\u0627\u0644\u0645\u0632\u0627\u0645\u0646\u0629",
