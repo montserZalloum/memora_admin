@@ -7,6 +7,8 @@ from typing import TYPE_CHECKING
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.services.hydration import guarded_hydrate
+
 if TYPE_CHECKING:
 	from fastapi_app.services.frappe_client import FrappeClient
 
@@ -46,14 +48,8 @@ class AccessService:
 	async def ensure_hydrated(self, player_id: str) -> None:
 		"""Ensure access set exists in Redis, hydrating from MariaDB if missing.
 
-		After a Redis flush (bench clear-cache, restart, etc.), access grants in Redis
-		are lost. Without hydration, access checks return False for all content,
-		effectively locking out all subscribed users.
-
-		This method checks if the access set exists and, if not, loads the active
-		subscriptions from MariaDB via the Frappe API and seeds Redis.
-
-		Follows the same pattern as WalletService.ensure_hydrated().
+		Uses distributed lock + semaphore to prevent thundering herd after Redis flush.
+		Only one request per player hydrates at a time; others wait for the result.
 
 		Args:
 		    player_id: Player's user ID
@@ -61,11 +57,10 @@ class AccessService:
 		key = self._access_key(player_id)
 
 		# Fast path: access set already exists in Redis
-		exists = await self.redis.exists(key)
-		if exists:
+		if await self.redis.exists(key):
 			return
 
-		# Access set missing from Redis -- hydrate from MariaDB
+		# No Frappe client — can't hydrate
 		if not self.frappe:
 			logger.warning(
 				"access_hydration_skipped",
@@ -74,37 +69,31 @@ class AccessService:
 			)
 			return
 
-		try:
-			result = await self.frappe.call(
-				"memora_admin.api.subscriptions.get_player_access_keys",
-				{"player_id": player_id},
-			)
-
-			if result and isinstance(result, list) and len(result) > 0:
-				# Seed Redis with MariaDB access keys using SADD
-				await self.redis.sadd(key, *result)
-
-				logger.info(
-					"access_hydrated_from_mariadb",
-					player_id=player_id,
-					keys=result,
-					count=len(result),
-				)
-			else:
-				logger.debug(
-					"access_hydration_empty",
-					player_id=player_id,
+		async def _do_hydrate() -> None:
+			try:
+				result = await self.frappe.call(
+					"memora_admin.api.subscriptions.get_player_access_keys",
+					{"player_id": player_id},
 				)
 
-		except Exception as e:
-			# Don't fail the access check if hydration fails -- log and continue.
-			# The check will return False (no access), which is the pre-existing
-			# behavior when Redis is empty. At least we tried.
-			logger.error(
-				"access_hydration_failed",
-				player_id=player_id,
-				error=str(e),
-			)
+				if result and isinstance(result, list) and len(result) > 0:
+					await self.redis.sadd(key, *result)
+					logger.info(
+						"access_hydrated_from_mariadb",
+						player_id=player_id,
+						count=len(result),
+					)
+				else:
+					logger.debug("access_hydration_empty", player_id=player_id)
+
+			except Exception as e:
+				logger.error(
+					"access_hydration_failed",
+					player_id=player_id,
+					error=str(e),
+				)
+
+		await guarded_hydrate(self.redis, key, _do_hydrate)
 
 	async def check_access(self, player_id: str, content_key: str) -> bool:
 		"""

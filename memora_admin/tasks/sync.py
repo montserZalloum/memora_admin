@@ -261,26 +261,41 @@ def sync_dirty_wallets():
 	logger.info(f"Wallet sync: {synced} synced, {len(errors)} errors")
 
 
+def _reserve_name_block(prefix: str, count: int) -> int:
+	"""Reserve a block of sequential names from tabSeries.
+
+	Atomically increments the series counter and returns the start number.
+	Names will be prefix + zero-padded numbers from (start+1) to (start+count).
+	"""
+	frappe.db.sql(
+		"UPDATE `tabSeries` SET `current` = `current` + %(count)s WHERE `name` = %(prefix)s",
+		{"count": count, "prefix": prefix},
+	)
+	current = frappe.db.sql(
+		"SELECT `current` FROM `tabSeries` WHERE `name` = %(prefix)s",
+		{"prefix": prefix},
+	)[0][0]
+	return current - count
+
+
 def flush_interaction_buffer():
 	"""
 	Batch insert interactions from Redis buffer to MariaDB.
 
 	Processes INTERACTION_BUFFER_KEY list:
-	1. LRANGE to get batch of items (limit 1000)
-	2. JSON parse and insert to Interaction Log
-	3. LTRIM to remove processed items atomically
+	1. LRANGE to get batch of items
+	2. Parse and validate all items (two-phase: parse then insert)
+	3. Bulk INSERT valid rows via single raw SQL statement
+	4. LTRIM to remove entire batch atomically
 
 	Scheduled: every 1 minute via hooks.py
-
-	Per RESEARCH.md: Fixed batch size (1000) prevents memory spikes.
 	"""
 	_write_debug_log("=== flush_interaction_buffer STARTED ===")
 
 	try:
 		r = get_redis()
 
-		# Batch size limit to prevent memory issues
-		BATCH_SIZE = 1000
+		BATCH_SIZE = 5000
 
 		# Get batch of items from head of list
 		items = r.lrange(INTERACTION_BUFFER_KEY, 0, BATCH_SIZE - 1)
@@ -292,82 +307,84 @@ def flush_interaction_buffer():
 			return
 
 		count = len(items)
-		inserted = 0
-		errors = []
+		skipped = 0
+
+		# Phase 1: Parse and validate all items
+		valid_rows = []
+		now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
 
 		for i, item_bytes in enumerate(items):
 			try:
-				# Parse JSON (handle bytes from Redis)
 				item_str = item_bytes.decode() if isinstance(item_bytes, bytes) else item_bytes
 				item = json.loads(item_str)
-				_write_debug_log(f"Item {i+1}/{count}: player={item.get('player')}, lesson={item.get('lesson')}")
+			except (json.JSONDecodeError, UnicodeDecodeError) as e:
+				skipped += 1
+				logger.warning(f"Invalid JSON in interaction buffer: {e}")
+				continue
 
-				# Validate required fields exist in Redis data
-				if not item.get("player") or not item.get("lesson"):
-					error_msg = f"Missing player or lesson in item: {item_str[:100]}"
-					errors.append(error_msg)
-					_write_debug_log(f"SKIP: {error_msg}")
-					logger.warning(error_msg)
-					continue
+			if not item.get("player") or not item.get("lesson"):
+				skipped += 1
+				logger.warning(f"Missing player or lesson in item: {str(item)[:100]}")
+				continue
 
-				# Insert to Interaction Log DocType
-				doc = frappe.get_doc({
-					"doctype": "Memora Interaction Log",
-					"player": item["player"],
-					"lesson": item["lesson"],
-					"stage_id": str(item.get("stage_id", "")),
-					"item_id": item.get("item_id", ""),  # Per Phase 27-02: item-level tracking
-					"event_type": item.get("event_type", "Completed"),
-					"time_spent": item.get("time_spent", 0),
-					"errors_count": item.get("errors_count", 0),
-					"timestamp": _parse_timestamp(item.get("timestamp", "")),
-					"client_metadata": json.dumps(item.get("metadata", {})),
-				})
-				_write_debug_log(f"  Creating doc object...")
-				doc.insert(ignore_permissions=True)
-				_write_debug_log(f"  ✓ Inserted: {doc.name}")
-				inserted += 1
-				logger.debug(f"Inserted interaction: {item['player']} - {item['lesson']} - {item.get('stage_id')}")
+			valid_rows.append((
+				item["player"],
+				item["lesson"],
+				str(item.get("stage_id", "")),
+				item.get("item_id", ""),
+				item.get("event_type", "Completed"),
+				int(item.get("time_spent", 0)),
+				int(item.get("errors_count", 0)),
+				_parse_timestamp(item.get("timestamp", "")),
+				json.dumps(item.get("metadata", {})),
+				now_str,  # creation
+				now_str,  # modified
+				"Administrator",  # modified_by
+				"Administrator",  # owner
+			))
 
-			except Exception as e:
-				error_msg = f"Insert interaction failed: {str(e)}"
-				errors.append(error_msg)
-				_write_debug_log(f"  ✗ ERROR: {error_msg}")
-				logger.error(error_msg, exc_info=True)
-				frappe.log_error(error_msg)
+		inserted = 0
 
-		# Trim successfully inserted items from list (atomic operation)
-		# LTRIM keeps elements from `inserted` to end, removing only successfully processed ones
-		# Failed items remain at the head of the list for retry on next flush cycle
-		if inserted < count:
-			logger.warning(
-				f"Partial flush: {inserted}/{count} interactions inserted, "
-				f"{count - inserted} failed items remain in buffer for retry"
+		# Phase 2: Bulk INSERT all valid rows in one SQL statement
+		if valid_rows:
+			n = len(valid_rows)
+			start = _reserve_name_block("LOG-", n)
+
+			# Build flat values list: (name, ...row_fields) for each row
+			flat_values = []
+			for i, row in enumerate(valid_rows):
+				name = f"LOG-{start + i + 1:05d}"
+				flat_values.append(name)
+				flat_values.extend(row)
+
+			placeholders = ", ".join(
+				[f"({', '.join(['%s'] * 14)})"] * n
 			)
-			_write_debug_log(f"PARTIAL FLUSH: {inserted}/{count} inserted, {count - inserted} remain")
-		_write_debug_log(f"Trimming {inserted} items from buffer (of {count} fetched)...")
-		r.ltrim(INTERACTION_BUFFER_KEY, inserted, -1)
-		_write_debug_log(f"Trim complete")
 
-		# Commit all inserts
-		if inserted > 0:
-			try:
-				_write_debug_log(f"Committing {inserted} inserts to database...")
-				frappe.db.commit()
-				_write_debug_log(f"✓ Database commit successful")
-				logger.info(f"Database commit successful for {inserted} interactions")
-			except Exception as e:
-				error_msg = f"Database commit failed: {e}"
-				_write_debug_log(f"✗ {error_msg}")
-				logger.error(error_msg, exc_info=True)
-				frappe.log_error(error_msg)
+			frappe.db.sql(
+				f"""
+				INSERT INTO `tabMemora Interaction Log`
+				(name, player, lesson, stage_id, item_id, event_type,
+				 time_spent, errors_count, timestamp, client_metadata,
+				 creation, modified, modified_by, owner)
+				VALUES {placeholders}
+				""",
+				tuple(flat_values),
+			)
+			frappe.db.commit()
+			inserted = n
+			_write_debug_log(f"Bulk inserted {n} rows")
 
-		# Log sync result - "Memory" is the sync_type for interactions per DocType schema
-		status = "Success" if not errors else "Failed"
+		# Phase 3: Trim entire batch from buffer (invalid items won't succeed on retry)
+		r.ltrim(INTERACTION_BUFFER_KEY, count, -1)
+		_write_debug_log(f"Trimmed {count} items from buffer")
+
+		# Log sync result
+		status = "Success" if skipped == 0 else "Failed"
 		_log_sync("Memory", inserted, status)
 
-		_write_debug_log(f"=== COMPLETE: {inserted} inserted, {len(errors)} errors, status={status} ===\n")
-		logger.info(f"Interaction flush: {inserted} inserted, {len(errors)} errors")
+		_write_debug_log(f"=== COMPLETE: {inserted} inserted, {skipped} skipped ===\n")
+		logger.info(f"Interaction flush: {inserted} inserted, {skipped} skipped")
 
 	except Exception as e:
 		error_msg = f"FATAL ERROR in flush_interaction_buffer: {e}"

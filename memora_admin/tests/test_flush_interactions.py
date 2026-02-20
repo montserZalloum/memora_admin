@@ -3,11 +3,12 @@ Tests for flush_interaction_buffer() task.
 
 Tests verify that interaction data is correctly flushed from Redis buffer to MariaDB,
 including happy path, edge cases, and error handling.
+
+Uses bulk raw SQL INSERT (no ORM) — see sync.py for implementation details.
 """
 
 import json
-from unittest.mock import patch, MagicMock
-from datetime import datetime
+from unittest.mock import patch
 
 import frappe
 from memora_admin.tests.sync_test_base import SyncTestCase
@@ -147,10 +148,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		- Push: [valid item, invalid JSON, valid item]
 		- Call flush_interaction_buffer()
 		- Assert: 2 Interaction Log docs created
-		- Assert: Buffer trimmed correctly (1 item remains - the invalid JSON at position 1)
-
-		Note: Per line 349 in sync.py, LTRIM(key, inserted, -1) removes `inserted` items.
-		With 3 items fetched and 2 successfully inserted, LTRIM(key, 2, -1) keeps 1 item.
+		- Assert: Buffer fully trimmed (invalid items won't succeed on retry)
 		"""
 		# Push valid item
 		self._push_interaction(self._make_interaction())
@@ -168,9 +166,9 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		count = frappe.db.count("Memora Interaction Log", {"player": self.player_id})
 		self.assertEqual(count, 2, f"Expected 2 Interaction Log docs, got {count}")
 
-		# Assert buffer has 1 item remaining (LTRIM(key, 2, -1) with 3 items = 1 remains)
+		# Entire batch is trimmed — invalid JSON won't succeed on retry
 		buffer_len = self.r.llen("memora:buffer:interactions")
-		self.assertEqual(buffer_len, 1, f"Expected 1 item in buffer, got {buffer_len}")
+		self.assertEqual(buffer_len, 0, f"Expected empty buffer, got {buffer_len}")
 
 	def test_missing_fields_skipped(self):
 		"""
@@ -179,7 +177,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		- Push: [valid, {no player field}, valid]
 		- Call flush_interaction_buffer()
 		- Assert: 2 Interaction Log docs created
-		- Assert: Buffer trimmed (1 item remains)
+		- Assert: Buffer fully trimmed
 		"""
 		# Push valid item
 		self._push_interaction(self._make_interaction())
@@ -199,21 +197,21 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		count = frappe.db.count("Memora Interaction Log", {"player": self.player_id})
 		self.assertEqual(count, 2, f"Expected 2 Interaction Log docs, got {count}")
 
-		# Assert buffer has 1 item (LTRIM(key, 2, -1) with 3 items = 1 remains)
+		# Entire batch trimmed — missing-field items won't succeed on retry
 		buffer_len = self.r.llen("memora:buffer:interactions")
-		self.assertEqual(buffer_len, 1, f"Expected 1 item in buffer, got {buffer_len}")
+		self.assertEqual(buffer_len, 0, f"Expected empty buffer, got {buffer_len}")
 
 	def test_batch_size_cap(self):
 		"""
-		Test: Flush respects batch size limit (1000 items).
+		Test: Flush respects batch size limit (5000 items).
 
-		- Push 1500 valid items
+		- Push 6000 valid items
 		- Call flush_interaction_buffer()
-		- Assert: 1000 Interaction Log docs created
-		- Assert: 500 items remain in buffer (1500 - 1000 = 500)
+		- Assert: 5000 Interaction Log docs created
+		- Assert: 1000 items remain in buffer (6000 - 5000 = 1000)
 		"""
-		# Push 1500 items
-		for i in range(1500):
+		# Push 6000 items
+		for i in range(6000):
 			self._push_interaction(
 				self._make_interaction(
 					stage_id=f"STG-{i % 10}",
@@ -221,62 +219,46 @@ class TestFlushInteractionBuffer(SyncTestCase):
 				)
 			)
 
-		# Verify buffer has 1500 items
+		# Verify buffer has 6000 items
 		initial_len = self.r.llen("memora:buffer:interactions")
-		self.assertEqual(initial_len, 1500, f"Expected 1500 items in buffer, got {initial_len}")
+		self.assertEqual(initial_len, 6000, f"Expected 6000 items in buffer, got {initial_len}")
 
 		# Call flush
 		flush_interaction_buffer()
 
-		# Assert 1000 docs created
+		# Assert 5000 docs created
 		count = frappe.db.count("Memora Interaction Log", {"player": self.player_id})
-		self.assertEqual(count, 1000, f"Expected 1000 Interaction Log docs, got {count}")
+		self.assertEqual(count, 5000, f"Expected 5000 Interaction Log docs, got {count}")
 
-		# Assert 500 items remain (1500 - 1000 = 500)
+		# Assert 1000 items remain (6000 - 5000 = 1000)
 		buffer_len = self.r.llen("memora:buffer:interactions")
-		self.assertEqual(buffer_len, 500, f"Expected 500 items in buffer, got {buffer_len}")
+		self.assertEqual(buffer_len, 1000, f"Expected 1000 items in buffer, got {buffer_len}")
 
-	def test_partial_failure_retry(self):
+	def test_sql_failure_preserves_buffer(self):
 		"""
-		Test: Partial failures don't block successful inserts.
+		Test: If the bulk INSERT fails, the buffer is NOT trimmed.
 
 		- Push 3 valid items
-		- Mock frappe.get_doc().insert() to fail on 2nd call
+		- Mock frappe.db.sql to raise on INSERT
 		- Call flush_interaction_buffer()
-		- Assert: 2 Interaction Log docs created (calls 1 and 3)
-		- Assert: Buffer trimmed by 2 (inserted count), 1 item remains for retry
-
-		Note: The mock should be applied to the insert method of the doc returned by get_doc().
+		- Assert: Buffer still has 3 items (nothing trimmed)
 		"""
-		# Push 3 valid items
 		for i in range(3):
 			self._push_interaction(
 				self._make_interaction(stage_id=f"STG-{i+1}")
 			)
 
-		# Mock frappe.get_doc to return a doc with failing insert on 2nd call
-		call_count = [0]
+		original_sql = frappe.db.sql
 
-		def mock_get_doc(*args, **kwargs):
-			call_count[0] += 1
-			doc = MagicMock()
+		def mock_sql(query, *args, **kwargs):
+			if isinstance(query, str) and "INSERT INTO `tabMemora Interaction Log`" in query:
+				raise Exception("Mock SQL failure")
+			return original_sql(query, *args, **kwargs)
 
-			def side_effect_insert(*args, **kwargs):
-				if call_count[0] == 2:
-					raise Exception("Mock insert failure")
-
-			doc.insert = side_effect_insert
-			doc.name = f"LOG-{call_count[0]:05d}"
-			return doc
-
-		with patch("frappe.get_doc", side_effect=mock_get_doc):
-			with patch("frappe.db.commit"):  # Mock commit
+		with patch.object(frappe.db, "sql", side_effect=mock_sql):
+			with patch.object(frappe.db, "commit"):
 				flush_interaction_buffer()
 
-		# After the flush, verify the state
-		# Note: The actual docs created in the mock won't be in the DB,
-		# so we check the buffer state instead to verify LTRIM behavior
+		# Buffer should be intact — INSERT failed so nothing was trimmed
 		buffer_len = self.r.llen("memora:buffer:interactions")
-
-		# With 3 items and 2 successful inserts, LTRIM(key, 2, -1) keeps 1 item
-		self.assertEqual(buffer_len, 1, f"Expected 1 item in buffer for retry, got {buffer_len}")
+		self.assertEqual(buffer_len, 3, f"Expected 3 items in buffer after failure, got {buffer_len}")

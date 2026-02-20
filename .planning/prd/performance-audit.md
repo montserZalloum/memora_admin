@@ -12,6 +12,7 @@
 |-------|--------|------|
 | ~~PERF-01: N+1 Query Storm in Hierarchy / Generator / Plan Generator~~ | ✅ Fixed | 2026-02-20 |
 | ~~Uncached `_get_skippable_stage_types()` in Generator~~ | ✅ Fixed by PERF-01 | 2026-02-20 |
+| ~~PERF-06: Hydration Thundering Herd After Redis Flush~~ | ✅ Fixed | 2026-02-20 |
 
 ---
 
@@ -220,14 +221,15 @@ Also increase batch size from 1000 to 5000-10000 (monitor memory).
 
 ### PERF-06: Hydration Thundering Herd After Redis Flush
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 5 of 21
 **Effort:** 1-2 days
 **Risk:** Medium — architectural change
 **Files:**
-- `fastapi_app/services/access.py:109-131`
-- `fastapi_app/services/progress.py:62-135`
-- `fastapi_app/services/wallet.py:148-213`
+- `fastapi_app/services/hydration.py` (new — distributed lock + semaphore guard)
+- `fastapi_app/services/access.py`
+- `fastapi_app/services/progress.py`
+- `fastapi_app/services/wallet.py`
 
 **Problem:**
 After Redis restart/flush, every user's first request triggers a synchronous Frappe HTTP call (~100-300ms) to hydrate their data. With 100k users hitting simultaneously:
@@ -751,11 +753,11 @@ CREATE INDEX idx_status_creation
 ## Tracking
 
 - [x] ~~**PERF-01** — N+1 hierarchy/plan/generator builds~~ ✅ FIXED
-- [ ] **PERF-02** — FrappeClient connection pooling (CRITICAL)
-- [ ] **PERF-03** — Missing composite indexes (CRITICAL)
+- [x] **PERF-02** — FrappeClient connection pooling (CRITICAL) ✅ FIXED
+- [x] **PERF-03** — Missing composite indexes (CRITICAL) ✅ FIXED
 - [x] ~~**PERF-04** — `_get_player_season_seq()` caching~~ ✅ FIXED
-- [ ] **PERF-05** — `flush_interaction_buffer()` ORM loop (CRITICAL)
-- [ ] **PERF-06** — Hydration thundering herd (CRITICAL)
+- [x] ~~**PERF-05** — `flush_interaction_buffer()` ORM loop~~ ✅ FIXED
+- [x] **PERF-06** — Hydration thundering herd (CRITICAL)
 - [ ] **PERF-07** — `submit_reviews()` N+1 (CRITICAL)
 - [ ] **PERF-08** — FSRS processor N+1 metadata (CRITICAL)
 - [ ] **PERF-09** — Redundant GETBIT pipelines (HIGH)
