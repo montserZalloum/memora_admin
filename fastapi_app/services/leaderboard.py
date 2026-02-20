@@ -261,14 +261,16 @@ class LeaderboardService:
 			withscores=True,
 		)
 
-		# Build neighbor entries with dense ranks
-		neighbors = []
-		for neighbor_id, neighbor_score in neighbors_raw:
-			neighbor_xp = int(neighbor_score)
+		# Pipeline all ZCOUNT calls for neighbor dense ranks (1 RTT instead of N)
+		pipe = self.redis.pipeline()
+		for _, neighbor_score in neighbors_raw:
+			pipe.zcount(key, f"({neighbor_score}", "+inf")
+		rank_results = await pipe.execute()
 
-			# Calculate dense rank for neighbor
-			neighbor_higher = await self.redis.zcount(key, f"({neighbor_score}", "+inf")
-			neighbor_rank = neighbor_higher + 1
+		neighbors = []
+		for i, (neighbor_id, neighbor_score) in enumerate(neighbors_raw):
+			neighbor_xp = int(neighbor_score)
+			neighbor_rank = rank_results[i] + 1
 
 			# Handle bytes response
 			nid = neighbor_id.decode() if isinstance(neighbor_id, bytes) else neighbor_id

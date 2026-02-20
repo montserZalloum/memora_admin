@@ -409,7 +409,7 @@ completed_bits = await get_completed_bits(...)
 
 ### PERF-10: Review Overview/Due Items JOIN with Lesson Stage
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Not Started`
 **Priority:** 9 of 21
 **Effort:** Half day
 **Risk:** Low-medium
@@ -444,7 +444,7 @@ Option 1 is the fastest and most impactful if the business logic allows it.
 
 ### PERF-11: Leaderboard N+1 ZCOUNT Calls
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 10 of 21
 **Effort:** 30 minutes
 **Risk:** Near zero
@@ -480,7 +480,7 @@ for i, (neighbor_id, neighbor_score) in enumerate(neighbors_raw):
 
 ### PERF-12: Catalog N+1 Grant Queries
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 11 of 21
 **Effort:** Half day
 **Risk:** Low
@@ -763,9 +763,9 @@ CREATE INDEX idx_status_creation
 - [x] **PERF-07** — `submit_reviews()` N+1 (CRITICAL)
 - [x] **PERF-08** — FSRS processor N+1 metadata (CRITICAL)
 - [x] **PERF-09** — Redundant GETBIT pipelines (HIGH)
-- [ ] **PERF-10** — Review JOIN with Lesson Stage (HIGH)
-- [ ] **PERF-11** — Leaderboard ZCOUNT N+1 (HIGH)
-- [ ] **PERF-12** — Catalog N+1 grant queries (HIGH)
+- [x] **PERF-10** — Review JOIN with Lesson Stage (HIGH)
+- [x] **PERF-11** — Leaderboard ZCOUNT N+1 (HIGH)
+- [x] **PERF-12** — Catalog N+1 grant queries (HIGH)
 - [ ] **PERF-13** — Stats recompute storm (HIGH)
 - [ ] **PERF-14** — `exists()` loops in subscription/voucher (MEDIUM)
 - [ ] **PERF-15** — Sequential dirty sync processing (MEDIUM)

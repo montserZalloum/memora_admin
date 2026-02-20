@@ -34,8 +34,7 @@ def get_review_overview(player_id: str) -> list[dict]:
 	"""Get count of due reviews per subject for a player.
 
 	Counts items (each Memory State row = 1 item) with season_seq for partition pruning.
-	Only counts items whose stage still exists in the parent lesson
-	(INNER JOIN with Memora Lesson Stage).
+	Orphan filtering is skipped for counts (fsrs_processor validates stage existence on insert).
 
 	Returns: [{"subject": "SUBJ-00001", "due_count": 15}, ...]
 	"""
@@ -45,8 +44,6 @@ def get_review_overview(player_id: str) -> list[dict]:
 		"""
 		SELECT ms.subject, COUNT(*) as due_count
 		FROM `tabMemora Memory State` ms
-		INNER JOIN `tabMemora Lesson Stage` ls
-			ON ls.name = ms.stage_id AND ls.parent = ms.lesson
 		WHERE ms.player = %(player)s
 		  AND ms.next_review <= %(today)s
 		  AND ms.season_seq = %(season_seq)s
@@ -145,8 +142,6 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 			"""
 			SELECT COUNT(*) as cnt
 			FROM `tabMemora Memory State` ms
-			INNER JOIN `tabMemora Lesson Stage` ls
-				ON ls.name = ms.stage_id AND ls.parent = ms.lesson
 			WHERE ms.player = %(player)s
 			  AND ms.subject = %(subject)s
 			  AND ms.next_review <= %(today)s
@@ -300,14 +295,12 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 		)
 		frappe.db.commit()
 
-	# --- Query 3: Remaining due count (unchanged) ---
+	# --- Query 3: Remaining due count ---
 	today = frappe.utils.today()
 	remaining_result = frappe.db.sql(
 		"""
 		SELECT COUNT(*) as cnt
 		FROM `tabMemora Memory State` ms
-		INNER JOIN `tabMemora Lesson Stage` ls
-			ON ls.name = ms.stage_id AND ls.parent = ms.lesson
 		WHERE ms.player = %(player)s
 		  AND ms.subject = %(subject)s
 		  AND ms.next_review <= %(today)s
