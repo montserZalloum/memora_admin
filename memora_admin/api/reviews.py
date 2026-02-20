@@ -26,7 +26,12 @@ from datetime import date, datetime, time, timedelta, timezone
 
 import frappe
 
-from memora_admin.api.utils import get_player_season_seq as _get_player_season_seq
+from memora_admin.api.utils import (
+	get_player_season_seq as _get_player_season_seq,
+)
+from memora_admin.api.utils import (
+	update_mastery_counters as _update_mastery_counters,
+)
 
 
 @frappe.whitelist(allow_guest=False)
@@ -233,15 +238,18 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 
 		card_last_review = card.last_review.replace(tzinfo=None) if card.last_review else None
 
-		updates.append({
-			"name": ms.name,
-			"stability": card.stability,
-			"difficulty": card.difficulty,
-			"next_review": next_date,
-			"state": card.state.value,
-			"step": card.step,
-			"last_review": card_last_review,
-		})
+		updates.append(
+			{
+				"name": ms.name,
+				"old_stability": ms.stability,
+				"stability": card.stability,
+				"difficulty": card.difficulty,
+				"next_review": next_date,
+				"state": card.state.value,
+				"step": card.step,
+				"last_review": card_last_review,
+			}
+		)
 
 	# --- Query 2: Batch UPDATE via CASE expressions (1 query instead of N) ---
 	processed = len(updates)
@@ -294,6 +302,23 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 			update_params,
 		)
 		frappe.db.commit()
+
+		# --- Update mastery counters in Redis ---
+		try:
+			import redis
+
+			r = redis.from_url(frappe.conf.redis_cache)
+			for u in updates:
+				_update_mastery_counters(
+					r,
+					player_id,
+					subject_id,
+					season_seq,
+					u["old_stability"],
+					u["stability"],
+				)
+		except Exception:
+			pass  # Best-effort; counters self-heal on next read
 
 	# --- Query 3: Remaining due count ---
 	today = frappe.utils.today()

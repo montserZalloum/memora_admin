@@ -13,6 +13,7 @@ All queries include season_seq for partition pruning. See setup.py for details.
 """
 
 import frappe
+import redis as _redis
 
 from memora_admin.api.utils import get_player_season_seq as _get_player_season_seq
 
@@ -61,7 +62,9 @@ def get_plan_season_seq(plan_id: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=False)
-def get_items_learned_count(player_id: str, subject_id: str | None = None, season_seq: int | None = None) -> dict:
+def get_items_learned_count(
+	player_id: str, subject_id: str | None = None, season_seq: int | None = None
+) -> dict:
 	"""Count Memory State records (items learned) for a player.
 
 	Each Memory State row represents one SRS item the player has encountered.
@@ -155,7 +158,8 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 	- Learning: 0 < stability < 21.0 days (reviewed but not yet mature)
 	- New: stability == 0 (initial FSRS state, first review)
 
-	Counts items (each Memory State row = 1 item) with season_seq for partition pruning.
+	Reads from Redis HASH counters first (O(1), sub-millisecond).
+	On cache miss, falls back to SQL scan and populates the counters.
 
 	Args:
 		player_id: Player docname (PLAYER-#####).
@@ -175,6 +179,29 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 	else:
 		season_seq = int(season_seq)
 
+	# --- Try Redis counters first ---
+	try:
+		r = _redis.from_url(frappe.conf.redis_cache)
+		counter_key = (
+			f"memora:mastery:{player_id}:{subject_id}:s{season_seq}"
+			if subject_id
+			else f"memora:mastery:{player_id}:all:s{season_seq}"
+		)
+		data = r.hgetall(counter_key)
+		if data:
+			mature = max(0, int(data.get(b"mature", 0)))
+			learning = max(0, int(data.get(b"learning", 0)))
+			new_items = max(0, int(data.get(b"new", 0)))
+			return {
+				"mature": mature,
+				"learning": learning,
+				"new_items": new_items,
+				"total": mature + learning + new_items,
+			}
+	except Exception:
+		r = None  # Fall through to SQL
+
+	# --- Cache miss: SQL scan (partition-pruned) ---
 	subject_filter = "AND subject = %(subject)s" if subject_id else ""
 
 	result = frappe.db.sql(
@@ -197,12 +224,59 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 	learning = int(row.get("learning") or 0)
 	new_items = int(row.get("new_items") or 0)
 
+	# --- Populate Redis counters as side effect ---
+	try:
+		if r is None:
+			r = _redis.from_url(frappe.conf.redis_cache)
+		counter_key = (
+			f"memora:mastery:{player_id}:{subject_id}:s{season_seq}"
+			if subject_id
+			else f"memora:mastery:{player_id}:all:s{season_seq}"
+		)
+		pipe = r.pipeline(transaction=False)
+		pipe.hset(counter_key, mapping={"mature": mature, "learning": learning, "new": new_items})
+		# Also populate the "all" aggregate if we queried a specific subject
+		if subject_id:
+			_populate_all_counter(pipe, r, player_id, season_seq)
+		pipe.execute()
+	except Exception:
+		pass  # Best-effort
+
 	return {
 		"mature": mature,
 		"learning": learning,
 		"new_items": new_items,
 		"total": mature + learning + new_items,
 	}
+
+
+def _populate_all_counter(pipe, r: _redis.Redis, player_id: str, season_seq: int) -> None:
+	"""Populate the 'all' aggregate mastery counter from SQL if it doesn't exist."""
+	all_key = f"memora:mastery:{player_id}:all:s{season_seq}"
+	if r.exists(all_key):
+		return
+	row = frappe.db.sql(
+		"""
+		SELECT
+			COALESCE(SUM(CASE WHEN stability >= 21.0 THEN 1 ELSE 0 END), 0) as mature,
+			COALESCE(SUM(CASE WHEN stability > 0 AND stability < 21.0 THEN 1 ELSE 0 END), 0) as learning,
+			COALESCE(SUM(CASE WHEN stability = 0 THEN 1 ELSE 0 END), 0) as new_items
+		FROM `tabMemora Memory State`
+		WHERE player = %(player)s
+		  AND season_seq = %(season_seq)s
+		""",
+		{"player": player_id, "season_seq": season_seq},
+		as_dict=True,
+	)
+	if row:
+		pipe.hset(
+			all_key,
+			mapping={
+				"mature": int(row[0].get("mature") or 0),
+				"learning": int(row[0].get("learning") or 0),
+				"new": int(row[0].get("new_items") or 0),
+			},
+		)
 
 
 @frappe.whitelist(allow_guest=False)

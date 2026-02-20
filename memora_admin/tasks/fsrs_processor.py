@@ -42,6 +42,13 @@ from datetime import date, datetime, time, timedelta, timezone
 import frappe
 import redis
 
+from memora_admin.api.utils import (
+	init_mastery_counter as _init_mastery_counter,
+)
+from memora_admin.api.utils import (
+	update_mastery_counters as _update_mastery_counters,
+)
+
 logger = logging.getLogger(__name__)
 
 FSRS_PROCESSED_KEY = "memora:fsrs:last_processed"
@@ -321,18 +328,26 @@ def process_fsrs_reviews():
 		stage_map = {}
 
 	# 3. For lessons missing subject, batch-resolve via hierarchy chain
-	missing_subject_ids = [lid for lid in unique_lessons if lid in lesson_map and not lesson_map[lid].get("subject")]
+	missing_subject_ids = [
+		lid for lid in unique_lessons if lid in lesson_map and not lesson_map[lid].get("subject")
+	]
 	if missing_subject_ids:
-		topic_ids = list({lesson_map[lid].topic for lid in missing_subject_ids if lesson_map[lid].get("topic")})
+		topic_ids = list(
+			{lesson_map[lid].topic for lid in missing_subject_ids if lesson_map[lid].get("topic")}
+		)
 		topic_map: dict[str, dict] = {}
 		unit_map: dict[str, dict] = {}
 		track_map: dict[str, dict] = {}
 		if topic_ids:
-			topics_data = frappe.get_all("Memora Topic", filters={"name": ["in", topic_ids]}, fields=["name", "unit"])
+			topics_data = frappe.get_all(
+				"Memora Topic", filters={"name": ["in", topic_ids]}, fields=["name", "unit"]
+			)
 			topic_map = {t.name: t for t in topics_data}
 			unit_ids = list({t.unit for t in topics_data if t.unit})
 			if unit_ids:
-				units_data = frappe.get_all("Memora Unit", filters={"name": ["in", unit_ids]}, fields=["name", "track"])
+				units_data = frappe.get_all(
+					"Memora Unit", filters={"name": ["in", unit_ids]}, fields=["name", "track"]
+				)
 				unit_map = {u.name: u for u in units_data}
 				track_ids = list({u.track for u in units_data if u.track})
 				if track_ids:
@@ -490,6 +505,28 @@ def process_fsrs_reviews():
 					step=card_step,
 					last_review=card_last_review,
 				)
+
+			# Update mastery counters in Redis
+			try:
+				if existing:
+					_update_mastery_counters(
+						r,
+						player,
+						subject,
+						player_season_seq,
+						existing.stability,
+						card.stability,
+					)
+				else:
+					_init_mastery_counter(
+						r,
+						player,
+						subject,
+						player_season_seq,
+						card.stability,
+					)
+			except Exception:
+				pass  # Best-effort; counters self-heal on next read
 
 			# T008: Cache in Redis for fast access (keyed by item_id, not stage_id)
 			redis_key = f"memora:fsrs:{player}:{item_id}"

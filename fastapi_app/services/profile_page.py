@@ -4,7 +4,6 @@ Composes existing services into profile-page-shaped responses.
 Does NOT duplicate business logic from underlying services.
 """
 
-import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -258,7 +257,8 @@ class ProfilePageService:
 	async def get_mastery(self, player_id: str, subject_id: str | None = None) -> dict:
 		"""Get memory mastery breakdown: mature/learning/new counts.
 
-		Cached in Redis with 5-min TTL. On cache miss, fetches from Frappe API.
+		Reads from Redis HASH counters directly (no Frappe round-trip on warm cache).
+		On cache miss, calls Frappe API which populates the counters as a side effect.
 
 		Args:
 			player_id: Player's user ID.
@@ -267,41 +267,47 @@ class ProfilePageService:
 		Returns:
 			Dict with subject, mature, learning, new_items, total.
 		"""
-		cache_key = f"{self.prefix}mastery:{player_id}:{subject_id or 'all'}"
-
-		# Check cache first
-		cached = await self.redis.get(cache_key)
-		if cached:
-			data = cached.decode() if isinstance(cached, bytes) else cached
-			logger.debug("mastery_cache_hit", player=player_id, subject=subject_id)
-			return json.loads(data)
-
-		logger.info("mastery_cache_miss", player=player_id, subject=subject_id)
-
-		# Pre-resolve season_seq to avoid 3-table JOIN inside Frappe
+		# Resolve season_seq (needed for counter key)
 		season_seq = await self._resolve_season_seq(player_id)
-		params = {"player_id": player_id, "subject_id": subject_id}
-		if season_seq is not None:
-			params["season_seq"] = season_seq
+		if season_seq is None:
+			season_seq = 1
 
-		# Fetch from Frappe API
+		# Build counter key
+		if subject_id:
+			counter_key = f"{self.prefix}mastery:{player_id}:{subject_id}:s{season_seq}"
+		else:
+			counter_key = f"{self.prefix}mastery:{player_id}:all:s{season_seq}"
+
+		# Try Redis HASH first
+		data = await self.redis.hgetall(counter_key)
+		if data:
+			mature = max(0, int(data.get(b"mature", data.get("mature", 0))))
+			learning = max(0, int(data.get(b"learning", data.get("learning", 0))))
+			new_items = max(0, int(data.get(b"new", data.get("new", 0))))
+			logger.debug("mastery_counter_hit", player=player_id, subject=subject_id)
+			return {
+				"subject": subject_id,
+				"mature": mature,
+				"learning": learning,
+				"new_items": new_items,
+				"total": mature + learning + new_items,
+			}
+
+		# Cache miss: call Frappe API (which populates the counters as side effect)
+		logger.info("mastery_counter_miss", player=player_id, subject=subject_id)
+		params = {"player_id": player_id, "subject_id": subject_id, "season_seq": season_seq}
 		result = await self.frappe.call(
 			"memora_admin.api.profile.get_memory_mastery",
 			params,
 		)
 
-		mastery = {
+		return {
 			"subject": subject_id,
 			"mature": result.get("mature", 0) if result else 0,
 			"learning": result.get("learning", 0) if result else 0,
 			"new_items": result.get("new_items", 0) if result else 0,
 			"total": result.get("total", 0) if result else 0,
 		}
-
-		# Cache with TTL
-		await self.redis.set(cache_key, json.dumps(mastery), ex=MASTERY_CACHE_TTL)
-
-		return mastery
 
 	async def update_avatar(self, player_id: str, avatar: str) -> dict:
 		"""Update player avatar via Frappe API and invalidate profile cache.
