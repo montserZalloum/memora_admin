@@ -119,6 +119,9 @@ def get_due_items(player_id: str, subject_id: str, limit: int = 10) -> dict:
 def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 	"""Accept batch review results at item level and update Memory State with FSRS.
 
+	Uses batched queries to avoid N+1 pattern on the 10B-row partitioned table:
+	  1 batch SELECT (all items) + 1 batch UPDATE (CASE-based) + 1 remaining COUNT = 3 queries.
+
 	Args:
 		player_id: Player identifier
 		subject_id: Subject identifier
@@ -135,37 +138,65 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 	else:
 		items_list = items
 
+	if not items_list:
+		today = frappe.utils.today()
+		season_seq = _get_player_season_seq(player_id)
+		remaining_result = frappe.db.sql(
+			"""
+			SELECT COUNT(*) as cnt
+			FROM `tabMemora Memory State` ms
+			INNER JOIN `tabMemora Lesson Stage` ls
+				ON ls.name = ms.stage_id AND ls.parent = ms.lesson
+			WHERE ms.player = %(player)s
+			  AND ms.subject = %(subject)s
+			  AND ms.next_review <= %(today)s
+			  AND ms.season_seq = %(season_seq)s
+			""",
+			{"player": player_id, "subject": subject_id, "today": today, "season_seq": season_seq},
+		)
+		remaining_due = remaining_result[0][0] if remaining_result else 0
+		return {"processed": 0, "remaining_due": remaining_due, "has_more": remaining_due > 0}
+
 	scheduler = _get_fsrs_scheduler()
-	processed = 0
 	now = datetime.now(timezone.utc)
 	season_seq = _get_player_season_seq(player_id)
+
+	# --- Query 1: Batch SELECT all items in one round-trip ---
+	select_params = {"player": player_id, "season_seq": season_seq}
+	in_parts = []
+	for i, item_data in enumerate(items_list):
+		key = f"id_{i}"
+		select_params[key] = item_data["item_id"]
+		in_parts.append(f"UUID_TO_BIN(%({key})s)")
+
+	rows = frappe.db.sql(
+		f"""
+		SELECT name, BIN_TO_UUID(item_id) as item_id, stability, difficulty,
+		       next_review, state, step, last_review
+		FROM `tabMemora Memory State`
+		WHERE player = %(player)s
+		  AND season_seq = %(season_seq)s
+		  AND item_id IN ({", ".join(in_parts)})
+		""",
+		select_params,
+		as_dict=True,
+	)
+
+	# Index by item_id for O(1) lookup (order-independent)
+	state_by_item = {row.item_id: row for row in rows}
+
+	# --- FSRS computation per item (unchanged logic) ---
+	# Collect (name, stability, difficulty, next_review, state, step, last_review) tuples
+	updates = []
+	tomorrow = date.today() + timedelta(days=1)
 
 	for item_data in items_list:
 		item_id = item_data["item_id"]
 		fail_count = item_data.get("fail_count", 0)
 
-		# Look up existing Memory State by (player, item_id, season_seq)
-		memory_state = frappe.db.sql(
-			"""
-			SELECT name, stability, difficulty, next_review, state, step, last_review
-			FROM `tabMemora Memory State`
-			WHERE player = %(player)s
-			  AND item_id = UUID_TO_BIN(%(item_id)s)
-			  AND season_seq = %(season_seq)s
-			LIMIT 1
-			""",
-			{
-				"player": player_id,
-				"item_id": item_id,
-				"season_seq": season_seq,
-			},
-			as_dict=True,
-		)
-
-		if not memory_state:
+		ms = state_by_item.get(item_id)
+		if not ms:
 			continue
-
-		ms = memory_state[0]
 
 		# Reconstruct FSRS Card from stored state
 		card = Card()
@@ -202,48 +233,74 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 
 		# Clamp next_review to date-only (midnight), minimum tomorrow
 		next_date = card.due.date()
-		tomorrow = date.today() + timedelta(days=1)
 		if next_date < tomorrow:
 			next_date = tomorrow
-		next_review_date = next_date
 
-		# Extract new FSRS state fields for persistence
-		card_state = card.state.value
-		card_step = card.step  # int or None
 		card_last_review = card.last_review.replace(tzinfo=None) if card.last_review else None
 
-		# Update via raw SQL (partition-aware)
+		updates.append({
+			"name": ms.name,
+			"stability": card.stability,
+			"difficulty": card.difficulty,
+			"next_review": next_date,
+			"state": card.state.value,
+			"step": card.step,
+			"last_review": card_last_review,
+		})
+
+	# --- Query 2: Batch UPDATE via CASE expressions (1 query instead of N) ---
+	processed = len(updates)
+	if processed > 0:
+		update_params = {"season_seq": season_seq}
+		case_stability = []
+		case_difficulty = []
+		case_next_review = []
+		case_state = []
+		case_step = []
+		case_last_review = []
+		name_list = []
+
+		for i, u in enumerate(updates):
+			nk = f"n_{i}"
+			update_params[nk] = u["name"]
+			name_list.append(f"%({nk})s")
+
+			update_params[f"s_{i}"] = u["stability"]
+			case_stability.append(f"WHEN %({nk})s THEN %(s_{i})s")
+
+			update_params[f"d_{i}"] = u["difficulty"]
+			case_difficulty.append(f"WHEN %({nk})s THEN %(d_{i})s")
+
+			update_params[f"nr_{i}"] = u["next_review"]
+			case_next_review.append(f"WHEN %({nk})s THEN %(nr_{i})s")
+
+			update_params[f"st_{i}"] = u["state"]
+			case_state.append(f"WHEN %({nk})s THEN %(st_{i})s")
+
+			update_params[f"stp_{i}"] = u["step"]
+			case_step.append(f"WHEN %({nk})s THEN %(stp_{i})s")
+
+			update_params[f"lr_{i}"] = u["last_review"]
+			case_last_review.append(f"WHEN %({nk})s THEN %(lr_{i})s")
+
 		frappe.db.sql(
-			"""
+			f"""
 			UPDATE `tabMemora Memory State`
-			SET stability = %(stability)s,
-			    difficulty = %(difficulty)s,
-			    next_review = %(next_review)s,
-			    state = %(state)s,
-			    step = %(step)s,
-			    last_review = %(last_review)s,
-			    modified = NOW(6)
-			WHERE name = %(name)s
+			SET stability   = CASE name {" ".join(case_stability)} END,
+			    difficulty   = CASE name {" ".join(case_difficulty)} END,
+			    next_review  = CASE name {" ".join(case_next_review)} END,
+			    state        = CASE name {" ".join(case_state)} END,
+			    step         = CASE name {" ".join(case_step)} END,
+			    last_review  = CASE name {" ".join(case_last_review)} END,
+			    modified     = NOW(6)
+			WHERE name IN ({", ".join(name_list)})
 			  AND season_seq = %(season_seq)s
 			""",
-			{
-				"name": ms.name,
-				"season_seq": season_seq,
-				"stability": card.stability,
-				"difficulty": card.difficulty,
-				"next_review": next_review_date,
-				"state": card_state,
-				"step": card_step,
-				"last_review": card_last_review,
-			},
+			update_params,
 		)
-
-		processed += 1
-
-	if processed > 0:
 		frappe.db.commit()
 
-	# Remaining due count (items whose stage still exists)
+	# --- Query 3: Remaining due count (unchanged) ---
 	today = frappe.utils.today()
 	remaining_result = frappe.db.sql(
 		"""

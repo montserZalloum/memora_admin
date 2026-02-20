@@ -264,11 +264,11 @@ async def ensure_hydrated(self, player_id: str):
 
 ### PERF-07: `submit_reviews()` — N+1 Query Pattern on 10B-Row Table
 
-**Status:** `[ ] Not Started`
+**Status:** `[x] Done`
 **Priority:** 6 of 21
 **Effort:** 1 day
 **Risk:** Medium — FSRS computation stays per-item, but I/O can batch
-**File:** `memora_admin/api/reviews.py:131+`
+**File:** `memora_admin/api/reviews.py:118+`
 
 **Problem:**
 Each item in a review batch triggers its own SELECT + UPDATE on the partitioned Memory State table:
