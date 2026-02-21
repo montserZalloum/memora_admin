@@ -174,26 +174,35 @@ doc_events = {
 	# Build trigger events for content DocTypes (debounced)
 	"Memora Subject": {
 		"on_update": "memora_admin.events.build_trigger.on_content_updated",
+		"on_trash": "memora_admin.events.build_trigger.on_content_updated",
 	},
 	"Memora Track": {
 		"on_update": "memora_admin.events.build_trigger.on_content_updated",
+		"on_trash": "memora_admin.events.build_trigger.on_content_updated",
 	},
 	"Memora Unit": {
 		"on_update": [
 			"memora_admin.events.build_trigger.on_content_updated",
 			"memora_admin.events.access_sync.on_unit_free_changed",
 		],
-		"on_trash": "memora_admin.events.access_sync.on_unit_free_changed",
+		"on_trash": [
+			"memora_admin.events.build_trigger.on_content_updated",
+			"memora_admin.events.access_sync.on_unit_free_changed",
+		],
 	},
 	"Memora Topic": {
 		"on_update": [
 			"memora_admin.events.build_trigger.on_content_updated",
 			"memora_admin.events.access_sync.on_topic_free_changed",
 		],
-		"on_trash": "memora_admin.events.access_sync.on_topic_free_changed",
+		"on_trash": [
+			"memora_admin.events.build_trigger.on_content_updated",
+			"memora_admin.events.access_sync.on_topic_free_changed",
+		],
 	},
 	"Memora Lesson": {
 		"on_update": "memora_admin.events.build_trigger.on_content_updated",
+		"on_trash": "memora_admin.events.build_trigger.on_content_updated",
 	},
 	# Plan build trigger events (debounced)
 	"Memora Academic Plan": {

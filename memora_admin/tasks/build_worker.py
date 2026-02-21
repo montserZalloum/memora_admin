@@ -124,8 +124,11 @@ def _process_single_build(build: dict):
 			# Clear retry count
 			_clear_retry_count(build_name)
 
-			# Purge CDN cache for published files (best-effort, never fails build)
-			_purge_cdn_cache(files)
+			# Clean up orphaned plan-scoped files (best-effort, never fails build)
+			orphaned_filenames = _cleanup_orphaned_files(target_name, files)
+
+			# Purge CDN cache for published files + orphans (best-effort, never fails build)
+			_purge_cdn_cache(files, extra_filenames=orphaned_filenames)
 
 			logger.info(f"Build {build_name} completed successfully for plan {target_name}, {len(files)} files published")
 		else:
@@ -314,7 +317,71 @@ def _clear_retry_count(build_name: str):
 		logger.debug(f"Failed to clear retry key {retry_key}: {e}")
 
 
-def _purge_cdn_cache(files: list) -> None:
+def _cleanup_orphaned_files(plan_id: str, files: list) -> list[str]:
+	"""
+	Remove plan-scoped files from storage that are no longer in the new build.
+
+	Only cleans up files under plans/{plan_id}/. Shared lesson files (lessons/*.json)
+	are NOT touched because they may be referenced by other plans.
+
+	Best-effort: errors are logged but never fail the build.
+
+	Args:
+		plan_id: The plan ID (e.g., "PLAN-00001")
+		files: Nested file list from the generator
+
+	Returns:
+		List of orphaned filenames that were deleted (for CDN purge)
+	"""
+	orphaned: list[str] = []
+	plan_prefix = f"plans/{plan_id}/"
+
+	try:
+		from memora_admin.memora_admin.services.build.storage import get_storage_backend
+
+		storage = get_storage_backend()
+
+		# Collect all plan-scoped filenames from the new build
+		def _collect_plan_filenames(file_list: list) -> set[str]:
+			names: set[str] = set()
+			for f in file_list:
+				if isinstance(f, dict) and "filename" in f:
+					fn = f["filename"]
+					if fn.startswith(plan_prefix):
+						names.add(fn)
+					if "children" in f and isinstance(f["children"], list):
+						names.update(_collect_plan_filenames(f["children"]))
+			return names
+
+		new_files = _collect_plan_filenames(files)
+
+		# List all existing files under plans/{plan_id}/
+		existing_files = set(storage.list_directory(plan_prefix))
+
+		# Compute orphans
+		orphans = existing_files - new_files
+
+		if not orphans:
+			return []
+
+		for orphan_key in orphans:
+			try:
+				storage.delete(orphan_key)
+				orphaned.append(orphan_key)
+				logger.info(f"Deleted orphaned file: {orphan_key}")
+			except Exception as e:
+				logger.warning(f"Failed to delete orphaned file {orphan_key}: {e}")
+
+		if orphaned:
+			logger.info(f"Cleaned up {len(orphaned)} orphaned files for plan {plan_id}")
+
+	except Exception as e:
+		logger.error(f"Orphan cleanup error for plan {plan_id} (build unaffected): {e}")
+
+	return orphaned
+
+
+def _purge_cdn_cache(files: list, extra_filenames: list[str] | None = None) -> None:
 	"""
 	Purge published files from Cloudflare edge cache after a successful build.
 
@@ -322,6 +389,7 @@ def _purge_cdn_cache(files: list) -> None:
 
 	Args:
 		files: Nested file list from the generator (same structure passed to publish_to_cdn).
+		extra_filenames: Additional filenames to purge (e.g., orphaned files).
 	"""
 	try:
 		from memora_admin.memora_admin.services.cdn.utils import get_purge_service
@@ -342,6 +410,10 @@ def _purge_cdn_cache(files: list) -> None:
 			return names
 
 		filenames = _collect_filenames(files)
+
+		# Add orphaned filenames for CDN purge
+		if extra_filenames:
+			filenames.extend(extra_filenames)
 
 		if not filenames:
 			logger.debug("No filenames to purge from CDN")

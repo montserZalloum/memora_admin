@@ -25,6 +25,7 @@ def on_content_updated(doc, method):
 
 	1. Immediately invalidates hierarchy cache (direct DEL + pubsub)
 	2. Queues plan builds for all plans containing the subject (with debounce)
+	3. On lesson trash: also deletes the shared lesson JSON file from storage + CDN
 
 	Handles: Memora Subject, Track, Unit, Topic, Lesson
 	"""
@@ -40,6 +41,11 @@ def on_content_updated(doc, method):
 	# Invalidate hierarchy cache immediately (direct DEL + pubsub).
 	# Previously this happened as a side effect of the subject build completing (~2 min delay).
 	_invalidate_hierarchy_cache(subject_id)
+
+	# When a lesson is deleted, its shared JSON file (lessons/{lesson_id}.json) is orphaned
+	# since no plan will reference it anymore. Delete it directly from storage + CDN.
+	if doc.doctype == "Memora Lesson" and method == "on_trash":
+		_delete_lesson_json(doc.name)
 
 	# Trigger builds for all plans that contain this subject
 	_queue_plan_builds_for_subject(subject_id, doc)
@@ -337,6 +343,47 @@ def _invalidate_hierarchy_cache(subject_id: str):
 		frappe.log_error(
 			f"Failed to invalidate hierarchy cache for {subject_id}: {e}",
 			"Hierarchy Cache Invalidation Error",
+		)
+
+
+def _delete_lesson_json(lesson_id: str):
+	"""Delete the shared lesson JSON file from storage and purge from CDN.
+
+	Called when a lesson is trashed. The file lessons/{lesson_id}.json is shared
+	across plans but becomes truly orphaned when the lesson is deleted.
+
+	Best-effort: errors are logged but never fail the deletion.
+	"""
+	lesson_key = f"lessons/{lesson_id}.json"
+
+	try:
+		from memora_admin.memora_admin.services.build.storage import get_storage_backend
+
+		storage = get_storage_backend()
+		deleted = storage.delete(lesson_key)
+
+		if deleted:
+			frappe.logger().info(f"Deleted orphaned lesson JSON: {lesson_key}")
+		else:
+			frappe.logger().debug(f"Lesson JSON not found (already clean): {lesson_key}")
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to delete lesson JSON {lesson_key}: {e}",
+			"Lesson JSON Cleanup Error",
+		)
+
+	# Also purge from CDN edge cache
+	try:
+		from memora_admin.memora_admin.services.cdn.utils import get_purge_service
+
+		purge_service = get_purge_service()
+		if purge_service is not None:
+			purge_service.purge_files([lesson_key])
+			frappe.logger().info(f"CDN cache purged for deleted lesson: {lesson_key}")
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to purge CDN for lesson {lesson_key}: {e}",
+			"Lesson CDN Purge Error",
 		)
 
 

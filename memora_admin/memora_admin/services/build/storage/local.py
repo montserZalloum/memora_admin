@@ -153,6 +153,27 @@ class LocalStorageBackend(StorageBackend):
 			logger.error(f"Failed to read {key}: {e}")
 			return None
 
+	def list_directory(self, prefix: str) -> list[str]:
+		"""
+		List all file keys under a prefix.
+
+		Args:
+		    prefix: Directory prefix to list (e.g., "plans/PLAN-001/")
+
+		Returns:
+		    List of file keys relative to base_path
+		"""
+		target_path = self.base_path / prefix
+		if not target_path.exists() or not target_path.is_dir():
+			return []
+
+		result = []
+		for file_path in target_path.rglob("*"):
+			if file_path.is_file():
+				# Return key relative to base_path
+				result.append(str(file_path.relative_to(self.base_path)))
+		return result
+
 	def delete_directory(self, key: str) -> bool:
 		"""
 		Delete a directory and all its contents from storage.

@@ -67,6 +67,19 @@ class StorageBackend(ABC):
 		pass
 
 	@abstractmethod
+	def list_directory(self, prefix: str) -> list[str]:
+		"""
+		List all file keys under a prefix.
+
+		Args:
+		    prefix: Directory prefix to list (e.g., "plans/PLAN-001/")
+
+		Returns:
+		    List of file keys relative to base_path
+		"""
+		pass
+
+	@abstractmethod
 	def delete_directory(self, key: str) -> bool:
 		"""
 		Delete a directory and all its contents from storage.

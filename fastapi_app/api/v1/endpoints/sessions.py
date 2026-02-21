@@ -128,12 +128,14 @@ async def start_session(
 			detail={"code": "LESSON_NOT_FOUND", "message": "Lesson not found"},
 		)
 
-	# Check content access (Gate 2) - free lessons bypass, paid lessons require explicit grant
+	# Check content access (Gate 2) - free lessons bypass, paid lessons require grant or plan
 	# Per Phase 3: Free content (is_free at Unit/Topic level) bypasses Gate 2
-	# Paid lessons require EXPLICIT GRANT - plan membership covers only free content
+	# Non-free lessons require EXPLICIT GRANT or plan membership (subject is free in plan)
 	if not hierarchy.is_lesson_free(request.lesson_id):
-		# Lesson is NOT free - check subject grant first, then track grant
-		has_access = await access_service.check_access(user.sub, f"SUB-{request.subject_id}")
+		# Lesson is NOT free - check subject grant or plan membership, then track grant
+		has_access = await access_service.check_access_with_plan(
+			user.sub, f"SUB-{request.subject_id}", user.plan
+		)
 		if not has_access:
 			# Fallback: check track-level grant
 			lesson_path = hierarchy.find_lesson_path(request.lesson_id)
