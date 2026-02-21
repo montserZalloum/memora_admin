@@ -235,6 +235,9 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 		next_date = card.due.date()
 		if next_date < tomorrow:
 			next_date = tomorrow
+		max_date = date.today() + timedelta(days=90)
+		if next_date > max_date:
+			next_date = max_date
 
 		card_last_review = card.last_review.replace(tzinfo=None) if card.last_review else None
 
@@ -356,8 +359,8 @@ def _get_fsrs_scheduler():
 	if weights_str and weights_str.strip():
 		try:
 			weights = json.loads(weights_str)
-			return Scheduler(parameters=weights)
+			return Scheduler(parameters=weights, maximum_interval=90)
 		except (json.JSONDecodeError, ValueError, TypeError):
 			pass
 
-	return Scheduler()
+	return Scheduler(maximum_interval=90)

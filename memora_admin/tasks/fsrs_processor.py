@@ -83,11 +83,11 @@ def _get_fsrs_scheduler():
 	if weights_str and weights_str.strip():
 		try:
 			weights = json.loads(weights_str)
-			return Scheduler(parameters=weights)
+			return Scheduler(parameters=weights, maximum_interval=90)
 		except (json.JSONDecodeError, ValueError, TypeError) as e:
 			logger.warning(f"Invalid FSRS weights, using defaults: {e}")
 
-	return Scheduler()
+	return Scheduler(maximum_interval=90)
 
 
 def _resolve_player_seasons(players: list[str]) -> dict[str, tuple[str, int]]:
@@ -470,6 +470,9 @@ def process_fsrs_reviews():
 			tomorrow = date.today() + timedelta(days=1)
 			if next_date < tomorrow:
 				next_date = tomorrow
+			max_date = date.today() + timedelta(days=90)
+			if next_date > max_date:
+				next_date = max_date
 			next_review_date = next_date
 
 			# Extract new FSRS state fields for persistence
