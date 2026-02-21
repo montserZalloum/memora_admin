@@ -21,11 +21,10 @@ DEBOUNCE_KEY_PREFIX = "memora:build:pending:"
 
 def on_content_updated(doc, method):
 	"""
-	Queue a build when content DocType is updated.
+	Handle content DocType updates: invalidate hierarchy cache and queue plan builds.
 
-	Uses Redis SET NX EX pattern for debounce:
-	- If key doesn't exist: set key with TTL, queue build
-	- If key exists: skip (build already pending)
+	1. Immediately invalidates hierarchy cache (direct DEL + pubsub)
+	2. Queues plan builds for all plans containing the subject (with debounce)
 
 	Handles: Memora Subject, Track, Unit, Topic, Lesson
 	"""
@@ -38,45 +37,11 @@ def on_content_updated(doc, method):
 		)
 		return
 
-	cache = frappe.cache
-	debounce_key = f"{DEBOUNCE_KEY_PREFIX}{subject_id}"
+	# Invalidate hierarchy cache immediately (direct DEL + pubsub).
+	# Previously this happened as a side effect of the subject build completing (~2 min delay).
+	_invalidate_hierarchy_cache(subject_id)
 
-	# Redis SET NX EX pattern for debounce
-	# Returns True if key was set (no existing key), None/False if key existed
-	timestamp = str(int(time.time()))
-	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
-
-	if not was_set:
-		frappe.logger().debug(f"Build already pending for subject {subject_id}")
-		return
-
-	# Create Build Queue entry
-	try:
-		build_queue = frappe.get_doc(
-			{
-				"doctype": "Memora Build Queue",
-				"target_type": "Memora Subject",
-				"target_name": subject_id,
-				"trigger_reason": "content_update",
-				"triggered_by": frappe.session.user,
-				"status": "Pending",
-			}
-		)
-		build_queue.insert(ignore_permissions=True)
-
-		frappe.logger().info(
-			f"Build queued: {build_queue.name} for subject {subject_id} "
-			f"(triggered by {doc.doctype} {doc.name})"
-		)
-	except Exception as e:
-		# Clear debounce key if queue entry failed so retry is possible
-		cache.delete_value(debounce_key)
-		frappe.log_error(
-			f"Failed to queue build for subject {subject_id}: {e}",
-			"Build Trigger Error",
-		)
-
-	# Also trigger builds for all plans that contain this subject
+	# Trigger builds for all plans that contain this subject
 	_queue_plan_builds_for_subject(subject_id, doc)
 
 

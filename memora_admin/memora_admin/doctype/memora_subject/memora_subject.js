@@ -15,10 +15,13 @@ frappe.ui.form.on("Memora Subject", {
 						},
 						callback: function (r) {
 							if (r.message && r.message.success) {
+								let count = (r.message.build_ids || []).length;
 								frappe.show_alert(
 									{
-										message: __("Build queued: {0}", [r.message.build_id]),
-										indicator: "green",
+										message: count
+											? __("{0} plan build(s) queued", [count])
+											: __("No plans found for this subject"),
+										indicator: count ? "green" : "orange",
 									},
 									5
 								);

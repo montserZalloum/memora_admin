@@ -1,11 +1,9 @@
 """
-Build worker scheduled task for processing pending builds.
+Build worker scheduled task for processing pending plan builds.
 
 Processes Memora Build Queue items:
 1. Picks pending builds (oldest first)
-2. Routes to appropriate generator based on target_type:
-   - Memora Subject -> generate_subject_json
-   - Memora Academic Plan -> generate_plan_json
+2. Generates plan JSON via generate_plan_json
 3. Uploads to CDN via publisher
 4. Notifies FastAPI for cache invalidation via Redis pub/sub
 5. Sends Frappe realtime notifications for success/failure
@@ -84,25 +82,25 @@ def _process_single_build(build: dict):
 	logger.info(f"Processing build {build_name} for {build_doc.target_type} {target_name}")
 
 	try:
-		# Import generators and publisher
-		from memora_admin.memora_admin.services.build.generator import generate_subject_json
+		# Import generator and publisher
 		from memora_admin.memora_admin.services.build.plan_generator import generate_plan_json
 		from memora_admin.memora_admin.services.build.publisher import publish_to_cdn
 
-		# Route to appropriate generator based on target_type
 		target_type = build_doc.target_type
 
-		if target_type == "Memora Academic Plan":
-			files = generate_plan_json(target_name)
-		else:
-			# Default to subject generator (Memora Subject)
-			files = generate_subject_json(target_name)
+		if target_type != "Memora Academic Plan":
+			logger.warning(f"Skipping unsupported build target_type={target_type} for {target_name}")
+			build_doc.status = "Failed"
+			build_doc.error_message = f"Unsupported target_type: {target_type}"
+			_finalize_build(build_doc)
+			return
+
+		files = generate_plan_json(target_name)
 
 		if not files:
-			entity_type = "plan" if target_type == "Memora Academic Plan" else "subject"
-			logger.warning(f"No files generated for {entity_type} {target_name}")
+			logger.warning(f"No files generated for plan {target_name}")
 			build_doc.status = "Failed"
-			build_doc.error_message = f"No files generated - {entity_type} may not exist or have no content"
+			build_doc.error_message = "No files generated - plan may not exist or have no content"
 			_finalize_build(build_doc)
 			_clear_retry_count(build_name)
 			_send_notification(target_name, success=False, error="No files generated", target_type=target_type)
@@ -129,8 +127,7 @@ def _process_single_build(build: dict):
 			# Purge CDN cache for published files (best-effort, never fails build)
 			_purge_cdn_cache(files)
 
-			entity_type = "plan" if target_type == "Memora Academic Plan" else "subject"
-			logger.info(f"Build {build_name} completed successfully for {entity_type} {target_name}, {len(files)} files published")
+			logger.info(f"Build {build_name} completed successfully for plan {target_name}, {len(files)} files published")
 		else:
 			# Upload failed - attempt requeue
 			_requeue_build(build_doc)
@@ -168,53 +165,45 @@ def _finalize_build(build_doc):
 	frappe.db.commit()
 
 
-def _notify_cache_invalidation(target_id: str, target_type: str = "Memora Subject"):
+def _notify_cache_invalidation(target_id: str, target_type: str = "Memora Academic Plan"):
 	"""
 	Publish cache invalidation message to Redis pub/sub.
 
 	FastAPI listens on this channel to invalidate caches.
 
 	Args:
-		target_id: The document name (subject_id or plan_id)
-		target_type: "Memora Subject" or "Memora Academic Plan"
+		target_id: The plan_id
+		target_type: "Memora Academic Plan"
 	"""
 	channel = "memora:cache:invalidate"
 
-	if target_type == "Memora Academic Plan":
-		message = json.dumps({
-			"type": "plan",
-			"plan_id": target_id,
-			"timestamp": datetime.now(timezone.utc).isoformat(),
-		})
-	else:
-		message = json.dumps({
-			"type": "hierarchy",
-			"subject_id": target_id,
-			"timestamp": datetime.now(timezone.utc).isoformat(),
-		})
+	message = json.dumps({
+		"type": "plan",
+		"plan_id": target_id,
+		"timestamp": datetime.now(timezone.utc).isoformat(),
+	})
 
 	try:
 		frappe.cache.publish(channel, message)
-		entity_type = "plan" if target_type == "Memora Academic Plan" else "subject"
-		logger.info(f"Published cache invalidation for {entity_type} {target_id}")
+		logger.info(f"Published cache invalidation for plan {target_id}")
 	except Exception as e:
 		# Log but don't fail the build
 		logger.error(f"Failed to publish cache invalidation: {e}")
 
 
-def _send_notification(target_id: str, success: bool, error: str | None = None, target_type: str = "Memora Subject"):
+def _send_notification(target_id: str, success: bool, error: str | None = None, target_type: str = "Memora Academic Plan"):
 	"""
 	Send Frappe realtime notification for build completion.
 
 	Shows in Frappe bell notifications for admins.
 
 	Args:
-		target_id: The document name (subject_id or plan_id)
+		target_id: The plan_id
 		success: Whether the build succeeded
 		error: Error message if failed
-		target_type: "Memora Subject" or "Memora Academic Plan"
+		target_type: "Memora Academic Plan"
 	"""
-	entity_type = "Plan" if target_type == "Memora Academic Plan" else "Subject"
+	entity_type = "Plan"
 
 	if success:
 		message = {
@@ -263,7 +252,7 @@ def _mark_build_failed(build_name: str, error: str):
 
 		# Get target info for notification
 		target_name = build_doc.target_name
-		target_type = build_doc.target_type or "Memora Subject"
+		target_type = build_doc.target_type or "Memora Academic Plan"
 		_send_notification(target_name, success=False, error=error, target_type=target_type)
 
 	except Exception as e:
@@ -304,7 +293,7 @@ def _requeue_build(build_doc):
 		build_doc.status = "Failed"
 		build_doc.error_message = f"Max retries ({MAX_RETRIES}) exceeded"
 		_clear_retry_count(build_name)
-		target_type = build_doc.target_type or "Memora Subject"
+		target_type = build_doc.target_type or "Memora Academic Plan"
 		_send_notification(build_doc.target_name, success=False, error="Max retries exceeded", target_type=target_type)
 		logger.error(f"Build {build_name} failed after {MAX_RETRIES} retries")
 
