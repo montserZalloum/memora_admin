@@ -13,6 +13,7 @@ from fastapi_app.api.v1.endpoints import (
 	profile,
 	progress,
 	purchase,
+	reports,
 	reviews,
 	sessions,
 	settings,
@@ -40,4 +41,5 @@ router.include_router(webhooks.router)
 router.include_router(notifications.router)
 router.include_router(reviews.router)
 router.include_router(profile.router)
+router.include_router(reports.router)
 router.include_router(voucher.router)

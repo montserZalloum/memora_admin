@@ -171,6 +171,10 @@ doc_events = {
 	"Memora Subscription Transaction": {
 		"after_insert": "memora_admin.events.purchase_sync.on_purchase_request_created",
 	},
+	# Content report admin notification
+	"Memora Content Report": {
+		"after_insert": "memora_admin.events.report_sync.on_content_report_created",
+	},
 	# Build trigger events for content DocTypes (debounced)
 	"Memora Subject": {
 		"on_update": "memora_admin.events.build_trigger.on_content_updated",
