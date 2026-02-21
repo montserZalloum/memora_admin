@@ -109,6 +109,15 @@ def _batch_hgetall_wallets(r, player_ids):
 	return dict(zip(player_ids, results))
 
 
+def _batch_hgetall_daily_xp(r, player_ids):
+	"""Pipeline HGETALL for multiple daily_xp keys. Returns {player_id: hash_dict}."""
+	pipe = r.pipeline(transaction=False)
+	for pid in player_ids:
+		pipe.hgetall(f"memora:daily_xp:{pid}")
+	results = pipe.execute()
+	return dict(zip(player_ids, results))
+
+
 def _bulk_lookup_wallet_names(player_ids):
 	"""Single SELECT ... WHERE IN to map player_id -> wallet record name."""
 	if not player_ids:
@@ -126,7 +135,8 @@ def _batch_update_wallets(updates):
 	"""CASE/WHEN UPDATE for multiple wallets in one query.
 
 	Args:
-		updates: list of (wallet_name, xp, streak)
+		updates: list of (wallet_name, xp, streak, daily_xp_json)
+		         daily_xp_json is a JSON string or None (skip update for that player)
 	"""
 	if not updates:
 		return
@@ -140,21 +150,34 @@ def _batch_update_wallets(updates):
 	xp_params = []
 	streak_params = []
 	names = []
-	for wallet_name, xp, streak in updates:
+	daily_xp_updates = []  # (wallet_name, json_str) for players with non-empty data
+	for wallet_name, xp, streak, daily_xp_json in updates:
 		xp_params.extend([wallet_name, xp])
 		streak_params.extend([wallet_name, streak])
 		names.append(wallet_name)
+		if daily_xp_json is not None:
+			daily_xp_updates.append((wallet_name, daily_xp_json))
+
+	# Build daily_xp_json CASE/WHEN only for players that have data;
+	# use ELSE daily_xp_json to preserve existing values for others.
+	daily_xp_sql = ""
+	daily_xp_params = []
+	if daily_xp_updates:
+		daily_xp_when = " ".join(["WHEN %s THEN %s"] * len(daily_xp_updates))
+		for wallet_name, json_str in daily_xp_updates:
+			daily_xp_params.extend([wallet_name, json_str])
+		daily_xp_sql = f",\n\t\t\tdaily_xp_json = CASE name {daily_xp_when} ELSE daily_xp_json END"
 
 	sql = f"""
 		UPDATE `tabMemora Player Wallet`
 		SET total_xp = CASE name {xp_when} END,
-			current_streak = CASE name {streak_when} END,
+			current_streak = CASE name {streak_when} END{daily_xp_sql},
 			dirty_flag = 0,
 			last_sync_at = %s
 		WHERE name IN ({in_placeholders})
 	"""
 
-	all_params = xp_params + streak_params + [now_str] + names
+	all_params = xp_params + streak_params + daily_xp_params + [now_str] + names
 	frappe.db.sql(sql, tuple(all_params))
 
 
@@ -486,7 +509,10 @@ def sync_dirty_wallets():
 			if not players_with_data:
 				continue
 
-			# 3. Single SELECT to get wallet names
+			# 3a. Pipeline HGETALL for daily_xp hashes (single RTT alongside wallet fetch)
+			daily_xp_data = _batch_hgetall_daily_xp(r, players_with_data)
+
+			# 3b. Single SELECT to get wallet names
 			wallet_names = _bulk_lookup_wallet_names(players_with_data)
 
 			# 4. Build update list
@@ -505,7 +531,18 @@ def sync_dirty_wallets():
 				xp = int(xp_raw) if xp_raw else 0
 				streak = int(streak_raw) if streak_raw else 0
 
-				updates.append((wallet_name, xp, streak))
+				# Serialize daily_xp hash to JSON for MariaDB persistence
+				raw_daily_xp = daily_xp_data.get(pid, {})
+				if raw_daily_xp:
+					daily_xp_dict = {
+						(k.decode() if isinstance(k, bytes) else k): int(v)
+						for k, v in raw_daily_xp.items()
+					}
+					daily_xp_json_str = json.dumps(daily_xp_dict)
+				else:
+					daily_xp_json_str = None  # No data — preserve existing DB value
+
+				updates.append((wallet_name, xp, streak, daily_xp_json_str))
 
 			# 5. Single CASE/WHEN UPDATE
 			_batch_update_wallets(updates)

@@ -11,6 +11,7 @@ The FastAPI sidecar uses a separate Redis instance without Frappe's site prefix.
 """
 # Player identity is PLAYER-##### docname (not email). See Phase 32.
 
+import json
 import os
 from pathlib import Path
 
@@ -100,6 +101,12 @@ def on_subscription_change(doc, method):
         r.srem(redis_key, access_key)
         frappe.logger().info(f"Revoked {access_key} from {user_id}")
 
+    # Notify the player to re-fetch subscriptions
+    r.publish("memora:cache:invalidate", json.dumps({
+        "type": "subscription_changed",
+        "player_id": user_id,
+    }))
+
 
 def on_subscription_deleted(doc, method):
     """Remove grant when subscription is deleted."""
@@ -110,6 +117,12 @@ def on_subscription_deleted(doc, method):
     redis_key = f"memora:access:{user_id}"
     r.srem(redis_key, doc.access_key)
     frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
+
+    # Notify the player to re-fetch subscriptions
+    r.publish("memora:cache:invalidate", json.dumps({
+        "type": "subscription_changed",
+        "player_id": user_id,
+    }))
 
 
 # =============================================================================
@@ -141,6 +154,12 @@ def on_plan_subject_changed(doc, method):
         # Remove from free set (is_premium=1 means paid)
         r.srem(redis_key, subject_id)
         frappe.logger().info(f"Plan subject {subject_id} marked premium in plan {plan_id}")
+
+    # Notify connected clients on this plan to re-fetch subscriptions
+    r.publish("memora:cache:invalidate", json.dumps({
+        "type": "plan_subjects",
+        "plan_id": plan_id,
+    }))
 
 
 def rebuild_plan_free_subjects(plan_id: str):

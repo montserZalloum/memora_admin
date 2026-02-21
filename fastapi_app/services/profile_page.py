@@ -4,6 +4,7 @@ Composes existing services into profile-page-shaped responses.
 Does NOT duplicate business logic from underlying services.
 """
 
+import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -240,6 +241,43 @@ class ProfilePageService:
 			for j, i in enumerate(archive_indices):
 				if archive_scores[j] is not None:
 					scores[i] = archive_scores[j]
+
+		# Phase 3: Per-player daily XP summary hash (Redis, MariaDB-backed).
+		# Covers days still missing after Phase 1 + Phase 2 (e.g. after Redis data loss).
+		still_missing = [i for i in archive_indices if scores[i] is None]
+		if still_missing:
+			daily_xp_key = f"{self.prefix}daily_xp:{player_id}"
+			daily_xp_data = await self.redis.hgetall(daily_xp_key)
+			if not daily_xp_data:
+				# Cache miss — recover from MariaDB via Frappe
+				try:
+					frappe_result = await self.frappe.call(
+						"memora_admin.api.profile.get_player_daily_xp_json",
+						{"player_id": player_id},
+					)
+					raw = frappe_result.get("daily_xp_json", "{}") if frappe_result else "{}"
+				except Exception:
+					raw = "{}"
+				try:
+					restored = json.loads(raw)
+				except (json.JSONDecodeError, TypeError):
+					restored = {}
+				if restored:
+					# Repopulate hash in Redis with 8-day TTL
+					pipe3 = self.redis.pipeline()
+					for d, v in restored.items():
+						pipe3.hset(daily_xp_key, d, v)
+					pipe3.expire(daily_xp_key, 8 * 86400)
+					await pipe3.execute()
+					daily_xp_data = {
+						k.encode() if isinstance(k, str) else k: str(v).encode()
+						for k, v in restored.items()
+					}
+			for i in still_missing:
+				key = days[i]["date"].encode()
+				val = daily_xp_data.get(key)
+				if val is not None:
+					scores[i] = float(val)
 
 		total_xp = 0
 		for i, score in enumerate(scores):

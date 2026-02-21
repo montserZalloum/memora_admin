@@ -362,6 +362,14 @@ class LeaderboardService:
 		pipe.zincrby(weekly_key, xp_amount, player_id)
 		pipe.expire(weekly_key, WEEKLY_KEY_TTL)
 
+		# Per-player daily XP summary hash (MariaDB-backed durability for activity chart)
+		# Stored separately from the ranked ZSET so it can survive Redis data loss and
+		# be recovered from MariaDB (synced by sync_dirty_wallets every minute).
+		amman_date_str = datetime.now(AMMAN_TZ).strftime("%Y-%m-%d")
+		daily_xp_key = f"memora:daily_xp:{player_id}"
+		pipe.hincrby(daily_xp_key, amman_date_str, xp_amount)
+		pipe.expire(daily_xp_key, 8 * 86400)  # 8 days — covers the 7-day window + 1 buffer
+
 		# Subject-specific leaderboards (if context available)
 		if subject_id:
 			alltime_subj_key = self._get_key("alltime", subject_id)

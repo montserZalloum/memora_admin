@@ -280,6 +280,28 @@ def _populate_all_counter(pipe, r: _redis.Redis, player_id: str, season_seq: int
 
 
 @frappe.whitelist(allow_guest=False)
+def get_player_daily_xp_json(player_id: str) -> dict:
+	"""Get the persisted daily XP JSON for a player from MariaDB.
+
+	Used by FastAPI as a Phase 3 fallback when Redis daily XP data is lost
+	(restart, eviction, or manual flush). Returns the last synced daily XP
+	summary so the activity chart can be recovered without a Redis ZSET.
+
+	Args:
+		player_id: Player docname (PLAYER-#####).
+
+	Returns:
+		Dict with daily_xp_json (JSON string of {date: xp} or "{}").
+	"""
+	val = frappe.db.get_value(
+		"Memora Player Wallet",
+		{"player": player_id},
+		"daily_xp_json",
+	)
+	return {"daily_xp_json": val or "{}"}
+
+
+@frappe.whitelist(allow_guest=False)
 def update_player_avatar(player_id: str, avatar: str) -> dict:
 	"""Update player's avatar selection.
 

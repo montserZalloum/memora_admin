@@ -4,7 +4,9 @@ Queue builds when content DocTypes are updated with 2-minute debounce.
 Per plan: prevent build flooding via Redis SET NX EX pattern.
 """
 
+import json
 import time
+
 import frappe
 
 # Debounce configuration
@@ -204,6 +206,24 @@ def on_plan_updated(doc, method):
 	# Plan Subject rows (alias_title, notes) are edited inline via the parent plan form,
 	# and Frappe's editable_grid does not reliably fire child doc on_update hooks.
 	_invalidate_catalog_cache(plan_id)
+
+	# Rebuild plan free subjects and notify connected clients.
+	# Child doc_events (after_insert/on_update/on_trash) don't fire reliably
+	# from editable_grid saves, so we rebuild the full set here.
+	try:
+		from memora_admin.events.access_sync import rebuild_plan_free_subjects, get_fastapi_redis
+
+		rebuild_plan_free_subjects(plan_id)
+		r = get_fastapi_redis()
+		r.publish("memora:cache:invalidate", json.dumps({
+			"type": "plan_subjects",
+			"plan_id": plan_id,
+		}))
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to sync plan free subjects for {plan_id}: {e}",
+			"Plan Subject Sync Error",
+		)
 
 	# Invalidate season_seq cache when plan's season assignment changes
 	if doc.has_value_changed("season"):

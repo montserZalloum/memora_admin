@@ -28,6 +28,8 @@ class ConnectionManager:
 
 	def __init__(self) -> None:
 		self._connections: dict[str, set[WebSocket]] = defaultdict(set)
+		self._user_plan: dict[str, str] = {}  # user_id -> plan_id
+		self._plan_users: dict[str, set[str]] = defaultdict(set)  # plan_id -> set of user_ids
 		self._lock = asyncio.Lock()
 
 	@property
@@ -40,12 +42,13 @@ class ConnectionManager:
 		"""Return total connection count across all users."""
 		return sum(len(ws_set) for ws_set in self._connections.values())
 
-	async def connect(self, user_id: str, websocket: WebSocket) -> bool:
+	async def connect(self, user_id: str, websocket: WebSocket, plan_id: str = "") -> bool:
 		"""Accept WebSocket and add to user's connection set.
 
 		Args:
 			user_id: The user identifier (email/player ID).
 			websocket: The WebSocket connection to register.
+			plan_id: The player's plan ID (for plan-level broadcasts).
 
 		Returns:
 			True if this is the first connection for the user
@@ -55,11 +58,15 @@ class ConnectionManager:
 		async with self._lock:
 			is_first = len(self._connections[user_id]) == 0
 			self._connections[user_id].add(websocket)
+			if plan_id:
+				self._user_plan[user_id] = plan_id
+				self._plan_users[plan_id].add(user_id)
 
 		logger.debug(
 			"ws_connected",
 			user_id=user_id,
 			is_first=is_first,
+			plan_id=plan_id,
 			user_connections=len(self._connections[user_id]),
 		)
 		return is_first
@@ -80,6 +87,11 @@ class ConnectionManager:
 			is_last = len(self._connections[user_id]) == 0
 			if is_last:
 				del self._connections[user_id]
+				plan_id = self._user_plan.pop(user_id, "")
+				if plan_id:
+					self._plan_users[plan_id].discard(user_id)
+					if not self._plan_users[plan_id]:
+						del self._plan_users[plan_id]
 
 		logger.debug(
 			"ws_disconnected",
@@ -125,3 +137,29 @@ class ConnectionManager:
 			await self.disconnect(user_id, ws)
 
 		return sent
+
+	async def send_to_plan(self, plan_id: str, message: str) -> int:
+		"""Send message to ALL connected users on the given plan.
+
+		Args:
+			plan_id: The plan identifier to broadcast to.
+			message: The text message (typically JSON) to send.
+
+		Returns:
+			Total count of successful sends across all users.
+		"""
+		user_ids = list(self._plan_users.get(plan_id, set()))
+		if not user_ids:
+			return 0
+
+		total = 0
+		for user_id in user_ids:
+			total += await self.send_to_user(user_id, message)
+
+		logger.info(
+			"plan_broadcast_sent",
+			plan_id=plan_id,
+			users=len(user_ids),
+			sent=total,
+		)
+		return total

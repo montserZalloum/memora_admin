@@ -15,7 +15,8 @@
   "sb_stats",
   "total_lessons",
   "total_time_min",
-  "last_sync_at"
+  "last_sync_at",
+  "daily_xp_json"
  ],
  "fields": [
   {
@@ -76,6 +77,14 @@
    "fieldname": "last_sync_at",
    "fieldtype": "Datetime",
    "label": "Last Sync At"
+  },
+  {
+   "fieldname": "daily_xp_json",
+   "fieldtype": "Small Text",
+   "label": "Daily XP JSON",
+   "hidden": 1,
+   "read_only": 1,
+   "in_list_view": 0
   }
  ],
  "grid_page_length": 50,

@@ -154,6 +154,27 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 					"catalog_service_not_available",
 					plan_id=plan_id,
 				)
+		elif msg_type == "plan_subjects" and plan_id:
+			ws_manager = getattr(app_state, "ws_manager", None)
+			if ws_manager:
+				event = json.dumps({"type": "subscriptions_changed"})
+				sent = await ws_manager.send_to_plan(plan_id, event)
+				logger.info(
+					"plan_subjects_notification_sent",
+					plan_id=plan_id,
+					sent=sent,
+				)
+		elif msg_type == "subscription_changed" and payload.get("player_id"):
+			ws_manager = getattr(app_state, "ws_manager", None)
+			if ws_manager:
+				player_id = payload["player_id"]
+				event = json.dumps({"type": "subscriptions_changed"})
+				sent = await ws_manager.send_to_user(player_id, event)
+				logger.info(
+					"subscription_notification_sent",
+					player_id=player_id,
+					sent=sent,
+				)
 		else:
 			logger.debug(
 				"unknown_invalidation_message",
