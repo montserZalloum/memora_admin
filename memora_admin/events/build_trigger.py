@@ -207,23 +207,24 @@ def on_plan_updated(doc, method):
 	# and Frappe's editable_grid does not reliably fire child doc on_update hooks.
 	_invalidate_catalog_cache(plan_id)
 
-	# Rebuild plan free subjects and notify connected clients.
-	# Child doc_events (after_insert/on_update/on_trash) don't fire reliably
-	# from editable_grid saves, so we rebuild the full set here.
-	try:
-		from memora_admin.events.access_sync import rebuild_plan_free_subjects, get_fastapi_redis
+	# Only rebuild plan free subjects and notify clients if is_premium actually changed.
+	# get_doc_before_save() gives us the previous child table state to compare.
+	old_doc = doc.get_doc_before_save()
+	if _has_is_premium_changed(old_doc, doc):
+		try:
+			from memora_admin.events.access_sync import get_fastapi_redis, rebuild_plan_free_subjects
 
-		rebuild_plan_free_subjects(plan_id)
-		r = get_fastapi_redis()
-		r.publish("memora:cache:invalidate", json.dumps({
-			"type": "plan_subjects",
-			"plan_id": plan_id,
-		}))
-	except Exception as e:
-		frappe.log_error(
-			f"Failed to sync plan free subjects for {plan_id}: {e}",
-			"Plan Subject Sync Error",
-		)
+			rebuild_plan_free_subjects(plan_id)
+			r = get_fastapi_redis()
+			r.publish("memora:cache:invalidate", json.dumps({
+				"type": "plan_subjects",
+				"plan_id": plan_id,
+			}))
+		except Exception as e:
+			frappe.log_error(
+				f"Failed to sync plan free subjects for {plan_id}: {e}",
+				"Plan Subject Sync Error",
+			)
 
 	# Invalidate season_seq cache when plan's season assignment changes
 	if doc.has_value_changed("season"):
@@ -326,6 +327,17 @@ def on_plan_subject_changed(doc, method):
 			f"Failed to queue build for plan {plan_id}: {e}",
 			"Build Trigger Error",
 		)
+
+
+def _has_is_premium_changed(old_doc, doc) -> bool:
+	"""Compare is_premium across old and new plan_subjects child rows."""
+	if not old_doc:
+		return True  # New doc — treat as changed
+
+	old_map = {row.subject: row.is_premium for row in (old_doc.plan_subjects or [])}
+	new_map = {row.subject: row.is_premium for row in (doc.plan_subjects or [])}
+
+	return old_map != new_map
 
 
 def _invalidate_hierarchy_cache(subject_id: str):
