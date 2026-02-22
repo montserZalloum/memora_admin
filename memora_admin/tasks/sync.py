@@ -50,7 +50,7 @@ def _parse_timestamp(timestamp_str: str) -> str:
 	Output: 2026-02-07 10:53:59 (MariaDB format)
 	"""
 	if not timestamp_str:
-		return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		return frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
 	try:
 		# Remove Z suffix if present
@@ -69,7 +69,7 @@ def _parse_timestamp(timestamp_str: str) -> str:
 		return dt.strftime("%Y-%m-%d %H:%M:%S")
 	except Exception as e:
 		logger.warning(f"Failed to parse timestamp {timestamp_str}: {e}")
-		return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		return frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
 def get_redis():
 	"""Get Redis connection using Frappe site config."""

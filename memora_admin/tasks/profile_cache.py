@@ -55,7 +55,7 @@ def warm_profile_cache(triggered_by: str = "Scheduler"):
 		triggered_by: Source of trigger - "Scheduler", "Manual", or "Catch-up"
 	"""
 	task_name = "profile_cache_warm"
-	start_time = datetime.now()
+	start_time = frappe.utils.now_datetime()
 
 	# Idempotency check - only run once per hour window
 	# For hourly tasks, we check against hour rather than day
@@ -99,7 +99,7 @@ def warm_profile_cache(triggered_by: str = "Scheduler"):
 		raise
 
 	finally:
-		duration = (datetime.now() - start_time).total_seconds()
+		duration = (frappe.utils.now_datetime() - start_time).total_seconds()
 		TASK_DURATION.labels(task_name=task_name).observe(duration)
 
 

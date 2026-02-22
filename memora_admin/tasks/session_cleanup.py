@@ -17,7 +17,7 @@ Scheduled via hooks.py: "15 * * * *"
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+
 
 import frappe
 import redis
@@ -54,7 +54,7 @@ def cleanup_expired_sessions(triggered_by: str = "Scheduler"):
 	Args:
 		triggered_by: Source of trigger - "Scheduler", "Manual", or "Catch-up"
 	"""
-	start_time = datetime.now()
+	start_time = frappe.utils.now_datetime()
 
 	try:
 		checked, removed, orphaned_keys = _do_session_cleanup()
@@ -90,7 +90,7 @@ def cleanup_expired_sessions(triggered_by: str = "Scheduler"):
 		raise
 
 	finally:
-		duration = (datetime.now() - start_time).total_seconds()
+		duration = (frappe.utils.now_datetime() - start_time).total_seconds()
 		TASK_DURATION.labels(task_name=TASK_NAME).observe(duration)
 
 

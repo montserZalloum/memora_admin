@@ -15,7 +15,7 @@ Scheduled via hooks.py: "5 0 * * *"
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+
 
 import frappe
 import redis
@@ -56,7 +56,7 @@ def reset_broken_streaks(triggered_by: str = "Scheduler"):
 	Args:
 		triggered_by: Source of trigger - "Scheduler", "Manual", or "Catch-up"
 	"""
-	start_time = datetime.now()
+	start_time = frappe.utils.now_datetime()
 
 	# Idempotency check: don't run twice on same day
 	if has_run_today(TASK_NAME):
@@ -110,7 +110,7 @@ def reset_broken_streaks(triggered_by: str = "Scheduler"):
 		raise  # Re-raise to signal failure to scheduler
 
 	finally:
-		duration = (datetime.now() - start_time).total_seconds()
+		duration = (frappe.utils.now_datetime() - start_time).total_seconds()
 		TASK_DURATION.labels(task_name=TASK_NAME).observe(duration)
 
 

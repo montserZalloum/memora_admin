@@ -110,7 +110,7 @@ def log_task_run(
 	Returns:
 		Document name (e.g., "TASK-00001") for reference
 	"""
-	now = datetime.now()
+	now = frappe.utils.now_datetime()
 	started = started_at or now
 	duration = (now - started).total_seconds()
 
@@ -233,7 +233,7 @@ def notify_admins(task_name: str, error_message: str) -> None:
 			message=f"""
 			<h3>Scheduled Task Failure Alert</h3>
 			<p><strong>Task:</strong> {task_name}</p>
-			<p><strong>Time:</strong> {datetime.now()}</p>
+			<p><strong>Time:</strong> {frappe.utils.now_datetime()}</p>
 			<p><strong>Error:</strong></p>
 			<pre>{error_message}</pre>
 			<p>Please check the Memora Task Run Log for details.</p>
