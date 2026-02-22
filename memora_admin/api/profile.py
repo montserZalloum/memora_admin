@@ -15,7 +15,10 @@ All queries include season_seq for partition pruning. See setup.py for details.
 import frappe
 import redis as _redis
 
-from memora_admin.api.utils import get_player_season_seq as _get_player_season_seq
+from memora_admin.api.utils import (
+	get_player_season_seq as _get_player_season_seq,
+	_MASTERY_COUNTER_TTL,
+)
 
 
 @frappe.whitelist(allow_guest=False)
@@ -229,6 +232,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 		)
 		pipe = r.pipeline(transaction=False)
 		pipe.hset(counter_key, mapping={"mature": mature, "learning": learning})
+		pipe.expire(counter_key, _MASTERY_COUNTER_TTL)
 		# Also populate the "all" aggregate if we queried a specific subject
 		if subject_id:
 			_populate_all_counter(pipe, r, player_id, season_seq)
@@ -267,6 +271,7 @@ def _populate_all_counter(pipe, r: _redis.Redis, player_id: str, season_seq: int
 				"learning": int(row[0].get("learning") or 0),
 			},
 		)
+		pipe.expire(all_key, _MASTERY_COUNTER_TTL)
 
 
 @frappe.whitelist(allow_guest=False)

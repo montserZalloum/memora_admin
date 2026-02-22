@@ -9,6 +9,7 @@ import redis as _redis
 MASTERY_MATURE_THRESHOLD = 21.0
 
 _SEASON_SEQ_CACHE_TTL = 86400  # 24 hours
+_MASTERY_COUNTER_TTL = 300  # 5 minutes — self-heal window for drifted counters
 
 
 def get_player_season_seq(player_id: str) -> int:
@@ -94,8 +95,10 @@ def update_mastery_counters(
 	pipe = r.pipeline(transaction=False)
 	pipe.hincrby(subj_key, old_bucket, -1)
 	pipe.hincrby(subj_key, new_bucket, 1)
+	pipe.expire(subj_key, _MASTERY_COUNTER_TTL)
 	pipe.hincrby(all_key, old_bucket, -1)
 	pipe.hincrby(all_key, new_bucket, 1)
+	pipe.expire(all_key, _MASTERY_COUNTER_TTL)
 	pipe.execute()
 
 
@@ -114,5 +117,7 @@ def init_mastery_counter(
 	subj_key, all_key = _mastery_keys(player, subject, season_seq)
 	pipe = r.pipeline(transaction=False)
 	pipe.hincrby(subj_key, bucket, 1)
+	pipe.expire(subj_key, _MASTERY_COUNTER_TTL)
 	pipe.hincrby(all_key, bucket, 1)
+	pipe.expire(all_key, _MASTERY_COUNTER_TTL)
 	pipe.execute()
