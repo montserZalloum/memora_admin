@@ -141,7 +141,7 @@ def _batch_update_wallets(updates):
 	if not updates:
 		return
 
-	now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+	now_str = frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
 	xp_when = " ".join(["WHEN %s THEN %s"] * len(updates))
 	streak_when = " ".join(["WHEN %s THEN %s"] * len(updates))
@@ -319,7 +319,7 @@ def _batch_insert_progress(inserts):
 
 	n = len(inserts)
 	start = _reserve_name_block("PROG-", n)
-	now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+	now_str = frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
 	flat_values = []
 	for i, (user_id, subject_id, hex_string, percentage) in enumerate(inserts):
@@ -615,7 +615,7 @@ def flush_interaction_buffer():
 
 		# Phase 1: Parse and validate all items
 		valid_rows = []
-		now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+		now_str = frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S.%f")
 
 		for i, item_bytes in enumerate(items):
 			try:

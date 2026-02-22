@@ -291,7 +291,6 @@ def process_fsrs_reviews():
 		limit_page_length=2000,
 	)
 
-	logger.info(f"FSRS: Found {len(interactions)} recent interactions (cutoff: {cutoff})")
 	if not interactions:
 		logger.debug("No recent interactions for FSRS processing")
 		return
@@ -560,4 +559,3 @@ def process_fsrs_reviews():
 	if processed > 0:
 		frappe.db.commit()
 
-	logger.info(f"FSRS processing: {processed} processed, {skipped} skipped, {len(errors_list)} errors")
