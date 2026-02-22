@@ -1,0 +1,89 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-02-22 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "curve_section",
+  "quadratic_coefficient",
+  "linear_coefficient",
+  "column_break_curve",
+  "max_level",
+  "titles_section",
+  "level_titles"
+ ],
+ "fields": [
+  {
+   "fieldname": "curve_section",
+   "fieldtype": "Section Break",
+   "label": "XP Curve Parameters"
+  },
+  {
+   "default": "50",
+   "description": "Quadratic coefficient (a) in XP formula: a*(level-1)^2 + b*(level-1)",
+   "fieldname": "quadratic_coefficient",
+   "fieldtype": "Int",
+   "label": "Quadratic Coefficient (a)",
+   "reqd": 1
+  },
+  {
+   "default": "50",
+   "description": "Linear coefficient (b) in XP formula: a*(level-1)^2 + b*(level-1)",
+   "fieldname": "linear_coefficient",
+   "fieldtype": "Int",
+   "label": "Linear Coefficient (b)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_curve",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "15",
+   "description": "Maximum level a player can reach",
+   "fieldname": "max_level",
+   "fieldtype": "Int",
+   "label": "Max Level",
+   "reqd": 1
+  },
+  {
+   "fieldname": "titles_section",
+   "fieldtype": "Section Break",
+   "label": "Level Titles"
+  },
+  {
+   "fieldname": "level_titles",
+   "fieldtype": "Table",
+   "label": "Level Titles",
+   "options": "Memora Level Title"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-02-22 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Level Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "print": 1,
+   "read": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

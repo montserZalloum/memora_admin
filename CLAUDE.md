@@ -241,6 +241,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM (Memora Settings singleton), no new tables (021-cdn-cache-purge)
 - Python 3.11+ (Frappe v15 bench environment) + FastAPI, Starlette (`BaseHTTPMiddleware`), `redis.asyncio`, `structlog` (022-global-rate-limiting)
 - Redis at `redis://127.0.0.1:13000` (shared with Frappe -- prefix isolation required) (022-global-rate-limiting)
+- Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, Single DocType, hooks), FastAPI, `redis.asyncio`, `structlog` (023-dynamic-level-system)
+- MariaDB via Frappe ORM (Level Settings DocType), Redis at `redis://127.0.0.1:13000` (config cache) (023-dynamic-level-system)
 
 ## Test Environment Configuration
 
@@ -260,9 +262,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 023-dynamic-level-system: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, Single DocType, hooks), FastAPI, `redis.asyncio`, `structlog`
 - 022-global-rate-limiting: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Starlette (`BaseHTTPMiddleware`), `redis.asyncio`, `structlog`
 - 021-cdn-cache-purge: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API, background jobs), `requests` (HTTP client, already available)
-- 020-fix-export-redeemed-cards: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API), `csv` (stdlib), `io` (stdlib)
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

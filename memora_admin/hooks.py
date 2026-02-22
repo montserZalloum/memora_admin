@@ -226,6 +226,9 @@ doc_events = {
 			"memora_admin.events.access_sync.on_plan_subject_changed",
 		],
 	},
+	"Memora Level Settings": {
+		"on_update": "memora_admin.events.level_sync.on_level_settings_updated",
+	},
 	"Memora Plan Overrider": {
 		"after_insert": "memora_admin.events.build_trigger.on_plan_overrider_changed",
 		"on_update": "memora_admin.events.build_trigger.on_plan_overrider_changed",

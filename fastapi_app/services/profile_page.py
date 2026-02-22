@@ -11,11 +11,8 @@ from zoneinfo import ZoneInfo
 import redis.asyncio as redis
 import structlog
 
-from fastapi_app.core.constants import (
-	LEVEL_THRESHOLDS,
-	MASTERY_CACHE_TTL,
-	calculate_level,
-)
+from fastapi_app.core.constants import MASTERY_CACHE_TTL
+from fastapi_app.core.level_config import calculate_level, get_level_config, get_threshold
 from fastapi_app.services.frappe_client import FrappeClient
 from fastapi_app.services.profile import ProfileService
 from fastapi_app.services.wallet import WalletService
@@ -108,11 +105,12 @@ class ProfilePageService:
 		display_name = profile.display_name if profile else "Anonymous"
 		avatar = profile.avatar if profile else "default_avatar"
 
-		level, level_title, xp_in_level, xp_for_next_level = calculate_level(total_xp)
+		config = await get_level_config(self.redis)
+		level, level_title, xp_in_level, xp_for_next_level = calculate_level(total_xp, config)
 
 		# XP boundaries for the current level
-		xp_level_start = LEVEL_THRESHOLDS[level - 1]
-		xp_level_end = LEVEL_THRESHOLDS[level] if level < len(LEVEL_THRESHOLDS) else 0
+		xp_level_start = get_threshold(level, config.a, config.b)
+		xp_level_end = get_threshold(level + 1, config.a, config.b) if level < config.max_level else 0
 
 		return {
 			"display_name": display_name,

@@ -164,6 +164,11 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 					plan_id=plan_id,
 					sent=sent,
 				)
+		elif msg_type == "level_config":
+			logger.info(
+				"level_config_updated",
+				timestamp=timestamp,
+			)
 		elif msg_type == "subscription_changed" and payload.get("player_id"):
 			ws_manager = getattr(app_state, "ws_manager", None)
 			if ws_manager:
