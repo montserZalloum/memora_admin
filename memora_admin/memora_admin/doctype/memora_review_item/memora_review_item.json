@@ -1,0 +1,169 @@
+{
+ "actions": [],
+ "autoname": "field:item_id",
+ "creation": "2026-02-22 00:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "item_id",
+  "hierarchy_section",
+  "subject",
+  "track",
+  "unit",
+  "topic",
+  "lesson",
+  "stage_section",
+  "stage_id",
+  "stage_type",
+  "question_section",
+  "question_text",
+  "choice_1",
+  "choice_2",
+  "choice_3",
+  "choice_4",
+  "correct_choice",
+  "content_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "item_id",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Item ID",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "hierarchy_section",
+   "fieldtype": "Section Break",
+   "label": "Hierarchy"
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "label": "Subject",
+   "options": "Memora Subject",
+   "reqd": 1
+  },
+  {
+   "fieldname": "track",
+   "fieldtype": "Link",
+   "label": "Track",
+   "options": "Memora Track",
+   "reqd": 1
+  },
+  {
+   "fieldname": "unit",
+   "fieldtype": "Link",
+   "label": "Unit",
+   "options": "Memora Unit",
+   "reqd": 1
+  },
+  {
+   "fieldname": "topic",
+   "fieldtype": "Link",
+   "label": "Topic",
+   "options": "Memora Topic",
+   "reqd": 1
+  },
+  {
+   "fieldname": "lesson",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Lesson",
+   "options": "Memora Lesson",
+   "reqd": 1
+  },
+  {
+   "fieldname": "stage_section",
+   "fieldtype": "Section Break",
+   "label": "Stage"
+  },
+  {
+   "fieldname": "stage_id",
+   "fieldtype": "Data",
+   "label": "Stage ID",
+   "reqd": 1
+  },
+  {
+   "fieldname": "stage_type",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Stage Type",
+   "options": "Memora Lesson Stage Settings",
+   "reqd": 1
+  },
+  {
+   "fieldname": "question_section",
+   "fieldtype": "Section Break",
+   "label": "Question Data"
+  },
+  {
+   "fieldname": "question_text",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Question Text"
+  },
+  {
+   "fieldname": "choice_1",
+   "fieldtype": "Small Text",
+   "label": "Choice 1"
+  },
+  {
+   "fieldname": "choice_2",
+   "fieldtype": "Small Text",
+   "label": "Choice 2"
+  },
+  {
+   "fieldname": "choice_3",
+   "fieldtype": "Small Text",
+   "label": "Choice 3"
+  },
+  {
+   "fieldname": "choice_4",
+   "fieldtype": "Small Text",
+   "label": "Choice 4"
+  },
+  {
+   "fieldname": "correct_choice",
+   "fieldtype": "Int",
+   "label": "Correct Choice"
+  },
+  {
+   "fieldname": "content_json",
+   "fieldtype": "Code",
+   "label": "Content JSON",
+   "options": "JSON"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-22 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Review Item",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "search_fields": "lesson,stage_type,question_text",
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
+}

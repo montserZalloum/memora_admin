@@ -60,16 +60,21 @@ def get_review_overview(player_id: str) -> list[dict]:
 
 
 @frappe.whitelist(allow_guest=False)
-def get_due_items(player_id: str, subject_id: str, limit: int = 10) -> dict:
+def get_due_items(player_id: str, subject_id: str, limit: int = 0) -> dict:
 	"""Get up to N due items for a subject, oldest first (FIFO).
 
 	Returns items with their stage context (stage_id, lesson, stage_type).
 	Uses BIN_TO_UUID polyfill to convert BINARY(16) item_id to string UUID.
 	Includes season_seq for partition pruning.
 
+	When limit=0, reads review_session_size from Memora Settings (default 10).
+
 	Returns: {"items": [...], "has_more": bool}
 	"""
 	limit = int(limit)
+	if limit <= 0:
+		limit = frappe.db.get_single_value("Memora Settings", "review_session_size") or 10
+		limit = int(limit)
 	today = frappe.utils.today()
 	season_seq = _get_player_season_seq(player_id)
 
@@ -78,11 +83,20 @@ def get_due_items(player_id: str, subject_id: str, limit: int = 10) -> dict:
 		SELECT ms.name as memory_state_name,
 		       BIN_TO_UUID(ms.item_id) as item_id,
 		       ms.stage_id, ms.lesson,
-		       ms.stability, ms.difficulty, ms.next_review,
-		       ls.stage_type
+		       ms.next_review,
+		       ls.stage_type,
+		       ri.question_text,
+		       ri.choice_1,
+		       ri.choice_2,
+		       ri.choice_3,
+		       ri.choice_4,
+		       ri.correct_choice,
+		       ri.content_json
 		FROM `tabMemora Memory State` ms
 		INNER JOIN `tabMemora Lesson Stage` ls
 			ON ls.name = ms.stage_id AND ls.parent = ms.lesson
+		LEFT JOIN `tabMemora Review Item` ri
+			ON ri.name = BIN_TO_UUID(ms.item_id)
 		WHERE ms.player = %(player)s
 		  AND ms.subject = %(subject)s
 		  AND ms.next_review <= %(today)s
@@ -102,17 +116,31 @@ def get_due_items(player_id: str, subject_id: str, limit: int = 10) -> dict:
 
 	has_more = len(rows) > limit
 
-	result = [
-		{
-			"item_id": row.item_id,
-			"stage_id": row.stage_id,
-			"lesson_id": row.lesson,
-			"stage_type": row.stage_type,
-			"stability": row.stability,
-			"difficulty": row.difficulty,
-		}
-		for row in rows[:limit]
-	]
+	result = []
+	for row in rows[:limit]:
+		# Assemble non-empty choices into a list
+		choices = [c for c in (row.choice_1, row.choice_2, row.choice_3, row.choice_4) if c]
+
+		# Parse content_json if present
+		content_json = None
+		if row.content_json:
+			try:
+				content_json = json.loads(row.content_json) if isinstance(row.content_json, str) else row.content_json
+			except (json.JSONDecodeError, TypeError):
+				content_json = None
+
+		result.append(
+			{
+				"item_id": row.item_id,
+				"stage_id": row.stage_id,
+				"lesson_id": row.lesson,
+				"stage_type": row.stage_type,
+				"question_text": row.question_text,
+				"choices": choices,
+				"correct_choice": row.correct_choice,
+				"content_json": content_json,
+			}
+		)
 
 	return {"items": result, "has_more": has_more}
 

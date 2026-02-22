@@ -61,6 +61,10 @@ async def get_due_items(
 			stage_id=i.get("stage_id", ""),
 			lesson_id=i.get("lesson_id", ""),
 			stage_type=i.get("stage_type", ""),
+			question_text=i.get("question_text"),
+			choices=i.get("choices", []),
+			correct_choice=i.get("correct_choice"),
+			content_json=i.get("content_json"),
 		)
 		for i in result.get("items", [])
 	]

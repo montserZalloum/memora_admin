@@ -243,6 +243,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - Redis at `redis://127.0.0.1:13000` (shared with Frappe -- prefix isolation required) (022-global-rate-limiting)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, Single DocType, hooks), FastAPI, `redis.asyncio`, `structlog` (023-dynamic-level-system)
 - MariaDB via Frappe ORM (Level Settings DocType), Redis at `redis://127.0.0.1:13000` (config cache) (023-dynamic-level-system)
+- Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, Pydantic v2, redis.asyncio (024-review-item-table)
+- MariaDB via Frappe ORM (standard DocType — NOT partitioned) (024-review-item-table)
 
 ## Test Environment Configuration
 
@@ -262,9 +264,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 024-review-item-table: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, Pydantic v2, redis.asyncio
 - 023-dynamic-level-system: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, Single DocType, hooks), FastAPI, `redis.asyncio`, `structlog`
 - 022-global-rate-limiting: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Starlette (`BaseHTTPMiddleware`), `redis.asyncio`, `structlog`
-- 021-cdn-cache-purge: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API, background jobs), `requests` (HTTP client, already available)
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

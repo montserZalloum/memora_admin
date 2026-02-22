@@ -205,8 +205,14 @@ doc_events = {
 		],
 	},
 	"Memora Lesson": {
-		"on_update": "memora_admin.events.build_trigger.on_content_updated",
-		"on_trash": "memora_admin.events.build_trigger.on_content_updated",
+		"on_update": [
+			"memora_admin.events.build_trigger.on_content_updated",
+			"memora_admin.events.review_item_sync.on_lesson_save",
+		],
+		"on_trash": [
+			"memora_admin.events.build_trigger.on_content_updated",
+			"memora_admin.events.review_item_sync.on_lesson_trash",
+		],
 	},
 	# Plan build trigger events (debounced)
 	"Memora Academic Plan": {

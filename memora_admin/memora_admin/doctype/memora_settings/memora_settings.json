@@ -24,7 +24,8 @@
   "max_devices_per_player",
   "session_timeout_days",
   "fsrs_section",
-  "fsrs_weights"
+  "fsrs_weights",
+  "review_session_size"
  ],
  "fields": [
   {
@@ -133,6 +134,13 @@
    "fieldname": "fsrs_weights",
    "fieldtype": "Small Text",
    "label": "FSRS Weights"
+  },
+  {
+   "default": "10",
+   "description": "Maximum number of items per review session",
+   "fieldname": "review_session_size",
+   "fieldtype": "Int",
+   "label": "Review Session Size"
   }
  ],
  "grid_page_length": 50,
