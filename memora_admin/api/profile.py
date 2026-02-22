@@ -153,10 +153,9 @@ def get_profiles_batch(player_ids: list[str] | str) -> list[dict]:
 def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq: int | None = None) -> dict:
 	"""Get memory mastery breakdown for a player.
 
-	Classifies Memory States into mature/learning/new based on FSRS stability:
+	Classifies Memory States into mature/learning based on FSRS stability:
 	- Mature: stability >= 21.0 days (high retention confidence)
-	- Learning: 0 < stability < 21.0 days (reviewed but not yet mature)
-	- New: stability == 0 (initial FSRS state, first review)
+	- Learning: stability > 0 AND stability < 21.0 days (reviewed but not yet mature)
 
 	Reads from Redis HASH counters first (O(1), sub-millisecond).
 	On cache miss, falls back to SQL scan and populates the counters.
@@ -167,7 +166,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 		season_seq: Optional pre-resolved season_seq. If None, resolves internally.
 
 	Returns:
-		Dict with mature, learning, new_items, total counts.
+		Dict with mature and learning counts.
 	"""
 	# Handle JSON "null" string from API calls
 	if subject_id in (None, "null", ""):
@@ -191,12 +190,9 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 		if data:
 			mature = max(0, int(data.get(b"mature", 0)))
 			learning = max(0, int(data.get(b"learning", 0)))
-			new_items = max(0, int(data.get(b"new", 0)))
 			return {
 				"mature": mature,
 				"learning": learning,
-				"new_items": new_items,
-				"total": mature + learning + new_items,
 			}
 	except Exception:
 		r = None  # Fall through to SQL
@@ -208,8 +204,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 		f"""
 		SELECT
 			COALESCE(SUM(CASE WHEN stability >= 21.0 THEN 1 ELSE 0 END), 0) as mature,
-			COALESCE(SUM(CASE WHEN stability > 0 AND stability < 21.0 THEN 1 ELSE 0 END), 0) as learning,
-			COALESCE(SUM(CASE WHEN stability = 0 THEN 1 ELSE 0 END), 0) as new_items
+			COALESCE(SUM(CASE WHEN stability > 0 AND stability < 21.0 THEN 1 ELSE 0 END), 0) as learning
 		FROM `tabMemora Memory State`
 		WHERE player = %(player)s
 		  AND season_seq = %(season_seq)s
@@ -222,7 +217,6 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 	row = result[0] if result else {}
 	mature = int(row.get("mature") or 0)
 	learning = int(row.get("learning") or 0)
-	new_items = int(row.get("new_items") or 0)
 
 	# --- Populate Redis counters as side effect ---
 	try:
@@ -234,7 +228,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 			else f"memora:mastery:{player_id}:all:s{season_seq}"
 		)
 		pipe = r.pipeline(transaction=False)
-		pipe.hset(counter_key, mapping={"mature": mature, "learning": learning, "new": new_items})
+		pipe.hset(counter_key, mapping={"mature": mature, "learning": learning})
 		# Also populate the "all" aggregate if we queried a specific subject
 		if subject_id:
 			_populate_all_counter(pipe, r, player_id, season_seq)
@@ -245,8 +239,6 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 	return {
 		"mature": mature,
 		"learning": learning,
-		"new_items": new_items,
-		"total": mature + learning + new_items,
 	}
 
 
@@ -259,8 +251,7 @@ def _populate_all_counter(pipe, r: _redis.Redis, player_id: str, season_seq: int
 		"""
 		SELECT
 			COALESCE(SUM(CASE WHEN stability >= 21.0 THEN 1 ELSE 0 END), 0) as mature,
-			COALESCE(SUM(CASE WHEN stability > 0 AND stability < 21.0 THEN 1 ELSE 0 END), 0) as learning,
-			COALESCE(SUM(CASE WHEN stability = 0 THEN 1 ELSE 0 END), 0) as new_items
+			COALESCE(SUM(CASE WHEN stability > 0 AND stability < 21.0 THEN 1 ELSE 0 END), 0) as learning
 		FROM `tabMemora Memory State`
 		WHERE player = %(player)s
 		  AND season_seq = %(season_seq)s
@@ -274,7 +265,6 @@ def _populate_all_counter(pipe, r: _redis.Redis, player_id: str, season_seq: int
 			mapping={
 				"mature": int(row[0].get("mature") or 0),
 				"learning": int(row[0].get("learning") or 0),
-				"new": int(row[0].get("new_items") or 0),
 			},
 		)
 

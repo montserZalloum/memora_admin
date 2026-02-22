@@ -49,6 +49,13 @@ class Settings(BaseSettings):
 	# IMPORTANT: Must match voucher_hmac_secret in Frappe site_config.json
 	voucher_hmac_secret: str = ""
 
+	# Rate Limiting
+	global_rate_limit: int = 100  # Max requests per IP per window
+	global_rate_limit_window: int = 60  # Window duration in seconds
+	reviews_rate_limit: int = 30  # Max review submits per player per window
+	session_rate_limit: int = 10  # Max session start/end per player per window
+	ws_max_connections_per_user: int = 5  # Max concurrent WebSocket connections
+
 
 @lru_cache
 def get_settings() -> Settings:

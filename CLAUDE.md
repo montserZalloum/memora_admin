@@ -122,6 +122,8 @@ Content hierarchy: Subject → Track → Unit → Topic → Lesson → Stage
 - **Dependencies**: Injected via `Annotated` + `Depends`
 - **Redis keys**: Prefixed with `memora:` (e.g., `memora:progress:{user_id}:{subject_id}:v{version}`)
 - **Logging**: Structured via `structlog`
+- **CRITICAL: `decode_responses=True`**: The Redis pool (`core/redis.py`) uses `decode_responses=True`. ALL Redis responses are **strings**, NEVER bytes. Do NOT use `.encode()` on keys when doing lookups against HGETALL/GET results. This caused a recurring bug in `profile_page.py` activity endpoint.
+- **Sync tasks must MERGE, not REPLACE**: When syncing Redis data to MariaDB (e.g., `daily_xp_json`), always merge with existing DB values. Redis may have sparse data after a flush; replacing would destroy historical data.
 
 ### Access Control (Double-Gate)
 
@@ -237,6 +239,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM (card status lookup), encrypted file on disk (PIN source) (020-fix-export-redeemed-cards)
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API, background jobs), `requests` (HTTP client, already available) (021-cdn-cache-purge)
 - MariaDB via Frappe ORM (Memora Settings singleton), no new tables (021-cdn-cache-purge)
+- Python 3.11+ (Frappe v15 bench environment) + FastAPI, Starlette (`BaseHTTPMiddleware`), `redis.asyncio`, `structlog` (022-global-rate-limiting)
+- Redis at `redis://127.0.0.1:13000` (shared with Frappe -- prefix isolation required) (022-global-rate-limiting)
 
 ## Test Environment Configuration
 
@@ -256,9 +260,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 022-global-rate-limiting: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Starlette (`BaseHTTPMiddleware`), `redis.asyncio`, `structlog`
 - 021-cdn-cache-purge: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API, background jobs), `requests` (HTTP client, already available)
 - 020-fix-export-redeemed-cards: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API), `csv` (stdlib), `io` (stdlib)
-- 019-stats-content-hash: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, whitelist API), FastAPI, Pydantic v2, `redis.asyncio`, `hashlib` (stdlib)
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

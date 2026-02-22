@@ -15,6 +15,7 @@ from fastapi_app.core.security import decode_token
 from fastapi_app.models.access import ContentAccessRequest, SeasonMeta
 from fastapi_app.models.auth import TokenPayload
 from fastapi_app.services.access import AccessService
+from fastapi_app.services.global_rate_limit import GlobalRateLimiter, RateLimitExceeded
 from fastapi_app.services.catalog import CatalogService
 from fastapi_app.services.device import DeviceService
 from fastapi_app.services.frappe_client import FrappeClient
@@ -343,6 +344,39 @@ async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) 
 
 
 VoucherServiceDep = Annotated[VoucherService, Depends(get_voucher_service)]
+
+
+# --- Per-Player Rate Limit Dependency ---
+
+_SCOPE_SETTINGS = {
+	"reviews": "reviews_rate_limit",
+	"session_start": "session_rate_limit",
+	"session_end": "session_rate_limit",
+}
+
+
+def require_rate_limit(scope: str):
+	"""Factory that returns a FastAPI dependency for per-player rate limiting.
+
+	Uses GlobalRateLimiter with key memora:rl:{scope}:{player_id}.
+	Reads limit from settings based on scope. Fails open on Redis errors.
+	"""
+	setting_attr = _SCOPE_SETTINGS[scope]
+
+	async def _check_rate_limit(
+		user: CurrentUser,
+		redis_client: RedisClient,
+		settings: SettingsDep,
+	):
+		limit = getattr(settings, setting_attr)
+		window = settings.global_rate_limit_window
+		limiter = GlobalRateLimiter(redis_client)
+		key = f"memora:rl:{scope}:{user.sub}"
+		allowed, count, ttl = await limiter.check(key, limit, window)
+		if not allowed:
+			raise RateLimitExceeded(max(ttl, 1))
+
+	return _check_rate_limit
 
 
 # --- Double-Gate Dependencies ---

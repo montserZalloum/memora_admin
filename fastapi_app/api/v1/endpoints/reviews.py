@@ -1,9 +1,9 @@
 """Review endpoints for FSRS spaced repetition (item-level)."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 import structlog
 
-from fastapi_app.api.deps import CurrentUser, ReviewServiceDep, WalletServiceDep
+from fastapi_app.api.deps import CurrentUser, ReviewServiceDep, WalletServiceDep, require_rate_limit
 from fastapi_app.models.review import (
 	DueItem,
 	DueItemsResponse,
@@ -79,6 +79,7 @@ async def submit_reviews(
 	user: CurrentUser,
 	review_service: ReviewServiceDep,
 	wallet_service: WalletServiceDep,
+	_rate_limit=Depends(require_rate_limit("reviews")),
 ):
 	"""Submit batch of reviewed items for a subject.
 

@@ -532,13 +532,28 @@ def sync_dirty_wallets():
 				streak = int(streak_raw) if streak_raw else 0
 
 				# Serialize daily_xp hash to JSON for MariaDB persistence
+				# MERGE with existing MariaDB data to avoid overwriting historical
+				# data after Redis flush (Redis may only have post-flush entries).
 				raw_daily_xp = daily_xp_data.get(pid, {})
 				if raw_daily_xp:
-					daily_xp_dict = {
+					redis_daily_xp = {
 						(k.decode() if isinstance(k, bytes) else k): int(v)
 						for k, v in raw_daily_xp.items()
 					}
-					daily_xp_json_str = json.dumps(daily_xp_dict)
+					# Read existing DB value and merge (Redis wins on conflicts)
+					existing_json = frappe.db.get_value(
+						"Memora Player Wallet", wallet_name, "daily_xp_json"
+					)
+					if existing_json:
+						try:
+							existing = json.loads(existing_json)
+						except (json.JSONDecodeError, TypeError):
+							existing = {}
+						# Merge: existing as base, Redis overwrites matching dates
+						existing.update(redis_daily_xp)
+						daily_xp_json_str = json.dumps(existing)
+					else:
+						daily_xp_json_str = json.dumps(redis_daily_xp)
 				else:
 					daily_xp_json_str = None  # No data — preserve existing DB value
 

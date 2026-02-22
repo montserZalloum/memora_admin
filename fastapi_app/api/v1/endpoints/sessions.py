@@ -6,7 +6,7 @@ import json
 import random
 
 import structlog
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from fastapi_app.api.deps import (
 	AccessServiceDep,
@@ -19,6 +19,7 @@ from fastapi_app.api.deps import (
 	SettingsServiceDep,
 	StatsServiceDep,
 	WalletServiceDep,
+	require_rate_limit,
 )
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
 from fastapi_app.models.game_session import (
@@ -87,6 +88,7 @@ async def start_session(
 	game_session_service: GameSessionServiceDep,
 	hierarchy_service: HierarchyServiceDep,
 	access_service: AccessServiceDep,
+	_rate_limit=Depends(require_rate_limit("session_start")),
 	x_device_id: str | None = Header(None, alias="X-Device-ID"),
 ) -> StartSessionResponse:
 	"""
@@ -181,6 +183,7 @@ async def end_session(
 	progress_service: ProgressServiceDep,
 	stats_service: StatsServiceDep,
 	redis_client: RedisClient,
+	_rate_limit=Depends(require_rate_limit("session_end")),
 ) -> EndSessionResponse:
 	"""End lesson session and trigger completion flow.
 

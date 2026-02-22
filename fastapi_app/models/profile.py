@@ -52,8 +52,6 @@ class MemoryMasteryResponse(BaseModel):
 	subject: str | None = None
 	mature: int
 	learning: int
-	new_items: int
-	total: int
 
 
 class DailyXP(BaseModel):

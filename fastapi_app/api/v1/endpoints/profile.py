@@ -54,7 +54,7 @@ async def get_mastery(
 	profile_page_service: ProfilePageServiceDep,
 	subject: str | None = Query(None, description="Subject ID filter"),
 ):
-	"""Get memory mastery breakdown: mature, learning, new items.
+	"""Get memory mastery breakdown: mature and learning counts.
 
 	Cached for 5 minutes. Optionally filtered by subject.
 	"""

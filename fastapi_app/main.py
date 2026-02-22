@@ -14,6 +14,11 @@ from fastapi_app.core.logging import configure_logging
 from fastapi_app.core.pubsub import start_notification_listener, start_pubsub_listener
 from fastapi_app.core.redis import create_redis_pool, verify_redis_connection
 from fastapi_app.core.ws_manager import ConnectionManager
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+from fastapi_app.middleware.rate_limit import GlobalRateLimitMiddleware
+from fastapi_app.services.global_rate_limit import RateLimitExceeded
 from fastapi_app.middleware.request_id import RequestIDMiddleware
 from fastapi_app.services.catalog import CatalogService
 from fastapi_app.api.deps import set_frappe_client
@@ -78,7 +83,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Note: Per-message deflate compression must be disabled at the ASGI server level
     # (uvicorn --ws none or nginx proxy_set_header) to achieve 14 KiB/connection at 100K scale.
     # Default uvicorn websockets library does NOT enable per-message-deflate.
-    ws_manager = ConnectionManager()
+    ws_manager = ConnectionManager(max_connections_per_user=settings.ws_max_connections_per_user)
     app.state.ws_manager = ws_manager
 
     # Start pub/sub listener background task (cache invalidation)
@@ -127,8 +132,26 @@ app = FastAPI(
     redirect_slashes=True,
 )
 
-# Middleware
+# Middleware (order: last added = first executed)
+# RequestIDMiddleware runs first (outermost), then GlobalRateLimitMiddleware
+settings = get_settings()
+app.add_middleware(
+	GlobalRateLimitMiddleware,
+	limit=settings.global_rate_limit,
+	window=settings.global_rate_limit_window,
+)
 app.add_middleware(RequestIDMiddleware)
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_exceeded_handler(request: Request, exc: RateLimitExceeded) -> JSONResponse:
+	"""Return 429 with consistent JSON body for per-player rate limit violations."""
+	return JSONResponse(
+		status_code=429,
+		content={"error": "RATE_LIMITED", "retry_after": exc.retry_after},
+		headers={"Retry-After": str(exc.retry_after)},
+	)
+
 
 # Routers
 app.include_router(v1_router)

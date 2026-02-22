@@ -25,6 +25,12 @@ _test_settings = Settings(
 	frappe_api_key="test-key",
 	frappe_api_secret="test-secret",
 	voucher_hmac_secret="test-hmac-secret",
+	# Rate limiting: low values for fast tests
+	global_rate_limit=10,
+	global_rate_limit_window=60,
+	reviews_rate_limit=5,
+	session_rate_limit=3,
+	ws_max_connections_per_user=3,
 )
 
 get_settings.cache_clear()
@@ -68,7 +74,7 @@ async def redis_client() -> AsyncGenerator[redis.Redis, None]:
 		decode_responses=True,
 	)
 	yield client
-	await client.aclose()
+	await client.close()
 
 
 @pytest.fixture(autouse=True)
@@ -103,6 +109,8 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 		"memora:settings:gamification",  # Clear cached settings between tests
 		"memora:access:PLAYER-TEST-*",
 		"memora:wallet:PLAYER-TEST-*",
+		"memora:global_rl:*",  # Global rate limit counters
+		"memora:rl:*",  # Per-player rate limit counters
 	]
 
 	for pattern in patterns_to_clean:
@@ -248,6 +256,9 @@ async def app_client(redis_client: redis.Redis, mock_frappe: AsyncMock) -> Async
 		return mock_frappe
 
 	app.dependency_overrides[get_frappe_client] = get_mock_frappe_client
+
+	# Set redis_pool on app.state so middleware (e.g., GlobalRateLimitMiddleware) can access it
+	app.state.redis_pool = redis_client.connection_pool
 
 	transport = ASGITransport(app=app)
 	client = AsyncClient(transport=transport, base_url="http://test")

@@ -270,11 +270,11 @@ class ProfilePageService:
 					pipe3.expire(daily_xp_key, 8 * 86400)
 					await pipe3.execute()
 					daily_xp_data = {
-						k.encode() if isinstance(k, str) else k: str(v).encode()
+						(k.decode() if isinstance(k, bytes) else k): str(v)
 						for k, v in restored.items()
 					}
 			for i in still_missing:
-				key = days[i]["date"].encode()
+				key = days[i]["date"]
 				val = daily_xp_data.get(key)
 				if val is not None:
 					scores[i] = float(val)
@@ -293,7 +293,7 @@ class ProfilePageService:
 		}
 
 	async def get_mastery(self, player_id: str, subject_id: str | None = None) -> dict:
-		"""Get memory mastery breakdown: mature/learning/new counts.
+		"""Get memory mastery breakdown: mature/learning counts.
 
 		Reads from Redis HASH counters directly (no Frappe round-trip on warm cache).
 		On cache miss, calls Frappe API which populates the counters as a side effect.
@@ -303,7 +303,7 @@ class ProfilePageService:
 			subject_id: Optional subject filter.
 
 		Returns:
-			Dict with subject, mature, learning, new_items, total.
+			Dict with subject, mature, learning.
 		"""
 		# Resolve season_seq (needed for counter key)
 		season_seq = await self._resolve_season_seq(player_id)
@@ -321,14 +321,11 @@ class ProfilePageService:
 		if data:
 			mature = max(0, int(data.get(b"mature", data.get("mature", 0))))
 			learning = max(0, int(data.get(b"learning", data.get("learning", 0))))
-			new_items = max(0, int(data.get(b"new", data.get("new", 0))))
 			logger.debug("mastery_counter_hit", player=player_id, subject=subject_id)
 			return {
 				"subject": subject_id,
 				"mature": mature,
 				"learning": learning,
-				"new_items": new_items,
-				"total": mature + learning + new_items,
 			}
 
 		# Cache miss: call Frappe API (which populates the counters as side effect)
@@ -343,8 +340,6 @@ class ProfilePageService:
 			"subject": subject_id,
 			"mature": result.get("mature", 0) if result else 0,
 			"learning": result.get("learning", 0) if result else 0,
-			"new_items": result.get("new_items", 0) if result else 0,
-			"total": result.get("total", 0) if result else 0,
 		}
 
 	async def update_avatar(self, player_id: str, avatar: str) -> dict:

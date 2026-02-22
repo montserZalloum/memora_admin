@@ -26,11 +26,12 @@ class ConnectionManager:
 	- Last connection for a user -> unsubscribe from their notification channel
 	"""
 
-	def __init__(self) -> None:
+	def __init__(self, max_connections_per_user: int = 5) -> None:
 		self._connections: dict[str, set[WebSocket]] = defaultdict(set)
 		self._user_plan: dict[str, str] = {}  # user_id -> plan_id
 		self._plan_users: dict[str, set[str]] = defaultdict(set)  # plan_id -> set of user_ids
 		self._lock = asyncio.Lock()
+		self._max_connections_per_user = max_connections_per_user
 
 	@property
 	def active_users(self) -> int:
@@ -53,9 +54,20 @@ class ConnectionManager:
 		Returns:
 			True if this is the first connection for the user
 			(caller should subscribe to pub/sub channel).
+			False if this is an additional connection or if rejected.
 		"""
-		await websocket.accept()
 		async with self._lock:
+			if len(self._connections[user_id]) >= self._max_connections_per_user:
+				logger.warning(
+					"ws_connection_rejected",
+					user_id=user_id,
+					current=len(self._connections[user_id]),
+					max=self._max_connections_per_user,
+				)
+				await websocket.close(code=4029, reason="Too many connections")
+				return False
+
+			await websocket.accept()
 			is_first = len(self._connections[user_id]) == 0
 			self._connections[user_id].add(websocket)
 			if plan_id:
