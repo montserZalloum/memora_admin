@@ -5,8 +5,6 @@ Called by FastAPI sidecar to create Memora Content Report documents.
 
 from __future__ import annotations
 
-import base64
-
 import frappe
 from frappe.utils.file_manager import save_file
 
@@ -63,14 +61,14 @@ def create_content_report(
 	# Attach screenshot if provided (non-fatal)
 	if screenshot_base64 and screenshot_filename:
 		try:
-			file_content = base64.b64decode(screenshot_base64)
 			file_doc = save_file(
 				fname=screenshot_filename,
-				content=file_content,
+				content=screenshot_base64,
 				dt="Memora Content Report",
 				dn=doc.name,
 				is_private=1,
 				df="screen_shot",
+				decode=True,
 			)
 			doc.db_set("screen_shot", file_doc.file_url)
 		except Exception:
