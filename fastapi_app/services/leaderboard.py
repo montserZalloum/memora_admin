@@ -9,11 +9,11 @@ Per CONTEXT.md (Phase 10):
 Key patterns:
 - memora:lb:alltime[:subject:{id}]
 - memora:lb:daily:{YYYY-MM-DD}[:subject:{id}]
-- memora:lb:weekly:{YYYY-Www}[:subject:{id}]
+- memora:lb:weekly:{YYYY-MM-DD}[:subject:{id}]  (date = Friday that starts the Islamic week)
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import redis.asyncio as redis
@@ -97,7 +97,7 @@ class LeaderboardService:
 
 		Per CONTEXT.md:
 		- Daily: resets at midnight Asia/Amman
-		- Weekly: resets Friday midnight Asia/Amman (uses ISO week)
+		- Weekly: resets Friday midnight Asia/Amman (Islamic week: Fri-Thu)
 		- All-time: no reset
 
 		Args:
@@ -118,10 +118,12 @@ class LeaderboardService:
 			date_str = now.strftime("%Y-%m-%d")
 			base = f"{LB_PREFIX}:daily:{date_str}"
 		elif lb_type == "weekly":
-			# ISO week format: 2026-W06
-			# %G = ISO year, %V = ISO week number (01-53)
-			week_str = now.strftime("%G-W%V")
-			base = f"{LB_PREFIX}:weekly:{week_str}"
+			# Islamic week: Friday through Thursday
+			# Key = the Friday date that starts the current week
+			weekday = now.isoweekday()  # 1=Mon … 5=Fri … 7=Sun
+			days_since_friday = (weekday - 5) % 7
+			friday = (now - timedelta(days=days_since_friday)).strftime("%Y-%m-%d")
+			base = f"{LB_PREFIX}:weekly:{friday}"
 		else:
 			raise ValueError(f"Invalid leaderboard type: {lb_type}")
 
@@ -207,9 +209,9 @@ class LeaderboardService:
 
 		Per CONTEXT.md:
 		- Include +/-2 neighbors for context around user's position
-		- Include distance to next tier (XP to pass player above)
+		- Include distance to next tier (XP to match player in rank above)
 		- Unranked users (0 XP) treated as tied for last place
-		- Dense ranking: count distinct higher scores for true rank
+		- Competition ranking: tied players share rank, next rank = count of players above + 1
 
 		Args:
 			player_id: Player's user ID
@@ -222,14 +224,24 @@ class LeaderboardService:
 		"""
 		key = self._get_key(lb_type, subject_id)
 
-		# Get player's position and score (None if not in leaderboard)
-		position = await self.redis.zrevrank(key, player_id)
-
-		# Get total players for context
-		total = await self.redis.zcard(key)
+		# Stage 1: Get position, total, score in one pipeline (1 RTT)
+		pipe = self.redis.pipeline()
+		pipe.zrevrank(key, player_id)
+		pipe.zcard(key)
+		pipe.zscore(key, player_id)
+		position, total, score = await pipe.execute()
 
 		# Handle unranked users (never earned XP in this period)
 		if position is None:
+			# Provide xp_to_next: XP needed to match the last-ranked player
+			xp_to_next = None
+			if total > 0:
+				bottom = await self.redis.zrange(key, 0, 0, withscores=True)
+				if bottom:
+					xp_to_next = int(bottom[0][1])
+					if xp_to_next == 0:
+						xp_to_next = 1
+
 			logger.debug(
 				"leaderboard_unranked_user",
 				player_id=player_id,
@@ -237,38 +249,43 @@ class LeaderboardService:
 				total_players=total,
 			)
 			return {
-				"rank": total + 1,  # Last place
+				"rank": total + 1,
 				"xp": 0,
-				"xp_to_next": None,  # No meaningful target
+				"xp_to_next": xp_to_next,
 				"neighbors": [],
 				"total_players": total,
 			}
 
-		# Get score for XP calculation
-		score = await self.redis.zscore(key, player_id)
 		xp = int(score) if score is not None else 0
 
-		# Calculate dense rank: count scores strictly greater than mine
-		# ZCOUNT with exclusive lower bound "(score" counts scores > mine
-		higher_count = await self.redis.zcount(key, f"({score}", "+inf")
-		dense_rank = higher_count + 1
-
-		# Get neighbors around position
+		# Stage 2: Get rank, neighbors, and next-tier data in one pipeline (1 RTT)
+		# Competition rank uses XP boundary (not exact composite score) so that
+		# alltime composite tie-breaking doesn't split same-XP players into
+		# different ranks. ZCOUNT(xp+1, +inf) counts players with strictly higher XP.
 		start = max(0, position - neighbor_count)
 		stop = position + neighbor_count
 
-		neighbors_raw = await self.redis.zrange(
-			key,
-			start,
-			stop,
-			desc=True,
-			withscores=True,
-		)
+		pipe = self.redis.pipeline()
+		pipe.zcount(key, xp + 1, "+inf")
+		pipe.zrange(key, start, stop, desc=True, withscores=True)
+		pipe.zrangebyscore(key, xp + 1, "+inf", start=0, num=1, withscores=True)
+		higher_count, neighbors_raw, above_entries = await pipe.execute()
 
-		# Pipeline all ZCOUNT calls for neighbor dense ranks (1 RTT instead of N)
+		my_rank = higher_count + 1
+
+		# xp_to_next: XP needed to match the next higher tier
+		# Matching is sufficient since ties share rank (competition ranking)
+		xp_to_next = None
+		if above_entries:
+			above_xp = int(above_entries[0][1])
+			xp_to_next = above_xp - xp
+
+		# Stage 3: Compute neighbor ranks via pipeline (1 RTT)
+		# Use XP boundary for consistency with main rank calculation
 		pipe = self.redis.pipeline()
 		for _, neighbor_score in neighbors_raw:
-			pipe.zcount(key, f"({neighbor_score}", "+inf")
+			neighbor_xp = int(neighbor_score)
+			pipe.zcount(key, neighbor_xp + 1, "+inf")
 		rank_results = await pipe.execute()
 
 		neighbors = []
@@ -276,7 +293,6 @@ class LeaderboardService:
 			neighbor_xp = int(neighbor_score)
 			neighbor_rank = rank_results[i] + 1
 
-			# Handle bytes response
 			nid = neighbor_id.decode() if isinstance(neighbor_id, bytes) else neighbor_id
 
 			neighbors.append({
@@ -286,34 +302,18 @@ class LeaderboardService:
 				"is_me": nid == player_id,
 			})
 
-		# Calculate XP to next tier (pass player above)
-		xp_to_next = None
-		if position > 0:
-			# Get player immediately above
-			above = await self.redis.zrange(
-				key,
-				position - 1,
-				position - 1,
-				desc=True,
-				withscores=True,
-			)
-			if above:
-				above_xp = int(above[0][1])
-				# +1 because we need to exceed, not just match
-				xp_to_next = above_xp - xp + 1
-
 		logger.debug(
 			"leaderboard_rank_fetched",
 			player_id=player_id,
 			lb_type=lb_type,
-			dense_rank=dense_rank,
+			rank=my_rank,
 			xp=xp,
 			xp_to_next=xp_to_next,
 			neighbor_count=len(neighbors),
 		)
 
 		return {
-			"rank": dense_rank,
+			"rank": my_rank,
 			"xp": xp,
 			"xp_to_next": xp_to_next,
 			"neighbors": neighbors,

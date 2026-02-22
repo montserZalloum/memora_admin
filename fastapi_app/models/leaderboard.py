@@ -58,12 +58,12 @@ class MyRankResponse(BaseModel):
 	Per CONTEXT.md:
 	- Separate endpoint from main leaderboard
 	- Include +/-2 neighbors for context around user's position
-	- Include distance to next tier (XP needed to pass player above)
+	- Include distance to next tier (XP needed to match player in rank above)
 	- Unranked users (0 XP) treated as tied for last place
 	"""
 
 	rank: int
 	xp: int
-	xp_to_next: int | None  # XP needed to pass player above, None if #1
+	xp_to_next: int | None  # XP needed to match next higher tier, None if #1 or unranked on empty board
 	neighbors: list[LeaderboardEntry]  # Includes is_me=True for requesting user
 	total_players: int

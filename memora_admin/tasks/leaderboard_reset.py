@@ -215,10 +215,13 @@ def _do_weekly_archive() -> int:
 	r = get_redis()
 	archived = 0
 
-	# Get last week's ISO week string
-	# Yesterday would be Thursday (end of Islamic week)
+	# Islamic week: Friday–Thursday. Archive runs Friday 00:15.
+	# The week that just ended started LAST Friday.
+	# yesterday = Thursday; Thursday - 6 days = last Friday.
 	yesterday = datetime.now(AMMAN_TZ) - timedelta(days=1)
-	last_week = yesterday.strftime("%G-W%V")
+	weekday = yesterday.isoweekday()  # Thursday = 4
+	days_since_friday = (weekday - 5) % 7  # 6 for Thursday
+	last_week = (yesterday - timedelta(days=days_since_friday)).strftime("%Y-%m-%d")
 
 	# Find all weekly leaderboard keys for last week
 	# Pattern matches both global and subject-specific leaderboards

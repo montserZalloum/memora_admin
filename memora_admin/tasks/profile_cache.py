@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import frappe
 import redis
@@ -119,7 +119,10 @@ def _do_warm_cache(r: redis.Redis) -> int:
 	"""
 	now = datetime.now(AMMAN_TZ)
 	today_str = now.strftime("%Y-%m-%d")
-	week_str = now.strftime("%G-W%V")
+	# Islamic week: Friday–Thursday (must match leaderboard.py key format)
+	weekday = now.isoweekday()  # 1=Mon … 5=Fri … 7=Sun
+	days_since_friday = (weekday - 5) % 7
+	week_str = (now - timedelta(days=days_since_friday)).strftime("%Y-%m-%d")
 
 	# Collect unique player_ids from active leaderboards
 	player_ids: set[str] = set()
