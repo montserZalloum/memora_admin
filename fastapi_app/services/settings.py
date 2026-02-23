@@ -3,6 +3,7 @@
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import gamification_settings_key
 from fastapi_app.models.settings import GamificationSettings
 from fastapi_app.services.frappe_client import FrappeClient
 
@@ -19,17 +20,14 @@ class SettingsService:
 	"""
 
 	CACHE_TTL = 300  # 5 minutes
-	CACHE_KEY = "memora:settings:gamification"
 
 	def __init__(
 		self,
 		redis_client: redis.Redis,
 		frappe_client: FrappeClient,
-		key_prefix: str = "memora:",
 	):
 		self.redis = redis_client
 		self.frappe = frappe_client
-		self.prefix = key_prefix
 
 	async def get_gamification_settings(self) -> GamificationSettings:
 		"""
@@ -43,7 +41,7 @@ class SettingsService:
 			GamificationSettings with XP values and streak multiplier cap
 		"""
 		# Try cache first
-		cached = await self.redis.get(self.CACHE_KEY)
+		cached = await self.redis.get(gamification_settings_key())
 		if cached:
 			data = cached.decode() if isinstance(cached, bytes) else cached
 			logger.debug("settings_cache_hit")
@@ -65,7 +63,7 @@ class SettingsService:
 
 		# Cache with TTL
 		await self.redis.set(
-			self.CACHE_KEY,
+			gamification_settings_key(),
 			settings.model_dump_json(),
 			ex=self.CACHE_TTL,
 		)
@@ -87,5 +85,5 @@ class SettingsService:
 		- Admin updates Memora Settings (Phase 6 hook)
 		- Manual cache clear
 		"""
-		await self.redis.delete(self.CACHE_KEY)
+		await self.redis.delete(gamification_settings_key())
 		logger.info("settings_cache_invalidated")

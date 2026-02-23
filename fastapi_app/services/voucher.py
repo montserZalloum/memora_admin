@@ -6,6 +6,7 @@ import hmac as hmac_module
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import voucher_fail_ip_key, voucher_fail_player_key
 from fastapi_app.services.frappe_client import FrappeAPIError, FrappeClient
 
 logger = structlog.get_logger(__name__)
@@ -101,12 +102,12 @@ class VoucherService:
 		if self._check_script is None:
 			self._check_script = self.redis.register_script(CHECK_LIMIT_SCRIPT)
 
-		player_key = f"memora:voucher_fail:player:{player_id}"
+		player_key = voucher_fail_player_key(player_id)
 		retry = await self._check_script(keys=[player_key], args=[self.PLAYER_LIMIT])
 		if retry and int(retry) > 0:
 			return int(retry)
 
-		ip_key = f"memora:voucher_fail:ip:{ip}"
+		ip_key = voucher_fail_ip_key(ip)
 		retry = await self._check_script(keys=[ip_key], args=[self.IP_LIMIT])
 		if retry and int(retry) > 0:
 			return int(retry)
@@ -118,8 +119,8 @@ class VoucherService:
 		if self._incr_script is None:
 			self._incr_script = self.redis.register_script(INCREMENT_SCRIPT)
 
-		player_key = f"memora:voucher_fail:player:{player_id}"
-		ip_key = f"memora:voucher_fail:ip:{ip}"
+		player_key = voucher_fail_player_key(player_id)
+		ip_key = voucher_fail_ip_key(ip)
 
 		await self._incr_script(keys=[player_key], args=[self.WINDOW_SECONDS])
 		await self._incr_script(keys=[ip_key], args=[self.WINDOW_SECONDS])

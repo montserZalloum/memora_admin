@@ -12,6 +12,8 @@ import json
 
 import pytest
 
+from fastapi_app.core.redis_keys import access_key
+
 
 @pytest.mark.asyncio
 class TestAccessGrants:
@@ -35,7 +37,7 @@ class TestAccessGrants:
 			assert "message" in data
 		finally:
 			# Cleanup
-			await redis_client.delete(f"memora:access:{player_id}")
+			await redis_client.delete(access_key(player_id))
 
 	async def test_grant_idempotent(self, admin_client, redis_client):
 		"""Granting same key twice returns granted=0 on second call."""
@@ -62,7 +64,7 @@ class TestAccessGrants:
 			assert resp2.status_code == 200
 			assert resp2.json()["granted"] == 0  # No new grants
 		finally:
-			await redis_client.delete(f"memora:access:{player_id}")
+			await redis_client.delete(access_key(player_id))
 
 	async def test_grant_empty_keys(self, admin_client):
 		"""Admin grant with empty content_keys returns 400."""
@@ -106,7 +108,7 @@ class TestAccessGrants:
 			assert data["revoked"] >= 1
 			assert "message" in data
 		finally:
-			await redis_client.delete(f"memora:access:{player_id}")
+			await redis_client.delete(access_key(player_id))
 
 	async def test_admin_list_grants(self, admin_client, redis_client):
 		"""Admin can list all grants for a player."""
@@ -136,7 +138,7 @@ class TestAccessGrants:
 			assert isinstance(data["grants"], list)
 			assert "count" in data
 		finally:
-			await redis_client.delete(f"memora:access:{player_id}")
+			await redis_client.delete(access_key(player_id))
 
 	async def test_non_admin_grant_forbidden(self, authed_client, redis_client):
 		"""Non-admin player cannot grant access."""

@@ -8,6 +8,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from fastapi_app.core.redis_keys import global_ratelimit_key
 from fastapi_app.services.global_rate_limit import GlobalRateLimiter
 
 logger = structlog.get_logger()
@@ -70,7 +71,7 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 			pool = request.app.state.redis_pool
 			redis_client = aioredis.Redis(connection_pool=pool)
 			limiter = GlobalRateLimiter(redis_client)
-			key = f"memora:global_rl:ip:{client_ip}"
+			key = global_ratelimit_key(client_ip)
 			allowed, count, ttl = await limiter.check(key, self.limit, self.window)
 		except Exception:
 			logger.warning("rate_limit_redis_unavailable", path=path, ip=client_ip)

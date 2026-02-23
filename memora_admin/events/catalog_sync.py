@@ -10,6 +10,7 @@ import json
 
 import frappe
 
+from fastapi_app.core.redis_keys import cache_invalidation_channel, catalog_key
 from memora_admin.events.access_sync import get_fastapi_redis
 
 
@@ -32,11 +33,11 @@ def on_product_grant_changed(doc, method):
 	r = get_fastapi_redis()
 
 	# 1. Direct cache delete (immediate effect)
-	r.delete(f"memora:catalog:{plan_id}")
+	r.delete(catalog_key(plan_id))
 
 	# 2. Pubsub notification for FastAPI sidecar
 	r.publish(
-		"memora:cache:invalidate",
+		cache_invalidation_channel(),
 		json.dumps({
 			"type": "catalog",
 			"plan_id": plan_id,

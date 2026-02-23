@@ -3,7 +3,8 @@
 import json
 import pytest
 
-from fastapi_app.services.review import ReviewService, REVIEW_OVERVIEW_KEY
+from fastapi_app.core.redis_keys import reviews_overview_key
+from fastapi_app.services.review import ReviewService
 
 # Test constants
 TEST_PLAYER = "PLAYER-TEST-REV-001"
@@ -37,7 +38,7 @@ class TestOverviewCacheHit:
 		"""TC-REV-01: get_overview cache hit - Frappe NOT called."""
 		# Setup: pre-seed overview in Redis
 		overview = [{"subject_id": TEST_SUBJECT, "due_count": 5}]
-		key = REVIEW_OVERVIEW_KEY.format(player_id=TEST_PLAYER)
+		key = reviews_overview_key(TEST_PLAYER)
 		await redis_client.set(key, json.dumps(overview))
 
 		# Action: get overview
@@ -77,7 +78,7 @@ class TestOverviewCacheMiss:
 		)
 
 		# Assert: cached in Redis with TTL
-		key = REVIEW_OVERVIEW_KEY.format(player_id=TEST_PLAYER)
+		key = reviews_overview_key(TEST_PLAYER)
 		cached = await redis_client.get(key)
 		assert cached is not None
 		cached_data = json.loads(cached)
@@ -124,7 +125,7 @@ class TestSubmitReviews:
 		"""TC-REV-04: submit_reviews - Frappe called, cache DELETED."""
 		# Setup: pre-seed overview cache
 		overview = [{"subject_id": TEST_SUBJECT, "due_count": 3}]
-		key = REVIEW_OVERVIEW_KEY.format(player_id=TEST_PLAYER)
+		key = reviews_overview_key(TEST_PLAYER)
 		await redis_client.set(key, json.dumps(overview))
 
 		# Setup: configure mock for submit

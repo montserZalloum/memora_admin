@@ -15,6 +15,14 @@ import frappe
 import redis
 from frappe.tests.utils import FrappeTestCase
 
+from fastapi_app.core.redis_keys import (
+	dirty_progress_key,
+	dirty_wallets_key,
+	interaction_buffer_key,
+	progress_key as _progress_key_fn,
+	wallet_key as _wallet_key_fn,
+)
+
 
 class SyncTestCase(FrappeTestCase):
 	"""
@@ -115,15 +123,15 @@ class SyncTestCase(FrappeTestCase):
 		Tracks Redis keys for cleanup.
 		"""
 		# Create wallet hash
-		wallet_key = f"memora:wallet:{player_id}"
-		self.r.hset(wallet_key, mapping={
+		wkey = _wallet_key_fn(player_id)
+		self.r.hset(wkey, mapping={
 			"xp": str(xp),
 			"streak": str(streak),
 		})
-		self._cleanup_keys.append(wallet_key)
+		self._cleanup_keys.append(wkey)
 
 		# Add to dirty set
-		dirty_key = "memora:dirty:wallets"
+		dirty_key = dirty_wallets_key()
 		self.r.sadd(dirty_key, player_id)
 		if dirty_key not in self._cleanup_keys:
 			self._cleanup_keys.append(dirty_key)
@@ -147,7 +155,7 @@ class SyncTestCase(FrappeTestCase):
 		Tracks Redis keys for cleanup.
 		"""
 		# Create bitmap key
-		bitmap_key = f"memora:progress:{user_id}:{subject_id}:v{version}"
+		bitmap_key = _progress_key_fn(user_id, subject_id, version)
 
 		# Set specified bit positions
 		for pos in bit_positions:
@@ -157,7 +165,7 @@ class SyncTestCase(FrappeTestCase):
 
 		# Add to dirty set
 		dirty_member = f"{user_id}:{subject_id}:v{version}"
-		dirty_key = "memora:dirty:progress"
+		dirty_key = dirty_progress_key()
 		self.r.sadd(dirty_key, dirty_member)
 		if dirty_key not in self._cleanup_keys:
 			self._cleanup_keys.append(dirty_key)
@@ -171,7 +179,7 @@ class SyncTestCase(FrappeTestCase):
 
 		Tracks Redis key for cleanup.
 		"""
-		buffer_key = "memora:buffer:interactions"
+		buffer_key = interaction_buffer_key()
 		self.r.rpush(buffer_key, json.dumps(data))
 		if buffer_key not in self._cleanup_keys:
 			self._cleanup_keys.append(buffer_key)

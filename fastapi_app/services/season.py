@@ -5,6 +5,7 @@ from typing import Optional
 
 import redis.asyncio as redis
 
+from fastapi_app.core.redis_keys import season_key as _season_key_fn
 from fastapi_app.models.access import SeasonMeta
 
 
@@ -17,13 +18,12 @@ class SeasonService:
     - is_started check (date comparison)
     """
 
-    def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:"):
+    def __init__(self, redis_client: redis.Redis):
         self.redis = redis_client
-        self.prefix = key_prefix
 
     def _season_key(self, season_id: str) -> str:
         """Generate Redis key for season metadata."""
-        return f"{self.prefix}season:{season_id}"
+        return _season_key_fn(season_id)
 
     async def get_season_meta(self, season_id: str) -> Optional[SeasonMeta]:
         """Get season metadata from cache.

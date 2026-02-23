@@ -7,6 +7,8 @@ Reference: contracts/endpoint-test-contracts.md §10
 """
 import pytest
 
+from fastapi_app.core.redis_keys import webhook_idempotency_key
+
 
 @pytest.mark.asyncio
 class TestWebhookEndpoints:
@@ -34,7 +36,7 @@ class TestWebhookEndpoints:
 			data = resp.json()
 			assert data.get("status") == "accepted"
 		finally:
-			await redis_client.delete("memora:webhook:evt-001")
+			await redis_client.delete(webhook_idempotency_key("evt-001"))
 
 	async def test_webhook_payment_idempotent(self, app_client, redis_client, mock_frappe):
 		"""Duplicate webhook event_id returns already_processed."""
@@ -61,7 +63,7 @@ class TestWebhookEndpoints:
 			data2 = resp2.json()
 			assert data2.get("status") == "already_processed"
 		finally:
-			await redis_client.delete(f"memora:webhook:{event_id}")
+			await redis_client.delete(webhook_idempotency_key(event_id))
 
 	async def test_webhook_payment_invalid_payload_422(self, app_client):
 		"""Invalid webhook payload returns 422."""

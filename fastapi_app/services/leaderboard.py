@@ -19,14 +19,13 @@ from zoneinfo import ZoneInfo
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import LB_PREFIX, daily_xp_key as _daily_xp_key_fn, lb_alltime_key, lb_daily_key, lb_weekly_key
+
 logger = structlog.get_logger()
 
 # Asia/Amman timezone for consistent daily/weekly boundaries
 # Per CONTEXT.md: Daily resets at midnight, weekly resets Friday midnight
 AMMAN_TZ = ZoneInfo("Asia/Amman")
-
-# Key prefix for all leaderboard keys
-LB_PREFIX = "memora:lb"
 
 # TTLs for periodic leaderboard keys (prevents unbounded accumulation after Redis data loss)
 DAILY_KEY_TTL = 30 * 86400  # 30 days
@@ -113,23 +112,19 @@ class LeaderboardService:
 		now = datetime.now(AMMAN_TZ)
 
 		if lb_type == "alltime":
-			base = f"{LB_PREFIX}:alltime"
+			return lb_alltime_key(subject_id)
 		elif lb_type == "daily":
 			date_str = now.strftime("%Y-%m-%d")
-			base = f"{LB_PREFIX}:daily:{date_str}"
+			return lb_daily_key(date_str, subject_id)
 		elif lb_type == "weekly":
 			# Islamic week: Friday through Thursday
 			# Key = the Friday date that starts the current week
 			weekday = now.isoweekday()  # 1=Mon … 5=Fri … 7=Sun
 			days_since_friday = (weekday - 5) % 7
 			friday = (now - timedelta(days=days_since_friday)).strftime("%Y-%m-%d")
-			base = f"{LB_PREFIX}:weekly:{friday}"
+			return lb_weekly_key(friday, subject_id)
 		else:
 			raise ValueError(f"Invalid leaderboard type: {lb_type}")
-
-		if subject_id:
-			return f"{base}:subject:{subject_id}"
-		return base
 
 	async def get_top(
 		self,
@@ -366,7 +361,7 @@ class LeaderboardService:
 		# Stored separately from the ranked ZSET so it can survive Redis data loss and
 		# be recovered from MariaDB (synced by sync_dirty_wallets every minute).
 		amman_date_str = datetime.now(AMMAN_TZ).strftime("%Y-%m-%d")
-		daily_xp_key = f"memora:daily_xp:{player_id}"
+		daily_xp_key = _daily_xp_key_fn(player_id)
 		pipe.hincrby(daily_xp_key, amman_date_str, xp_amount)
 		pipe.expire(daily_xp_key, 8 * 86400)  # 8 days — covers the 7-day window + 1 buffer
 

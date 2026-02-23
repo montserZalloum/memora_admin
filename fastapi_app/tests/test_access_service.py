@@ -3,6 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock
 
+from fastapi_app.core.redis_keys import access_key, plan_free_subjects_key
 from fastapi_app.services.access import AccessService
 
 # Test constants
@@ -15,13 +16,13 @@ TEST_PLAN_ID = "PLAN-TEST-001"
 @pytest.fixture
 def access_service(redis_client, test_prefix, mock_frappe):
 	"""AccessService with all dependencies."""
-	return AccessService(redis_client, key_prefix=test_prefix, frappe_client=mock_frappe)
+	return AccessService(redis_client, frappe_client=mock_frappe)
 
 
 @pytest.fixture
 def access_service_no_frappe(redis_client, test_prefix):
 	"""AccessService without FrappeClient (for hydration skip tests)."""
-	return AccessService(redis_client, key_prefix=test_prefix, frappe_client=None)
+	return AccessService(redis_client, frappe_client=None)
 
 
 class TestGrantRevoke:
@@ -33,7 +34,7 @@ class TestGrantRevoke:
 		assert result == 2
 
 		# Verify SMEMBERS
-		key = f"{test_prefix}access:{TEST_PLAYER}"
+		key = access_key(TEST_PLAYER)
 		members = await redis_client.smembers(key)
 		assert members == {TEST_SUBJECT_KEY, TEST_TRACK_KEY}
 
@@ -47,7 +48,7 @@ class TestGrantRevoke:
 		assert result == 1
 
 		# Verify remaining
-		key = f"{test_prefix}access:{TEST_PLAYER}"
+		key = access_key(TEST_PLAYER)
 		members = await redis_client.smembers(key)
 		assert members == {TEST_TRACK_KEY}
 
@@ -102,7 +103,7 @@ class TestPlanAccess:
 	async def test_check_with_plan_fallback(self, redis_client, test_prefix, access_service):
 		"""Plan free subjects provide access fallback."""
 		# Setup: plan has free subjects (no explicit grant)
-		plan_free_key = f"{test_prefix}plan:{TEST_PLAN_ID}:free_subjects"
+		plan_free_key = plan_free_subjects_key(TEST_PLAN_ID)
 		subject_id = TEST_SUBJECT_KEY.replace("SUB-", "")
 		await redis_client.sadd(plan_free_key, subject_id)
 
@@ -113,7 +114,7 @@ class TestPlanAccess:
 	async def test_check_with_plan_track_key_no_plan(self, redis_client, test_prefix, access_service):
 		"""Track keys skip plan check."""
 		# Setup: plan has free subjects but we're checking a track
-		plan_free_key = f"{test_prefix}plan:{TEST_PLAN_ID}:free_subjects"
+		plan_free_key = plan_free_subjects_key(TEST_PLAN_ID)
 		await redis_client.sadd(plan_free_key, "SOME-SUBJECT")
 
 		# Check track key with plan (should skip plan check for TRK- keys)
@@ -127,7 +128,7 @@ class TestHydration:
 	async def test_hydration_skips_when_exists(self, redis_client, test_prefix, mock_frappe, access_service):
 		"""Hydration skips if access set already exists."""
 		# Pre-seed access set
-		key = f"{test_prefix}access:{TEST_PLAYER}"
+		key = access_key(TEST_PLAYER)
 		await redis_client.sadd(key, "SUB-X")
 
 		# Call hydration
@@ -151,7 +152,7 @@ class TestHydration:
 		)
 
 		# Verify Redis was seeded
-		key = f"{test_prefix}access:{TEST_PLAYER}"
+		key = access_key(TEST_PLAYER)
 		members = await redis_client.smembers(key)
 		assert members == {TEST_SUBJECT_KEY, TEST_TRACK_KEY}
 
@@ -161,6 +162,6 @@ class TestHydration:
 		await access_service_no_frappe.ensure_hydrated(TEST_PLAYER)
 
 		# Verify no crash - access set remains empty
-		key = f"{test_prefix}access:{TEST_PLAYER}"
+		key = access_key(TEST_PLAYER)
 		members = await redis_client.smembers(key)
 		assert members == set()

@@ -2,8 +2,9 @@
 
 import pytest
 
-from fastapi_app.services.progress import ProgressService
 from fastapi_app.core.constants import DIRTY_PROGRESS_KEY
+from fastapi_app.core.redis_keys import progress_key
+from fastapi_app.services.progress import ProgressService
 
 # Test constants
 TEST_USER = "USER-TEST-001"
@@ -14,13 +15,13 @@ TEST_VERSION = 1
 @pytest.fixture
 def progress_service(redis_client, test_prefix, mock_frappe):
 	"""ProgressService with all dependencies."""
-	return ProgressService(redis_client, key_prefix=test_prefix, frappe_client=mock_frappe)
+	return ProgressService(redis_client, frappe_client=mock_frappe)
 
 
 @pytest.fixture
 def progress_service_no_frappe(redis_client, test_prefix):
 	"""ProgressService without FrappeClient (for hydration skip tests)."""
-	return ProgressService(redis_client, key_prefix=test_prefix, frappe_client=None)
+	return ProgressService(redis_client, frappe_client=None)
 
 
 @pytest.fixture(autouse=True)
@@ -39,13 +40,13 @@ class TestLessonCompletion:
 		assert result is False
 
 		# Verify SETBIT actually set the bit
-		key = f"{test_prefix}progress:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		key = progress_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 		bit_value = await redis_client.getbit(key, 5)
 		assert bit_value == 1
 
 	async def test_complete_replay(self, redis_client, test_prefix, progress_service):
 		"""Replay (bit already set) returns True."""
-		key = f"{test_prefix}progress:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		key = progress_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 
 		# Pre-set the bit (first completion already done)
 		await redis_client.setbit(key, 5, 1)
@@ -114,7 +115,7 @@ class TestHydration:
 		# Verify bits are set: hex "8001" = bytes \x80\x01
 		# \x80 = 10000000 (bit 0 set)
 		# \x01 = 00000001 (bit 15 set in MSB-first ordering within the byte)
-		key = f"{test_prefix}progress:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		key = progress_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 		bit_0 = await redis_client.getbit(key, 0)
 		bit_15 = await redis_client.getbit(key, 15)
 		assert bit_0 == 1
@@ -130,6 +131,6 @@ class TestHydration:
 		await progress_service_no_frappe.ensure_hydrated(TEST_USER, TEST_SUBJECT)
 
 		# Verify bitmap remains empty
-		key = f"{test_prefix}progress:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		key = progress_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 		bit_0 = await redis_client.getbit(key, 0)
 		assert bit_0 == 0

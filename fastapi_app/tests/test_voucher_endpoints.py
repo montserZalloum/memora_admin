@@ -8,6 +8,8 @@ Reference: contracts/endpoint-test-contracts.md §9
 """
 import pytest
 
+from fastapi_app.core.redis_keys import voucher_fail_player_key
+
 
 @pytest.mark.asyncio
 class TestVoucherEndpoints:
@@ -91,7 +93,7 @@ class TestVoucherEndpoints:
 
 		try:
 			# Pre-seed rate limit counter
-			await redis_client.set(f"memora:voucher_fail:player:{player_id}", "5", ex=3600)
+			await redis_client.set(voucher_fail_player_key(player_id), "5", ex=3600)
 
 			# Mock check_rate_limit to return retry_after
 			mock_frappe.call.return_value = {
@@ -107,4 +109,4 @@ class TestVoucherEndpoints:
 			# Depends on endpoint implementation
 			assert resp.status_code in [200, 429]
 		finally:
-			await redis_client.delete(f"memora:voucher_fail:player:{player_id}")
+			await redis_client.delete(voucher_fail_player_key(player_id))

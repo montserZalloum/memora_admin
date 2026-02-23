@@ -6,6 +6,7 @@ import time
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from fastapi_app.core.redis_keys import global_ratelimit_key, session_key
 from fastapi_app.services.review import ReviewService
 from fastapi_app.services.wallet import WalletService
 
@@ -274,8 +275,8 @@ class TestPerPlayerIndependence:
 		token2, fid2 = make_player_token(player_id="PLAYER-RL-002")
 
 		# Seed sessions for both
-		await redis_client.set("memora:session:PLAYER-RL-001", json.dumps({"fid": fid1}))
-		await redis_client.set("memora:session:PLAYER-RL-002", json.dumps({"fid": fid2}))
+		await redis_client.set(session_key("PLAYER-RL-001"), json.dumps({"fid": fid1}))
+		await redis_client.set(session_key("PLAYER-RL-002"), json.dumps({"fid": fid2}))
 
 		with (
 			patch.object(
@@ -313,7 +314,7 @@ class TestPerPlayerIndependence:
 				assert resp.status_code != 429, f"Player 2 request {i+1} was incorrectly rate limited"
 
 		# Cleanup
-		await redis_client.delete("memora:session:PLAYER-RL-001", "memora:session:PLAYER-RL-002")
+		await redis_client.delete(session_key("PLAYER-RL-001"), session_key("PLAYER-RL-002"))
 
 
 # === Phase 5: User Story 3 — WebSocket Connection Limiting ===
@@ -458,11 +459,11 @@ class TestRateLimitBenchmark:
 		limiter = GlobalRateLimiter(redis_client)
 
 		# Warmup: register the Lua script
-		await limiter.check("memora:global_rl:ip:bench-warmup", 1000, 60)
+		await limiter.check(global_ratelimit_key("bench-warmup"), 1000, 60)
 
 		latencies = []
 		for i in range(100):
-			key = f"memora:global_rl:ip:bench-{i}"
+			key = global_ratelimit_key(f"bench-{i}")
 			start = time.perf_counter()
 			await limiter.check(key, 1000, 60)
 			elapsed = (time.perf_counter() - start) * 1000  # ms
@@ -473,8 +474,8 @@ class TestRateLimitBenchmark:
 		median = latencies[len(latencies) // 2]
 
 		# Cleanup
-		keys = [f"memora:global_rl:ip:bench-{i}" for i in range(100)]
-		keys.append("memora:global_rl:ip:bench-warmup")
+		keys = [global_ratelimit_key(f"bench-{i}") for i in range(100)]
+		keys.append(global_ratelimit_key("bench-warmup"))
 		await redis_client.delete(*keys)
 
 		assert p99 < 2.0, (

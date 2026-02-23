@@ -4,8 +4,9 @@ import asyncio
 
 import pytest
 
-from fastapi_app.services.stats import StatsService, compute_stats_from_hierarchy, get_stats_recompute_semaphore
+from fastapi_app.core.redis_keys import stats_key
 from fastapi_app.models.progress import SubjectHierarchy, TrackInfo, UnitInfo, TopicInfo, LessonInfo
+from fastapi_app.services.stats import StatsService, compute_stats_from_hierarchy, get_stats_recompute_semaphore
 
 # Test constants
 TEST_USER = "USER-TEST-STS-001"
@@ -16,7 +17,7 @@ TEST_VERSION = 1
 @pytest.fixture
 async def stats_svc(redis_client, test_prefix, mock_frappe):
 	"""StatsService with test dependencies."""
-	return StatsService(redis_client, key_prefix=test_prefix)
+	return StatsService(redis_client)
 
 
 class TestCacheHit:
@@ -25,7 +26,7 @@ class TestCacheHit:
 	async def test_tc_sts_01_get_stats_cache_hit(self, stats_svc, redis_client, test_prefix):
 		"""TC-STS-01: Cache hit returns pre-seeded stats."""
 		# Setup: pre-seed stats in Redis
-		key = f"{test_prefix}stats:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		key = stats_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 		stats_data = {
 			"completed": "5",
 			"total": "10",
@@ -73,7 +74,7 @@ class TestSetStats:
 		await stats_svc.set_stats(TEST_USER, TEST_SUBJECT, TEST_VERSION, stats_data)
 
 		# Assert: key exists with correct data
-		key = f"{test_prefix}stats:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		key = stats_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 		stored = await redis_client.hgetall(key)
 		assert stored == stats_data
 
@@ -88,7 +89,7 @@ class TestIncrementStats:
 	async def test_tc_sts_04_increment_completion_stats(self, stats_svc, redis_client, test_prefix):
 		"""TC-STS-04: increment_completion_stats increments counters atomically."""
 		# Setup: initial stats
-		key = f"{test_prefix}stats:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		key = stats_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 		initial_stats = {
 			"completed": "5",
 			"total": "10",
@@ -182,7 +183,7 @@ class TestEdgeCases:
 	async def test_tc_sts_07_invalidate_stats(self, stats_svc, redis_client, test_prefix):
 		"""TC-STS-07: invalidate_stats deletes cache key."""
 		# Setup: pre-seeded stats
-		key = f"{test_prefix}stats:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		key = stats_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 		await redis_client.hset(key, mapping={"completed": "5"})
 
 		# Action: invalidate
@@ -291,7 +292,7 @@ class TestTTLJitter:
 			user = f"USR-JITTER-{i:03d}"
 			stats = compute_stats_from_hierarchy(hierarchy, completed_bits=set())
 			await stats_svc.set_stats(user, TEST_SUBJECT, TEST_VERSION, stats)
-			key = f"{test_prefix}stats:{user}:{TEST_SUBJECT}:v{TEST_VERSION}"
+			key = stats_key(user, TEST_SUBJECT, TEST_VERSION)
 			ttl = await redis_client.ttl(key)
 			ttls.append(ttl)
 

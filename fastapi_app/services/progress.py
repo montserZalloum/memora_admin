@@ -8,6 +8,7 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.constants import DIRTY_PROGRESS_KEY
+from fastapi_app.core.redis_keys import progress_key as _progress_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:
@@ -40,11 +41,9 @@ class ProgressService:
     def __init__(
         self,
         redis_client: redis.Redis,
-        key_prefix: str = "memora:",
         frappe_client: FrappeClient | None = None,
     ):
         self.redis = redis_client
-        self.prefix = key_prefix
         self.frappe = frappe_client
 
     def _progress_key(self, user_id: str, subject_id: str, version: int = 1) -> str:
@@ -58,7 +57,7 @@ class ProgressService:
         Returns:
             Redis key string
         """
-        return f"{self.prefix}progress:{user_id}:{subject_id}:v{version}"
+        return _progress_key_fn(user_id, subject_id, version)
 
     async def ensure_hydrated(self, user_id: str, subject_id: str, version: int = 1) -> None:
         """Ensure progress bitmap exists in Redis, hydrating from MariaDB if missing.

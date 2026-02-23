@@ -4,6 +4,8 @@ from typing import Tuple
 
 import redis.asyncio as redis
 
+from fastapi_app.core.redis_keys import ratelimit_account_key, ratelimit_ip_key
+
 # Lua script for atomic increment with conditional TTL
 # Returns current count after increment
 RATE_LIMIT_SCRIPT = """
@@ -28,13 +30,11 @@ class RateLimiter:
     def __init__(
         self,
         redis_client: redis.Redis,
-        key_prefix: str = "memora:ratelimit:",
         ip_limit: int = 10,
         account_limit: int = 5,
         window_seconds: int = 60,
     ):
         self.redis = redis_client
-        self.prefix = key_prefix
         self.ip_limit = ip_limit
         self.account_limit = account_limit
         self.window_seconds = window_seconds
@@ -67,7 +67,7 @@ class RateLimiter:
         script = await self._get_script()
 
         # Check IP limit first
-        ip_key = f"{self.prefix}ip:{ip_address}"
+        ip_key = ratelimit_ip_key(ip_address)
         ip_count = await script(keys=[ip_key], args=[self.window_seconds])
 
         if ip_count > self.ip_limit:
@@ -77,7 +77,7 @@ class RateLimiter:
         # Check account limit if account provided
         if target_account:
             # Normalize email to lowercase for consistent limiting
-            account_key = f"{self.prefix}account:{target_account.lower()}"
+            account_key = ratelimit_account_key(target_account.lower())
             account_count = await script(keys=[account_key], args=[self.window_seconds])
 
             if account_count > self.account_limit:
@@ -97,14 +97,14 @@ class RateLimiter:
         Returns:
             Tuple of (ip_remaining, account_remaining)
         """
-        ip_key = f"{self.prefix}ip:{ip_address}"
+        ip_key = ratelimit_ip_key(ip_address)
         ip_count_raw = await self.redis.get(ip_key)
         ip_count = int(ip_count_raw) if ip_count_raw else 0
         ip_remaining = max(0, self.ip_limit - ip_count)
 
         account_remaining = self.account_limit
         if target_account:
-            account_key = f"{self.prefix}account:{target_account.lower()}"
+            account_key = ratelimit_account_key(target_account.lower())
             account_count_raw = await self.redis.get(account_key)
             account_count = int(account_count_raw) if account_count_raw else 0
             account_remaining = max(0, self.account_limit - account_count)

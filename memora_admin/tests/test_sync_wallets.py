@@ -7,6 +7,7 @@ including happy path, edge cases, and error handling.
 
 from unittest.mock import patch, MagicMock
 import frappe
+from fastapi_app.core.redis_keys import dirty_wallets_key, wallet_key as _wallet_key_fn
 from memora_admin.tests.sync_test_base import SyncTestCase
 from memora_admin.tests.voucher_fixtures import make_player
 from memora_admin.tasks.sync import sync_dirty_wallets
@@ -51,7 +52,7 @@ class TestSyncDirtyWallets(SyncTestCase):
 		self._seed_redis_wallet(self.player_id, xp=500, streak=3)
 
 		# Verify data is in Redis before sync (handle bytes from redis-py)
-		wallet_hash = self.r.hgetall(f"memora:wallet:{self.player_id}")
+		wallet_hash = self.r.hgetall(_wallet_key_fn(self.player_id))
 		xp_val = wallet_hash.get(b"xp") or wallet_hash.get("xp")
 		streak_val = wallet_hash.get(b"streak") or wallet_hash.get("streak")
 		# Convert to string if bytes
@@ -75,7 +76,7 @@ class TestSyncDirtyWallets(SyncTestCase):
 		self.assertEqual(dirty_flag, 0)
 
 		# Verify removed from dirty set
-		is_dirty = self.r.sismember("memora:dirty:wallets", self.player_id)
+		is_dirty = self.r.sismember(dirty_wallets_key(), self.player_id)
 		self.assertFalse(is_dirty)
 
 	def test_multiple_dirty(self):
@@ -119,7 +120,7 @@ class TestSyncDirtyWallets(SyncTestCase):
 			self.assertEqual(streak_value, expected_streak, f"Streak mismatch for {player_id}")
 
 		# Verify dirty set is empty (no test players remain)
-		dirty_set = self.r.smembers("memora:dirty:wallets")
+		dirty_set = self.r.smembers(dirty_wallets_key())
 		# Filter to only our test players
 		test_player_ids = {self.player_id, player2_id, player3_id}
 		remaining_dirty = dirty_set & test_player_ids
@@ -167,7 +168,7 @@ class TestSyncDirtyWallets(SyncTestCase):
 		sync_dirty_wallets()
 
 		# Verify removed from dirty set
-		is_dirty = self.r.sismember("memora:dirty:wallets", player_id)
+		is_dirty = self.r.sismember(dirty_wallets_key(), player_id)
 		self.assertFalse(is_dirty, f"Player {player_id} should be removed from dirty set")
 
 		# Verify no wallet record exists (or at least not the one we would have created)
@@ -194,11 +195,11 @@ class TestSyncDirtyWallets(SyncTestCase):
 		- Assert: Wallet DB record unchanged (total_xp still 0)
 		"""
 		# Add to dirty set manually (without creating wallet hash)
-		self.r.sadd("memora:dirty:wallets", self.player_id)
-		self._cleanup_keys.append("memora:dirty:wallets")
+		self.r.sadd(dirty_wallets_key(), self.player_id)
+		self._cleanup_keys.append(dirty_wallets_key())
 
 		# Verify no wallet hash exists
-		wallet_hash = self.r.hgetall(f"memora:wallet:{self.player_id}")
+		wallet_hash = self.r.hgetall(_wallet_key_fn(self.player_id))
 		self.assertEqual(len(wallet_hash), 0, "Wallet hash should not exist")
 
 		# Verify initial DB state (total_xp should be 0)
@@ -209,7 +210,7 @@ class TestSyncDirtyWallets(SyncTestCase):
 		sync_dirty_wallets()
 
 		# Verify removed from dirty set
-		is_dirty = self.r.sismember("memora:dirty:wallets", self.player_id)
+		is_dirty = self.r.sismember(dirty_wallets_key(), self.player_id)
 		self.assertFalse(is_dirty, f"Player {self.player_id} should be removed from dirty set")
 
 		# Verify wallet DB record unchanged
@@ -247,7 +248,7 @@ class TestSyncDirtyWallets(SyncTestCase):
 
 		# All 3 players should remain in dirty set (chunk failed, no SREMs)
 		for pid in [self.player_id, player2_id, player3_id]:
-			is_dirty = self.r.sismember("memora:dirty:wallets", pid.encode() if isinstance(pid, str) else pid)
+			is_dirty = self.r.sismember(dirty_wallets_key(), pid.encode() if isinstance(pid, str) else pid)
 			self.assertTrue(is_dirty, f"Player {pid} should remain in dirty set after chunk failure")
 
 		# No xp values should be updated (batch update was mocked to raise)

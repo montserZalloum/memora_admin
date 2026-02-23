@@ -18,7 +18,6 @@ class Settings(BaseSettings):
 	# CRITICAL: Must match Frappe's redis_cache in common_site_config.json
 	# If not set in .env, app will fail to start (prevents silent port mismatches)
 	redis_url: str  # REQUIRED in .env - no default
-	redis_key_prefix: str = "memora:"
 
 	# JWT Configuration
 	jwt_secret: str  # REQUIRED in .env - no default

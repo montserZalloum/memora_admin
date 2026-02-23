@@ -20,6 +20,7 @@ import logging
 import frappe
 import redis
 
+from fastapi_app.core.redis_keys import WALLET_SCAN_PATTERN
 from memora_admin.tasks.task_utils import (
 	AMMAN_TZ,
 	TASK_DURATION,
@@ -131,7 +132,7 @@ def _do_streak_reset() -> tuple[int, int, list]:
 	# Use SCAN to iterate wallet keys (not KEYS - per RESEARCH.md Pitfall 4)
 	cursor = 0
 	while True:
-		cursor, keys = r.scan(cursor, match="memora:wallet:*", count=1000)
+		cursor, keys = r.scan(cursor, match=WALLET_SCAN_PATTERN, count=1000)
 
 		for key in keys:
 			key_str = None

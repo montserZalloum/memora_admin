@@ -14,6 +14,8 @@ import pytest
 import redis.asyncio
 from unittest.mock import AsyncMock
 
+from fastapi_app.core.redis_keys import stats_key as _stats_key_fn, wallet_key as _wallet_key_fn
+
 from fastapi_app.services.wallet import WalletService
 from fastapi_app.services.stats import StatsService, compute_stats_from_hierarchy
 from fastapi_app.tests.conftest import seed_wallet, make_hierarchy_json
@@ -42,7 +44,7 @@ class TestXPHydrationFailure:
 	) -> None:
 		"""Test that XP resets to 0 when FrappeClient is unreachable."""
 		player_id = "PLAYER-TEST-001"
-		wallet_key = f"memora:wallet:{player_id}"
+		wallet_key = _wallet_key_fn(player_id)
 
 		# Setup: Create mock FrappeClient that fails on .call()
 		mock_frappe = AsyncMock()
@@ -201,7 +203,7 @@ class TestStatsDoubleCounting:
 		test_prefix: str,
 	) -> None:
 		"""Test that concurrent cold start requests cause double-counting."""
-		stats_key = f"{test_prefix}stats:PLAYER-TEST:SUB-TEST:v1"
+		stats_key = _stats_key_fn("PLAYER-TEST", "SUB-TEST")
 
 		# Simulate Request 1 (cold start path from sessions.py:329-345)
 		exists = await redis_client.exists(stats_key)
@@ -234,7 +236,7 @@ class TestStatsDoubleCounting:
 		test_prefix: str,
 	) -> None:
 		"""Test that warm path increments correctly (no race)."""
-		stats_key = f"{test_prefix}stats:PLAYER-TEST:SUB-TEST:v1"
+		stats_key = _stats_key_fn("PLAYER-TEST", "SUB-TEST")
 
 		# Pre-seed stats hash
 		await redis_client.hset(

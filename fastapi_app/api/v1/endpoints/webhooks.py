@@ -6,7 +6,7 @@ import structlog
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from fastapi_app.api.deps import RedisClient, get_frappe_client
-from fastapi_app.core.redis_keys import access_key, webhook_idempotency_key
+from fastapi_app.core.redis_keys import access_key, webhook_idempotency_key, webhook_retry_queue_key
 from fastapi_app.models.access import WebhookPayload, WebhookResponse
 from fastapi_app.services.frappe_client import FrappeAPIError, FrappeClient
 
@@ -15,7 +15,7 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 # Redis keys for webhook processing
-RETRY_QUEUE_KEY = "memora:webhook:retry_queue"
+RETRY_QUEUE_KEY = webhook_retry_queue_key()
 IDEMPOTENCY_TTL = 86400  # 24 hours
 
 async def process_payment_webhook(

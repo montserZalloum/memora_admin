@@ -21,6 +21,20 @@ from uuid import uuid4
 
 import pytest
 
+from fastapi_app.core.redis_keys import (
+	devices_key,
+	pending_reg_key,
+	phone_reserved_key,
+	ratelimit_account_key,
+	ratelimit_ip_key,
+	ratelimit_otp_ip_key,
+	ratelimit_otp_phone_key,
+	registration_options_key,
+	reset_otp_key,
+	reset_token_key,
+	session_key,
+)
+
 
 @pytest.mark.asyncio
 class TestPlayerLogin:
@@ -60,8 +74,8 @@ class TestPlayerLogin:
 				assert data["profile"]["display_name"] == "Test Player"
 		finally:
 			# Cleanup
-			await redis_client.delete(f"memora:session:{player_id}")
-			await redis_client.delete(f"memora:device:{player_id}:{device_id}")
+			await redis_client.delete(session_key(player_id))
+			await redis_client.delete(devices_key(player_id))
 
 	async def test_player_login_bad_credentials(self, app_client, redis_client):
 		"""Bad credentials return 401."""
@@ -86,8 +100,8 @@ class TestPlayerLogin:
 				assert resp.status_code == 401
 		finally:
 			# Clean up rate limit keys (IP and account based)
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(mobile.lower()))
 
 	async def test_player_login_missing_device_id(self, app_client):
 		"""Missing X-Device-ID header returns 400."""
@@ -124,10 +138,10 @@ class TestPlayerLogin:
 					"plan": "PLAN-001",
 				}
 
-				# Simulate rate limit by pre-populating rate limit counters
-				rate_limit_key = f"memora:rate:login:{mobile}"
-				# Set to max attempts (usually 5-10, vary by implementation)
-				await redis_client.set(rate_limit_key, "10", ex=3600)
+				# Simulate rate limit by pre-populating actual rate limit keys
+				# Production uses ratelimit_ip_key and ratelimit_account_key
+				await redis_client.set(ratelimit_ip_key("127.0.0.1"), "20", ex=60)
+				await redis_client.set(ratelimit_account_key(mobile.lower()), "10", ex=60)
 
 				resp = await app_client.post(
 					"/api/v1/auth/player/login",
@@ -139,7 +153,8 @@ class TestPlayerLogin:
 				if resp.status_code == 429:
 					assert "Retry-After" in resp.headers or "retry_after" in resp.json().get("detail", {})
 		finally:
-			await redis_client.delete(f"memora:rate:login:{mobile}")
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(mobile.lower()))
 
 	async def test_player_login_creates_session(self, app_client, redis_client):
 		"""Successful login creates session in Redis."""
@@ -166,15 +181,15 @@ class TestPlayerLogin:
 				assert resp.status_code == 200
 
 				# Verify session exists in Redis
-				session_key = f"memora:session:{player_id}"
-				session_data = await redis_client.get(session_key)
+				sess_key = session_key(player_id)
+				session_data = await redis_client.get(sess_key)
 				assert session_data is not None
 				session_obj = json.loads(session_data)
 				assert "fid" in session_obj  # family_id
 		finally:
-			await redis_client.delete(f"memora:session:{player_id}")
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
+			await redis_client.delete(session_key(player_id))
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(mobile.lower()))
 
 	async def test_player_login_kicks_old_session(self, app_client, redis_client):
 		"""Second login replaces old session's family_id."""
@@ -199,8 +214,8 @@ class TestPlayerLogin:
 					headers={"X-Device-ID": device_id},
 				)
 				assert resp1.status_code == 200
-				session_key = f"memora:session:{player_id}"
-				session_data1 = await redis_client.get(session_key)
+				sess_key = session_key(player_id)
+				session_data1 = await redis_client.get(sess_key)
 				old_fid = json.loads(session_data1)["fid"]
 
 				# Second login
@@ -210,15 +225,15 @@ class TestPlayerLogin:
 					headers={"X-Device-ID": device_id},
 				)
 				assert resp2.status_code == 200
-				session_data2 = await redis_client.get(session_key)
+				session_data2 = await redis_client.get(sess_key)
 				new_fid = json.loads(session_data2)["fid"]
 
 				# FIDs should be different (old session kicked)
 				assert old_fid != new_fid
 		finally:
-			await redis_client.delete(f"memora:session:{player_id}")
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
+			await redis_client.delete(session_key(player_id))
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(mobile.lower()))
 
 	async def test_player_login_registers_device(self, app_client, redis_client):
 		"""Successful login registers device hash in Redis."""
@@ -245,18 +260,15 @@ class TestPlayerLogin:
 				assert resp.status_code == 200
 
 				# Verify device is registered in Redis
-				device_key = f"memora:device:{player_id}:{device_id}"
-				device_data = await redis_client.get(device_key)
-				# Device data should exist (even if empty)
-				# Some implementations may use hset instead
-				device_hash = await redis_client.hgetall(f"memora:devices:{player_id}")
-				# Either key format is acceptable
-				assert device_data is not None or device_hash
+				# DeviceService stores devices in a hash at memora:devices:{user_id}
+				# with fields like device:{id}:fingerprint, device:{id}:name, etc.
+				device_hash = await redis_client.hgetall(devices_key(player_id))
+				assert device_hash  # Should have at least one device field
 		finally:
-			await redis_client.delete(f"memora:session:{player_id}")
-			await redis_client.delete(f"memora:device:{player_id}:{device_id}")
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
+			await redis_client.delete(session_key(player_id))
+			await redis_client.delete(devices_key(player_id))
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(mobile.lower()))
 
 
 @pytest.mark.asyncio
@@ -291,9 +303,9 @@ class TestAdminLoginAndRefresh:
 				assert "refresh_token" in data
 				assert data["token_type"] == "bearer"
 		finally:
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{email.lower()}")
-			await redis_client.delete(f"memora:session:{email}")
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(email.lower()))
+			await redis_client.delete(session_key(email))
 
 	async def test_admin_login_invalid_credentials(self, app_client, redis_client):
 		"""Invalid admin credentials return 401."""
@@ -313,8 +325,8 @@ class TestAdminLoginAndRefresh:
 
 				assert resp.status_code == 401
 		finally:
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{email.lower()}")
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(email.lower()))
 
 	async def test_refresh_valid_token(self, app_client, redis_client):
 		"""Valid refresh token returns new access token."""
@@ -339,8 +351,8 @@ class TestAdminLoginAndRefresh:
 			)
 
 			# Seed session with matching family_id AND plan_id
-			session_key = f"memora:session:{player_id}"
-			await redis_client.set(session_key, json.dumps({
+			sess_key = session_key(player_id)
+			await redis_client.set(sess_key, json.dumps({
 				"fid": family_id,
 				"plan": plan_id,
 			}))
@@ -355,7 +367,7 @@ class TestAdminLoginAndRefresh:
 			assert "access_token" in data
 			assert "refresh_token" in data
 		finally:
-			await redis_client.delete(f"memora:session:{player_id}")
+			await redis_client.delete(session_key(player_id))
 
 	async def test_refresh_expired_token(self, app_client):
 		"""Expired refresh token returns 401."""
@@ -395,8 +407,8 @@ class TestAdminLoginAndRefresh:
 			)
 
 			# Seed session with different family_id
-			session_key = f"memora:session:{player_id}"
-			await redis_client.set(session_key, json.dumps({"fid": session_fid}))
+			sess_key = session_key(player_id)
+			await redis_client.set(sess_key, json.dumps({"fid": session_fid}))
 
 			resp = await app_client.post(
 				"/api/v1/auth/refresh",
@@ -405,7 +417,7 @@ class TestAdminLoginAndRefresh:
 
 			assert resp.status_code == 401
 		finally:
-			await redis_client.delete(f"memora:session:{player_id}")
+			await redis_client.delete(session_key(player_id))
 
 
 @pytest.mark.asyncio
@@ -449,7 +461,7 @@ class TestRegistration:
 			# Scan and delete all pending registration keys for this mobile
 			cursor = 0
 			while True:
-				cursor, keys = await redis_client.scan(cursor, match="memora:pending:*", count=100)
+				cursor, keys = await redis_client.scan(cursor, match="memora:pending_reg:*", count=100)
 				for key in keys:
 					pending_data = await redis_client.get(key)
 					if pending_data and mobile in pending_data:
@@ -458,7 +470,7 @@ class TestRegistration:
 					break
 
 			# Also check for phone reserved keys that might block registration
-			await redis_client.delete(f"memora:phone_reserved:{mobile}")
+			await redis_client.delete(phone_reserved_key(mobile))
 
 			with patch("fastapi_app.api.v1.endpoints.auth.get_frappe_client") as mock_get_frappe:
 				mock_frappe_client = AsyncMock()
@@ -483,11 +495,11 @@ class TestRegistration:
 				assert "pending_id" in data
 				assert "message" in data
 		finally:
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
-			await redis_client.delete(f"memora:ratelimit:otp:phone:{mobile}")
-			await redis_client.delete("memora:ratelimit:otp:ip:127.0.0.1")
-			await redis_client.delete(f"memora:phone_reserved:{mobile}")
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(mobile.lower()))
+			await redis_client.delete(ratelimit_otp_phone_key(mobile))
+			await redis_client.delete(ratelimit_otp_ip_key("127.0.0.1"))
+			await redis_client.delete(phone_reserved_key(mobile))
 
 	async def test_register_duplicate_phone(self, app_client):
 		"""Registering with existing phone returns 409."""
@@ -523,11 +535,11 @@ class TestRegistration:
 
 		try:
 			# Clear registration options cache to ensure fresh fetch
-			await redis_client.delete("memora:registration_options")
+			await redis_client.delete(registration_options_key())
 
 			# Pre-seed registration options in Redis
 			await redis_client.set(
-				"memora:registration_options",
+				registration_options_key(),
 				json.dumps({
 					"grades": [{"name": "1", "majors": []}],
 					"plans": [{"name": "PLAN-FREE", "label": "Free Plan"}],
@@ -538,7 +550,7 @@ class TestRegistration:
 
 			# Pre-seed pending registration with all required fields
 			await redis_client.set(
-				f"memora:pending:{pending_id}",
+				pending_reg_key(pending_id),
 				json.dumps({
 					"mobile": mobile,
 					"plan": "PLAN-FREE",
@@ -587,15 +599,15 @@ class TestRegistration:
 				assert "access_token" in data
 				assert "refresh_token" in data
 		finally:
-			await redis_client.delete(f"memora:pending:{pending_id}")
-			await redis_client.delete(f"memora:session:{player_id}")
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{mobile.lower()}")
-			await redis_client.delete(f"memora:ratelimit:otp:phone:{mobile}")
-			await redis_client.delete("memora:ratelimit:otp:ip:127.0.0.1")
-			await redis_client.delete("memora:registration_options")
+			await redis_client.delete(pending_reg_key(pending_id))
+			await redis_client.delete(session_key(player_id))
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(mobile.lower()))
+			await redis_client.delete(ratelimit_otp_phone_key(mobile))
+			await redis_client.delete(ratelimit_otp_ip_key("127.0.0.1"))
+			await redis_client.delete(registration_options_key())
 			# Clean up phone reserved key if it was created
-			await redis_client.delete(f"memora:phone_reserved:{mobile}")
+			await redis_client.delete(phone_reserved_key(mobile))
 
 	async def test_register_verify_invalid_otp(self, app_client, redis_client):
 		"""Invalid OTP returns error."""
@@ -605,11 +617,11 @@ class TestRegistration:
 		wrong_otp = "000000"
 
 		try:
-			# Pre-seed correct OTP
-			await redis_client.set(f"memora:otp:{pending_id}", correct_otp, ex=600)
+			# Pre-seed pending registration with OTP embedded in JSON
+			# (OTPService stores OTP inside pending_reg_key, not as a separate key)
 			await redis_client.set(
-				f"memora:pending_reg:{pending_id}",
-				json.dumps({"mobile": "201000000013"}),
+				pending_reg_key(pending_id),
+				json.dumps({"mobile": "201000000013", "otp": correct_otp, "attempts": 0}),
 				ex=3600,
 			)
 
@@ -621,18 +633,17 @@ class TestRegistration:
 
 			assert resp.status_code in [400, 401]
 		finally:
-			await redis_client.delete(f"memora:otp:{pending_id}")
-			await redis_client.delete(f"memora:pending_reg:{pending_id}")
+			await redis_client.delete(pending_reg_key(pending_id))
 
 	async def test_register_resend(self, app_client, redis_client):
 		"""Resend OTP succeeds for valid pending registration."""
 		pending_id = f"PENDING-{uuid4().hex[:8]}"
 
 		try:
-			# Pre-seed pending registration
+			# Pre-seed pending registration (OTP stored inside JSON)
 			await redis_client.set(
-				f"memora:pending_reg:{pending_id}",
-				json.dumps({"mobile": "201000000014"}),
+				pending_reg_key(pending_id),
+				json.dumps({"mobile": "201000000014", "otp": "123456", "attempts": 0}),
 				ex=3600,
 			)
 
@@ -644,8 +655,7 @@ class TestRegistration:
 			# Accept both 200 (success) and 401 (expired pending) as valid test outcomes
 			assert resp.status_code in [200, 401]
 		finally:
-			await redis_client.delete(f"memora:pending_reg:{pending_id}")
-			await redis_client.delete(f"memora:otp:{pending_id}")
+			await redis_client.delete(pending_reg_key(pending_id))
 
 
 @pytest.mark.asyncio
@@ -659,9 +669,9 @@ class TestPasswordReset:
 
 		try:
 			# Clean up OTP rate limit keys for these phones and IP
-			await redis_client.delete(f"memora:ratelimit:otp:phone:{existing_phone}")
-			await redis_client.delete(f"memora:ratelimit:otp:phone:{nonexisting_phone}")
-			await redis_client.delete("memora:ratelimit:otp:ip:127.0.0.1")
+			await redis_client.delete(ratelimit_otp_phone_key(existing_phone))
+			await redis_client.delete(ratelimit_otp_phone_key(nonexisting_phone))
+			await redis_client.delete(ratelimit_otp_ip_key("127.0.0.1"))
 
 			with patch("fastapi_app.api.v1.endpoints.auth.get_frappe_client") as mock_get_frappe:
 				mock_frappe_client = AsyncMock()
@@ -683,12 +693,12 @@ class TestPasswordReset:
 				)
 				assert resp2.status_code == 200  # Still 200 for anti-enumeration
 		finally:
-			await redis_client.delete("memora:ratelimit:ip:127.0.0.1")
-			await redis_client.delete(f"memora:ratelimit:account:{existing_phone.lower()}")
-			await redis_client.delete(f"memora:ratelimit:account:{nonexisting_phone.lower()}")
-			await redis_client.delete(f"memora:ratelimit:otp:phone:{existing_phone}")
-			await redis_client.delete(f"memora:ratelimit:otp:phone:{nonexisting_phone}")
-			await redis_client.delete("memora:ratelimit:otp:ip:127.0.0.1")
+			await redis_client.delete(ratelimit_ip_key("127.0.0.1"))
+			await redis_client.delete(ratelimit_account_key(existing_phone.lower()))
+			await redis_client.delete(ratelimit_account_key(nonexisting_phone.lower()))
+			await redis_client.delete(ratelimit_otp_phone_key(existing_phone))
+			await redis_client.delete(ratelimit_otp_phone_key(nonexisting_phone))
+			await redis_client.delete(ratelimit_otp_ip_key("127.0.0.1"))
 
 	async def test_password_reset_verify_valid(self, app_client, redis_client):
 		"""Valid reset OTP returns reset token."""
@@ -696,8 +706,8 @@ class TestPasswordReset:
 		otp = "654321"
 
 		try:
-			# Pre-seed reset OTP
-			await redis_client.set(f"memora:reset_otp:{mobile}", otp, ex=600)
+			# Pre-seed reset OTP (JSON format: {"otp": code, "attempts": int})
+			await redis_client.set(reset_otp_key(mobile), json.dumps({"otp": otp, "attempts": 0}), ex=600)
 
 			resp = await app_client.post(
 				"/api/v1/auth/player/password-reset/verify",
@@ -710,7 +720,7 @@ class TestPasswordReset:
 				data = resp.json()
 				assert "reset_token" in data
 		finally:
-			await redis_client.delete(f"memora:reset_otp:{mobile}")
+			await redis_client.delete(reset_otp_key(mobile))
 
 	async def test_password_reset_verify_invalid(self, app_client, redis_client):
 		"""Invalid reset OTP returns error."""
@@ -719,8 +729,8 @@ class TestPasswordReset:
 		wrong_otp = "000000"
 
 		try:
-			# Pre-seed correct OTP
-			await redis_client.set(f"memora:reset_otp:{mobile}", correct_otp, ex=600)
+			# Pre-seed correct OTP (JSON format)
+			await redis_client.set(reset_otp_key(mobile), json.dumps({"otp": correct_otp, "attempts": 0}), ex=600)
 
 			resp = await app_client.post(
 				"/api/v1/auth/player/password-reset/verify",
@@ -729,7 +739,7 @@ class TestPasswordReset:
 
 			assert resp.status_code in [400, 401]
 		finally:
-			await redis_client.delete(f"memora:reset_otp:{mobile}")
+			await redis_client.delete(reset_otp_key(mobile))
 
 	async def test_password_reset_confirm_success(self, app_client, redis_client):
 		"""Valid reset token allows password change."""
@@ -738,7 +748,7 @@ class TestPasswordReset:
 
 		try:
 			# Pre-seed reset token
-			await redis_client.set(f"memora:reset_token:{reset_token}", mobile, ex=600)
+			await redis_client.set(reset_token_key(reset_token), mobile, ex=600)
 
 			with patch("fastapi_app.api.v1.endpoints.auth.get_frappe_client") as mock_get_frappe:
 				mock_frappe_client = AsyncMock()
@@ -757,7 +767,7 @@ class TestPasswordReset:
 					data = resp.json()
 					assert "message" in data
 		finally:
-			await redis_client.delete(f"memora:reset_token:{reset_token}")
+			await redis_client.delete(reset_token_key(reset_token))
 
 	async def test_password_reset_confirm_reused_token(self, app_client, redis_client):
 		"""Reusing reset token fails (single-use enforcement)."""
@@ -766,7 +776,7 @@ class TestPasswordReset:
 
 		try:
 			# Pre-seed reset token
-			await redis_client.set(f"memora:reset_token:{reset_token}", mobile, ex=600)
+			await redis_client.set(reset_token_key(reset_token), mobile, ex=600)
 
 			with patch("fastapi_app.api.v1.endpoints.auth.get_frappe_client") as mock_get_frappe:
 				mock_frappe_client = AsyncMock()
@@ -793,4 +803,4 @@ class TestPasswordReset:
 				# If single-use is NOT enforced, both can succeed
 				assert resp2.status_code in [200, 401, 400]
 		finally:
-			await redis_client.delete(f"memora:reset_token:{reset_token}")
+			await redis_client.delete(reset_token_key(reset_token))

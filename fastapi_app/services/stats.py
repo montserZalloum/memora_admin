@@ -6,6 +6,7 @@ import random
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import stats_key as _stats_key_fn
 from fastapi_app.models.progress import SubjectHierarchy
 
 logger = structlog.get_logger()
@@ -53,9 +54,8 @@ class StatsService:
 	JITTER_RANGE = 120  # +0-120s spread to prevent synchronized TTL expiry
 	RECOMPUTE_TIMEOUT = 2.0  # seconds to wait for semaphore before bypassing
 
-	def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:"):
+	def __init__(self, redis_client: redis.Redis):
 		self.redis = redis_client
-		self.prefix = key_prefix
 
 	def _stats_key(self, user_id: str, subject_id: str, version: int) -> str:
 		"""Generate Redis key for stats hash.
@@ -68,7 +68,7 @@ class StatsService:
 		Returns:
 			Redis key string
 		"""
-		return f"{self.prefix}stats:{user_id}:{subject_id}:v{version}"
+		return _stats_key_fn(user_id, subject_id, version)
 
 	async def increment_completion_stats(
 		self,

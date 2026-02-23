@@ -13,7 +13,7 @@ from typing import Any
 
 import structlog
 
-INVALIDATION_CHANNEL = "memora:cache:invalidate"
+from fastapi_app.core.redis_keys import cache_invalidation_channel
 
 logger = structlog.get_logger()
 
@@ -22,7 +22,7 @@ async def start_pubsub_listener(redis_pool: Any, app_state: Any) -> None:
 	"""
 	Start Redis pub/sub listener for cache invalidation.
 
-	Subscribes to INVALIDATION_CHANNEL and listens for invalidation messages.
+	Subscribes to cache_invalidation_channel() and listens for invalidation messages.
 	On message receipt, calls hierarchy_service.invalidate(subject_id).
 
 	Args:
@@ -40,11 +40,11 @@ async def start_pubsub_listener(redis_pool: Any, app_state: Any) -> None:
 
 	try:
 		pubsub = client.pubsub()
-		await pubsub.subscribe(INVALIDATION_CHANNEL)
+		await pubsub.subscribe(cache_invalidation_channel())
 
 		logger.info(
 			"pubsub_listener_started",
-			channel=INVALIDATION_CHANNEL,
+			channel=cache_invalidation_channel(),
 		)
 
 		async for message in pubsub.listen():
@@ -62,7 +62,7 @@ async def start_pubsub_listener(redis_pool: Any, app_state: Any) -> None:
 	finally:
 		# Clean shutdown
 		try:
-			await pubsub.unsubscribe(INVALIDATION_CHANNEL)
+			await pubsub.unsubscribe(cache_invalidation_channel())
 			await client.aclose()
 		except Exception as e:
 			logger.debug("pubsub_cleanup_error", error=str(e))

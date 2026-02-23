@@ -42,6 +42,11 @@ from datetime import date, datetime, time, timedelta, timezone
 import frappe
 import redis
 
+from fastapi_app.core.redis_keys import (
+	fsrs_card_state_key,
+	fsrs_last_processed_key,
+	fsrs_processed_key,
+)
 from memora_admin.api.utils import (
 	init_mastery_counter as _init_mastery_counter,
 )
@@ -51,7 +56,7 @@ from memora_admin.api.utils import (
 
 logger = logging.getLogger(__name__)
 
-FSRS_PROCESSED_KEY = "memora:fsrs:last_processed"
+FSRS_PROCESSED_KEY = fsrs_last_processed_key()
 
 
 def get_redis():
@@ -419,7 +424,7 @@ def process_fsrs_reviews():
 
 		try:
 			# Check for idempotency -- skip if already processed
-			idem_key = f"memora:fsrs:processed:{player}:{item_id}:{interaction.creation}"
+			idem_key = fsrs_processed_key(player, item_id, interaction.creation)
 			if r.exists(idem_key):
 				skipped += 1
 				continue
@@ -532,7 +537,7 @@ def process_fsrs_reviews():
 				pass  # Best-effort; counters self-heal on next read
 
 			# T008: Cache in Redis for fast access (keyed by item_id, not stage_id)
-			redis_key = f"memora:fsrs:{player}:{item_id}"
+			redis_key = fsrs_card_state_key(player, item_id)
 			fsrs_data = json.dumps(
 				{
 					"stability": card.stability,

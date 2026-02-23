@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
 
 from fastapi_app.api.deps import RedisClient, SettingsDep, evict_session_cache, get_frappe_client
+from fastapi_app.core.redis_keys import registration_options_key
 from fastapi_app.core.security import create_access_token, create_refresh_token, decode_token
 from fastapi_app.core.ws_manager import ConnectionManager
 from fastapi_app.models.auth import (
@@ -165,7 +166,7 @@ async def player_login(
 	max_devices = game_settings.max_devices_per_player
 
 	# 6. Device registration (atomic with limit check)
-	device_service = DeviceService(redis, key_prefix=settings.redis_key_prefix)
+	device_service = DeviceService(redis)
 	device_result = await device_service.register_device(
 		user_id=player_id,
 		device_id=device_id,
@@ -184,7 +185,7 @@ async def player_login(
 		)
 
 	# 7. Fetch wallet for XP (with FrappeClient for hydration after cache flush)
-	wallet_service = WalletService(redis, key_prefix=settings.redis_key_prefix, frappe_client=frappe_client)
+	wallet_service = WalletService(redis, frappe_client=frappe_client)
 	wallet = await wallet_service.get_wallet(player_id)
 
 	# 8. Force-kick old WebSocket connections BEFORE creating new session
@@ -192,7 +193,7 @@ async def player_login(
 	await _force_kick_old_sessions(request, player_id)
 
 	# 9. Create session (invalidates any previous session in Redis)
-	session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
+	session_service = SessionService(redis)
 	family_id = await session_service.create_session(
 		player_id,
 		plan_id=profile["plan"],
@@ -272,7 +273,7 @@ async def admin_login(
 		)
 
 	# 3. Create session (admin uses email as user_id)
-	session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
+	session_service = SessionService(redis)
 	family_id = await session_service.create_session(
 		user.user_id,
 		plan_id="",
@@ -326,7 +327,7 @@ async def refresh(
 		family_id = payload["fid"]
 
 		# Validate session is still active and get plan_id from session
-		session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
+		session_service = SessionService(redis)
 		is_valid, plan_id = await session_service.validate_session(user_id, family_id)
 
 		if not is_valid or not plan_id:
@@ -371,7 +372,7 @@ async def refresh(
 # Registration endpoints
 # =============================================================================
 
-REGISTRATION_OPTIONS_CACHE_KEY = "memora:registration_options"
+REGISTRATION_OPTIONS_CACHE_KEY = registration_options_key()
 REGISTRATION_OPTIONS_CACHE_TTL = 300  # 5 minutes
 
 
@@ -560,7 +561,7 @@ async def player_register_verify(
 	user_agent = request.headers.get("User-Agent", "Unknown")
 	platform_hint = request.headers.get("X-Platform")
 
-	device_service = DeviceService(redis, key_prefix=settings.redis_key_prefix)
+	device_service = DeviceService(redis)
 	device_result = await device_service.register_device(
 		user_id=player_id,
 		device_id=device_id,
@@ -579,14 +580,14 @@ async def player_register_verify(
 		)
 
 	# Fetch wallet XP (should be 0 for new player)
-	wallet_service = WalletService(redis, key_prefix=settings.redis_key_prefix, frappe_client=frappe_client)
+	wallet_service = WalletService(redis, frappe_client=frappe_client)
 	wallet = await wallet_service.get_wallet(player_id)
 
 	# Force-kick old WebSocket connections (unlikely for new registration but safe)
 	await _force_kick_old_sessions(request, player_id)
 
 	# Create session
-	session_service = SessionService(redis, key_prefix=f"{settings.redis_key_prefix}session:")
+	session_service = SessionService(redis)
 	family_id = await session_service.create_session(
 		player_id,
 		plan_id=profile["plan"],

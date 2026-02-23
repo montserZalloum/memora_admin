@@ -10,6 +10,7 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
+from fastapi_app.core.redis_keys import wallet_key as _wallet_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:
@@ -127,11 +128,9 @@ class WalletService:
 	def __init__(
 		self,
 		redis_client: redis.Redis,
-		key_prefix: str = "memora:",
 		frappe_client: FrappeClient | None = None,
 	):
 		self.redis = redis_client
-		self.prefix = key_prefix
 		self.frappe = frappe_client
 		self._streak_script = None
 
@@ -144,7 +143,7 @@ class WalletService:
 		Returns:
 			Redis key string
 		"""
-		return f"{self.prefix}wallet:{player_id}"
+		return _wallet_key_fn(player_id)
 
 	async def ensure_hydrated(self, player_id: str) -> None:
 		"""Ensure wallet hash exists in Redis, hydrating from MariaDB if missing.

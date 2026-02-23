@@ -9,9 +9,16 @@ import time
 
 import frappe
 
+from fastapi_app.core.redis_keys import (
+	build_debounce_key,
+	cache_invalidation_channel,
+	catalog_key,
+	hierarchy_key,
+	plan_season_seq_key,
+)
+
 # Debounce configuration
 DEBOUNCE_SECONDS = 120  # 2 minutes per plan
-DEBOUNCE_KEY_PREFIX = "memora:build:pending:"
 
 
 # =============================================================================
@@ -81,7 +88,7 @@ def _queue_plan_builds_for_subject(subject_id: str, doc):
 		if not plan_id:
 			continue
 
-		debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"
+		debounce_key = build_debounce_key(plan_id)
 
 		# Redis SET NX EX pattern for debounce
 		was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
@@ -187,7 +194,7 @@ def on_plan_updated(doc, method):
 
 			rebuild_plan_free_subjects(plan_id)
 			r = get_fastapi_redis()
-			r.publish("memora:cache:invalidate", json.dumps({
+			r.publish(cache_invalidation_channel(), json.dumps({
 				"type": "plan_subjects",
 				"plan_id": plan_id,
 			}))
@@ -203,7 +210,7 @@ def on_plan_updated(doc, method):
 			from memora_admin.events.access_sync import get_fastapi_redis
 
 			r = get_fastapi_redis()
-			r.delete(f"memora:plan_season_seq:{plan_id}")
+			r.delete(plan_season_seq_key(plan_id))
 			frappe.logger().info(f"plan_season_seq cache invalidated for {plan_id}")
 		except Exception as e:
 			frappe.log_error(
@@ -212,7 +219,7 @@ def on_plan_updated(doc, method):
 			)
 
 	cache = frappe.cache
-	debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"
+	debounce_key = build_debounce_key(plan_id)
 
 	# Redis SET NX EX pattern for debounce
 	timestamp = str(int(time.time()))
@@ -270,7 +277,7 @@ def on_plan_subject_changed(doc, method):
 
 	# Reuse plan debounce logic
 	cache = frappe.cache
-	debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"
+	debounce_key = build_debounce_key(plan_id)
 
 	timestamp = str(int(time.time()))
 	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
@@ -326,11 +333,11 @@ def _invalidate_hierarchy_cache(subject_id: str):
 		r = get_fastapi_redis()
 
 		# 1. Direct cache delete
-		r.delete(f"memora:hierarchy:{subject_id}")
+		r.delete(hierarchy_key(subject_id))
 
 		# 2. Pubsub notification for FastAPI sidecar
 		r.publish(
-			"memora:cache:invalidate",
+			cache_invalidation_channel(),
 			json.dumps({
 				"type": "hierarchy",
 				"subject_id": subject_id,
@@ -404,11 +411,11 @@ def _invalidate_catalog_cache(plan_id: str):
 		r = get_fastapi_redis()
 
 		# 1. Direct cache delete
-		r.delete(f"memora:catalog:{plan_id}")
+		r.delete(catalog_key(plan_id))
 
 		# 2. Pubsub notification for FastAPI sidecar
 		r.publish(
-			"memora:cache:invalidate",
+			cache_invalidation_channel(),
 			json.dumps({
 				"type": "catalog",
 				"plan_id": plan_id,
@@ -440,7 +447,7 @@ def on_plan_overrider_changed(doc, method):
 		return
 
 	cache = frappe.cache
-	debounce_key = f"{DEBOUNCE_KEY_PREFIX}plan:{plan_id}"
+	debounce_key = build_debounce_key(plan_id)
 
 	timestamp = str(int(time.time()))
 	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)

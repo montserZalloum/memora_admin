@@ -13,6 +13,17 @@ import structlog
 
 from fastapi_app.core.constants import MASTERY_CACHE_TTL
 from fastapi_app.core.level_config import calculate_level, get_level_config, get_threshold
+from fastapi_app.core.redis_keys import (
+	daily_xp_key as _daily_xp_key_fn,
+	items_learned_key as _items_learned_key_fn,
+	lb_alltime_key,
+	lb_archive_daily_key,
+	lb_daily_key,
+	mastery_key as _mastery_key_fn,
+	plan_season_seq_key as _plan_season_seq_key_fn,
+	player_plan_key as _player_plan_key_fn,
+	profile_key as _profile_key_fn,
+)
 from fastapi_app.services.frappe_client import FrappeClient
 from fastapi_app.services.profile import ProfileService
 from fastapi_app.services.wallet import WalletService
@@ -38,11 +49,9 @@ class ProfilePageService:
 		self,
 		redis_client: redis.Redis,
 		frappe_client: FrappeClient,
-		key_prefix: str = "memora:",
 	):
 		self.redis = redis_client
 		self.frappe = frappe_client
-		self.prefix = key_prefix
 
 	async def _resolve_season_seq(self, player_id: str) -> int | None:
 		"""Resolve season_seq for a player via two-cache lookup.
@@ -54,7 +63,7 @@ class ProfilePageService:
 		Returns None if player has no plan (lets Frappe fallback to default).
 		"""
 		# Step 1: player → plan
-		plan_key = f"{self.prefix}player_plan:{player_id}"
+		plan_key = _player_plan_key_fn(player_id)
 		plan_id = await self.redis.get(plan_key)
 		if plan_id is not None:
 			plan_id = plan_id.decode() if isinstance(plan_id, bytes) else plan_id
@@ -71,7 +80,7 @@ class ProfilePageService:
 				return None
 
 		# Step 2: plan → season_seq
-		seq_key = f"{self.prefix}plan_season_seq:{plan_id}"
+		seq_key = _plan_season_seq_key_fn(plan_id)
 		season_seq = await self.redis.get(seq_key)
 		if season_seq is not None:
 			season_seq = season_seq.decode() if isinstance(season_seq, bytes) else season_seq
@@ -146,12 +155,12 @@ class ProfilePageService:
 		if subject_id is None:
 			total_xp = wallet.get("xp", 0)
 		else:
-			score = await self.redis.zscore(f"{self.prefix}lb:alltime:subject:{subject_id}", player_id)
+			score = await self.redis.zscore(lb_alltime_key(subject_id), player_id)
 			total_xp = int(score) if score is not None else 0
 
 		# Items learned: count of Memory State records (SRS items encountered)
 		# Cached in Redis with 5-min TTL. On cache miss, fetches from Frappe API.
-		items_cache_key = f"{self.prefix}items_learned:{player_id}:{subject_id or 'all'}"
+		items_cache_key = _items_learned_key_fn(player_id, subject_id)
 		cached_items = await self.redis.get(items_cache_key)
 		if cached_items is not None:
 			items_str = cached_items.decode() if isinstance(cached_items, bytes) else cached_items
@@ -201,10 +210,7 @@ class ProfilePageService:
 		for i in range(7):
 			day = week_start + timedelta(days=i)
 			date_str = day.strftime("%Y-%m-%d")
-			if subject_id:
-				key = f"{self.prefix}lb:daily:{date_str}:subject:{subject_id}"
-			else:
-				key = f"{self.prefix}lb:daily:{date_str}"
+			key = lb_daily_key(date_str, subject_id)
 			pipe.zscore(key, player_id)
 			days.append(
 				{
@@ -230,10 +236,7 @@ class ProfilePageService:
 			archive_pipe = self.redis.pipeline()
 			for i in archive_indices:
 				date_str = days[i]["date"]
-				if subject_id:
-					archive_key = f"{self.prefix}lb:archive:daily:{date_str}:subject:{subject_id}"
-				else:
-					archive_key = f"{self.prefix}lb:archive:daily:{date_str}"
+				archive_key = lb_archive_daily_key(date_str, subject_id)
 				archive_pipe.zscore(archive_key, player_id)
 			archive_scores = await archive_pipe.execute()
 			for j, i in enumerate(archive_indices):
@@ -244,7 +247,7 @@ class ProfilePageService:
 		# Covers days still missing after Phase 1 + Phase 2 (e.g. after Redis data loss).
 		still_missing = [i for i in archive_indices if scores[i] is None]
 		if still_missing:
-			daily_xp_key = f"{self.prefix}daily_xp:{player_id}"
+			daily_xp_key = _daily_xp_key_fn(player_id)
 			daily_xp_data = await self.redis.hgetall(daily_xp_key)
 			if not daily_xp_data:
 				# Cache miss — recover from MariaDB via Frappe
@@ -309,10 +312,7 @@ class ProfilePageService:
 			season_seq = 1
 
 		# Build counter key
-		if subject_id:
-			counter_key = f"{self.prefix}mastery:{player_id}:{subject_id}:s{season_seq}"
-		else:
-			counter_key = f"{self.prefix}mastery:{player_id}:all:s{season_seq}"
+		counter_key = _mastery_key_fn(player_id, subject_id, season_seq)
 
 		# Try Redis HASH first
 		data = await self.redis.hgetall(counter_key)
@@ -359,7 +359,7 @@ class ProfilePageService:
 		)
 
 		# Invalidate profile cache so next fetch picks up new avatar
-		await self.redis.delete(f"{self.prefix}profile:{player_id}")
+		await self.redis.delete(_profile_key_fn(player_id))
 		logger.info("avatar_updated", player=player_id, avatar=avatar)
 
 		return result if isinstance(result, dict) else {"avatar": avatar, "success": True}
@@ -381,7 +381,7 @@ class ProfilePageService:
 		await session_service.invalidate_session(player_id)
 
 		if device_id:
-			device_service = DeviceService(self.redis, key_prefix=self.prefix)
+			device_service = DeviceService(self.redis)
 			await device_service.remove_device(player_id, device_id)
 			logger.info("logout_with_device_removal", player=player_id, device=device_id)
 		else:

@@ -6,6 +6,8 @@ from typing import Optional
 
 import redis.asyncio as redis
 
+from fastapi_app.core.redis_keys import session_key as _session_key_fn
+
 
 class SessionService:
     """
@@ -19,9 +21,8 @@ class SessionService:
     This allows refresh token flow to get plan_id without Frappe roundtrip.
     """
 
-    def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:session:"):
+    def __init__(self, redis_client: redis.Redis):
         self.redis = redis_client
-        self.prefix = key_prefix
 
     async def create_session(self, user_id: str, plan_id: str, ttl_days: int = 30) -> str:
         """
@@ -36,7 +37,7 @@ class SessionService:
             New family_id to embed in tokens
         """
         family_id = str(uuid.uuid4())
-        key = f"{self.prefix}{user_id}"
+        key = _session_key_fn(user_id)
 
         # Store session data as JSON (overwrites old, auto-invalidating previous session)
         session_data = json.dumps({"fid": family_id, "plan": plan_id})
@@ -69,7 +70,7 @@ class SessionService:
         Returns:
             True if session existed and was deleted, False otherwise
         """
-        key = f"{self.prefix}{user_id}"
+        key = _session_key_fn(user_id)
         deleted = await self.redis.delete(key)
         return deleted > 0
 
@@ -80,7 +81,7 @@ class SessionService:
         Returns:
             Dict with "fid" and "plan" keys, or None if no session
         """
-        key = f"{self.prefix}{user_id}"
+        key = _session_key_fn(user_id)
         raw = await self.redis.get(key)
 
         if raw is None:

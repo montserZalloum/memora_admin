@@ -5,6 +5,12 @@ import pytest
 import redis.asyncio as redis
 from httpx import AsyncClient
 
+from fastapi_app.core.redis_keys import (
+	dirty_wallets_key,
+	gamification_settings_key,
+	hierarchy_key,
+	progress_key as _progress_key_fn,
+)
 from fastapi_app.tests.conftest import (
 	make_hierarchy_json,
 	seed_hierarchy,
@@ -131,7 +137,7 @@ class TestStartSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 	async def test_start_nonexistent_subject(
 		self,
@@ -187,7 +193,7 @@ class TestStartSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 	async def test_start_free_bypass(
 		self,
@@ -218,7 +224,7 @@ class TestStartSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 	async def test_start_nonexistent_lesson(
 		self,
@@ -248,7 +254,7 @@ class TestStartSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 
 class TestEndSession:
@@ -300,8 +306,8 @@ class TestEndSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
-		await redis_client.delete("memora:settings:gamification")
+		await redis_client.delete(hierarchy_key(subject_id))
+		await redis_client.delete(gamification_settings_key())
 
 	async def test_end_no_session(
 		self,
@@ -360,7 +366,7 @@ class TestEndSession:
 		await seed_wallet(redis_client, player_id, xp=0, streak=0)
 
 		# Mark lesson as already completed (set bit_index 0 to 1)
-		progress_key = f"memora:progress:{player_id}:{subject_id}:v1"
+		progress_key = _progress_key_fn(player_id, subject_id)
 		await redis_client.setbit(progress_key, 0, 1)
 
 		# End session (should detect as replay)
@@ -385,8 +391,8 @@ class TestEndSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
-		await redis_client.delete("memora:settings:gamification")
+		await redis_client.delete(hierarchy_key(subject_id))
+		await redis_client.delete(gamification_settings_key())
 		await redis_client.delete(progress_key)
 
 	async def test_end_streak_update(
@@ -433,8 +439,8 @@ class TestEndSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
-		await redis_client.delete("memora:settings:gamification")
+		await redis_client.delete(hierarchy_key(subject_id))
+		await redis_client.delete(gamification_settings_key())
 
 	async def test_end_xp_awarded(
 		self,
@@ -480,8 +486,8 @@ class TestEndSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
-		await redis_client.delete("memora:settings:gamification")
+		await redis_client.delete(hierarchy_key(subject_id))
+		await redis_client.delete(gamification_settings_key())
 
 	async def test_end_marks_dirty(
 		self,
@@ -523,14 +529,14 @@ class TestEndSession:
 		assert response.status_code == 200
 
 		# Verify player in dirty set
-		dirty_players = await redis_client.smembers("memora:dirty:wallets")
+		dirty_players = await redis_client.smembers(dirty_wallets_key())
 		assert player_id in dirty_players
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
-		await redis_client.delete("memora:settings:gamification")
-		await redis_client.delete("memora:dirty:wallets")
+		await redis_client.delete(hierarchy_key(subject_id))
+		await redis_client.delete(gamification_settings_key())
+		await redis_client.delete(dirty_wallets_key())
 
 	async def test_end_leaderboard_update(
 		self,
@@ -595,8 +601,8 @@ class TestEndSession:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
-		await redis_client.delete("memora:settings:gamification")
-		await redis_client.delete("memora:dirty:wallets")
+		await redis_client.delete(hierarchy_key(subject_id))
+		await redis_client.delete(gamification_settings_key())
+		await redis_client.delete(dirty_wallets_key())
 		for key in all_keys:
 			await redis_client.delete(key)

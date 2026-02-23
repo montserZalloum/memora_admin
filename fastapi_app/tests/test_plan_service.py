@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import pytest
 
+from fastapi_app.core.redis_keys import plan_manifest_key
 from fastapi_app.services.plan import PlanService
 from fastapi_app.models.plan import PlanManifest, PlanSubject
 
@@ -14,7 +15,7 @@ TEST_PLAN = "PLAN-TEST-PLN-001"
 @pytest.fixture
 async def plan_svc(redis_client, test_prefix, mock_frappe):
 	"""PlanService with test dependencies."""
-	return PlanService(redis_client, frappe_client=mock_frappe, key_prefix=test_prefix)
+	return PlanService(redis_client, frappe_client=mock_frappe)
 
 
 class TestCacheHit:
@@ -30,8 +31,7 @@ class TestCacheHit:
 			title="Test Plan",
 			subjects=[],
 		)
-		key = f"{test_prefix}plan:{TEST_PLAN}:manifest"
-		await redis_client.set(key, manifest.model_dump_json())
+		await redis_client.set(plan_manifest_key(TEST_PLAN), manifest.model_dump_json())
 
 		# Action: get manifest
 		result = await plan_svc.get_manifest(TEST_PLAN)
@@ -70,12 +70,11 @@ class TestCacheMiss:
 		mock_frappe.call.assert_called_once()
 
 		# Assert: cached in Redis with TTL
-		key = f"{test_prefix}plan:{TEST_PLAN}:manifest"
-		cached = await redis_client.get(key)
+		cached = await redis_client.get(plan_manifest_key(TEST_PLAN))
 		assert cached is not None
 
 		# Assert: TTL set
-		ttl = await redis_client.ttl(key)
+		ttl = await redis_client.ttl(plan_manifest_key(TEST_PLAN))
 		assert ttl > 0 and ttl <= 3600
 
 
@@ -92,12 +91,11 @@ class TestInvalidation:
 			title="Test Plan",
 			subjects=[],
 		)
-		key = f"{test_prefix}plan:{TEST_PLAN}:manifest"
-		await redis_client.set(key, manifest.model_dump_json())
+		await redis_client.set(plan_manifest_key(TEST_PLAN), manifest.model_dump_json())
 
 		# Action: invalidate
 		await plan_svc.invalidate(TEST_PLAN)
 
 		# Assert: key deleted
-		exists = await redis_client.exists(key)
+		exists = await redis_client.exists(plan_manifest_key(TEST_PLAN))
 		assert exists == 0

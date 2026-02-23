@@ -5,6 +5,7 @@ from fastapi import HTTPException
 
 from fastapi_app.services.purchase import PurchaseService
 from fastapi_app.services.frappe_client import FrappeAPIError
+from fastapi_app.core.redis_keys import pending_key as _pending_key_fn
 from fastapi_app.models.purchase import PurchaseRequest
 
 # Test constants
@@ -52,8 +53,8 @@ class TestSuccessfulPurchase:
 		mock_frappe.call.assert_called_once()
 
 		# Assert: product added to pending set
-		pending_key = f"memora:pending:{TEST_USER}"
-		is_member = await redis_client.sismember(pending_key, TEST_PRODUCT)
+		pk = _pending_key_fn(TEST_USER)
+		is_member = await redis_client.sismember(pk, TEST_PRODUCT)
 		assert bool(is_member) is True
 
 
@@ -63,8 +64,8 @@ class TestDuplicateInRedis:
 	async def test_tc_pur_02_duplicate_in_redis_raises_409(self, purchase_svc, redis_client, mock_frappe):
 		"""TC-PUR-02: Duplicate in Redis pending - raises HTTPException(409)."""
 		# Setup: add product to pending set
-		pending_key = f"memora:pending:{TEST_USER}"
-		await redis_client.sadd(pending_key, TEST_PRODUCT)
+		pk = _pending_key_fn(TEST_USER)
+		await redis_client.sadd(pk, TEST_PRODUCT)
 
 		# Action & Assert: raises 409
 		req = PurchaseRequest(product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof")

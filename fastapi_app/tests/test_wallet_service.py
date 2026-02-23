@@ -5,8 +5,9 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from fastapi_app.services.wallet import WalletService, get_amman_today, get_amman_yesterday
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
+from fastapi_app.core.redis_keys import wallet_key
+from fastapi_app.services.wallet import WalletService, get_amman_today, get_amman_yesterday
 
 # Test constants
 TEST_PLAYER = "PLAYER-TEST-001"
@@ -16,13 +17,13 @@ AMMAN_TZ = ZoneInfo("Asia/Amman")
 @pytest.fixture
 def wallet_service(redis_client, test_prefix, mock_frappe):
 	"""WalletService with all dependencies."""
-	return WalletService(redis_client, key_prefix=test_prefix, frappe_client=mock_frappe)
+	return WalletService(redis_client, frappe_client=mock_frappe)
 
 
 @pytest.fixture
 def wallet_service_no_frappe(redis_client, test_prefix):
 	"""WalletService without FrappeClient (for hydration skip tests)."""
-	return WalletService(redis_client, key_prefix=test_prefix, frappe_client=None)
+	return WalletService(redis_client, frappe_client=None)
 
 
 @pytest.fixture(autouse=True)
@@ -44,7 +45,7 @@ class TestXPOperations:
 		assert result2 == 150
 
 		# Verify HGET
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		xp_value = await redis_client.hget(key, "xp")
 		assert xp_value == "150"
 
@@ -81,7 +82,7 @@ class TestWalletHydration:
 		)
 
 		# Verify Redis was seeded
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		data = await redis_client.hgetall(key)
 		assert data["xp"] == "1500"
 		assert data["streak"] == "7"
@@ -95,7 +96,7 @@ class TestWalletHydration:
 		await wallet_service.ensure_hydrated(TEST_PLAYER)
 
 		# Verify Redis was seeded
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		xp_value = await redis_client.hget(key, "xp")
 		streak_value = await redis_client.hget(key, "streak")
 		assert xp_value == "500"
@@ -104,7 +105,7 @@ class TestWalletHydration:
 	async def test_hydration_skips_existing(self, redis_client, test_prefix, mock_frappe, wallet_service):
 		"""Hydration skips if wallet already exists in Redis."""
 		# Pre-seed wallet
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		await redis_client.hset(key, mapping={"xp": "100", "streak": "2"})
 
 		# Call hydration
@@ -128,14 +129,14 @@ class TestStreakLua:
 		assert was_updated is True
 
 		# Verify streak_date was set to today
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		today = get_amman_today()
 		date_value = await redis_client.hget(key, "streak_date")
 		assert date_value == today
 
 	async def test_streak_consecutive(self, redis_client, test_prefix, wallet_service):
 		"""Consecutive day - streak increments."""
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		yesterday = get_amman_yesterday()
 
 		# Pre-seed: streak=5 from yesterday
@@ -153,7 +154,7 @@ class TestStreakLua:
 
 	async def test_streak_missed_day(self, redis_client, test_prefix, wallet_service):
 		"""Missed day (2+ days gap) - streak resets to 1."""
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		two_days_ago = (datetime.now(AMMAN_TZ) - timedelta(days=2)).strftime("%Y-%m-%d")
 
 		# Pre-seed: streak=5 from 2 days ago
@@ -166,7 +167,7 @@ class TestStreakLua:
 
 	async def test_streak_same_day(self, redis_client, test_prefix, wallet_service):
 		"""Same day completion - no streak change."""
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		today = get_amman_today()
 
 		# Pre-seed: streak=3 from today
@@ -179,7 +180,7 @@ class TestStreakLua:
 
 	async def test_streak_replay_no_change(self, redis_client, test_prefix, wallet_service):
 		"""Replay - streak unchanged and not marked dirty."""
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		yesterday = get_amman_yesterday()
 
 		# Pre-seed: streak=5 from yesterday
@@ -202,7 +203,7 @@ class TestStreakLua:
 
 		# Replay (same day later): no dirty marking
 		today = get_amman_today()
-		key = f"{test_prefix}wallet:{TEST_PLAYER}"
+		key = wallet_key(TEST_PLAYER)
 		await redis_client.hset(key, mapping={"streak": "1", "streak_date": today})
 
 		await wallet_service.update_streak(TEST_PLAYER, is_replay=True)

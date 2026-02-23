@@ -20,6 +20,7 @@ from datetime import datetime, timedelta
 import frappe
 import redis
 
+from fastapi_app.core.redis_keys import LB_PREFIX
 from memora_admin.tasks.task_utils import (
 	AMMAN_TZ,
 	TASK_DURATION,
@@ -35,8 +36,7 @@ logger = logging.getLogger(__name__)
 # Archive retention: 90 days
 ARCHIVE_TTL_SECONDS = 90 * 24 * 3600
 
-# Leaderboard key prefix (must match leaderboard.py)
-LB_PREFIX = "memora:lb"
+# LB_PREFIX imported from fastapi_app.core.redis_keys
 
 
 def get_redis():

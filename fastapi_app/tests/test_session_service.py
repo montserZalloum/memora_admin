@@ -5,6 +5,7 @@ import json
 import pytest
 import redis.asyncio as redis
 
+from fastapi_app.core.redis_keys import session_key
 from fastapi_app.services.session import SessionService
 
 # Test constants
@@ -15,7 +16,7 @@ TEST_PLAN = "PLAN-001"
 @pytest.fixture
 async def session_service(redis_client: redis.Redis, test_prefix: str) -> SessionService:
 	"""Create SessionService with test prefix for isolation."""
-	return SessionService(redis_client, key_prefix=test_prefix)
+	return SessionService(redis_client)
 
 
 class TestSessionManagement:
@@ -32,7 +33,7 @@ class TestSessionManagement:
 		assert len(family_id) == 36, "family_id should be UUID (36 chars)"
 
 		# Verify Redis stores JSON
-		key = f"{test_prefix}{TEST_USER}"
+		key = session_key(TEST_USER)
 		raw = await redis_client.get(key)
 		assert raw is not None, "Session key should exist"
 
@@ -81,7 +82,7 @@ class TestSessionManagement:
 		assert deleted is True, "Should return True when deleting existing session"
 
 		# Verify key is deleted
-		key = f"{test_prefix}{TEST_USER}"
+		key = session_key(TEST_USER)
 		exists = await redis_client.exists(key)
 		assert exists == 0, "Session key should be deleted"
 

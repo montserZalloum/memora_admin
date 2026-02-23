@@ -12,7 +12,7 @@ import time
 
 import frappe
 
-from fastapi_app.core.redis_keys import player_plan_key, session_key
+from fastapi_app.core.redis_keys import cache_invalidation_channel, player_plan_key, session_key
 from memora_admin.api.utils import invalidate_player_season_seq
 from memora_admin.events.access_sync import get_fastapi_redis
 
@@ -49,6 +49,6 @@ def on_player_profile_plan_changed(doc, method):
         "reason": "plan_changed",
         "timestamp": time.time(),
     })
-    r.publish("memora:cache:invalidate", invalidation_msg)
+    r.publish(cache_invalidation_channel(), invalidation_msg)
 
     frappe.logger().info(f"Session + player_plan cache invalidated for {doc.name} due to plan change")

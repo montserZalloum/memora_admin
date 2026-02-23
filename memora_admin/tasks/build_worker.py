@@ -20,10 +20,10 @@ from datetime import datetime, timezone
 import frappe
 from frappe.utils import now_datetime
 
+from fastapi_app.core.redis_keys import build_retry_key as _build_retry_key_fn, cache_invalidation_channel
+
 logger = logging.getLogger(__name__)
 
-# Redis key prefix for retry tracking
-RETRY_KEY_PREFIX = "memora:build:retry:"
 MAX_RETRIES = 3
 
 
@@ -178,7 +178,7 @@ def _notify_cache_invalidation(target_id: str, target_type: str = "Memora Academ
 		target_id: The plan_id
 		target_type: "Memora Academic Plan"
 	"""
-	channel = "memora:cache:invalidate"
+	channel = cache_invalidation_channel()
 
 	message = json.dumps({
 		"type": "plan",
@@ -270,7 +270,7 @@ def _requeue_build(build_doc):
 	If max retries exceeded, marks as failed.
 	"""
 	build_name = build_doc.name
-	retry_key = RETRY_KEY_PREFIX + build_name
+	retry_key = _build_retry_key_fn(build_name)
 
 	# Increment retry count atomically
 	frappe.cache.incr(retry_key)
@@ -310,7 +310,7 @@ def _clear_retry_count(build_name: str):
 	- Final failure (max retries)
 	- Manual failure marking
 	"""
-	retry_key = RETRY_KEY_PREFIX + build_name
+	retry_key = _build_retry_key_fn(build_name)
 	try:
 		frappe.cache.delete(retry_key)
 	except Exception as e:

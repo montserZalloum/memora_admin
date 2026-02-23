@@ -5,11 +5,11 @@ import json
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import reviews_overview_key
 from fastapi_app.services.frappe_client import FrappeClient
 
 logger = structlog.get_logger()
 
-REVIEW_OVERVIEW_KEY = "memora:reviews_overview:{player_id}"
 REVIEW_OVERVIEW_TTL = 300  # 5 minutes
 
 
@@ -30,7 +30,7 @@ class ReviewService:
 
 		Returns list of dicts with subject and due_count keys.
 		"""
-		key = REVIEW_OVERVIEW_KEY.format(player_id=player_id)
+		key = reviews_overview_key(player_id)
 
 		cached = await self.redis.get(key)
 		if cached:
@@ -87,6 +87,6 @@ class ReviewService:
 
 	async def invalidate_overview(self, player_id: str):
 		"""Invalidate cached review overview after submit."""
-		key = REVIEW_OVERVIEW_KEY.format(player_id=player_id)
+		key = reviews_overview_key(player_id)
 		await self.redis.delete(key)
 		logger.info("review_overview_cache_invalidated", player=player_id)

@@ -11,6 +11,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
 
 from fastapi_app.core.config import Settings, get_settings
+from fastapi_app.core.redis_keys import player_ratelimit_key, session_key as _session_key_fn
 from fastapi_app.core.security import decode_token
 from fastapi_app.models.access import ContentAccessRequest, SeasonMeta
 from fastapi_app.models.auth import TokenPayload
@@ -115,7 +116,7 @@ async def get_current_user(
 		return token_payload
 
 	# Validate session family_id against Redis (single-session enforcement)
-	session_key = f"{settings.redis_key_prefix}session:{token_payload.sub}"
+	session_key = _session_key_fn(token_payload.sub)
 	try:
 		raw = await redis_client.get(session_key)
 		if raw is None:
@@ -371,7 +372,7 @@ def require_rate_limit(scope: str):
 		limit = getattr(settings, setting_attr)
 		window = settings.global_rate_limit_window
 		limiter = GlobalRateLimiter(redis_client)
-		key = f"memora:rl:{scope}:{user.sub}"
+		key = player_ratelimit_key(scope, user.sub)
 		allowed, count, ttl = await limiter.check(key, limit, window)
 		if not allowed:
 			raise RateLimitExceeded(max(ttl, 1))

@@ -5,6 +5,7 @@ from typing import Optional
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import plan_manifest_key as _plan_manifest_key_fn
 from fastapi_app.models.plan import PlanManifest
 from fastapi_app.services.frappe_client import FrappeClient
 
@@ -26,15 +27,13 @@ class PlanService:
 		self,
 		redis_client: redis.Redis,
 		frappe_client: FrappeClient,
-		key_prefix: str = "memora:",
 	):
 		self.redis = redis_client
 		self.frappe = frappe_client
-		self.prefix = key_prefix
 
 	def _cache_key(self, plan_id: str) -> str:
 		"""Generate Redis key for plan manifest cache."""
-		return f"{self.prefix}plan:{plan_id}:manifest"
+		return _plan_manifest_key_fn(plan_id)
 
 	async def get_manifest(self, plan_id: str) -> Optional[PlanManifest]:
 		"""
@@ -104,7 +103,7 @@ class PlanService:
 		Uses SCAN to find keys matching pattern.
 		Use sparingly - for major updates.
 		"""
-		pattern = f"{self.prefix}plan:*:manifest"
+		pattern = _plan_manifest_key_fn("*")
 		cursor = 0
 		deleted = 0
 		while True:

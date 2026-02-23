@@ -21,6 +21,7 @@ from datetime import datetime, timedelta
 import frappe
 import redis
 
+from fastapi_app.core.redis_keys import LB_PREFIX, profile_key, task_ran_key
 from memora_admin.events.access_sync import get_fastapi_redis
 from memora_admin.tasks.task_utils import (
 	AMMAN_TZ,
@@ -36,8 +37,7 @@ logger = logging.getLogger(__name__)
 # Cache TTL: 1 hour per CONTEXT.md
 CACHE_TTL = 3600
 
-# Leaderboard key prefix (must match leaderboard.py)
-LB_PREFIX = "memora:lb"
+# LB_PREFIX imported from fastapi_app.core.redis_keys
 
 
 def warm_profile_cache(triggered_by: str = "Scheduler"):
@@ -61,7 +61,7 @@ def warm_profile_cache(triggered_by: str = "Scheduler"):
 	# For hourly tasks, we check against hour rather than day
 	hour_key = f"{task_name}:{datetime.now(AMMAN_TZ).strftime('%Y-%m-%d-%H')}"
 	r = get_fastapi_redis()
-	if r.get(f"memora:task_ran:{hour_key}"):
+	if r.get(task_ran_key(hour_key)):
 		logger.info(f"{task_name} already completed for this hour")
 		return
 
@@ -69,7 +69,7 @@ def warm_profile_cache(triggered_by: str = "Scheduler"):
 		cached_count = _do_warm_cache(r)
 
 		# Mark this hour as completed
-		r.set(f"memora:task_ran:{hour_key}", "1", ex=3600)
+		r.set(task_ran_key(hour_key), "1", ex=3600)
 
 		status = "Success"
 		log_task_run(
@@ -162,7 +162,7 @@ def _do_warm_cache(r: redis.Redis) -> int:
 	# Pipeline SET to cache each profile
 	pipe = r.pipeline()
 	for p in profiles:
-		key = f"memora:profile:{p.name}"
+		key = profile_key(p.name)
 		data = json.dumps({
 			"player_id": p.name,
 			"display_name": p.display_name or "",

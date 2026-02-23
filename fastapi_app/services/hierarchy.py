@@ -4,6 +4,7 @@ from typing import Optional
 
 import redis.asyncio as redis
 
+from fastapi_app.core.redis_keys import hierarchy_key as _hierarchy_key_fn, subjects_with_free_content_key
 from fastapi_app.models.progress import SubjectHierarchy
 from fastapi_app.services.frappe_client import FrappeClient
 
@@ -23,15 +24,13 @@ class HierarchyService:
         self,
         redis_client: redis.Redis,
         frappe_client: FrappeClient,
-        key_prefix: str = "memora:",
     ):
         self.redis = redis_client
         self.frappe = frappe_client
-        self.prefix = key_prefix
 
     def _cache_key(self, subject_id: str) -> str:
         """Generate Redis key for hierarchy cache."""
-        return f"{self.prefix}hierarchy:{subject_id}"
+        return _hierarchy_key_fn(subject_id)
 
     async def get_hierarchy(self, subject_id: str) -> Optional[SubjectHierarchy]:
         """
@@ -96,7 +95,7 @@ class HierarchyService:
         Uses SCAN to find keys matching pattern.
         Use sparingly - for major content updates.
         """
-        pattern = f"{self.prefix}hierarchy:*"
+        pattern = _hierarchy_key_fn("*")
         cursor = 0
         while True:
             cursor, keys = await self.redis.scan(cursor, match=pattern, count=100)
@@ -111,7 +110,7 @@ class HierarchyService:
 
     def _free_content_subjects_key(self) -> str:
         """Redis key for set of subjects that have free units or topics."""
-        return f"{self.prefix}subjects_with_free_content"
+        return subjects_with_free_content_key()
 
     async def get_subjects_with_free_content(self) -> list[str]:
         """Get list of subjects that have free units or topics.

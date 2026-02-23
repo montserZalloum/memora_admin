@@ -9,6 +9,8 @@ import json
 
 import pytest
 
+from fastapi_app.core.redis_keys import catalog_key
+
 
 @pytest.mark.asyncio
 class TestCatalogEndpoints:
@@ -17,10 +19,6 @@ class TestCatalogEndpoints:
 	async def test_catalog_success_with_products(self, authed_client, redis_client, mock_frappe):
 		"""Authenticated player gets catalog with products."""
 		client, token, player_id, family_id = authed_client
-		from fastapi_app.core.config import get_settings
-
-		settings = get_settings()
-		prefix = settings.redis_key_prefix
 
 		try:
 			# Seed catalog cache in Redis
@@ -41,7 +39,7 @@ class TestCatalogEndpoints:
 
 			# Seed the catalog cache (plan ID comes from authed_client fixture)
 			plan_id = "PLAN-TEST-001"  # Default from fixture
-			await redis_client.set(f"{prefix}catalog:{plan_id}", json.dumps(products))
+			await redis_client.set(catalog_key(plan_id), json.dumps(products))
 
 			resp = await client.get("/api/v1/catalog/")
 

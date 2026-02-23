@@ -9,6 +9,7 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.constants import DIRTY_PROGRESS_KEY, GAME_SESSION_TTL, INTERACTION_BUFFER_KEY
+from fastapi_app.core.redis_keys import game_session_key as _game_session_key_fn, progress_key as _progress_key_fn
 from fastapi_app.models.game_session import GameSession
 
 logger = structlog.get_logger()
@@ -109,15 +110,13 @@ class GameSessionService:
 	- complete_session: Lua script O(1) - atomic DEL + SETBIT + SADD + RPUSH
 	"""
 
-	def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:"):
+	def __init__(self, redis_client: redis.Redis):
 		"""Initialize GameSessionService.
 
 		Args:
 			redis_client: Async Redis client
-			key_prefix: Prefix for Redis keys (default: "memora:")
 		"""
 		self.redis = redis_client
-		self.prefix = key_prefix
 		self._start_script: Any | None = None
 		self._complete_script: Any | None = None
 
@@ -130,7 +129,7 @@ class GameSessionService:
 		Returns:
 			Redis key string
 		"""
-		return f"{self.prefix}gamesession:{user_id}"
+		return _game_session_key_fn(user_id)
 
 	async def _get_start_script(self) -> Any:
 		"""Get or create the start session Lua script (lazy-loaded and cached).
@@ -180,7 +179,7 @@ class GameSessionService:
 		script = await self._get_complete_script()
 
 		session_key = self._session_key(user_id)
-		progress_key = f"{self.prefix}progress:{user_id}:{subject_id}:v{version}"
+		progress_key = _progress_key_fn(user_id, subject_id, version)
 		dirty_member = f"{user_id}:{subject_id}:v{version}"
 
 		keys = [session_key, progress_key, DIRTY_PROGRESS_KEY, INTERACTION_BUFFER_KEY]

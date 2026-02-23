@@ -5,6 +5,7 @@ import json
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import access_key as _access_key_fn, catalog_key as _catalog_key_fn, pending_key as _pending_key_fn
 from fastapi_app.models.catalog import CatalogProduct
 from fastapi_app.services.frappe_client import FrappeClient
 
@@ -24,15 +25,13 @@ class CatalogService:
 		self,
 		redis_client: redis.Redis,
 		frappe_client: FrappeClient,
-		key_prefix: str = "memora:",
 	):
 		self.redis = redis_client
 		self.frappe = frappe_client
-		self.prefix = key_prefix
 
 	def _cache_key(self, plan_id: str) -> str:
 		"""Generate Redis key for plan catalog cache."""
-		return f"{self.prefix}catalog:{plan_id}"
+		return _catalog_key_fn(plan_id)
 
 	async def get_catalog(self, plan_id: str) -> list[CatalogProduct]:
 		"""Get plan catalog from cache or Frappe. No TTL -- infinite cache.
@@ -101,8 +100,8 @@ class CatalogService:
 
 		# Pipeline: fetch player's access set and pending set in one round-trip
 		pipe = self.redis.pipeline()
-		pipe.smembers(f"{self.prefix}access:{player_id}")
-		pipe.smembers(f"{self.prefix}pending:{player_id}")
+		pipe.smembers(_access_key_fn(player_id))
+		pipe.smembers(_pending_key_fn(player_id))
 		access_raw, pending_raw = await pipe.execute()
 
 		# Decode bytes to strings

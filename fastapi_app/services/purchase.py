@@ -4,6 +4,7 @@ import redis.asyncio as redis
 import structlog
 from fastapi import HTTPException, status
 
+from fastapi_app.core.redis_keys import pending_key as _pending_key_fn
 from fastapi_app.models.purchase import PurchaseRequest, PurchaseResponse
 from fastapi_app.services.frappe_client import FrappeAPIError, FrappeClient
 
@@ -20,8 +21,6 @@ class PurchaseService:
 
 	Write order: Frappe first, Redis second (per RESEARCH.md pitfall 2).
 	"""
-
-	PENDING_KEY_PREFIX = "memora:pending:"
 
 	def __init__(
 		self,
@@ -53,7 +52,7 @@ class PurchaseService:
 			HTTPException 404: Product grant or player profile not found
 			HTTPException 502: Frappe API failure
 		"""
-		pending_key = f"{self.PENDING_KEY_PREFIX}{user_id}"
+		pending_key = _pending_key_fn(user_id)
 
 		# 1. Fast duplicate check via Redis pending set
 		is_pending = await self.redis.sismember(pending_key, req.product_grant_id)

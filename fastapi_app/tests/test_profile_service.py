@@ -3,8 +3,9 @@
 import json
 import pytest
 
-from fastapi_app.services.profile import ProfileService
+from fastapi_app.core.redis_keys import profile_key
 from fastapi_app.models.profile import PlayerProfile
+from fastapi_app.services.profile import ProfileService
 
 # Test constants
 TEST_PLAYER_1 = "PLAYER-TEST-PRF-001"
@@ -15,7 +16,7 @@ TEST_PLAYER_3 = "PLAYER-TEST-PRF-003"
 @pytest.fixture
 async def profile_svc(redis_client, test_prefix, mock_frappe):
 	"""ProfileService with test dependencies."""
-	return ProfileService(redis_client, frappe_client=mock_frappe, key_prefix=test_prefix)
+	return ProfileService(redis_client, frappe_client=mock_frappe)
 
 
 def _make_test_profile(player_id: str, display_name: str = None) -> dict:
@@ -33,8 +34,8 @@ class TestBatchCacheHit:
 	async def test_tc_prf_01_batch_cache_hit_no_frappe_call(self, profile_svc, redis_client, test_prefix, mock_frappe):
 		"""TC-PRF-01: Batch cache hit - Frappe NOT called."""
 		# Setup: pre-seed 2 profiles in Redis
-		key1 = f"{test_prefix}profile:{TEST_PLAYER_1}"
-		key2 = f"{test_prefix}profile:{TEST_PLAYER_2}"
+		key1 = profile_key(TEST_PLAYER_1)
+		key2 = profile_key(TEST_PLAYER_2)
 		profile1 = PlayerProfile(player_id=TEST_PLAYER_1, display_name="Player 1", avatar="avatar1")
 		profile2 = PlayerProfile(player_id=TEST_PLAYER_2, display_name="Player 2", avatar="avatar2")
 		await redis_client.set(key1, profile1.model_dump_json())
@@ -58,7 +59,7 @@ class TestPartialCacheMiss:
 	async def test_tc_prf_02_partial_miss_frappe_called_for_missing(self, profile_svc, redis_client, test_prefix, mock_frappe):
 		"""TC-PRF-02: Partial miss - Frappe called for missing."""
 		# Setup: pre-seed only PLAYER_1
-		key1 = f"{test_prefix}profile:{TEST_PLAYER_1}"
+		key1 = profile_key(TEST_PLAYER_1)
 		profile1 = PlayerProfile(player_id=TEST_PLAYER_1, display_name="Player 1", avatar="avatar1")
 		await redis_client.set(key1, profile1.model_dump_json())
 
@@ -78,8 +79,8 @@ class TestPartialCacheMiss:
 		mock_frappe.call.assert_called_once()
 
 		# Assert: PLAYER_2 and PLAYER_3 now cached
-		key2 = f"{test_prefix}profile:{TEST_PLAYER_2}"
-		key3 = f"{test_prefix}profile:{TEST_PLAYER_3}"
+		key2 = profile_key(TEST_PLAYER_2)
+		key3 = profile_key(TEST_PLAYER_3)
 		cached2 = await redis_client.get(key2)
 		cached3 = await redis_client.get(key3)
 		assert cached2 is not None

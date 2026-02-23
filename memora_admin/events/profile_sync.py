@@ -10,6 +10,7 @@ import time
 
 import frappe
 
+from fastapi_app.core.redis_keys import cache_invalidation_channel, profile_key
 from memora_admin.events.access_sync import get_fastapi_redis
 
 # Cache TTL: 1 hour per CONTEXT.md
@@ -29,7 +30,7 @@ def on_player_profile_updated(doc, method):
 	matching the established pattern in catalog_sync.py.
 	"""
 	r = get_fastapi_redis()
-	redis_key = f"memora:profile:{doc.name}"
+	redis_key = profile_key(doc.name)
 
 	# Build profile data
 	profile_data = {
@@ -47,6 +48,6 @@ def on_player_profile_updated(doc, method):
 		"player_id": doc.name,
 		"timestamp": time.time(),
 	})
-	r.publish("memora:cache:invalidate", invalidation_msg)
+	r.publish(cache_invalidation_channel(), invalidation_msg)
 
 	frappe.logger().info(f"Profile {doc.name} synced to Redis")

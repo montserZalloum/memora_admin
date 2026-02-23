@@ -7,6 +7,7 @@ including happy path, edge cases, and error handling.
 
 from unittest.mock import patch, MagicMock
 import frappe
+from fastapi_app.core.redis_keys import dirty_progress_key, progress_key as _progress_key_fn
 from memora_admin.tests.sync_test_base import SyncTestCase
 from memora_admin.tests.voucher_fixtures import make_player
 from memora_admin.tasks.sync import sync_dirty_progress
@@ -65,7 +66,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self._seed_redis_progress(self.player_id, self.subject_id, 1, [0, 7])
 
 		# Verify bits are set in Redis
-		bitmap_key = f"memora:progress:{self.player_id}:{self.subject_id}:v1"
+		bitmap_key = _progress_key_fn(self.player_id, self.subject_id)
 		bitmap_bytes = self.r.get(bitmap_key)
 		self.assertIsNotNone(bitmap_bytes, "Bitmap should be set in Redis")
 
@@ -92,7 +93,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 
 		# Verify removed from dirty set
 		dirty_member = f"{self.player_id}:{self.subject_id}:v1"
-		is_dirty = self.r.sismember("memora:dirty:progress", dirty_member)
+		is_dirty = self.r.sismember(dirty_progress_key(), dirty_member)
 		self.assertFalse(is_dirty, "Progress should be removed from dirty set")
 
 	def test_new_record_created(self):
@@ -197,10 +198,10 @@ class TestSyncDirtyProgress(SyncTestCase):
 		invalid_member = f"{self.player_id}:{self.subject_id}"  # Missing :v{version}
 		valid_member = f"{self.player_id}:{self.subject_id}:v1"
 
-		self.r.sadd("memora:dirty:progress", invalid_member)
-		self.r.sadd("memora:dirty:progress", valid_member)
-		if "memora:dirty:progress" not in self._cleanup_keys:
-			self._cleanup_keys.append("memora:dirty:progress")
+		self.r.sadd(dirty_progress_key(), invalid_member)
+		self.r.sadd(dirty_progress_key(), valid_member)
+		if dirty_progress_key() not in self._cleanup_keys:
+			self._cleanup_keys.append(dirty_progress_key())
 
 		# Seed Redis bitmap for valid member only
 		self._seed_redis_progress(self.player_id, self.subject_id, 1, [0])
@@ -221,7 +222,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self.assertTrue(valid_exists, "Valid member should be processed and record created")
 
 		# Verify valid member removed from dirty set
-		is_valid_dirty = self.r.sismember("memora:dirty:progress", valid_member)
+		is_valid_dirty = self.r.sismember(dirty_progress_key(), valid_member)
 		self.assertFalse(is_valid_dirty, "Valid member should be removed from dirty set")
 
 		# Invalid member should remain or be skipped (either way, no crash is success)
@@ -238,12 +239,12 @@ class TestSyncDirtyProgress(SyncTestCase):
 		"""
 		# Add to dirty set but don't create bitmap (no SETBIT calls)
 		dirty_member = f"{self.player_id}:{self.subject_id}:v1"
-		self.r.sadd("memora:dirty:progress", dirty_member)
-		if "memora:dirty:progress" not in self._cleanup_keys:
-			self._cleanup_keys.append("memora:dirty:progress")
+		self.r.sadd(dirty_progress_key(), dirty_member)
+		if dirty_progress_key() not in self._cleanup_keys:
+			self._cleanup_keys.append(dirty_progress_key())
 
 		# Verify no bitmap exists
-		bitmap_key = f"memora:progress:{self.player_id}:{self.subject_id}:v1"
+		bitmap_key = _progress_key_fn(self.player_id, self.subject_id)
 		bitmap_bytes = self.r.get(bitmap_key)
 		self.assertIsNone(bitmap_bytes, "Bitmap should not exist")
 
@@ -266,5 +267,5 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self.assertAlmostEqual(completion_pct, 0.0, places=1, msg=f"Expected 0.0%, got {completion_pct}%")
 
 		# Verify removed from dirty set
-		is_dirty = self.r.sismember("memora:dirty:progress", dirty_member)
+		is_dirty = self.r.sismember(dirty_progress_key(), dirty_member)
 		self.assertFalse(is_dirty, "Progress should be removed from dirty set")

@@ -11,6 +11,7 @@ import json
 from unittest.mock import patch
 
 import frappe
+from fastapi_app.core.redis_keys import interaction_buffer_key
 from memora_admin.tests.sync_test_base import SyncTestCase
 from memora_admin.tests.voucher_fixtures import make_player
 from memora_admin.tasks.sync import flush_interaction_buffer
@@ -36,7 +37,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		super().setUp()
 
 		# Clear interaction buffer at start of each test to ensure clean state
-		buffer_key = "memora:buffer:interactions"
+		buffer_key = interaction_buffer_key()
 		self.r.delete(buffer_key)
 		self._cleanup_keys.append(buffer_key)
 
@@ -122,7 +123,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		self.assertEqual(count, 3, f"Expected 3 Interaction Log docs, got {count}")
 
 		# Assert buffer is empty
-		buffer_len = self.r.llen("memora:buffer:interactions")
+		buffer_len = self.r.llen(interaction_buffer_key())
 		self.assertEqual(buffer_len, 0, f"Expected empty buffer, got {buffer_len} items")
 
 	def test_empty_buffer(self):
@@ -154,7 +155,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		self._push_interaction(self._make_interaction())
 
 		# Push invalid JSON
-		self.r.rpush("memora:buffer:interactions", "NOT-VALID-JSON")
+		self.r.rpush(interaction_buffer_key(), "NOT-VALID-JSON")
 
 		# Push another valid item
 		self._push_interaction(self._make_interaction())
@@ -167,7 +168,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		self.assertEqual(count, 2, f"Expected 2 Interaction Log docs, got {count}")
 
 		# Entire batch is trimmed — invalid JSON won't succeed on retry
-		buffer_len = self.r.llen("memora:buffer:interactions")
+		buffer_len = self.r.llen(interaction_buffer_key())
 		self.assertEqual(buffer_len, 0, f"Expected empty buffer, got {buffer_len}")
 
 	def test_missing_fields_skipped(self):
@@ -198,7 +199,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		self.assertEqual(count, 2, f"Expected 2 Interaction Log docs, got {count}")
 
 		# Entire batch trimmed — missing-field items won't succeed on retry
-		buffer_len = self.r.llen("memora:buffer:interactions")
+		buffer_len = self.r.llen(interaction_buffer_key())
 		self.assertEqual(buffer_len, 0, f"Expected empty buffer, got {buffer_len}")
 
 	def test_batch_size_cap(self):
@@ -220,7 +221,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 			)
 
 		# Verify buffer has 6000 items
-		initial_len = self.r.llen("memora:buffer:interactions")
+		initial_len = self.r.llen(interaction_buffer_key())
 		self.assertEqual(initial_len, 6000, f"Expected 6000 items in buffer, got {initial_len}")
 
 		# Call flush
@@ -231,7 +232,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		self.assertEqual(count, 5000, f"Expected 5000 Interaction Log docs, got {count}")
 
 		# Assert 1000 items remain (6000 - 5000 = 1000)
-		buffer_len = self.r.llen("memora:buffer:interactions")
+		buffer_len = self.r.llen(interaction_buffer_key())
 		self.assertEqual(buffer_len, 1000, f"Expected 1000 items in buffer, got {buffer_len}")
 
 	def test_sql_failure_preserves_buffer(self):
@@ -260,5 +261,5 @@ class TestFlushInteractionBuffer(SyncTestCase):
 				flush_interaction_buffer()
 
 		# Buffer should be intact — INSERT failed so nothing was trimmed
-		buffer_len = self.r.llen("memora:buffer:interactions")
+		buffer_len = self.r.llen(interaction_buffer_key())
 		self.assertEqual(buffer_len, 3, f"Expected 3 items in buffer after failure, got {buffer_len}")

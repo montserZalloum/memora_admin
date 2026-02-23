@@ -14,7 +14,7 @@ TEST_ACCOUNT = "test@example.com"
 @pytest.fixture
 async def rate_limiter(redis_client: redis.Redis, test_prefix: str) -> RateLimiter:
 	"""Create RateLimiter with test prefix for isolation."""
-	return RateLimiter(redis_client, key_prefix=test_prefix)
+	return RateLimiter(redis_client)
 
 
 class TestRateLimiter:

@@ -25,6 +25,12 @@ from fastapi_app.core.constants import (
 	DIRTY_WALLETS_KEY,
 	INTERACTION_BUFFER_KEY,
 )
+from fastapi_app.core.redis_keys import (
+	daily_xp_key,
+	progress_key as _progress_key,
+	subject_total_lessons_key,
+	wallet_key,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -104,7 +110,7 @@ def _batch_hgetall_wallets(r, player_ids):
 	"""Pipeline HGETALL for multiple wallet keys. Returns {player_id: hash_dict}."""
 	pipe = r.pipeline(transaction=False)
 	for pid in player_ids:
-		pipe.hgetall(f"memora:wallet:{pid}")
+		pipe.hgetall(wallet_key(pid))
 	results = pipe.execute()
 	return dict(zip(player_ids, results))
 
@@ -113,7 +119,7 @@ def _batch_hgetall_daily_xp(r, player_ids):
 	"""Pipeline HGETALL for multiple daily_xp keys. Returns {player_id: hash_dict}."""
 	pipe = r.pipeline(transaction=False)
 	for pid in player_ids:
-		pipe.hgetall(f"memora:daily_xp:{pid}")
+		pipe.hgetall(daily_xp_key(pid))
 	results = pipe.execute()
 	return dict(zip(player_ids, results))
 
@@ -218,7 +224,7 @@ def _batch_get_subject_lesson_counts(r, subject_ids):
 
 	# Pipeline GET for all cache keys
 	unique_ids = list(set(subject_ids))
-	cache_keys = [f"memora:subject:total_lessons:{sid}" for sid in unique_ids]
+	cache_keys = [subject_total_lessons_key(sid) for sid in unique_ids]
 	pipe = r.pipeline(transaction=False)
 	for key in cache_keys:
 		pipe.get(key)
@@ -247,7 +253,7 @@ def _batch_get_subject_lesson_counts(r, subject_ids):
 		for sid in missing_subjects:
 			count = db_counts.get(sid, 0)
 			counts[sid] = count
-			pipe.setex(f"memora:subject:total_lessons:{sid}", 3600, count)
+			pipe.setex(subject_total_lessons_key(sid), 3600, count)
 		pipe.execute()
 
 	return counts
@@ -405,7 +411,7 @@ def sync_dirty_progress():
 		try:
 			# 1. Pipeline GET + BITCOUNT for all bitmap keys
 			bitmap_keys = [
-				f"memora:progress:{uid}:{sid}:v{ver}"
+				_progress_key(uid, sid, ver)
 				for _, uid, sid, ver in chunk
 			]
 			bitmap_data = _batch_get_bitmaps(r, bitmap_keys)
@@ -718,7 +724,7 @@ def _get_subject_lesson_count(r, subject_id: str) -> int:
 
 	Cache TTL: 1 hour - matches hierarchy cache TTL from Phase 4.
 	"""
-	cache_key = f"memora:subject:total_lessons:{subject_id}"
+	cache_key = subject_total_lessons_key(subject_id)
 	total = r.get(cache_key)
 	if total:
 		if isinstance(total, bytes):

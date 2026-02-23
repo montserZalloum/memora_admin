@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 
 import structlog
 
+from fastapi_app.core.redis_keys import level_config_key
+
 logger = structlog.get_logger()
 
 DEFAULT_TITLES: dict[int, str] = {
@@ -90,13 +92,10 @@ def calculate_level(total_xp: int, config: LevelConfig) -> tuple[int, str, int, 
 	return level, title, xp_in_level, xp_to_next
 
 
-LEVEL_CONFIG_REDIS_KEY = "memora:config:levels"
-
-
 async def get_level_config(redis_client) -> LevelConfig:
 	"""Load level config from Redis, fallback to defaults on miss/error."""
 	try:
-		cached = await redis_client.get(LEVEL_CONFIG_REDIS_KEY)
+		cached = await redis_client.get(level_config_key())
 		if cached is None:
 			return DEFAULT_LEVEL_CONFIG
 

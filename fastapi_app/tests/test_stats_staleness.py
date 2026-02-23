@@ -32,7 +32,7 @@ TEST_VERSION = 1
 @pytest.fixture
 async def stats_svc(redis_client, test_prefix):
 	"""StatsService with prefix-isolated test keys."""
-	return StatsService(redis_client, key_prefix=test_prefix)
+	return StatsService(redis_client)
 
 
 def _make_hierarchy(content_hash: str = "aabbccdd", num_lessons: int = 3) -> SubjectHierarchy:

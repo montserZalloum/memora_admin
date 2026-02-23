@@ -120,7 +120,7 @@ Content hierarchy: Subject → Track → Unit → Topic → Lesson → Stage
 
 - **Services**: Business logic with Redis operations (`services/progress.py`, `services/access.py`)
 - **Dependencies**: Injected via `Annotated` + `Depends`
-- **Redis keys**: Prefixed with `memora:` (e.g., `memora:progress:{user_id}:{subject_id}:v{version}`)
+- **Redis keys**: ALL keys MUST be defined in `fastapi_app/core/redis_keys.py`. Never use inline `f"memora:..."` strings — always import a key builder function. This is the single source of truth for key formats and documentation.
 - **Logging**: Structured via `structlog`
 - **CRITICAL: `decode_responses=True`**: The Redis pool (`core/redis.py`) uses `decode_responses=True`. ALL Redis responses are **strings**, NEVER bytes. Do NOT use `.encode()` on keys when doing lookups against HGETALL/GET results. This caused a recurring bug in `profile_page.py` activity endpoint.
 - **Sync tasks must MERGE, not REPLACE**: When syncing Redis data to MariaDB (e.g., `daily_xp_json`), always merge with existing DB values. Redis may have sparse data after a flush; replacing would destroy historical data.

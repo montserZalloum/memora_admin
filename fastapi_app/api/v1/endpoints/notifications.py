@@ -8,6 +8,7 @@ import jwt
 import structlog
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect, status
 
+from fastapi_app.core.redis_keys import notify_channel
 from fastapi_app.core.security import decode_token
 
 if TYPE_CHECKING:
@@ -57,7 +58,7 @@ async def notifications_ws(
 	# If first connection for this user, subscribe to their notification channel
 	notify_pubsub = websocket.app.state.notify_pubsub
 	if is_first:
-		await notify_pubsub.subscribe(f"memora:notify:{user_id}")
+		await notify_pubsub.subscribe(notify_channel(user_id))
 		logger.info("ws_connected", user_id=user_id, is_first=True)
 	else:
 		logger.info("ws_connected", user_id=user_id, is_first=False)
@@ -74,7 +75,7 @@ async def notifications_ws(
 		is_last = await ws_manager.disconnect(user_id, websocket)
 		if is_last:
 			try:
-				await notify_pubsub.unsubscribe(f"memora:notify:{user_id}")
+				await notify_pubsub.unsubscribe(notify_channel(user_id))
 			except Exception:
 				pass
 		logger.info("ws_disconnected", user_id=user_id, is_last=is_last)

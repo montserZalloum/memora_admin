@@ -19,6 +19,14 @@ import frappe
 import redis
 from dotenv import load_dotenv
 
+from fastapi_app.core.redis_keys import (
+	access_key as _access_key,
+	cache_invalidation_channel,
+	plan_free_subjects_key,
+	season_key,
+	subjects_with_free_content_key,
+)
+
 # Load FastAPI .env file
 _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(_env_path)
@@ -48,7 +56,7 @@ def on_season_updated(doc, method):
     - Uses Redis hash for atomic multi-field updates
     """
     r = get_fastapi_redis()
-    redis_key = f"memora:season:{doc.name}"
+    redis_key = season_key(doc.name)
 
     # Use single hset with mapping for atomic update
     r.hset(
@@ -67,7 +75,7 @@ def on_season_updated(doc, method):
 def on_season_deleted(doc, method):
     """Remove season from Redis cache when deleted."""
     r = get_fastapi_redis()
-    redis_key = f"memora:season:{doc.name}"
+    redis_key = season_key(doc.name)
     r.delete(redis_key)
 
     frappe.logger().info(f"Season {doc.name} removed from Redis")
@@ -92,7 +100,7 @@ def on_subscription_change(doc, method):
     access_key = doc.access_key
 
     r = get_fastapi_redis()
-    redis_key = f"memora:access:{user_id}"
+    redis_key = _access_key(user_id)
 
     if doc.is_active:
         r.sadd(redis_key, access_key)
@@ -102,7 +110,7 @@ def on_subscription_change(doc, method):
         frappe.logger().info(f"Revoked {access_key} from {user_id}")
 
     # Notify the player to re-fetch subscriptions
-    r.publish("memora:cache:invalidate", json.dumps({
+    r.publish(cache_invalidation_channel(), json.dumps({
         "type": "subscription_changed",
         "player_id": user_id,
     }))
@@ -114,12 +122,12 @@ def on_subscription_deleted(doc, method):
     user_id = doc.player
 
     r = get_fastapi_redis()
-    redis_key = f"memora:access:{user_id}"
+    redis_key = _access_key(user_id)
     r.srem(redis_key, doc.access_key)
     frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
 
     # Notify the player to re-fetch subscriptions
-    r.publish("memora:cache:invalidate", json.dumps({
+    r.publish(cache_invalidation_channel(), json.dumps({
         "type": "subscription_changed",
         "player_id": user_id,
     }))
@@ -138,7 +146,7 @@ def on_plan_subject_changed(doc, method):
     """
     plan_id = doc.parent
     subject_id = doc.subject
-    redis_key = f"memora:plan:{plan_id}:free_subjects"
+    redis_key = plan_free_subjects_key(plan_id)
 
     r = get_fastapi_redis()
 
@@ -156,7 +164,7 @@ def on_plan_subject_changed(doc, method):
         frappe.logger().info(f"Plan subject {subject_id} marked premium in plan {plan_id}")
 
     # Notify connected clients on this plan to re-fetch subscriptions
-    r.publish("memora:cache:invalidate", json.dumps({
+    r.publish(cache_invalidation_channel(), json.dumps({
         "type": "plan_subjects",
         "plan_id": plan_id,
     }))
@@ -175,7 +183,7 @@ def rebuild_plan_free_subjects(plan_id: str):
     )
 
     r = get_fastapi_redis()
-    redis_key = f"memora:plan:{plan_id}:free_subjects"
+    redis_key = plan_free_subjects_key(plan_id)
 
     # Clear and rebuild
     r.delete(redis_key)
@@ -204,7 +212,7 @@ def on_unit_free_changed(doc, method):
         return
 
     subject_id = track.subject
-    redis_key = "memora:subjects_with_free_content"
+    redis_key = subjects_with_free_content_key()
     r = get_fastapi_redis()
 
     if method == "on_trash":
@@ -237,7 +245,7 @@ def on_topic_free_changed(doc, method):
         return
 
     subject_id = track.subject
-    redis_key = "memora:subjects_with_free_content"
+    redis_key = subjects_with_free_content_key()
     r = get_fastapi_redis()
 
     if method == "on_trash":
@@ -291,7 +299,7 @@ def _update_subject_free_content_status(subject_id: str, r, redis_key: str):
 def rebuild_subjects_with_free_content():
     """Rebuild entire subjects_with_free_content set (for initial sync or repair)."""
     r = get_fastapi_redis()
-    redis_key = "memora:subjects_with_free_content"
+    redis_key = subjects_with_free_content_key()
 
     # Clear existing
     r.delete(redis_key)

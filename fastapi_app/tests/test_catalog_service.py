@@ -3,8 +3,9 @@
 import json
 import pytest
 
-from fastapi_app.services.catalog import CatalogService
+from fastapi_app.core.redis_keys import access_key as _access_key_fn, catalog_key, pending_key as _pending_key_fn
 from fastapi_app.models.catalog import CatalogProduct, CatalogSubject
+from fastapi_app.services.catalog import CatalogService
 
 # Test constants
 TEST_PLAN = "PLAN-TEST-CAT-001"
@@ -16,7 +17,7 @@ TEST_PRODUCT_2 = "GRANT-CAT-002"
 @pytest.fixture
 async def catalog_svc(redis_client, test_prefix, mock_frappe):
 	"""CatalogService with test dependencies."""
-	return CatalogService(redis_client, frappe_client=mock_frappe, key_prefix=test_prefix)
+	return CatalogService(redis_client, frappe_client=mock_frappe)
 
 
 def _make_test_product(grant_id: str, subject_ids: list[str]) -> dict:
@@ -39,7 +40,7 @@ class TestCacheHit:
 			_make_test_product(TEST_PRODUCT_1, ["MATH"]),
 			_make_test_product(TEST_PRODUCT_2, ["SCIENCE"]),
 		]
-		key = f"{test_prefix}catalog:{TEST_PLAN}"
+		key = catalog_key(TEST_PLAN)
 		await redis_client.set(key, json.dumps(products))
 
 		# Action: get catalog
@@ -73,7 +74,7 @@ class TestCacheMiss:
 		mock_frappe.call.assert_called_once()
 
 		# Assert: cached in Redis with NO TTL (infinite)
-		key = f"{test_prefix}catalog:{TEST_PLAN}"
+		key = catalog_key(TEST_PLAN)
 		cached = await redis_client.get(key)
 		assert cached is not None
 
@@ -92,12 +93,12 @@ class TestPlayerFiltering:
 			_make_test_product(TEST_PRODUCT_1, ["MATH"]),
 			_make_test_product(TEST_PRODUCT_2, ["SCIENCE"]),
 		]
-		key = f"{test_prefix}catalog:{TEST_PLAN}"
+		key = catalog_key(TEST_PLAN)
 		await redis_client.set(key, json.dumps(products))
 
 		# Setup: add PRODUCT_1 to pending set
-		pending_key = f"{test_prefix}pending:{TEST_PLAYER}"
-		await redis_client.sadd(pending_key, TEST_PRODUCT_1)
+		pkey = _pending_key_fn(TEST_PLAYER)
+		await redis_client.sadd(pkey, TEST_PRODUCT_1)
 
 		# Action: get player catalog
 		result = await catalog_svc.get_player_catalog(TEST_PLAN, TEST_PLAYER)
@@ -113,12 +114,12 @@ class TestPlayerFiltering:
 			_make_test_product(TEST_PRODUCT_1, ["MATH", "SCIENCE"]),
 			_make_test_product(TEST_PRODUCT_2, ["HISTORY"]),
 		]
-		key = f"{test_prefix}catalog:{TEST_PLAN}"
+		key = catalog_key(TEST_PLAN)
 		await redis_client.set(key, json.dumps(products))
 
 		# Setup: add all subjects of PRODUCT_1 to access set
-		access_key = f"{test_prefix}access:{TEST_PLAYER}"
-		await redis_client.sadd(access_key, "SUB-MATH", "SUB-SCIENCE")
+		akey = _access_key_fn(TEST_PLAYER)
+		await redis_client.sadd(akey, "SUB-MATH", "SUB-SCIENCE")
 
 		# Action: get player catalog
 		result = await catalog_svc.get_player_catalog(TEST_PLAN, TEST_PLAYER)

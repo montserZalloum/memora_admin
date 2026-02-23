@@ -13,6 +13,7 @@ from typing import Optional
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import profile_key as _profile_key_fn
 from fastapi_app.models.profile import PlayerProfile
 from fastapi_app.services.frappe_client import FrappeClient
 
@@ -36,15 +37,13 @@ class ProfileService:
 		self,
 		redis_client: redis.Redis,
 		frappe_client: FrappeClient,
-		key_prefix: str = "memora:",
 	):
 		self.redis = redis_client
 		self.frappe = frappe_client
-		self.prefix = key_prefix
 
 	def _cache_key(self, player_id: str) -> str:
 		"""Generate Redis key for profile cache."""
-		return f"{self.prefix}profile:{player_id}"
+		return _profile_key_fn(player_id)
 
 	def _apply_fallback(self, player_id: str) -> PlayerProfile:
 		"""Generate fallback profile for missing data.

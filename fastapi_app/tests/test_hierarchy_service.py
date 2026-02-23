@@ -3,8 +3,9 @@
 import json
 import pytest
 
-from fastapi_app.services.hierarchy import HierarchyService
+from fastapi_app.core.redis_keys import hierarchy_key, subjects_with_free_content_key
 from fastapi_app.models.progress import SubjectHierarchy, TrackInfo, UnitInfo, TopicInfo, LessonInfo
+from fastapi_app.services.hierarchy import HierarchyService
 
 # Test constants
 TEST_SUBJECT = "SUBJ-TEST-HIR-001"
@@ -13,7 +14,7 @@ TEST_SUBJECT = "SUBJ-TEST-HIR-001"
 @pytest.fixture
 async def hierarchy_svc(redis_client, test_prefix, mock_frappe):
 	"""HierarchyService with test dependencies."""
-	return HierarchyService(redis_client, frappe_client=mock_frappe, key_prefix=test_prefix)
+	return HierarchyService(redis_client, frappe_client=mock_frappe)
 
 
 def _make_test_hierarchy() -> SubjectHierarchy:
@@ -50,7 +51,7 @@ class TestCacheHit:
 		"""TC-HIR-01: Cache hit - Frappe NOT called."""
 		# Setup: pre-seed hierarchy in Redis
 		hierarchy = _make_test_hierarchy()
-		key = f"{test_prefix}hierarchy:{TEST_SUBJECT}"
+		key = hierarchy_key(TEST_SUBJECT)
 		await redis_client.set(key, hierarchy.model_dump_json())
 
 		# Action: get hierarchy
@@ -87,7 +88,7 @@ class TestCacheMiss:
 		)
 
 		# Assert: cached in Redis with TTL
-		key = f"{test_prefix}hierarchy:{TEST_SUBJECT}"
+		key = hierarchy_key(TEST_SUBJECT)
 		cached = await redis_client.get(key)
 		assert cached is not None
 		cached_obj = SubjectHierarchy.model_validate_json(cached)
@@ -105,7 +106,7 @@ class TestInvalidation:
 		"""TC-HIR-03: invalidate deletes Redis key."""
 		# Setup: pre-seed hierarchy
 		hierarchy = _make_test_hierarchy()
-		key = f"{test_prefix}hierarchy:{TEST_SUBJECT}"
+		key = hierarchy_key(TEST_SUBJECT)
 		await redis_client.set(key, hierarchy.model_dump_json())
 
 		# Action: invalidate
@@ -131,6 +132,6 @@ class TestFreeContent:
 		await hierarchy_svc.get_hierarchy(TEST_SUBJECT)
 
 		# Assert: subject added to free content set
-		free_set_key = f"{test_prefix}subjects_with_free_content"
+		free_set_key = subjects_with_free_content_key()
 		is_member = await redis_client.sismember(free_set_key, TEST_SUBJECT)
 		assert bool(is_member) is True

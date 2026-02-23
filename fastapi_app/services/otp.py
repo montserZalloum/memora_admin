@@ -15,6 +15,16 @@ import redis.asyncio as aioredis
 import structlog
 from fastapi import HTTPException
 
+from fastapi_app.core.redis_keys import (
+	pending_reg_key,
+	phone_reserved_key,
+	ratelimit_otp_cooldown_key,
+	ratelimit_otp_ip_key,
+	ratelimit_otp_phone_key,
+	reset_otp_key,
+	reset_token_key,
+)
+
 logger = structlog.get_logger()
 
 # Lua script for atomic increment with conditional TTL (same pattern as rate_limit.py)
@@ -66,11 +76,9 @@ class OTPService:
 		self,
 		redis_client: aioredis.Redis,
 		provider: OTPProvider | None = None,
-		key_prefix: str = "memora:",
 	):
 		self.redis = redis_client
 		self.provider = provider or StaticOTPProvider()
-		self.prefix = key_prefix
 		self._rate_limit_script = None
 
 	async def _get_rate_limit_script(self):
@@ -89,7 +97,7 @@ class OTPService:
 		script = await self._get_rate_limit_script()
 
 		# Check phone limit
-		phone_key = f"{self.prefix}ratelimit:otp:phone:{mobile}"
+		phone_key = ratelimit_otp_phone_key(mobile)
 		phone_count = await script(keys=[phone_key], args=[self.RATE_LIMIT_WINDOW])
 
 		if phone_count > self.PHONE_LIMIT:
@@ -102,7 +110,7 @@ class OTPService:
 			)
 
 		# Check IP limit
-		ip_key = f"{self.prefix}ratelimit:otp:ip:{ip_address}"
+		ip_key = ratelimit_otp_ip_key(ip_address)
 		ip_count = await script(keys=[ip_key], args=[self.RATE_LIMIT_WINDOW])
 
 		if ip_count > self.IP_LIMIT:
@@ -119,7 +127,7 @@ class OTPService:
 
 		Raises HTTPException(429) if cooldown is still active.
 		"""
-		cooldown_key = f"{self.prefix}ratelimit:otp:cooldown:{mobile}"
+		cooldown_key = ratelimit_otp_cooldown_key(mobile)
 		exists = await self.redis.exists(cooldown_key)
 
 		if exists:
@@ -132,7 +140,7 @@ class OTPService:
 
 	async def _set_cooldown(self, mobile: str) -> None:
 		"""Set resend cooldown for this phone number."""
-		cooldown_key = f"{self.prefix}ratelimit:otp:cooldown:{mobile}"
+		cooldown_key = ratelimit_otp_cooldown_key(mobile)
 		await self.redis.set(cooldown_key, "1", ex=self.COOLDOWN_TTL)
 
 	# --- Registration flow ---
@@ -168,7 +176,7 @@ class OTPService:
 		await self._check_cooldown(mobile)
 
 		# Atomic phone reservation (SETNX)
-		reserved_key = f"{self.prefix}phone_reserved:{mobile}"
+		reserved_key = phone_reserved_key(mobile)
 		was_set = await self.redis.set(reserved_key, "1", ex=self.OTP_TTL, nx=True)
 
 		if not was_set:
@@ -195,7 +203,7 @@ class OTPService:
 			"attempts": 0,
 		}
 
-		pending_key = f"{self.prefix}pending:{pending_id}"
+		pending_key = pending_reg_key(pending_id)
 		await self.redis.set(pending_key, json.dumps(pending_data), ex=self.OTP_TTL)
 
 		# Set cooldown and send OTP
@@ -217,7 +225,7 @@ class OTPService:
 		Raises:
 			HTTPException(401): OTP expired, invalid, or too many attempts
 		"""
-		pending_key = f"{self.prefix}pending:{pending_id}"
+		pending_key = pending_reg_key(pending_id)
 		raw = await self.redis.get(pending_key)
 
 		if raw is None:
@@ -229,7 +237,7 @@ class OTPService:
 		if data["attempts"] >= self.MAX_ATTEMPTS:
 			# Clean up
 			await self.redis.delete(pending_key)
-			reserved_key = f"{self.prefix}phone_reserved:{data['mobile']}"
+			reserved_key = phone_reserved_key(data["mobile"])
 			await self.redis.delete(reserved_key)
 			logger.warning("otp_max_attempts", mobile_suffix=data["mobile"][-4:])
 			raise HTTPException(
@@ -253,7 +261,7 @@ class OTPService:
 			)
 
 		# Success: clean up and return data
-		reserved_key = f"{self.prefix}phone_reserved:{data['mobile']}"
+		reserved_key = phone_reserved_key(data["mobile"])
 		await self.redis.delete(pending_key, reserved_key)
 
 		logger.info("otp_verification_success", mobile_suffix=data["mobile"][-4:])
@@ -273,7 +281,7 @@ class OTPService:
 			HTTPException(401): Registration expired
 			HTTPException(429): Rate limit or cooldown exceeded
 		"""
-		pending_key = f"{self.prefix}pending:{pending_id}"
+		pending_key = pending_reg_key(pending_id)
 		raw = await self.redis.get(pending_key)
 
 		if raw is None:
@@ -328,7 +336,7 @@ class OTPService:
 			# Generate and store OTP only for existing phones
 			otp = "1111"
 			reset_data = {"otp": otp, "attempts": 0}
-			reset_key = f"{self.prefix}reset:{mobile}"
+			reset_key = reset_otp_key(mobile)
 			await self.redis.set(reset_key, json.dumps(reset_data), ex=self.OTP_TTL)
 
 			# Send via provider
@@ -349,7 +357,7 @@ class OTPService:
 		Raises:
 			HTTPException(401): OTP expired, invalid, or too many attempts
 		"""
-		reset_key = f"{self.prefix}reset:{mobile}"
+		reset_key = reset_otp_key(mobile)
 		raw = await self.redis.get(reset_key)
 
 		if raw is None:
@@ -385,7 +393,7 @@ class OTPService:
 		await self.redis.delete(reset_key)
 
 		token = secrets.token_urlsafe(32)
-		token_key = f"{self.prefix}reset_token:{token}"
+		token_key = reset_token_key(token)
 		await self.redis.set(token_key, mobile, ex=self.RESET_TOKEN_TTL)
 
 		logger.info("reset_otp_verified", mobile_suffix=mobile[-4:])
@@ -403,7 +411,7 @@ class OTPService:
 		Raises:
 			HTTPException(401): Token expired or invalid
 		"""
-		token_key = f"{self.prefix}reset_token:{token}"
+		token_key = reset_token_key(token)
 		mobile = await self.redis.get(token_key)
 
 		if mobile is None:
@@ -411,10 +419,6 @@ class OTPService:
 
 		# Single-use: delete immediately
 		await self.redis.delete(token_key)
-
-		# Redis returns bytes, decode if needed
-		if isinstance(mobile, bytes):
-			mobile = mobile.decode("utf-8")
 
 		logger.info("reset_token_validated", mobile_suffix=mobile[-4:])
 		return mobile

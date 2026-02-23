@@ -5,6 +5,7 @@ import pytest
 import redis.asyncio as redis
 from httpx import AsyncClient
 
+from fastapi_app.core.redis_keys import hierarchy_key, progress_key as _progress_key_fn
 from fastapi_app.tests.conftest import (
 	make_hierarchy_json,
 	seed_hierarchy,
@@ -50,7 +51,7 @@ class TestProgressSummary:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 	async def test_unauthenticated(
 		self,
@@ -102,7 +103,7 @@ class TestSubjectProgress:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 	async def test_subject_not_found(
 		self,
@@ -151,7 +152,7 @@ class TestSubjectProgress:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 	async def test_free_content_bypass(
 		self,
@@ -179,7 +180,7 @@ class TestSubjectProgress:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 
 class TestTrackListing:
@@ -212,7 +213,7 @@ class TestTrackListing:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 
 class TestTrackDetail:
@@ -246,7 +247,7 @@ class TestTrackDetail:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 
 class TestUnitDetail:
@@ -283,7 +284,7 @@ class TestUnitDetail:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 
 
 class TestLessonCompletion:
@@ -309,7 +310,7 @@ class TestLessonCompletion:
 		await seed_access_grants(redis_client, player_id, [f"SUB-{subject_id}"])
 
 		# Seed progress bitmap: mark lessons 0,2,4 as completed
-		progress_key = f"memora:progress:{player_id}:{subject_id}:v1"
+		progress_key = _progress_key_fn(player_id, subject_id)
 		for bit_index in [0, 2, 4]:
 			await redis_client.setbit(progress_key, bit_index, 1)
 
@@ -322,5 +323,5 @@ class TestLessonCompletion:
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
-		await redis_client.delete(f"memora:hierarchy:{subject_id}")
+		await redis_client.delete(hierarchy_key(subject_id))
 		await redis_client.delete(progress_key)

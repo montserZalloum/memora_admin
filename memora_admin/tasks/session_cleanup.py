@@ -22,6 +22,7 @@ import logging
 import frappe
 import redis
 
+from fastapi_app.core.redis_keys import GAME_SESSION_SCAN_PATTERN
 from memora_admin.tasks.task_utils import (
 	TASK_DURATION,
 	TASK_RUNS,
@@ -111,7 +112,7 @@ def _do_session_cleanup() -> tuple[int, int, list]:
 		# Per Phase 9: memora:gamesession:{user_id}
 		cursor, keys = r.scan(
 			cursor,
-			match="memora:gamesession:*",
+			match=GAME_SESSION_SCAN_PATTERN,
 			count=100,  # Smaller batches since sessions should be fewer than wallets
 		)
 

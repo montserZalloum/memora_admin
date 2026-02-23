@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 import redis.asyncio as redis
 import structlog
 
+from fastapi_app.core.redis_keys import access_key as _access_key_fn, plan_free_subjects_key as _plan_free_subjects_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:
@@ -34,16 +35,14 @@ class AccessService:
 	def __init__(
 		self,
 		redis_client: redis.Redis,
-		key_prefix: str = "memora:",
 		frappe_client: FrappeClient | None = None,
 	):
 		self.redis = redis_client
-		self.prefix = key_prefix
 		self.frappe = frappe_client
 
 	def _access_key(self, player_id: str) -> str:
 		"""Generate Redis key for player's access set."""
-		return f"{self.prefix}access:{player_id}"
+		return _access_key_fn(player_id)
 
 	async def ensure_hydrated(self, player_id: str) -> None:
 		"""Ensure access set exists in Redis, hydrating from MariaDB if missing.
@@ -166,7 +165,7 @@ class AccessService:
 
 	def _plan_free_subjects_key(self, plan_id: str) -> str:
 		"""Generate Redis key for plan's free subjects set."""
-		return f"{self.prefix}plan:{plan_id}:free_subjects"
+		return _plan_free_subjects_key_fn(plan_id)
 
 	async def is_subject_free_in_plan(self, plan_id: str, subject_id: str) -> bool:
 		"""Check if subject is marked non-premium in player's plan.

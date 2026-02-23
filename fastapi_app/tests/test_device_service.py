@@ -5,6 +5,7 @@ import uuid
 import pytest
 import redis.asyncio as redis
 
+from fastapi_app.core.redis_keys import devices_key
 from fastapi_app.models.device import DeviceInfo, DeviceRegistrationResult
 from fastapi_app.services.device import DeviceService
 
@@ -40,7 +41,7 @@ MAX_DEVICES = 3
 @pytest.fixture
 async def device_service(redis_client: redis.Redis, test_prefix: str) -> DeviceService:
 	"""Create DeviceService with test prefix for isolation."""
-	return DeviceService(redis_client, key_prefix=test_prefix)
+	return DeviceService(redis_client)
 
 
 class TestRegisterDevice:
@@ -65,7 +66,7 @@ class TestRegisterDevice:
 		assert result.device_name, "Device name should be populated"
 
 		# Verify 6 hash fields are stored
-		key = f"{test_prefix}devices:{TEST_USER}"
+		key = devices_key(TEST_USER)
 		fields = await redis_client.hgetall(key)
 
 		# Count device fields for this device
@@ -127,7 +128,7 @@ class TestRegisterDevice:
 		assert result2.status == "fingerprint_match", "Status should be 'fingerprint_match'"
 
 		# Verify old device_id is no longer in Redis
-		key = f"{test_prefix}devices:{TEST_USER}"
+		key = devices_key(TEST_USER)
 		device_fields_old = [f for f in (await redis_client.hgetall(key)).keys() if device_id_1 in str(f)]
 		assert len(device_fields_old) == 0, "Old device should be removed"
 
@@ -217,7 +218,7 @@ class TestDeviceManagement:
 		)
 
 		# Verify device exists
-		key = f"{test_prefix}devices:{TEST_USER}"
+		key = devices_key(TEST_USER)
 		fields_before = [f for f in (await redis_client.hgetall(key)).keys() if device_id in str(f)]
 		assert len(fields_before) >= 5, "Device should have fields before removal"
 

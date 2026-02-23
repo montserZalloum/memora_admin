@@ -6,6 +6,7 @@ import pytest
 import redis.asyncio as redis
 
 from fastapi_app.core.constants import DIRTY_PROGRESS_KEY, GAME_SESSION_TTL, INTERACTION_BUFFER_KEY
+from fastapi_app.core.redis_keys import game_session_key, progress_key
 from fastapi_app.models.game_session import GameSession
 from fastapi_app.services.game_session import GameSessionService
 
@@ -20,7 +21,7 @@ TEST_DEVICE = "device-abc"
 @pytest.fixture
 async def game_session_service(redis_client: redis.Redis, test_prefix: str) -> GameSessionService:
 	"""Create GameSessionService with test prefix for isolation."""
-	return GameSessionService(redis_client, key_prefix=test_prefix)
+	return GameSessionService(redis_client)
 
 
 @pytest.fixture(autouse=True)
@@ -53,7 +54,7 @@ class TestStartSession:
 		assert len(session_id) > 20, "session_id should be UUID-like"
 
 		# Verify Redis hash exists with 5 fields
-		key = f"{test_prefix}gamesession:{TEST_USER}"
+		key = game_session_key(TEST_USER)
 		hash_data = await redis_client.hgetall(key)
 		assert len(hash_data) == 5, "Session hash should have 5 fields"
 		assert hash_data.get(b"session_id") or hash_data.get("session_id"), "session_id field missing"
@@ -85,7 +86,7 @@ class TestStartSession:
 		assert session_id_a != session_id_b, "Session IDs should differ for new session"
 
 		# Verify only second session exists
-		key = f"{test_prefix}gamesession:{TEST_USER}"
+		key = game_session_key(TEST_USER)
 		hash_data = await redis_client.hgetall(key)
 		stored_session_id = hash_data.get(b"session_id") or hash_data.get("session_id")
 		stored_session_id_str = (
@@ -145,7 +146,7 @@ class TestCompleteSession:
 		assert ended_session.lesson_id == TEST_LESSON, "lesson_id should be preserved"
 
 		# Verify hash is deleted from Redis
-		key = f"{test_prefix}gamesession:{TEST_USER}"
+		key = game_session_key(TEST_USER)
 		exists = await redis_client.exists(key)
 		assert exists == 0, "Session hash should be deleted"
 
@@ -175,8 +176,8 @@ class TestCompleteSession:
 		assert session is not None, "Should return session data"
 
 		# Verify progress bit is set
-		progress_key = f"{test_prefix}progress:{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
-		bit_value = await redis_client.getbit(progress_key, 5)
+		pkey = progress_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
+		bit_value = await redis_client.getbit(pkey, 5)
 		assert bit_value == 1, "Progress bit at index 5 should be set"
 
 		# Verify dirty set contains member

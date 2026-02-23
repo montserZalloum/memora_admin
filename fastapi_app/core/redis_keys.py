@@ -156,6 +156,17 @@ def catalog_key(plan_id: str) -> str:
 	return f"memora:catalog:{plan_id}"
 
 
+def plan_manifest_key(plan_id: str) -> str:
+	"""Cached plan manifest JSON for mobile app serving.
+
+	Type: STRING (JSON-encoded PlanManifest)
+	Producers: PlanService.get_manifest() on cache miss
+	Consumers: PlanService.get_manifest()
+	TTL: 1 hour
+	"""
+	return f"memora:plan:{plan_id}:manifest"
+
+
 # =============================================================================
 # Session & Game State
 # =============================================================================
@@ -641,24 +652,24 @@ def report_cooldown_key(player_id: str) -> str:
 # =============================================================================
 
 
-def otp_key(pending_id: str) -> str:
-	"""OTP code for pending registration verification.
+def registration_options_key() -> str:
+	"""Cached registration options (grades, plans, seasons).
 
-	Type: STRING (6-digit OTP code)
-	Producers: auth endpoint (send OTP)
-	Consumers: auth endpoint (verify OTP)
-	TTL: 10 minutes
+	Type: STRING (JSON: {grades, plans, seasons})
+	Producers: auth.py _get_registration_options() on cache miss
+	Consumers: auth.py get_registration_options(), register verify
+	TTL: 5 minutes
 	"""
-	return f"memora:otp:{pending_id}"
+	return "memora:registration_options"
 
 
 def pending_reg_key(pending_id: str) -> str:
 	"""Pending registration data awaiting OTP verification.
 
 	Type: STRING (JSON with mobile, plan, grade, major, etc.)
-	Producers: auth endpoint (initiate registration)
-	Consumers: auth endpoint (complete registration after OTP)
-	TTL: 10 minutes
+	Producers: OTPService.create_pending_registration()
+	Consumers: OTPService.verify_registration_otp(), resend_registration_otp()
+	TTL: 5 minutes (OTP_TTL)
 	"""
 	return f"memora:pending_reg:{pending_id}"
 
@@ -691,20 +702,33 @@ def ratelimit_otp_ip_key(ip: str) -> str:
 	"""OTP send rate limit counter per IP address.
 
 	Type: STRING (counter)
-	Producers: auth endpoint (send OTP)
-	Consumers: auth endpoint (send OTP)
-	TTL: 10 minutes
+	Producers: OTPService._check_otp_rate_limit()
+	Consumers: OTPService._check_otp_rate_limit()
+	TTL: 10 minutes (RATE_LIMIT_WINDOW)
 	"""
 	return f"memora:ratelimit:otp:ip:{ip}"
 
 
-def reset_otp_key(mobile: str) -> str:
-	"""Password reset OTP for phone verification.
+def ratelimit_otp_cooldown_key(mobile: str) -> str:
+	"""OTP resend cooldown flag per phone number.
 
-	Type: STRING (6-digit OTP code)
-	Producers: auth endpoint (request password reset)
-	Consumers: auth endpoint (verify reset OTP)
-	TTL: 10 minutes
+	Prevents spamming OTP resend — 60s cooldown between requests.
+
+	Type: STRING ("1")
+	Producers: OTPService._set_cooldown()
+	Consumers: OTPService._check_cooldown()
+	TTL: 60 seconds (COOLDOWN_TTL)
+	"""
+	return f"memora:ratelimit:otp:cooldown:{mobile}"
+
+
+def reset_otp_key(mobile: str) -> str:
+	"""Password reset OTP data for phone verification.
+
+	Type: STRING (JSON: {"otp": code, "attempts": int})
+	Producers: OTPService.create_password_reset()
+	Consumers: OTPService.verify_password_reset_otp()
+	TTL: 5 minutes (OTP_TTL)
 	"""
 	return f"memora:reset_otp:{mobile}"
 
@@ -734,3 +758,25 @@ def webhook_idempotency_key(event_id: str) -> str:
 	TTL: 24 hours
 	"""
 	return f"memora:webhook:{event_id}"
+
+
+def webhook_retry_queue_key() -> str:
+	"""Webhook retry queue for failed payment webhooks.
+
+	Type: LIST of JSON strings
+	Producers: webhooks.py process_payment_webhook() on failure
+	Consumers: webhooks.py retry processing
+	TTL: None (persistent until processed)
+	"""
+	return "memora:webhook:retry_queue"
+
+
+# =============================================================================
+# SCAN Patterns (for background tasks iterating over key sets)
+# =============================================================================
+
+# Pattern for SCAN match= parameter to iterate all game session keys
+GAME_SESSION_SCAN_PATTERN = "memora:gamesession:*"
+
+# Pattern for SCAN match= parameter to iterate all wallet keys
+WALLET_SCAN_PATTERN = "memora:wallet:*"

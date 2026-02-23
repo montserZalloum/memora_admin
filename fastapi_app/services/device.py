@@ -7,6 +7,7 @@ import redis.asyncio as redis
 import structlog
 from user_agents import parse
 
+from fastapi_app.core.redis_keys import devices_key as _devices_key_fn
 from fastapi_app.models.device import DeviceInfo, DeviceRegistrationResult
 
 logger = structlog.get_logger()
@@ -105,21 +106,19 @@ class DeviceService:
 	- Admin removal handled separately via Frappe hooks
 	"""
 
-	def __init__(self, redis_client: redis.Redis, key_prefix: str = "memora:"):
+	def __init__(self, redis_client: redis.Redis):
 		"""
 		Initialize DeviceService.
 
 		Args:
 			redis_client: Async Redis client
-			key_prefix: Prefix for Redis keys (default: "memora:")
 		"""
 		self.redis = redis_client
-		self.prefix = key_prefix
 		self._register_script: Optional[Any] = None  # redis Script object
 
 	def _device_key(self, user_id: str) -> str:
 		"""Get Redis key for user's device registry."""
-		return f"{self.prefix}devices:{user_id}"
+		return _devices_key_fn(user_id)
 
 	async def _get_register_script(self) -> Any:
 		"""Get or create the registration Lua script (lazy-loaded and cached)."""

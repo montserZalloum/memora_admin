@@ -6,6 +6,13 @@ import pytest
 import redis.asyncio as redis
 from fastapi import HTTPException
 
+from fastapi_app.core.redis_keys import (
+	pending_reg_key,
+	phone_reserved_key,
+	ratelimit_otp_cooldown_key,
+	reset_otp_key,
+	reset_token_key,
+)
 from fastapi_app.services.otp import OTPService, StaticOTPProvider
 
 # Test constants
@@ -22,7 +29,6 @@ async def otp_service(redis_client: redis.Redis, test_prefix: str) -> OTPService
 	return OTPService(
 		redis_client=redis_client,
 		provider=StaticOTPProvider(),
-		key_prefix=test_prefix,
 	)
 
 
@@ -49,8 +55,8 @@ class TestRegistrationFlow:
 		assert len(pending_id) > 20, "pending_id should be long enough (token_urlsafe)"
 
 		# Verify Redis state
-		pending_key = f"{test_prefix}pending:{pending_id}"
-		raw = await redis_client.get(pending_key)
+		pk = pending_reg_key(pending_id)
+		raw = await redis_client.get(pk)
 		assert raw is not None, "Pending key should exist in Redis"
 
 		data = json.loads(raw)
@@ -59,12 +65,12 @@ class TestRegistrationFlow:
 		assert data["attempts"] == 0, "Attempts should start at 0"
 
 		# Verify phone_reserved key exists
-		reserved_key = f"{test_prefix}phone_reserved:{TEST_MOBILE}"
-		reserved = await redis_client.get(reserved_key)
+		rk = phone_reserved_key(TEST_MOBILE)
+		reserved = await redis_client.get(rk)
 		assert reserved is not None, "Phone should be reserved"
 
 		# Verify TTL
-		ttl = await redis_client.ttl(pending_key)
+		ttl = await redis_client.ttl(pk)
 		assert ttl > 0 and ttl <= 300, f"TTL should be <= 300, got {ttl}"
 
 	async def test_tc_otp_02_verify_correct_otp_returns_data_and_cleans(
@@ -94,13 +100,11 @@ class TestRegistrationFlow:
 		assert "attempts" not in data, "Attempts should not be returned"
 
 		# Verify pending key is deleted
-		pending_key = f"{test_prefix}pending:{pending_id}"
-		exists = await redis_client.exists(pending_key)
+		exists = await redis_client.exists(pending_reg_key(pending_id))
 		assert exists == 0, "Pending key should be deleted"
 
 		# Verify phone_reserved is deleted
-		reserved_key = f"{test_prefix}phone_reserved:{TEST_MOBILE}"
-		exists = await redis_client.exists(reserved_key)
+		exists = await redis_client.exists(phone_reserved_key(TEST_MOBILE))
 		assert exists == 0, "Phone reservation should be deleted"
 
 	async def test_tc_otp_03_verify_wrong_otp_increments_attempts(
@@ -125,8 +129,7 @@ class TestRegistrationFlow:
 		assert exc_info.value.status_code == 401, "Should return 401"
 
 		# Verify attempts incremented
-		pending_key = f"{test_prefix}pending:{pending_id}"
-		raw = await redis_client.get(pending_key)
+		raw = await redis_client.get(pending_reg_key(pending_id))
 		data = json.loads(raw)
 		assert data["attempts"] == 1, "Attempts should be 1"
 
@@ -158,13 +161,11 @@ class TestRegistrationFlow:
 		assert "Too many attempts" in str(exc_info.value.detail), "Should mention too many attempts"
 
 		# Verify pending key is deleted
-		pending_key = f"{test_prefix}pending:{pending_id}"
-		exists = await redis_client.exists(pending_key)
+		exists = await redis_client.exists(pending_reg_key(pending_id))
 		assert exists == 0, "Pending key should be deleted after max attempts"
 
 		# Verify phone_reserved is deleted
-		reserved_key = f"{test_prefix}phone_reserved:{TEST_MOBILE}"
-		exists = await redis_client.exists(reserved_key)
+		exists = await redis_client.exists(phone_reserved_key(TEST_MOBILE))
 		assert exists == 0, "Phone reservation should be deleted"
 
 	async def test_tc_otp_05_resend_cooldown_blocks_rapid_resend(
@@ -214,8 +215,7 @@ class TestOTPRateLimits:
 				pass
 
 			# Clear phone_reserved to allow another pending
-			reserved_key = f"{test_prefix}phone_reserved:{TEST_MOBILE}"
-			await redis_client.delete(reserved_key)
+			await redis_client.delete(phone_reserved_key(TEST_MOBILE))
 
 		# 4th request should be blocked by phone rate limit
 		with pytest.raises(HTTPException) as exc_info:
@@ -257,8 +257,7 @@ class TestOTPRateLimits:
 				pass
 
 			# Clear phone_reserved for this phone
-			reserved_key = f"{test_prefix}phone_reserved:2010000000{i:02d}"
-			await redis_client.delete(reserved_key)
+			await redis_client.delete(phone_reserved_key(f"2010000000{i:02d}"))
 
 		# 11th request should be blocked by IP rate limit
 		with pytest.raises(HTTPException) as exc_info:
@@ -291,8 +290,7 @@ class TestPasswordReset:
 		)
 
 		# Verify reset state is stored
-		reset_key = f"{test_prefix}reset:{TEST_MOBILE}"
-		raw = await redis_client.get(reset_key)
+		raw = await redis_client.get(reset_otp_key(TEST_MOBILE))
 		assert raw is not None, "Reset key should exist"
 
 		data = json.loads(raw)
@@ -308,13 +306,11 @@ class TestPasswordReset:
 		)
 
 		# Verify no reset state is stored
-		reset_key = f"{test_prefix}reset:9999999999"
-		exists = await redis_client.exists(reset_key)
+		exists = await redis_client.exists(reset_otp_key("9999999999"))
 		assert exists == 0, "Reset key should NOT exist when phone_exists=False"
 
 		# Verify cooldown IS still set (timing consistency)
-		cooldown_key = f"{test_prefix}ratelimit:otp:cooldown:9999999999"
-		exists = await redis_client.exists(cooldown_key)
+		exists = await redis_client.exists(ratelimit_otp_cooldown_key("9999999999"))
 		assert exists == 1, "Cooldown should be set even when phone_exists=False"
 
 	async def test_tc_otp_10_verify_password_reset_otp_returns_token_with_ttl(
@@ -333,13 +329,11 @@ class TestPasswordReset:
 		assert len(token) > 20, "Token should be long enough"
 
 		# Verify token is stored with correct TTL
-		token_key = f"{test_prefix}reset_token:{token}"
-		ttl = await redis_client.ttl(token_key)
+		ttl = await redis_client.ttl(reset_token_key(token))
 		assert ttl > 0 and ttl <= 900, f"TTL should be <= 900, got {ttl}"
 
 		# Verify reset state is deleted
-		reset_key = f"{test_prefix}reset:{TEST_MOBILE}"
-		exists = await redis_client.exists(reset_key)
+		exists = await redis_client.exists(reset_otp_key(TEST_MOBILE))
 		assert exists == 0, "Reset key should be deleted after verification"
 
 	async def test_tc_otp_11_validate_reset_token_consumed_on_first_use(

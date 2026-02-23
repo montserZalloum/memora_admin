@@ -13,6 +13,15 @@ from httpx import AsyncClient
 # CRITICAL: Override settings BEFORE any app import
 # This prevents lru_cache from caching the production settings
 from fastapi_app.core.config import Settings, get_settings
+from fastapi_app.core.redis_keys import (
+	access_key as _access_key_fn,
+	game_session_key as _game_session_key_fn,
+	gamification_settings_key,
+	hierarchy_key as _hierarchy_key_fn,
+	registration_options_key,
+	session_key as _session_key_fn,
+	wallet_key as _wallet_key_fn,
+)
 import fastapi_app.core.config as config_module
 
 _test_settings = Settings(
@@ -101,16 +110,38 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 	yield
 
 	# Cleanup: Scan and delete all keys matching test prefix and memora:* test keys
-	# (tests create memora:catalog:* keys and other memora:* keys using settings.redis_key_prefix)
+	# (tests create memora:catalog:* keys and other memora:* keys via redis_keys.py builders)
 	patterns_to_clean = [
 		f"{test_prefix}*",
 		"memora:catalog:*",
 		"memora:session:PLAYER-TEST-*",
+		"memora:session:USER-*",
 		"memora:settings:gamification",  # Clear cached settings between tests
 		"memora:access:PLAYER-TEST-*",
 		"memora:wallet:PLAYER-TEST-*",
+		"memora:progress:USER-*",
+		"memora:progress:PLAYER-*",
+		"memora:stats:USER-*",
+		"memora:stats:USR-*",
+		"memora:stats:PLAYER-*",
+		"memora:gamesession:USER-*",
+		"memora:devices:USER-*",
+		"memora:pending:PLAYER-*",
+		"memora:pending_reg:*",  # OTP pending registrations (random token IDs)
+		"memora:phone_reserved:*",
+		"memora:reset_otp:*",
+		"memora:reset_token:*",
+		"memora:plan:PLAN-TEST-*",
+		"memora:dirty:*",
+		"memora:buffer:*",
 		"memora:global_rl:*",  # Global rate limit counters
 		"memora:rl:*",  # Per-player rate limit counters
+		"memora:reviews_overview:*",
+		"memora:ratelimit:*",
+		"memora:hierarchy:SUBJ-TEST-*",
+		"memora:subjects_with_free_content",
+		"memora:profile:PLAYER-TEST-*",
+		registration_options_key(),
 	]
 
 	for pattern in patterns_to_clean:
@@ -299,8 +330,8 @@ async def authed_client(
 	token, family_id = make_player_token(player_id=player_id)
 
 	# Seed session in Redis for auth validation
-	session_key = f"memora:session:{player_id}"
-	await redis_client.set(session_key, json.dumps({"fid": family_id}))
+	sess_key = _session_key_fn(player_id)
+	await redis_client.set(sess_key, json.dumps({"fid": family_id}))
 
 	# Set Authorization header
 	app_client.headers["Authorization"] = f"Bearer {token}"
@@ -310,7 +341,7 @@ async def authed_client(
 	# Cleanup: Remove Authorization header and session key
 	if "Authorization" in app_client.headers:
 		del app_client.headers["Authorization"]
-	await redis_client.delete(session_key)
+	await redis_client.delete(sess_key)
 
 
 @pytest.fixture
@@ -342,8 +373,8 @@ async def admin_client(
 	token, family_id = make_admin_token(email=email)
 
 	# Seed session in Redis for auth validation
-	session_key = f"memora:session:{email}"
-	await redis_client.set(session_key, json.dumps({"fid": family_id}))
+	sess_key = _session_key_fn(email)
+	await redis_client.set(sess_key, json.dumps({"fid": family_id}))
 
 	# Set Authorization header
 	app_client.headers["Authorization"] = f"Bearer {token}"
@@ -353,7 +384,7 @@ async def admin_client(
 	# Cleanup: Remove Authorization header and session key
 	if "Authorization" in app_client.headers:
 		del app_client.headers["Authorization"]
-	await redis_client.delete(session_key)
+	await redis_client.delete(sess_key)
 
 
 # === Redis Seeding Helpers (plain async functions, not fixtures) ===
@@ -441,7 +472,7 @@ async def seed_hierarchy(
 	if hierarchy_json is None:
 		hierarchy_json = make_hierarchy_json(subject_id, **overrides)
 
-	key = f"memora:hierarchy:{subject_id}"
+	key = _hierarchy_key_fn(subject_id)
 	await redis.set(key, json.dumps(hierarchy_json), ex=3600)
 
 
@@ -471,7 +502,7 @@ async def seed_game_session(
 	}
 	session_data.update(overrides)
 
-	key = f"memora:gamesession:{user_id}"
+	key = _game_session_key_fn(user_id)
 	await redis.hset(key, mapping=session_data)
 
 
@@ -491,7 +522,7 @@ async def seed_settings(redis: redis.Redis) -> None:
 		"max_devices_per_player": 3,
 	}
 
-	key = "memora:settings:gamification"
+	key = gamification_settings_key()
 	await redis.set(key, json.dumps(settings))
 
 
@@ -515,7 +546,7 @@ async def seed_wallet(
 		"streak": str(streak),
 	}
 
-	key = f"memora:wallet:{player_id}"
+	key = _wallet_key_fn(player_id)
 	await redis.hset(key, mapping=wallet_data)
 
 
@@ -533,7 +564,7 @@ async def seed_access_grants(
 		keys: List of content keys to grant access to (e.g., ["SUB-MATH", "SUB-SCIENCE"])
 	"""
 	if keys:
-		key = f"memora:access:{player_id}"
+		key = _access_key_fn(player_id)
 		await redis.sadd(key, *keys)
 
 
