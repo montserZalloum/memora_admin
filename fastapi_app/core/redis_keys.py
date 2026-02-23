@@ -1,0 +1,736 @@
+"""Centralized Redis key builders for all memora: keys.
+
+EVERY Redis key used in the project must be defined here.
+When adding a new Redis key, create a builder function here first.
+Do NOT use inline f-strings for memora: keys anywhere in the codebase.
+
+This file is the single source of truth for:
+- Key naming conventions
+- Key documentation (what data lives there, what type, TTL)
+- Preventing key format mismatches between producers and consumers
+
+Usage:
+    from fastapi_app.core.redis_keys import access_key, wallet_key
+    data = await redis.hgetall(wallet_key("PLAYER-00001"))
+"""
+
+# =============================================================================
+# Access & Permissions
+# =============================================================================
+
+
+def access_key(player_id: str) -> str:
+	"""Player's access grants set.
+
+	Type: SET of content keys (e.g., "SUB-MATH", "TRK-MATH-01")
+	Producers: access_sync.py (Frappe hook), AccessService.ensure_hydrated()
+	Consumers: AccessService.check_access(), CatalogService.get_player_catalog()
+	TTL: None (persistent, explicit SREM to revoke)
+	"""
+	return f"memora:access:{player_id}"
+
+
+def plan_free_subjects_key(plan_id: str) -> str:
+	"""Subjects marked as non-premium (is_premium=0) in a plan.
+
+	Type: SET of subject IDs
+	Producers: access_sync.py on_plan_subject_changed(), rebuild_plan_free_subjects()
+	Consumers: AccessService.is_subject_free_in_plan()
+	TTL: None (event-driven invalidation)
+	"""
+	return f"memora:plan:{plan_id}:free_subjects"
+
+
+def subjects_with_free_content_key() -> str:
+	"""Global set of subjects that have at least one free unit or topic.
+
+	Type: SET of subject IDs
+	Producers: access_sync.py (unit/topic is_free hooks), HierarchyService (auto-repair)
+	Consumers: HierarchyService.get_subjects_with_free_content()
+	TTL: None (event-driven invalidation)
+	"""
+	return "memora:subjects_with_free_content"
+
+
+# =============================================================================
+# Progress & Completion
+# =============================================================================
+
+
+def progress_key(user_id: str, subject_id: str, version: int = 1) -> str:
+	"""Player's lesson completion bitmap for a subject.
+
+	Type: STRING (bitmap — each bit = one lesson)
+	Producers: ProgressService.complete_lesson(), GameSessionService.complete_session()
+	Consumers: ProgressService.is_complete(), StatsService (recompute)
+	TTL: None (synced to MariaDB via dirty set)
+	"""
+	return f"memora:progress:{user_id}:{subject_id}:v{version}"
+
+
+def stats_key(user_id: str, subject_id: str, version: int = 1) -> str:
+	"""Pre-computed progress statistics hash for a subject.
+
+	Type: HASH (completed, total, {track_id}:completed, {track_id}:total, ...)
+	Also stores _content_hash for staleness detection.
+	Producers: StatsService.set_stats(), StatsService.increment_completion_stats()
+	Consumers: StatsService.get_stats(), progress endpoint
+	TTL: 1 hour (with jitter)
+	"""
+	return f"memora:stats:{user_id}:{subject_id}:v{version}"
+
+
+def dirty_progress_key() -> str:
+	"""Dirty set of progress keys pending sync to MariaDB.
+
+	Type: SET of strings formatted as "{user_id}:{subject_id}:v{version}"
+	Producers: ProgressService.complete_lesson(), GameSessionService (Lua script)
+	Consumers: sync.py sync_dirty_progress()
+	TTL: None (consumed by background task)
+	"""
+	return "memora:dirty:progress"
+
+
+# =============================================================================
+# Wallet & Economy
+# =============================================================================
+
+
+def wallet_key(player_id: str) -> str:
+	"""Player's wallet hash (XP, streak, streak_date).
+
+	Type: HASH (xp: int, streak: int, streak_date: YYYY-MM-DD)
+	Producers: WalletService.award_xp(), WalletService.update_streak()
+	Consumers: WalletService.get_wallet(), ProfilePageService.get_hero()
+	TTL: None (synced to MariaDB via dirty set)
+	"""
+	return f"memora:wallet:{player_id}"
+
+
+def dirty_wallets_key() -> str:
+	"""Dirty set of player IDs pending wallet sync to MariaDB.
+
+	Type: SET of player IDs
+	Producers: WalletService.award_xp(), WalletService.update_streak()
+	Consumers: sync.py sync_dirty_wallets()
+	TTL: None (consumed by background task)
+	"""
+	return "memora:dirty:wallets"
+
+
+def daily_xp_key(player_id: str) -> str:
+	"""Per-player daily XP summary hash (MariaDB-backed).
+
+	Type: HASH (date string -> XP earned that day)
+	Producers: LeaderboardService.update_leaderboards()
+	Consumers: ProfilePageService.get_weekly_activity() (Phase 3 fallback)
+	TTL: 8 days (covers 7-day activity window + 1 buffer)
+	"""
+	return f"memora:daily_xp:{player_id}"
+
+
+# =============================================================================
+# Content Hierarchy & Metadata
+# =============================================================================
+
+
+def hierarchy_key(subject_id: str) -> str:
+	"""Cached subject hierarchy JSON (units, topics, lessons, stages).
+
+	Type: STRING (JSON-encoded SubjectHierarchy)
+	Producers: HierarchyService.get_hierarchy() on cache miss
+	Consumers: HierarchyService.get_hierarchy(), progress/session endpoints
+	TTL: 1 hour
+	"""
+	return f"memora:hierarchy:{subject_id}"
+
+
+def catalog_key(plan_id: str) -> str:
+	"""Cached product catalog JSON for a plan.
+
+	Type: STRING (JSON array of CatalogProduct)
+	Producers: CatalogService.get_catalog() on cache miss
+	Consumers: CatalogService.get_catalog(), CatalogService.get_player_catalog()
+	TTL: None (infinite — event-driven invalidation only)
+	"""
+	return f"memora:catalog:{plan_id}"
+
+
+# =============================================================================
+# Session & Game State
+# =============================================================================
+
+
+def session_key(user_id: str) -> str:
+	"""Player's auth session data (family ID + plan).
+
+	Type: STRING (JSON: {"fid": uuid, "plan": plan_id})
+	Producers: SessionService.create_session()
+	Consumers: SessionService.validate_session()
+	TTL: 30 days (matches refresh token lifetime)
+	"""
+	return f"memora:session:{user_id}"
+
+
+def game_session_key(user_id: str) -> str:
+	"""Active game session hash.
+
+	Type: HASH (session_id, lesson_id, subject_id, device_id, started_at)
+	Producers: GameSessionService.start_session() (Lua script)
+	Consumers: GameSessionService.get_active_session(), complete_session()
+	TTL: 1 hour (auto-expire abandoned sessions)
+	"""
+	return f"memora:gamesession:{user_id}"
+
+
+def devices_key(user_id: str) -> str:
+	"""Player's registered devices hash.
+
+	Type: HASH (device:{id}:name, device:{id}:ua, device:{id}:platform, ...)
+	Producers: DeviceService.register_device() (Lua script)
+	Consumers: DeviceService.get_devices(), DeviceService.validate_device()
+	TTL: None (persistent until admin removal)
+	"""
+	return f"memora:devices:{user_id}"
+
+
+# =============================================================================
+# Leaderboard
+# =============================================================================
+
+# Leaderboard prefix used by both FastAPI and Frappe tasks
+LB_PREFIX = "memora:lb"
+
+
+def lb_alltime_key(subject_id: str | None = None) -> str:
+	"""All-time leaderboard sorted set.
+
+	Type: ZSET (player_id -> composite score with tie-breaking)
+	Producers: LeaderboardService.update_leaderboards()
+	Consumers: LeaderboardService.get_top(), get_my_rank()
+	TTL: None (persistent)
+	"""
+	base = f"{LB_PREFIX}:alltime"
+	return f"{base}:subject:{subject_id}" if subject_id else base
+
+
+def lb_daily_key(date_str: str, subject_id: str | None = None) -> str:
+	"""Daily leaderboard sorted set (resets at midnight Asia/Amman).
+
+	Type: ZSET (player_id -> XP earned today)
+	Producers: LeaderboardService.update_leaderboards()
+	Consumers: LeaderboardService.get_top(), ProfilePageService.get_weekly_activity()
+	TTL: 30 days
+	"""
+	base = f"{LB_PREFIX}:daily:{date_str}"
+	return f"{base}:subject:{subject_id}" if subject_id else base
+
+
+def lb_weekly_key(friday_date: str, subject_id: str | None = None) -> str:
+	"""Weekly leaderboard sorted set (Islamic week: Fri-Thu).
+
+	Type: ZSET (player_id -> XP earned this week)
+	Producers: LeaderboardService.update_leaderboards()
+	Consumers: LeaderboardService.get_top(), get_my_rank()
+	TTL: 90 days
+	"""
+	base = f"{LB_PREFIX}:weekly:{friday_date}"
+	return f"{base}:subject:{subject_id}" if subject_id else base
+
+
+def lb_archive_daily_key(date_str: str, subject_id: str | None = None) -> str:
+	"""Archived daily leaderboard (copied by leaderboard_reset.py at 00:10 AM).
+
+	Type: ZSET (snapshot of yesterday's daily leaderboard)
+	Producers: leaderboard_reset.py archive_daily_leaderboard()
+	Consumers: ProfilePageService.get_weekly_activity() (Phase 2 fallback)
+	TTL: 30 days
+	"""
+	base = f"{LB_PREFIX}:archive:daily:{date_str}"
+	return f"{base}:subject:{subject_id}" if subject_id else base
+
+
+# =============================================================================
+# Interaction Buffer (FSRS)
+# =============================================================================
+
+
+def interaction_buffer_key() -> str:
+	"""JSON-encoded interaction events pending batch flush to MariaDB.
+
+	Type: LIST of JSON strings
+	Producers: GameSessionService.complete_session() (Lua RPUSH)
+	Consumers: sync.py flush_interaction_buffer()
+	TTL: None (consumed by background task)
+	"""
+	return "memora:buffer:interactions"
+
+
+# =============================================================================
+# Auth Rate Limiting
+# =============================================================================
+
+
+def ratelimit_ip_key(ip_address: str) -> str:
+	"""Auth attempt counter per IP (login rate limiting).
+
+	Type: STRING (counter)
+	Producers: RateLimiter.check_rate_limit()
+	Consumers: RateLimiter.check_rate_limit(), get_remaining()
+	TTL: 60 seconds (window)
+	"""
+	return f"memora:ratelimit:ip:{ip_address}"
+
+
+def ratelimit_account_key(account: str) -> str:
+	"""Auth attempt counter per account/email (login rate limiting).
+
+	Type: STRING (counter)
+	Producers: RateLimiter.check_rate_limit()
+	Consumers: RateLimiter.check_rate_limit(), get_remaining()
+	TTL: 60 seconds (window)
+	"""
+	return f"memora:ratelimit:account:{account}"
+
+
+# =============================================================================
+# Global & Per-Player Rate Limiting
+# =============================================================================
+
+
+def global_ratelimit_key(ip_address: str) -> str:
+	"""Global per-IP rate limit counter (middleware).
+
+	Type: STRING (counter)
+	Producers: GlobalRateLimitMiddleware
+	Consumers: GlobalRateLimitMiddleware
+	TTL: Configurable window (default 60s)
+	"""
+	return f"memora:global_rl:ip:{ip_address}"
+
+
+def player_ratelimit_key(scope: str, player_id: str) -> str:
+	"""Per-player rate limit counter for specific scopes.
+
+	Scopes: "reviews", "session_start", "session_end"
+
+	Type: STRING (counter)
+	Producers: deps.py player_rate_limit()
+	Consumers: deps.py player_rate_limit()
+	TTL: Configurable window from settings
+	"""
+	return f"memora:rl:{scope}:{player_id}"
+
+
+# =============================================================================
+# Voucher / Redemption
+# =============================================================================
+
+
+def voucher_fail_player_key(player_id: str) -> str:
+	"""Failed voucher redemption attempts per player.
+
+	Type: STRING (counter)
+	Producers: VoucherService.record_failure()
+	Consumers: VoucherService.check_rate_limit()
+	TTL: 1 hour
+	"""
+	return f"memora:voucher_fail:player:{player_id}"
+
+
+def voucher_fail_ip_key(ip_address: str) -> str:
+	"""Failed voucher redemption attempts per IP.
+
+	Type: STRING (counter)
+	Producers: VoucherService.record_failure()
+	Consumers: VoucherService.check_rate_limit()
+	TTL: 1 hour
+	"""
+	return f"memora:voucher_fail:ip:{ip_address}"
+
+
+# =============================================================================
+# Reviews (FSRS Spaced Repetition)
+# =============================================================================
+
+
+def reviews_overview_key(player_id: str) -> str:
+	"""Cached review overview (due count per subject).
+
+	Type: STRING (JSON array)
+	Producers: ReviewService.get_overview() on cache miss
+	Consumers: ReviewService.get_overview()
+	TTL: 5 minutes
+	"""
+	return f"memora:reviews_overview:{player_id}"
+
+
+# =============================================================================
+# Profile & User Data
+# =============================================================================
+
+
+def profile_key(player_id: str) -> str:
+	"""Cached player profile (display_name, avatar).
+
+	Type: STRING (JSON PlayerProfile)
+	Producers: ProfileService.set_profile(), profile_sync.py, profile_cache.py
+	Consumers: ProfileService.get_profiles_batch()
+	TTL: 1 hour
+	"""
+	return f"memora:profile:{player_id}"
+
+
+def player_plan_key(player_id: str) -> str:
+	"""Cached player's plan ID for profile page optimization.
+
+	Type: STRING (plan_id)
+	Producers: ProfilePageService._resolve_season_seq()
+	Consumers: ProfilePageService._resolve_season_seq()
+	TTL: 24 hours
+	"""
+	return f"memora:player_plan:{player_id}"
+
+
+def plan_season_seq_key(plan_id: str) -> str:
+	"""Cached plan's season sequence number.
+
+	Type: STRING (integer as string)
+	Producers: ProfilePageService._resolve_season_seq()
+	Consumers: ProfilePageService._resolve_season_seq()
+	TTL: 24 hours
+	"""
+	return f"memora:plan_season_seq:{plan_id}"
+
+
+def items_learned_key(player_id: str, subject_id: str | None = None) -> str:
+	"""Cached items learned count (Memory State records).
+
+	Type: STRING (integer as string)
+	Producers: ProfilePageService.get_stats() on cache miss
+	Consumers: ProfilePageService.get_stats()
+	TTL: 5 minutes (MASTERY_CACHE_TTL)
+	"""
+	return f"memora:items_learned:{player_id}:{subject_id or 'all'}"
+
+
+def mastery_key(player_id: str, subject_id: str | None, season_seq: int) -> str:
+	"""Memory mastery counters (mature/learning counts).
+
+	Type: HASH (mature: int, learning: int)
+	Producers: Frappe API get_memory_mastery() as side effect
+	Consumers: ProfilePageService.get_mastery()
+	TTL: 5 minutes (MASTERY_CACHE_TTL)
+	"""
+	subj = subject_id or "all"
+	return f"memora:mastery:{player_id}:{subj}:s{season_seq}"
+
+
+# =============================================================================
+# Configuration & Settings
+# =============================================================================
+
+
+def level_config_key() -> str:
+	"""Dynamic level configuration (curve params + titles).
+
+	Type: STRING (JSON: {a, b, max_level, titles})
+	Producers: level_sync.py on_level_settings_updated()
+	Consumers: level_config.py get_level_config()
+	TTL: 1 hour
+	"""
+	return "memora:config:levels"
+
+
+def gamification_settings_key() -> str:
+	"""Cached gamification settings (XP rewards, etc.).
+
+	Type: STRING (JSON GamificationSettings)
+	Producers: SettingsService.get_gamification_settings() on cache miss
+	Consumers: SettingsService.get_gamification_settings()
+	TTL: 5 minutes
+	"""
+	return "memora:settings:gamification"
+
+
+# =============================================================================
+# Pub/Sub Channels
+# =============================================================================
+
+
+def cache_invalidation_channel() -> str:
+	"""Pub/sub channel for cache invalidation from Frappe to FastAPI.
+
+	Payload: JSON {"type": "hierarchy|plan|profile|catalog|...", ...}
+	Producers: build_trigger.py, catalog_sync.py, profile_sync.py, level_sync.py
+	Consumers: pubsub.py start_pubsub_listener()
+	"""
+	return "memora:cache:invalidate"
+
+
+def notify_channel(user_id: str) -> str:
+	"""Per-user notification pub/sub channel for WebSocket forwarding.
+
+	Payload: JSON event (e.g., subscription approved/rejected)
+	Producers: memora_subscription_transaction.py
+	Consumers: pubsub.py start_notification_listener(), notifications.py WebSocket
+	"""
+	return f"memora:notify:{user_id}"
+
+
+# =============================================================================
+# Purchase / Pending Transactions
+# =============================================================================
+
+
+def pending_key(player_id: str) -> str:
+	"""Player's pending purchase set (hides products from catalog).
+
+	Type: SET of product_grant_id strings
+	Producers: PurchaseService.submit_purchase()
+	Consumers: CatalogService.get_player_catalog(), subscription_transaction.py
+	TTL: None (cleared when transaction is approved/rejected)
+	"""
+	return f"memora:pending:{player_id}"
+
+
+# =============================================================================
+# Season (Frappe-managed)
+# =============================================================================
+
+
+def season_key(season_id: str) -> str:
+	"""Season metadata hash (Gate 1 validation).
+
+	Type: HASH (is_published, start_date, end_date, season_seq)
+	Producers: access_sync.py on_season_updated()
+	Consumers: SeasonService (Gate 1 check)
+	TTL: None (event-driven)
+	"""
+	return f"memora:season:{season_id}"
+
+
+# =============================================================================
+# Build System (Frappe-managed)
+# =============================================================================
+
+
+def build_debounce_key(plan_id: str) -> str:
+	"""Build debounce key to prevent flooding (SET NX EX pattern).
+
+	Type: STRING (timestamp)
+	Producers: build_trigger.py on_content_updated(), on_plan_updated()
+	Consumers: build_trigger.py (NX check)
+	TTL: 120 seconds (DEBOUNCE_SECONDS)
+	"""
+	return f"memora:build:pending:plan:{plan_id}"
+
+
+def build_retry_key(build_id: str) -> str:
+	"""Build retry counter for failed builds.
+
+	Type: STRING (counter)
+	Producers: build_worker.py
+	Consumers: build_worker.py
+	TTL: Build-specific
+	"""
+	return f"memora:build:retry:{build_id}"
+
+
+# =============================================================================
+# FSRS Background Processor (Frappe-managed)
+# =============================================================================
+
+
+def fsrs_last_processed_key() -> str:
+	"""Timestamp of last FSRS processing run.
+
+	Type: STRING (ISO timestamp)
+	Producers: fsrs_processor.py
+	Consumers: fsrs_processor.py
+	"""
+	return "memora:fsrs:last_processed"
+
+
+def fsrs_processed_key(player: str, item_id: str, creation: str) -> str:
+	"""Idempotency key for FSRS interaction processing.
+
+	Type: STRING (flag)
+	Producers: fsrs_processor.py
+	Consumers: fsrs_processor.py
+	"""
+	return f"memora:fsrs:processed:{player}:{item_id}:{creation}"
+
+
+def fsrs_card_state_key(player: str, item_id: str) -> str:
+	"""FSRS card state cache.
+
+	Type: STRING (JSON card state)
+	Producers: fsrs_processor.py
+	Consumers: fsrs_processor.py
+	"""
+	return f"memora:fsrs:{player}:{item_id}"
+
+
+# =============================================================================
+# Task Deduplication (Frappe-managed)
+# =============================================================================
+
+
+def task_ran_key(hour_key: str) -> str:
+	"""Dedup flag for hourly Frappe tasks (e.g., profile cache warmup).
+
+	Type: STRING ("1")
+	Producers: profile_cache.py
+	Consumers: profile_cache.py
+	TTL: 1 hour
+	"""
+	return f"memora:task_ran:{hour_key}"
+
+
+# =============================================================================
+# Subject Totals Cache (Sync tasks)
+# =============================================================================
+
+
+def subject_total_lessons_key(subject_id: str) -> str:
+	"""Cached total lesson count for a subject (used by sync).
+
+	Type: STRING (integer as string)
+	Producers: sync.py _batch_get_subject_totals()
+	Consumers: sync.py sync_dirty_progress()
+	TTL: 1 hour
+	"""
+	return f"memora:subject:total_lessons:{subject_id}"
+
+
+# =============================================================================
+# Hydration
+# =============================================================================
+
+
+def hydration_lock_key(cache_key: str) -> str:
+	"""Distributed lock during cache hydration (prevents thundering herd).
+
+	Type: STRING with short TTL (SET NX EX pattern)
+	Producers: hydration.py guarded_hydrate()
+	Consumers: hydration.py guarded_hydrate()
+	TTL: 30 seconds (lock_ttl parameter)
+	"""
+	return f"memora:hydrating:{cache_key}"
+
+
+# =============================================================================
+# Reports
+# =============================================================================
+
+
+def report_cooldown_key(player_id: str) -> str:
+	"""Cooldown for player content reports (1 per 60s).
+
+	Type: STRING ("1")
+	Producers: reports.py submit_content_report()
+	Consumers: reports.py submit_content_report()
+	TTL: 60 seconds
+	"""
+	return f"memora:report_cooldown:{player_id}"
+
+
+# =============================================================================
+# OTP & Registration
+# =============================================================================
+
+
+def otp_key(pending_id: str) -> str:
+	"""OTP code for pending registration verification.
+
+	Type: STRING (6-digit OTP code)
+	Producers: auth endpoint (send OTP)
+	Consumers: auth endpoint (verify OTP)
+	TTL: 10 minutes
+	"""
+	return f"memora:otp:{pending_id}"
+
+
+def pending_reg_key(pending_id: str) -> str:
+	"""Pending registration data awaiting OTP verification.
+
+	Type: STRING (JSON with mobile, plan, grade, major, etc.)
+	Producers: auth endpoint (initiate registration)
+	Consumers: auth endpoint (complete registration after OTP)
+	TTL: 10 minutes
+	"""
+	return f"memora:pending_reg:{pending_id}"
+
+
+def phone_reserved_key(mobile: str) -> str:
+	"""Phone reservation flag during registration flow.
+
+	Prevents duplicate registrations for the same phone while OTP is pending.
+
+	Type: STRING ("1")
+	Producers: auth endpoint (initiate registration)
+	Consumers: auth endpoint (check phone availability)
+	TTL: 10 minutes
+	"""
+	return f"memora:phone_reserved:{mobile}"
+
+
+def ratelimit_otp_phone_key(mobile: str) -> str:
+	"""OTP send rate limit counter per phone number.
+
+	Type: STRING (counter)
+	Producers: auth endpoint (send OTP)
+	Consumers: auth endpoint (send OTP)
+	TTL: 10 minutes
+	"""
+	return f"memora:ratelimit:otp:phone:{mobile}"
+
+
+def ratelimit_otp_ip_key(ip: str) -> str:
+	"""OTP send rate limit counter per IP address.
+
+	Type: STRING (counter)
+	Producers: auth endpoint (send OTP)
+	Consumers: auth endpoint (send OTP)
+	TTL: 10 minutes
+	"""
+	return f"memora:ratelimit:otp:ip:{ip}"
+
+
+def reset_otp_key(mobile: str) -> str:
+	"""Password reset OTP for phone verification.
+
+	Type: STRING (6-digit OTP code)
+	Producers: auth endpoint (request password reset)
+	Consumers: auth endpoint (verify reset OTP)
+	TTL: 10 minutes
+	"""
+	return f"memora:reset_otp:{mobile}"
+
+
+def reset_token_key(token: str) -> str:
+	"""Password reset token mapping to mobile number.
+
+	Type: STRING (mobile number)
+	Producers: auth endpoint (after OTP verified)
+	Consumers: auth endpoint (set new password)
+	TTL: 10 minutes
+	"""
+	return f"memora:reset_token:{token}"
+
+
+# =============================================================================
+# Webhooks
+# =============================================================================
+
+
+def webhook_idempotency_key(event_id: str) -> str:
+	"""Webhook event idempotency marker.
+
+	Type: STRING ("processing" or "completed")
+	Producers: webhooks.py payment_webhook()
+	Consumers: webhooks.py payment_webhook(), process_payment_webhook()
+	TTL: 24 hours
+	"""
+	return f"memora:webhook:{event_id}"

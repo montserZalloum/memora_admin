@@ -12,6 +12,7 @@ Redis namespace (shared with FastAPI sidecar).
 import frappe
 import redis
 
+from fastapi_app.core.redis_keys import devices_key, session_key
 from memora_admin.events.access_sync import get_fastapi_redis
 
 
@@ -44,8 +45,8 @@ def on_player_profile_update(doc, method):
 		return
 
 	user_id = doc.name
-	devices_key = f"memora:devices:{user_id}"
-	session_key = f"memora:session:{user_id}"
+	dk = devices_key(user_id)
+	sk = session_key(user_id)
 
 	try:
 		r = get_fastapi_redis()
@@ -60,13 +61,13 @@ def on_player_profile_update(doc, method):
 				f"device:{device_id}:fingerprint",
 				f"device:{device_id}:push_token",
 			]
-			r.hdel(devices_key, *fields_to_delete)
+			r.hdel(dk, *fields_to_delete)
 
 			frappe.logger().info(f"Device {device_id} removed from Redis for user {user_id}")
 
 		# Invalidate session to force re-login
 		# Per CONTEXT.md: removed device gets kicked out immediately
-		r.delete(session_key)
+		r.delete(sk)
 		frappe.logger().info(f"Session invalidated for user {user_id} after device removal")
 	except (redis.ConnectionError, redis.RedisError) as e:
 		frappe.log_error(

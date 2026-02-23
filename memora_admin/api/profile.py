@@ -15,6 +15,7 @@ All queries include season_seq for partition pruning. See setup.py for details.
 import frappe
 import redis as _redis
 
+from fastapi_app.core.redis_keys import mastery_key
 from memora_admin.api.utils import (
 	get_player_season_seq as _get_player_season_seq,
 	_MASTERY_COUNTER_TTL,
@@ -184,11 +185,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 	# --- Try Redis counters first ---
 	try:
 		r = _redis.from_url(frappe.conf.redis_cache)
-		counter_key = (
-			f"memora:mastery:{player_id}:{subject_id}:s{season_seq}"
-			if subject_id
-			else f"memora:mastery:{player_id}:all:s{season_seq}"
-		)
+		counter_key = mastery_key(player_id, subject_id, season_seq)
 		data = r.hgetall(counter_key)
 		if data:
 			mature = max(0, int(data.get(b"mature", 0)))
@@ -225,11 +222,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 	try:
 		if r is None:
 			r = _redis.from_url(frappe.conf.redis_cache)
-		counter_key = (
-			f"memora:mastery:{player_id}:{subject_id}:s{season_seq}"
-			if subject_id
-			else f"memora:mastery:{player_id}:all:s{season_seq}"
-		)
+		counter_key = mastery_key(player_id, subject_id, season_seq)
 		pipe = r.pipeline(transaction=False)
 		pipe.hset(counter_key, mapping={"mature": mature, "learning": learning})
 		pipe.expire(counter_key, _MASTERY_COUNTER_TTL)
@@ -248,7 +241,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 
 def _populate_all_counter(pipe, r: _redis.Redis, player_id: str, season_seq: int) -> None:
 	"""Populate the 'all' aggregate mastery counter from SQL if it doesn't exist."""
-	all_key = f"memora:mastery:{player_id}:all:s{season_seq}"
+	all_key = mastery_key(player_id, None, season_seq)
 	if r.exists(all_key):
 		return
 	row = frappe.db.sql(

@@ -4,6 +4,7 @@ import structlog
 from fastapi import APIRouter, HTTPException, status
 
 from fastapi_app.api.deps import CurrentUser, RedisClient
+from fastapi_app.core.redis_keys import report_cooldown_key
 from fastapi_app.models.report import ContentReportRequest, ContentReportResponse
 from fastapi_app.services.frappe_client import FrappeAPIError
 
@@ -41,7 +42,7 @@ async def submit_content_report(
 		)
 
 	# Redis cooldown check (degrade gracefully on Redis failure)
-	cooldown_key = f"memora:report_cooldown:{player_id}"
+	cooldown_key = report_cooldown_key(player_id)
 	try:
 		was_set = await redis_client.set(cooldown_key, "1", nx=True, ex=COOLDOWN_SECONDS)
 		if not was_set:

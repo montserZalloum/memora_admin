@@ -21,6 +21,8 @@ from collections.abc import Awaitable, Callable
 import redis.asyncio as aioredis
 import structlog
 
+from fastapi_app.core.redis_keys import hydration_lock_key
+
 logger = structlog.get_logger()
 
 # Max concurrent Frappe hydration calls per uvicorn worker process.
@@ -73,7 +75,7 @@ async def guarded_hydrate(
 		sentinel_ttl: TTL for empty-result sentinel (seconds).
 	"""
 	sentinel_key = f"{cache_key}:_hydrated"
-	lock_key = f"memora:hydrating:{cache_key}"
+	lock_key = hydration_lock_key(cache_key)
 
 	# Fast path: we recently confirmed this key is empty (no data in MariaDB).
 	# Avoids re-hydrating new players every request for sentinel_ttl seconds.

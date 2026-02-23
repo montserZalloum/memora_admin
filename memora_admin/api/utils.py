@@ -5,6 +5,8 @@ from __future__ import annotations
 import frappe
 import redis as _redis
 
+from fastapi_app.core.redis_keys import mastery_key
+
 # FSRS stability threshold for mature memory classification (days)
 MASTERY_MATURE_THRESHOLD = 21.0
 
@@ -68,8 +70,8 @@ def _classify_stability(stability: float | None) -> str:
 
 def _mastery_keys(player: str, subject: str, season_seq: int) -> tuple[str, str]:
 	"""Return (subject_key, all_key) for mastery counter hashes."""
-	subject_key = f"memora:mastery:{player}:{subject}:s{season_seq}"
-	all_key = f"memora:mastery:{player}:all:s{season_seq}"
+	subject_key = mastery_key(player, subject, season_seq)
+	all_key = mastery_key(player, None, season_seq)
 	return subject_key, all_key
 
 

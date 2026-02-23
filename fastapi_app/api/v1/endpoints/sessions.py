@@ -22,6 +22,7 @@ from fastapi_app.api.deps import (
 	require_rate_limit,
 )
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
+from fastapi_app.core.redis_keys import stats_key, wallet_key
 from fastapi_app.models.game_session import (
 	CurrentSessionResponse,
 	EndSessionRequest,
@@ -317,8 +318,8 @@ async def end_session(
 	pipe = redis_client.pipeline()
 
 	# XP award
-	wallet_key = f"memora:wallet:{user.sub}"
-	pipe.hincrby(wallet_key, "xp", xp_awarded)
+	wk = wallet_key(user.sub)
+	pipe.hincrby(wk, "xp", xp_awarded)
 
 	# Dirty wallet
 	pipe.sadd(DIRTY_WALLETS_KEY, user.sub)
@@ -328,7 +329,7 @@ async def end_session(
 	if not is_replay:
 		lesson_path = hierarchy.find_lesson_path(session.lesson_id)
 		if lesson_path:
-			stats_key = f"memora:stats:{user.sub}:{session.subject_id}:v{hierarchy.version}"
+			sk = stats_key(user.sub, session.subject_id, hierarchy.version)
 
 			# Check if stats hash exists before deciding how to update.
 			# Two paths:
@@ -336,7 +337,7 @@ async def end_session(
 			#    includes the just-completed lesson (SETBIT happened in Lua script above).
 			#    Do NOT also HINCRBY -- that would double-count the completion.
 			# 2) Stats hash EXISTS: Increment completed counters via HINCRBY.
-			stats_exists = await redis_client.exists(stats_key)
+			stats_exists = await redis_client.exists(sk)
 			if not stats_exists:
 				# Cold start: bitmap already has the new bit set, so
 				# compute_stats_from_hierarchy will include this lesson.
@@ -374,11 +375,11 @@ async def end_session(
 						sem.release()
 			else:
 				# Stats hash exists: increment completed counters
-				pipe.hincrby(stats_key, "completed", 1)
-				pipe.hincrby(stats_key, f"{lesson_path.track_id}:completed", 1)
-				pipe.hincrby(stats_key, f"{lesson_path.unit_id}:completed", 1)
-				pipe.hincrby(stats_key, f"{lesson_path.topic_id}:completed", 1)
-				pipe.expire(stats_key, StatsService.CACHE_TTL + random.randint(0, StatsService.JITTER_RANGE))
+				pipe.hincrby(sk, "completed", 1)
+				pipe.hincrby(sk, f"{lesson_path.track_id}:completed", 1)
+				pipe.hincrby(sk, f"{lesson_path.unit_id}:completed", 1)
+				pipe.hincrby(sk, f"{lesson_path.topic_id}:completed", 1)
+				pipe.expire(sk, StatsService.CACHE_TTL + random.randint(0, StatsService.JITTER_RANGE))
 			stats_updated = True
 
 	pipe_results = await pipe.execute()

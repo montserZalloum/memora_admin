@@ -6,6 +6,7 @@ import structlog
 from fastapi import APIRouter, BackgroundTasks, HTTPException, status
 
 from fastapi_app.api.deps import RedisClient, get_frappe_client
+from fastapi_app.core.redis_keys import access_key, webhook_idempotency_key
 from fastapi_app.models.access import WebhookPayload, WebhookResponse
 from fastapi_app.services.frappe_client import FrappeAPIError, FrappeClient
 
@@ -14,7 +15,6 @@ logger = structlog.get_logger()
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 
 # Redis keys for webhook processing
-IDEMPOTENCY_PREFIX = "memora:webhook:"
 RETRY_QUEUE_KEY = "memora:webhook:retry_queue"
 IDEMPOTENCY_TTL = 86400  # 24 hours
 
@@ -82,12 +82,12 @@ async def process_payment_webhook(
                 # doc_events hook won't fire, but Redis will have grant
 
         # 3. Add grants to Redis (idempotent via SADD)
-        access_key = f"memora:access:{payload.player_id}"
+        ak = access_key(payload.player_id)
         if grant_keys:
-            await redis.sadd(access_key, *grant_keys)
+            await redis.sadd(ak, *grant_keys)
 
         # 4. Mark as completed
-        idempotency_key = f"{IDEMPOTENCY_PREFIX}{payload.event_id}"
+        idempotency_key = webhook_idempotency_key(payload.event_id)
         await redis.set(idempotency_key, "completed", ex=IDEMPOTENCY_TTL)
 
         logger.info(
@@ -144,7 +144,7 @@ async def payment_webhook(
     )
 
     # Check idempotency
-    idempotency_key = f"{IDEMPOTENCY_PREFIX}{payload.event_id}"
+    idempotency_key = webhook_idempotency_key(payload.event_id)
     existing = await redis.get(idempotency_key)
 
     if existing:

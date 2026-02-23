@@ -12,6 +12,7 @@ import time
 
 import frappe
 
+from fastapi_app.core.redis_keys import player_plan_key, session_key
 from memora_admin.api.utils import invalidate_player_season_seq
 from memora_admin.events.access_sync import get_fastapi_redis
 
@@ -37,9 +38,9 @@ def on_player_profile_plan_changed(doc, method):
 
     # 1. Direct delete: invalidate session + player_plan cache immediately
     # Key pattern matches SessionService: memora:session:{player_id}
-    session_key = f"memora:session:{doc.name}"
-    player_plan_key = f"memora:player_plan:{doc.name}"
-    r.delete(session_key, player_plan_key)
+    sk = session_key(doc.name)
+    ppk = player_plan_key(doc.name)
+    r.delete(sk, ppk)
 
     # 2. Pubsub: notify FastAPI in-process caches
     invalidation_msg = json.dumps({

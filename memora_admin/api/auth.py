@@ -11,6 +11,8 @@ import re
 
 import frappe
 
+from fastapi_app.core.redis_keys import session_key, wallet_key
+
 MOBILE_PATTERN = re.compile(r"^\d{9,15}$")
 
 
@@ -240,8 +242,8 @@ def _get_player_xp(player_name: str) -> int:
 		from memora_admin.events.access_sync import get_fastapi_redis
 
 		r = get_fastapi_redis()
-		wallet_key = f"memora:wallet:{player_name}"
-		xp_value = r.hget(wallet_key, "xp")
+		wk = wallet_key(player_name)
+		xp_value = r.hget(wk, "xp")
 		return int(xp_value) if xp_value else 0
 	except Exception:
 		return 0
@@ -253,8 +255,8 @@ def _initialize_redis_wallet(player_name: str) -> None:
 		from memora_admin.events.access_sync import get_fastapi_redis
 
 		r = get_fastapi_redis()
-		wallet_key = f"memora:wallet:{player_name}"
-		r.hset(wallet_key, mapping={"xp": 0, "streak": 0})
+		wk = wallet_key(player_name)
+		r.hset(wk, mapping={"xp": 0, "streak": 0})
 	except Exception:
 		frappe.logger().warning(f"Failed to initialize Redis wallet for {player_name}")
 
@@ -265,8 +267,8 @@ def _invalidate_player_sessions(player_name: str) -> None:
 		from memora_admin.events.access_sync import get_fastapi_redis
 
 		r = get_fastapi_redis()
-		session_key = f"memora:session:{player_name}"
-		r.delete(session_key)
+		sk = session_key(player_name)
+		r.delete(sk)
 		frappe.logger().info(f"Invalidated session for {player_name}")
 	except Exception:
 		frappe.logger().error(f"Failed to invalidate session for {player_name}")

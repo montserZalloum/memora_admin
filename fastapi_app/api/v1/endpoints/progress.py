@@ -10,6 +10,7 @@ from fastapi_app.api.deps import (
 	ProgressServiceDep,
 	StatsServiceDep,
 )
+from fastapi_app.core.redis_keys import progress_key
 from fastapi_app.models.progress import (
 	LessonCompletionStatus,
 	SubjectHierarchy,
@@ -581,7 +582,7 @@ async def get_topic_lessons(
 
 	if topic.lessons:
 		# Use pipeline for batch GETBIT (single round-trip, ~1ms for 100 lessons)
-		key = f"memora:progress:{user.sub}:{subject}:v{hierarchy.version}"
+		key = progress_key(user.sub, subject, hierarchy.version)
 		pipe = progress_service.redis.pipeline()
 		for lesson in topic.lessons:
 			pipe.getbit(key, lesson.bit_index)

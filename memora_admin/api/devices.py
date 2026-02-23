@@ -14,6 +14,7 @@ from datetime import datetime
 import frappe
 import redis
 
+from fastapi_app.core.redis_keys import devices_key, session_key
 from memora_admin.events.access_sync import get_fastapi_redis
 
 
@@ -54,8 +55,8 @@ def sync_devices_from_redis(player_name: str) -> list[dict]:
 
 	try:
 		r = get_fastapi_redis()
-		devices_key = f"memora:devices:{user_id}"
-		raw_data = r.hgetall(devices_key)
+		dk = devices_key(user_id)
+		raw_data = r.hgetall(dk)
 	except (redis.ConnectionError, redis.RedisError) as e:
 		frappe.throw(f"Could not fetch live device data: {e}", title="Redis Error")
 
@@ -130,8 +131,8 @@ def remove_device(player_name: str, device_id: str) -> dict:
 
 	try:
 		r = get_fastapi_redis()
-		devices_key = f"memora:devices:{user_id}"
-		session_key = f"memora:session:{user_id}"
+		dk = devices_key(user_id)
+		sk = session_key(user_id)
 
 		# Build field list for deletion (all 6 attributes per device)
 		fields = [
@@ -144,10 +145,10 @@ def remove_device(player_name: str, device_id: str) -> dict:
 		]
 
 		# Delete device fields from hash
-		deleted = r.hdel(devices_key, *fields)
+		deleted = r.hdel(dk, *fields)
 
 		# Invalidate session to force re-login
-		r.delete(session_key)
+		r.delete(sk)
 
 		frappe.logger().info(
 			f"Device {device_id} removed from Redis for {user_id} (deleted={deleted}), session invalidated"
