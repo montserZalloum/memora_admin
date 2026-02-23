@@ -10,6 +10,7 @@ from fastapi_app.api.v1.endpoints import (
 	leaderboard,
 	notifications,
 	plans,
+	practice,
 	profile,
 	progress,
 	purchase,
@@ -43,3 +44,4 @@ router.include_router(reviews.router)
 router.include_router(profile.router)
 router.include_router(reports.router)
 router.include_router(voucher.router)
+router.include_router(practice.router)

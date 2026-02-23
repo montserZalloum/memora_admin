@@ -11,9 +11,23 @@ import frappe
 def on_lesson_save(doc, method):
 	"""Sync Review Items when a lesson is saved (on_update).
 
-	Extracts items from non-skippable stages, upserts records,
-	and deletes orphans.
+	If is_reviewable=0, deletes existing Review Items for this lesson
+	instead of extracting new ones. Otherwise extracts items from
+	non-skippable stages, upserts records, and deletes orphans.
 	"""
+	if not doc.is_reviewable:
+		from memora_admin.api.review_items import delete_review_items_for_lesson
+
+		try:
+			count = delete_review_items_for_lesson(doc.name)
+			if count:
+				frappe.logger().info(
+					f"Review Item cleanup for non-reviewable lesson {doc.name}: deleted={count}"
+				)
+		except Exception:
+			frappe.log_error(f"Review Item cleanup failed for lesson {doc.name}")
+		return
+
 	from memora_admin.api.review_items import sync_review_items
 
 	try:

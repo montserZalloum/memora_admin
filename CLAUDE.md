@@ -245,6 +245,8 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM (Level Settings DocType), Redis at `redis://127.0.0.1:13000` (config cache) (023-dynamic-level-system)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, Pydantic v2, redis.asyncio (024-review-item-table)
 - MariaDB via Frappe ORM (standard DocType — NOT partitioned) (024-review-item-table)
+- Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log) (025-practice-arena)
+- MariaDB via Frappe ORM (Review Items) + raw SQL (Practice Log, ~500M rows), Redis at `redis://127.0.0.1:13000` (practice sessions, hierarchy cache) (025-practice-arena)
 
 ## Test Environment Configuration
 
@@ -264,9 +266,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 025-practice-arena: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log)
 - 024-review-item-table: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, Pydantic v2, redis.asyncio
 - 023-dynamic-level-system: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, Single DocType, hooks), FastAPI, `redis.asyncio`, `structlog`
-- 022-global-rate-limiting: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Starlette (`BaseHTTPMiddleware`), `redis.asyncio`, `structlog`
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

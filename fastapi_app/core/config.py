@@ -55,6 +55,16 @@ class Settings(BaseSettings):
 	session_rate_limit: int = 10  # Max session start/end per player per window
 	ws_max_connections_per_user: int = 5  # Max concurrent WebSocket connections
 
+	# Practice Arena Rate Limits
+	practice_hierarchy_rate_limit: int = 30
+	practice_start_rate_limit: int = 10
+	practice_submit_rate_limit: int = 30
+	practice_continue_rate_limit: int = 30
+
+	# Practice Arena Session Settings
+	practice_session_size: int = 20
+	practice_session_ttl: int = 3600
+
 
 @lru_cache
 def get_settings() -> Settings:

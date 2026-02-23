@@ -206,6 +206,34 @@ def devices_key(user_id: str) -> str:
 
 
 # =============================================================================
+# Practice Arena
+# =============================================================================
+
+
+def practice_session_key(player_id: str) -> str:
+	"""Active practice session for a player.
+
+	Type: HASH (subject_id, filter, tracks, units, topics, batch_seq,
+	           served_item_ids, accessible_lessons, created_at, submitted_{N})
+	Producers: PracticeService.start_session()
+	Consumers: PracticeService.continue_session(), submit_batch()
+	TTL: practice_session_ttl (default 3600s)
+	"""
+	return f"memora:practice:{player_id}"
+
+
+def practice_hierarchy_meta_key(subject_id: str) -> str:
+	"""Cached practice hierarchy metadata (titles + Review Item counts).
+
+	Type: STRING (JSON: {subject_title, tracks, units, topics, item_counts})
+	Producers: PracticeService._load_hierarchy_meta() on cache miss
+	Consumers: PracticeService.get_practice_hierarchy()
+	TTL: 1 hour
+	"""
+	return f"memora:practice:hierarchy_meta:{subject_id}"
+
+
+# =============================================================================
 # Leaderboard
 # =============================================================================
 

@@ -174,6 +174,12 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Hot table indexes setup failed: {e}")
 
+	# Practice Log raw SQL table
+	try:
+		_ensure_practice_log_table()
+	except Exception as e:
+		print(f"[after_migrate] Practice Log table setup failed: {e}")
+
 
 def _ensure_uuid_polyfill_functions():
 	"""Create UUID_TO_BIN and BIN_TO_UUID polyfill stored functions.
@@ -600,6 +606,31 @@ def _ensure_voucher_card_indexes():
 			ADD INDEX idx_batch_status (batch, status)
 		""")
 		print("[after_migrate] Created INDEX idx_batch_status on tabMemora Voucher Card")
+
+
+def _ensure_practice_log_table():
+	"""Create tabMemora Practice Log raw SQL table for practice session results.
+
+	This is NOT a Frappe DocType — it's a raw SQL table managed via setup.py,
+	following the Memory State precedent for high-volume tables (~500M rows).
+
+	Idempotent: uses CREATE TABLE IF NOT EXISTS.
+	"""
+	frappe.db.sql_ddl("""
+		CREATE TABLE IF NOT EXISTS `tabMemora Practice Log` (
+			`name` BIGINT AUTO_INCREMENT,
+			`player_id` VARCHAR(140) NOT NULL,
+			`item_id` VARCHAR(36) NOT NULL,
+			`first_seen_at` DATETIME NOT NULL,
+			`last_seen_at` DATETIME NOT NULL,
+			`last_result` ENUM('Correct', 'Incorrect') NOT NULL,
+			`attempt_count` INT UNSIGNED NOT NULL DEFAULT 1,
+			`correct_count` INT UNSIGNED NOT NULL DEFAULT 0,
+			PRIMARY KEY (`name`),
+			UNIQUE KEY `uq_player_item` (`player_id`, `item_id`),
+			KEY `idx_item_id` (`item_id`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+	""")
 
 
 def _ensure_hot_table_indexes():

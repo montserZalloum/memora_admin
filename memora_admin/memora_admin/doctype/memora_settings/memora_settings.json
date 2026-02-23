@@ -25,7 +25,11 @@
   "session_timeout_days",
   "fsrs_section",
   "fsrs_weights",
-  "review_session_size"
+  "review_session_size",
+  "practice_section",
+  "practice_session_size",
+  "column_break_practice",
+  "practice_session_ttl"
  ],
  "fields": [
   {
@@ -141,6 +145,29 @@
    "fieldname": "review_session_size",
    "fieldtype": "Int",
    "label": "Review Session Size"
+  },
+  {
+   "fieldname": "practice_section",
+   "fieldtype": "Section Break",
+   "label": "Practice Arena"
+  },
+  {
+   "default": "20",
+   "description": "Number of questions per practice batch",
+   "fieldname": "practice_session_size",
+   "fieldtype": "Int",
+   "label": "Practice Session Size"
+  },
+  {
+   "fieldname": "column_break_practice",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "3600",
+   "description": "Practice session timeout in seconds",
+   "fieldname": "practice_session_ttl",
+   "fieldtype": "Int",
+   "label": "Practice Session TTL"
   }
  ],
  "grid_page_length": 50,

@@ -11,19 +11,21 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
 
 from fastapi_app.core.config import Settings, get_settings
-from fastapi_app.core.redis_keys import player_ratelimit_key, session_key as _session_key_fn
+from fastapi_app.core.redis_keys import player_ratelimit_key
+from fastapi_app.core.redis_keys import session_key as _session_key_fn
 from fastapi_app.core.security import decode_token
 from fastapi_app.models.access import ContentAccessRequest, SeasonMeta
 from fastapi_app.models.auth import TokenPayload
 from fastapi_app.services.access import AccessService
-from fastapi_app.services.global_rate_limit import GlobalRateLimiter, RateLimitExceeded
 from fastapi_app.services.catalog import CatalogService
 from fastapi_app.services.device import DeviceService
 from fastapi_app.services.frappe_client import FrappeClient
 from fastapi_app.services.game_session import GameSessionService
+from fastapi_app.services.global_rate_limit import GlobalRateLimiter, RateLimitExceeded
 from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.leaderboard import LeaderboardService
 from fastapi_app.services.plan import PlanService
+from fastapi_app.services.practice import PracticeService
 from fastapi_app.services.profile import ProfileService
 from fastapi_app.services.profile_page import ProfilePageService
 from fastapi_app.services.progress import ProgressService
@@ -338,6 +340,28 @@ async def get_review_service(redis_client: RedisClient) -> ReviewService:
 ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 
 
+async def get_practice_service(
+	redis_client: RedisClient,
+	settings: SettingsDep,
+) -> PracticeService:
+	"""Get PracticeService with all required dependencies."""
+	frappe_client = await get_frappe_client()
+	hierarchy_service = HierarchyService(redis_client, frappe_client)
+	access_service = AccessService(redis_client, frappe_client=frappe_client)
+	progress_service = ProgressService(redis_client, frappe_client=frappe_client)
+	return PracticeService(
+		redis_client,
+		frappe_client,
+		settings,
+		hierarchy_service,
+		access_service,
+		progress_service,
+	)
+
+
+PracticeServiceDep = Annotated[PracticeService, Depends(get_practice_service)]
+
+
 async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) -> VoucherService:
 	"""Get VoucherService with Redis, FrappeClient, and HMAC secret."""
 	frappe_client = await get_frappe_client()
@@ -353,6 +377,10 @@ _SCOPE_SETTINGS = {
 	"reviews": "reviews_rate_limit",
 	"session_start": "session_rate_limit",
 	"session_end": "session_rate_limit",
+	"practice_hierarchy": "practice_hierarchy_rate_limit",
+	"practice_start": "practice_start_rate_limit",
+	"practice_submit": "practice_submit_rate_limit",
+	"practice_continue": "practice_continue_rate_limit",
 }
 
 

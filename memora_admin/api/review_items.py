@@ -9,6 +9,7 @@ globally excluded. Per-stage `is_skippable` overrides are also respected.
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 import frappe
@@ -64,6 +65,8 @@ def extract_items_from_stage(stage) -> list[dict]:
 		return _extract_fill_blank(config, stage_type)
 	elif stage_type == "MATCHING":
 		return _extract_matching(config, stage_type)
+	elif stage_type == "MINDMAP":
+		return _extract_mindmap(config, stage_type)
 	else:
 		return _extract_generic(config, stage_type)
 
@@ -178,6 +181,39 @@ def _extract_matching(config: dict, stage_type: str) -> list[dict]:
 	return items
 
 
+def _extract_mindmap(config: dict, stage_type: str) -> list[dict]:
+	"""Recursively extract items from MINDMAP children[].
+
+	MINDMAP stages have a tree of nodes, each with an optional item_id.
+	Generic fallback only finds top-level children — this traverses the
+	full depth.
+	"""
+	instruction = config.get("instruction") or config.get("central") or ""
+	items = []
+
+	def _walk(nodes):
+		for node in nodes or []:
+			if not isinstance(node, dict):
+				continue
+			item_id = node.get("item_id")
+			if item_id:
+				items.append({
+					"item_id": item_id,
+					"stage_type": stage_type,
+					"question_text": instruction,
+					"choice_1": None,
+					"choice_2": None,
+					"choice_3": None,
+					"choice_4": None,
+					"correct_choice": None,
+					"content_json": json.dumps(node),
+				})
+			_walk(node.get("children"))
+
+	_walk(config.get("children"))
+	return items
+
+
 def _extract_generic(config: dict, stage_type: str) -> list[dict]:
 	"""Fallback extraction for unknown non-skippable stage types.
 
@@ -226,6 +262,24 @@ def _extract_generic(config: dict, stage_type: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Content hash for debounce (T010)
+# ---------------------------------------------------------------------------
+
+
+def _compute_lesson_content_hash(stages) -> str:
+	"""Deterministic hash of stage configs for debounce.
+
+	Only includes fields that affect Review Item extraction: stage name,
+	stage_type, is_skippable, and config_json. Changes to other fields
+	(e.g. xp, is_linear) do NOT trigger re-extraction.
+	"""
+	parts = []
+	for stage in sorted(stages or [], key=lambda s: s.name):
+		parts.append(f"{stage.name}:{stage.stage_type}:{stage.is_skippable}:{stage.config_json or ''}")
+	return hashlib.md5("|".join(parts).encode()).hexdigest()[:8]
+
+
+# ---------------------------------------------------------------------------
 # Sync orchestrator (T005)
 # ---------------------------------------------------------------------------
 
@@ -235,15 +289,28 @@ def sync_review_items(lesson_doc) -> dict:
 
 	Called from the on_update hook. Idempotent — safe to call multiple times.
 
-	1. Collect all item_ids from non-skippable stages
-	2. Fetch existing Review Items for this lesson
-	3. Upsert new/changed items
-	4. Delete orphans (in DB but not in current config)
-	5. For deleted items, also delete Memory State records
+	1. Check is_reviewable — if disabled, delete existing items and bail
+	2. Debounce via content_hash — skip if unchanged
+	3. Collect all item_ids from non-skippable stages
+	4. Fetch existing Review Items for this lesson
+	5. Upsert new/changed items
+	6. Delete orphans (in DB but not in current config)
+	7. For deleted items, also delete Memory State + Practice Log records
 
 	Returns: {"created": int, "updated": int, "deleted": int}
 	"""
 	lesson_name = lesson_doc.name
+
+	# --- Gate: is_reviewable check ---
+	if not lesson_doc.is_reviewable:
+		count = delete_review_items_for_lesson(lesson_name)
+		return {"created": 0, "updated": 0, "deleted": count}
+
+	# --- Debounce: content_hash comparison ---
+	new_hash = _compute_lesson_content_hash(lesson_doc.stages)
+	if lesson_doc.content_hash and lesson_doc.content_hash == new_hash:
+		return {"created": 0, "updated": 0, "deleted": 0}
+
 	skippable_types = _get_globally_skippable_types()
 
 	# --- Step 1: Collect items from all non-skippable stages ---
@@ -334,6 +401,9 @@ def sync_review_items(lesson_doc) -> dict:
 		_delete_review_items_and_memory_state(list(orphan_ids))
 		deleted = len(orphan_ids)
 
+	# --- Step 5: Update content_hash for debounce ---
+	frappe.db.set_value("Memora Lesson", lesson_name, "content_hash", new_hash, update_modified=False)
+
 	return {"created": created, "updated": updated, "deleted": deleted}
 
 
@@ -364,6 +434,13 @@ def _delete_review_items_and_memory_state(item_ids: list[str]):
 	"""
 	if not item_ids:
 		return
+
+	# Delete Practice Log entries (raw SQL table, idx_item_id index)
+	placeholders = ", ".join(["%s"] * len(item_ids))
+	frappe.db.sql(
+		f"DELETE FROM `tabMemora Practice Log` WHERE item_id IN ({placeholders})",
+		tuple(item_ids),
+	)
 
 	# Delete Memory State records (raw SQL — partitioned table)
 	# Get all season_seqs to ensure we prune across partitions

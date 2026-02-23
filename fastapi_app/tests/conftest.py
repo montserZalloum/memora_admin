@@ -141,6 +141,8 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 		"memora:hierarchy:SUBJ-TEST-*",
 		"memora:subjects_with_free_content",
 		"memora:profile:PLAYER-TEST-*",
+		"memora:practice:PLAYER-TEST-*",
+		"memora:practice:hierarchy_meta:*",
 		registration_options_key(),
 	]
 
