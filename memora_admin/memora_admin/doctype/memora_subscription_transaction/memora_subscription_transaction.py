@@ -75,10 +75,12 @@ class MemoraSubscriptionTransaction(Document):
 		r.srem(pending_key(self.player), self.related_grant)
 
 		# Publish real-time notification to player via Redis pub/sub
-		try:
-			self._publish_notification("approved", grant_keys)
-		except Exception as e:
-			frappe.logger().warning(f"Failed to publish notification: {e}")
+		# Skip for voucher redemptions — player already gets the result in the HTTP response
+		if self.payment_method != "Voucher":
+			try:
+				self._publish_notification("approved", grant_keys)
+			except Exception as e:
+				frappe.logger().warning(f"Failed to publish notification: {e}")
 
 		frappe.logger().info(f"Transaction {self.name} approved: {len(created_subs)} subscriptions created")
 		frappe.msgprint(
