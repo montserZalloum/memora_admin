@@ -42,6 +42,7 @@ class TokenPayload(BaseModel):
 	# Optional fields
 	iat: int | None = None  # Issued at timestamp
 	role: str | None = None  # User role (e.g., "System Manager" for admins)
+	season: str | None = None  # Player's season ID (e.g., 'SEAS-00027')
 
 
 class FrappeUser(BaseModel):

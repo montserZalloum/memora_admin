@@ -411,6 +411,23 @@ def require_rate_limit(scope: str):
 # --- Double-Gate Dependencies ---
 
 
+async def require_active_season(
+	user: CurrentUser,
+	season_service: SeasonServiceDep,
+) -> SeasonMeta | None:
+	"""Gate 1: Block if player's season is expired or unpublished.
+
+	Reads season_id from JWT. Old tokens without season are allowed through
+	(backward compat — they'll get season on next login/refresh).
+	"""
+	if not user.season:
+		return None  # Old token without season — allow through
+	return await require_season_access(user.season, season_service)
+
+
+ActiveSeasonDep = Annotated[SeasonMeta | None, Depends(require_active_season)]
+
+
 async def require_season_access(
 	season_id: str,
 	season_service: SeasonServiceDep,

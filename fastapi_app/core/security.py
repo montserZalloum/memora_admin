@@ -18,6 +18,7 @@ def create_access_token(
     email: str | None = None,
     mobile: str | None = None,
     role: str | None = None,
+    season_id: str | None = None,
     expires_delta: timedelta | None = None,
 ) -> str:
     """
@@ -32,6 +33,7 @@ def create_access_token(
         email: User email address (admin tokens)
         mobile: User mobile number (player tokens)
         role: Optional user role (e.g., "System Manager" for admin users)
+        season_id: Player's season ID (e.g., 'SEAS-00027'). None for admins.
         expires_delta: Optional custom expiration time
 
     Returns:
@@ -70,6 +72,10 @@ def create_access_token(
     # Include role only for admin users (keeps player tokens lean)
     if role:
         payload["role"] = role
+
+    # Include season for players (Gate 1 enforcement)
+    if season_id:
+        payload["season"] = season_id
 
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 

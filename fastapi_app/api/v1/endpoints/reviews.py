@@ -1,9 +1,16 @@
 """Review endpoints for FSRS spaced repetition (item-level)."""
 
-from fastapi import APIRouter, Depends
 import structlog
+from fastapi import APIRouter, Depends
 
-from fastapi_app.api.deps import CurrentUser, ReviewServiceDep, WalletServiceDep, require_rate_limit
+from fastapi_app.api.deps import (
+	ActiveSeasonDep,
+	CurrentUser,
+	LeaderboardServiceDep,
+	ReviewServiceDep,
+	WalletServiceDep,
+	require_rate_limit,
+)
 from fastapi_app.models.review import (
 	DueItem,
 	DueItemsResponse,
@@ -81,8 +88,10 @@ async def submit_reviews(
 	subject: str,
 	body: ReviewSubmitRequest,
 	user: CurrentUser,
+	_season: ActiveSeasonDep,
 	review_service: ReviewServiceDep,
 	wallet_service: WalletServiceDep,
+	leaderboard_service: LeaderboardServiceDep,
 	_rate_limit=Depends(require_rate_limit("reviews")),
 ):
 	"""Submit batch of reviewed items for a subject.
@@ -99,8 +108,16 @@ async def submit_reviews(
 
 	if processed > 0:
 		XP_PER_REVIEW_SESSION = 3
-		await wallet_service.award_xp(user.sub, XP_PER_REVIEW_SESSION)
+		new_total_xp = await wallet_service.award_xp(user.sub, XP_PER_REVIEW_SESSION)
 		xp_awarded = XP_PER_REVIEW_SESSION
+
+		await leaderboard_service.update_leaderboards(
+			player_id=user.sub,
+			xp_amount=xp_awarded,
+			new_total_xp=new_total_xp,
+			subject_id=subject,
+			plan_id=user.plan,
+		)
 
 		logger.info(
 			"review_xp_awarded",

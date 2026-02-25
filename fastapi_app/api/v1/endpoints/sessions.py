@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from fastapi_app.api.deps import (
 	AccessServiceDep,
+	ActiveSeasonDep,
 	CurrentUser,
 	GameSessionServiceDep,
 	HierarchyServiceDep,
@@ -86,6 +87,7 @@ async def get_current_session(
 async def start_session(
 	request: StartSessionRequest,
 	user: CurrentUser,
+	_season: ActiveSeasonDep,
 	game_session_service: GameSessionServiceDep,
 	hierarchy_service: HierarchyServiceDep,
 	access_service: AccessServiceDep,

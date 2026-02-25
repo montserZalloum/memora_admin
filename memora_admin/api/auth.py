@@ -52,6 +52,7 @@ def verify_player_password(mobile: str, password: str) -> dict:
 		"player_id": profile.name,
 		"display_name": profile.display_name,
 		"plan": profile.plan,
+		"season": profile.season,
 		"avatar": profile.avatar,
 		"gender": profile.gender,
 		"mobile": profile.mobile,

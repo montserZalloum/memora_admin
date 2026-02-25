@@ -4,7 +4,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from fastapi_app.api.deps import CurrentUser, PracticeServiceDep, require_rate_limit
+from fastapi_app.api.deps import ActiveSeasonDep, CurrentUser, PracticeServiceDep, require_rate_limit
 from fastapi_app.models.practice import (
 	PracticeBatchResponse,
 	PracticeHierarchyResponse,
@@ -59,6 +59,7 @@ async def get_practice_hierarchy(
 async def start_practice(
 	body: StartPracticeRequest,
 	user: CurrentUser,
+	_season: ActiveSeasonDep,
 	practice_service: PracticeServiceDep,
 ) -> PracticeBatchResponse:
 	"""Start a new practice session. Validates access, returns first batch."""

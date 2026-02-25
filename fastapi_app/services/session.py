@@ -24,7 +24,9 @@ class SessionService:
     def __init__(self, redis_client: redis.Redis):
         self.redis = redis_client
 
-    async def create_session(self, user_id: str, plan_id: str, ttl_days: int = 30) -> str:
+    async def create_session(
+        self, user_id: str, plan_id: str, ttl_days: int = 30, season_id: str | None = None
+    ) -> str:
         """
         Create new session, invalidating any previous session.
 
@@ -32,6 +34,7 @@ class SessionService:
             user_id: The player's user ID
             plan_id: Player's plan document name (e.g., 'PLAN-00001')
             ttl_days: Session TTL (matches refresh token lifetime)
+            season_id: Player's season ID (e.g., 'SEAS-00027')
 
         Returns:
             New family_id to embed in tokens
@@ -40,28 +43,31 @@ class SessionService:
         key = _session_key_fn(user_id)
 
         # Store session data as JSON (overwrites old, auto-invalidating previous session)
-        session_data = json.dumps({"fid": family_id, "plan": plan_id})
+        data = {"fid": family_id, "plan": plan_id}
+        if season_id:
+            data["season"] = season_id
+        session_data = json.dumps(data)
         await self.redis.set(key, session_data, ex=ttl_days * 24 * 3600)
         return family_id
 
-    async def validate_session(self, user_id: str, family_id: str) -> tuple[bool, str | None]:
+    async def validate_session(self, user_id: str, family_id: str) -> tuple[bool, str | None, str | None]:
         """
         Check if family_id matches current session.
 
         Returns:
-            Tuple of (is_valid, plan_id):
-            - (True, plan_id) if session is valid
-            - (False, None) if invalidated by new login or no session
+            Tuple of (is_valid, plan_id, season_id):
+            - (True, plan_id, season_id) if session is valid
+            - (False, None, None) if invalidated by new login or no session
         """
         session_data = await self.get_session_data(user_id)
 
         if session_data is None:
-            return (False, None)
+            return (False, None, None)
 
         if session_data.get("fid") != family_id:
-            return (False, None)
+            return (False, None, None)
 
-        return (True, session_data.get("plan"))
+        return (True, session_data.get("plan"), session_data.get("season"))
 
     async def invalidate_session(self, user_id: str) -> bool:
         """

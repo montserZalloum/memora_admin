@@ -198,16 +198,18 @@ async def player_login(
 		player_id,
 		plan_id=profile["plan"],
 		ttl_days=session_ttl_days,
+		season_id=profile.get("season", ""),
 	)
 	evict_session_cache(player_id)
 
-	# 10. Create tokens (player: mobile claim, no email)
+	# 10. Create tokens (player: mobile claim, no email, season for Gate 1)
 	access_token = create_access_token(
 		user_id=player_id,
 		mobile=profile["mobile"],
 		plan_id=profile["plan"],
 		display_name=profile.get("display_name", ""),
 		family_id=family_id,
+		season_id=profile.get("season", ""),
 		expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
 	)
 
@@ -326,9 +328,9 @@ async def refresh(
 		user_id = payload["sub"]
 		family_id = payload["fid"]
 
-		# Validate session is still active and get plan_id from session
+		# Validate session is still active and get plan_id + season_id from session
 		session_service = SessionService(redis)
-		is_valid, plan_id = await session_service.validate_session(user_id, family_id)
+		is_valid, plan_id, season_id = await session_service.validate_session(user_id, family_id)
 
 		if not is_valid or not plan_id:
 			# Session invalidated by new login or plan change
@@ -337,7 +339,7 @@ async def refresh(
 				detail="Invalid credentials",
 			)
 
-		# Create new access token with plan_id from session
+		# Create new access token with plan_id and season from session
 		# Pass email and mobile from original token payload (one will be None)
 		access_token = create_access_token(
 			user_id=user_id,
@@ -347,6 +349,7 @@ async def refresh(
 			display_name=payload.get("name", ""),
 			family_id=family_id,
 			role=payload.get("role"),
+			season_id=season_id or "",
 			expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
 		)
 
@@ -592,16 +595,18 @@ async def player_register_verify(
 		player_id,
 		plan_id=profile["plan"],
 		ttl_days=session_ttl_days,
+		season_id=season,
 	)
 	evict_session_cache(player_id)
 
-	# Create tokens (player: mobile claim, no email)
+	# Create tokens (player: mobile claim, no email, season for Gate 1)
 	access_token = create_access_token(
 		user_id=player_id,
 		mobile=profile["mobile"],
 		plan_id=profile["plan"],
 		display_name=profile.get("display_name", ""),
 		family_id=family_id,
+		season_id=season,
 		expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
 	)
 
