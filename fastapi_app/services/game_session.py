@@ -74,6 +74,9 @@ redis.call('DEL', KEYS[1])
 -- Set progress bit, get previous value (0=first, 1=replay)
 local prev = redis.call('SETBIT', KEYS[2], tonumber(ARGV[1]), 1)
 
+-- Refresh TTL on progress key (literal 172800 = PROGRESS_KEY_TTL, cross-ref redis_keys.py)
+redis.call('EXPIRE', KEYS[2], 172800)
+
 -- Mark dirty for background sync
 redis.call('SADD', KEYS[3], ARGV[2])
 

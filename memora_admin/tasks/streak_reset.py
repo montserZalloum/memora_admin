@@ -18,7 +18,6 @@ import logging
 
 
 import frappe
-import redis
 
 from fastapi_app.core.redis_keys import WALLET_SCAN_PATTERN
 from memora_admin.tasks.task_utils import (
@@ -33,15 +32,11 @@ from memora_admin.tasks.task_utils import (
 	log_task_run,
 	notify_admins,
 )
+from memora_admin.utils.redis_connection import get_memora_redis
 
 logger = logging.getLogger(__name__)
 
 TASK_NAME = "streak_reset"
-
-
-def get_redis():
-	"""Get Redis connection using Frappe site config."""
-	return redis.from_url(frappe.conf.redis_cache)
 
 
 def reset_broken_streaks(triggered_by: str = "Scheduler"):
@@ -121,7 +116,7 @@ def _do_streak_reset() -> tuple[int, int, list]:
 	Returns:
 		Tuple of (processed_count, failed_count, failed_details_list)
 	"""
-	r = get_redis()
+	r = get_memora_redis()
 	processed = 0
 	failed = 0
 	failed_details = []

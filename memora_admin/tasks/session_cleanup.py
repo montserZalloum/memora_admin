@@ -20,7 +20,6 @@ import logging
 
 
 import frappe
-import redis
 
 from fastapi_app.core.redis_keys import GAME_SESSION_SCAN_PATTERN
 from memora_admin.tasks.task_utils import (
@@ -29,15 +28,11 @@ from memora_admin.tasks.task_utils import (
 	log_task_run,
 	notify_admins,
 )
+from memora_admin.utils.redis_connection import get_memora_redis
 
 logger = logging.getLogger(__name__)
 
 TASK_NAME = "session_cleanup"
-
-
-def get_redis():
-	"""Get Redis connection using Frappe site config."""
-	return redis.from_url(frappe.conf.redis_cache)
 
 
 def cleanup_expired_sessions(triggered_by: str = "Scheduler"):
@@ -101,7 +96,7 @@ def _do_session_cleanup() -> tuple[int, int, list]:
 	Returns:
 		Tuple of (checked_count, removed_count, orphaned_key_list)
 	"""
-	r = get_redis()
+	r = get_memora_redis()
 	checked = 0
 	removed = 0
 	orphaned_keys = []

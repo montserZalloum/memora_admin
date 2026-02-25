@@ -4,7 +4,7 @@
 """Device sync events for admin device management.
 
 Syncs device removal from Frappe child table to Redis when admin
-updates a player profile. Uses get_fastapi_redis() for correct
+updates a player profile. Uses get_memora_redis() for correct
 Redis namespace (shared with FastAPI sidecar).
 """
 # Player identity is PLAYER-##### docname (not email). See Phase 32.
@@ -13,7 +13,7 @@ import frappe
 import redis
 
 from fastapi_app.core.redis_keys import devices_key, session_key
-from memora_admin.events.access_sync import get_fastapi_redis
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 def on_player_profile_update(doc, method):
@@ -49,7 +49,7 @@ def on_player_profile_update(doc, method):
 	sk = session_key(user_id)
 
 	try:
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 
 		for device_id in removed_devices:
 			# Remove device from Redis registry

@@ -10,14 +10,14 @@ def main():
     """Manually test the interaction buffer flush"""
     try:
         import frappe
-        import redis
+        from memora_admin.utils.redis_connection import get_memora_redis
 
         logger.info("=" * 70)
         logger.info("MANUAL SYNC TEST")
         logger.info("=" * 70)
 
-        # Get Redis connection
-        r = redis.from_url(frappe.conf.redis_cache)
+        # Get Redis connection (dedicated Memora instance)
+        r = get_memora_redis()
 
         INTERACTION_BUFFER_KEY = "memora:buffer:interactions"
         BATCH_SIZE = 1000

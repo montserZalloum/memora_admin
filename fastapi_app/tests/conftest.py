@@ -25,7 +25,7 @@ from fastapi_app.core.redis_keys import (
 import fastapi_app.core.config as config_module
 
 _test_settings = Settings(
-	redis_url="redis://127.0.0.1:13000",
+	redis_url="redis://127.0.0.1:13001",
 	jwt_secret="test-secret-key-for-unit-tests",
 	jwt_algorithm="HS256",
 	bitmap_json_path="/tmp/test-bitmaps",
@@ -72,14 +72,14 @@ async def redis_client() -> AsyncGenerator[redis.Redis, None]:
 	Creates a new client per test function with proper cleanup.
 
 	Yields:
-		redis.asyncio.Redis client connected to redis://127.0.0.1:13000
-		with decode_responses=True for string operations.
+		redis.asyncio.Redis client connected to the Memora Redis instance
+		(from .env REDIS_URL) with decode_responses=True for string operations.
 
 	Raises:
 		ConnectionError: If Redis is not available at the configured URL.
 	"""
 	client = redis.Redis.from_url(
-		"redis://127.0.0.1:13000",
+		_test_settings.redis_url,
 		decode_responses=True,
 	)
 	yield client

@@ -8,7 +8,7 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.constants import DIRTY_PROGRESS_KEY
-from fastapi_app.core.redis_keys import progress_key as _progress_key_fn
+from fastapi_app.core.redis_keys import PROGRESS_KEY_TTL, progress_key as _progress_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:
@@ -105,6 +105,7 @@ class ProgressService:
                 if hex_bitset:
                     bitset_bytes = bytes.fromhex(hex_bitset)
                     await self.redis.setrange(key, 0, bitset_bytes)
+                    await self.redis.expire(key, PROGRESS_KEY_TTL)
                     logger.info(
                         "progress_hydrated",
                         user_id=user_id,
@@ -147,6 +148,7 @@ class ProgressService:
         key = self._progress_key(user_id, subject_id, version)
         # SETBIT returns previous value: 0 if first time, 1 if replay
         previous = await self.redis.setbit(key, bit_index, 1)
+        await self.redis.expire(key, PROGRESS_KEY_TTL)
 
         # Mark dirty for background sync to MariaDB
         # Format: user_id:subject_id:v{version}

@@ -22,7 +22,7 @@ import frappe
 import redis
 
 from fastapi_app.core.redis_keys import LB_PREFIX, profile_key, task_ran_key
-from memora_admin.events.access_sync import get_fastapi_redis
+from memora_admin.utils.redis_connection import get_memora_redis
 from memora_admin.tasks.task_utils import (
 	AMMAN_TZ,
 	TASK_DURATION,
@@ -60,7 +60,7 @@ def warm_profile_cache(triggered_by: str = "Scheduler"):
 	# Idempotency check - only run once per hour window
 	# For hourly tasks, we check against hour rather than day
 	hour_key = f"{task_name}:{datetime.now(AMMAN_TZ).strftime('%Y-%m-%d-%H')}"
-	r = get_fastapi_redis()
+	r = get_memora_redis()
 	if r.get(task_ran_key(hour_key)):
 		logger.info(f"{task_name} already completed for this hour")
 		return

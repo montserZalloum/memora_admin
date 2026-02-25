@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import redis.asyncio as redis
 import structlog
 
-from fastapi_app.core.redis_keys import access_key as _access_key_fn, plan_free_subjects_key as _plan_free_subjects_key_fn
+from fastapi_app.core.redis_keys import ACCESS_KEY_TTL, access_key as _access_key_fn, plan_free_subjects_key as _plan_free_subjects_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:
@@ -77,6 +77,7 @@ class AccessService:
 
 				if result and isinstance(result, list) and len(result) > 0:
 					await self.redis.sadd(key, *result)
+					await self.redis.expire(key, ACCESS_KEY_TTL)
 					logger.info(
 						"access_hydrated_from_mariadb",
 						player_id=player_id,

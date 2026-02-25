@@ -18,7 +18,6 @@ import logging
 from datetime import datetime, timedelta
 
 import frappe
-import redis
 
 from fastapi_app.core.redis_keys import LB_PREFIX
 from memora_admin.tasks.task_utils import (
@@ -30,6 +29,7 @@ from memora_admin.tasks.task_utils import (
 	log_task_run,
 	notify_admins,
 )
+from memora_admin.utils.redis_connection import get_memora_redis
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +37,6 @@ logger = logging.getLogger(__name__)
 ARCHIVE_TTL_SECONDS = 90 * 24 * 3600
 
 # LB_PREFIX imported from fastapi_app.core.redis_keys
-
-
-def get_redis():
-	"""Get Redis connection using Frappe site config."""
-	return redis.from_url(frappe.conf.redis_cache)
 
 
 def archive_daily_leaderboard(triggered_by: str = "Scheduler"):
@@ -108,7 +103,7 @@ def _do_daily_archive() -> int:
 	Returns:
 		Number of leaderboards archived
 	"""
-	r = get_redis()
+	r = get_memora_redis()
 	yesterday = get_amman_yesterday()
 	archived = 0
 
@@ -212,7 +207,7 @@ def _do_weekly_archive() -> int:
 	Returns:
 		Number of leaderboards archived
 	"""
-	r = get_redis()
+	r = get_memora_redis()
 	archived = 0
 
 	# Islamic week: Friday–Thursday. Archive runs Friday 00:15.

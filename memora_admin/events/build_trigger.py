@@ -190,10 +190,11 @@ def on_plan_updated(doc, method):
 	old_doc = doc.get_doc_before_save()
 	if _has_is_premium_changed(old_doc, doc):
 		try:
-			from memora_admin.events.access_sync import get_fastapi_redis, rebuild_plan_free_subjects
+			from memora_admin.events.access_sync import rebuild_plan_free_subjects
+			from memora_admin.utils.redis_connection import get_memora_redis
 
 			rebuild_plan_free_subjects(plan_id)
-			r = get_fastapi_redis()
+			r = get_memora_redis()
 			r.publish(cache_invalidation_channel(), json.dumps({
 				"type": "plan_subjects",
 				"plan_id": plan_id,
@@ -207,9 +208,9 @@ def on_plan_updated(doc, method):
 	# Invalidate season_seq cache when plan's season assignment changes
 	if doc.has_value_changed("season"):
 		try:
-			from memora_admin.events.access_sync import get_fastapi_redis
+			from memora_admin.utils.redis_connection import get_memora_redis
 
-			r = get_fastapi_redis()
+			r = get_memora_redis()
 			r.delete(plan_season_seq_key(plan_id))
 			frappe.logger().info(f"plan_season_seq cache invalidated for {plan_id}")
 		except Exception as e:
@@ -327,10 +328,10 @@ def _invalidate_hierarchy_cache(subject_id: str):
 	"""
 	import json
 
-	from memora_admin.events.access_sync import get_fastapi_redis
+	from memora_admin.utils.redis_connection import get_memora_redis
 
 	try:
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 
 		# 1. Direct cache delete
 		r.delete(hierarchy_key(subject_id))
@@ -405,10 +406,10 @@ def _invalidate_catalog_cache(plan_id: str):
 	"""
 	import json
 
-	from memora_admin.events.access_sync import get_fastapi_redis
+	from memora_admin.utils.redis_connection import get_memora_redis
 
 	try:
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 
 		# 1. Direct cache delete
 		r.delete(catalog_key(plan_id))

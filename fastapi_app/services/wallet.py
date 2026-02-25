@@ -10,7 +10,7 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
-from fastapi_app.core.redis_keys import wallet_key as _wallet_key_fn
+from fastapi_app.core.redis_keys import WALLET_KEY_TTL, wallet_key as _wallet_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:
@@ -98,12 +98,17 @@ if streak_date == yesterday then
     current_streak = current_streak + 1
     redis.call('HSET', key, 'streak', current_streak)
     redis.call('HSET', key, 'streak_date', today)
+    redis.call('EXPIRE', key, 172800)
     return {current_streak, 1}
 end
 
 -- Missed day(s) or first completion - reset to 1
 redis.call('HSET', key, 'streak', 1)
 redis.call('HSET', key, 'streak_date', today)
+
+-- Refresh TTL on wallet key (literal 172800 = WALLET_KEY_TTL, cross-ref redis_keys.py)
+redis.call('EXPIRE', key, 172800)
+
 return {1, 1}
 """
 
@@ -183,6 +188,7 @@ class WalletService:
 					if total_xp > 0 or current_streak > 0:
 						mapping = {"xp": total_xp, "streak": current_streak}
 						await self.redis.hset(key, mapping=mapping)
+						await self.redis.expire(key, WALLET_KEY_TTL)
 						logger.info(
 							"wallet_hydrated_from_mariadb",
 							player_id=player_id,
@@ -253,6 +259,7 @@ class WalletService:
 		await self.ensure_hydrated(player_id)
 
 		new_total = await self.redis.hincrby(key, "xp", amount)
+		await self.redis.expire(key, WALLET_KEY_TTL)
 
 		# Mark dirty for background sync to MariaDB
 		await self.redis.sadd(DIRTY_WALLETS_KEY, player_id)

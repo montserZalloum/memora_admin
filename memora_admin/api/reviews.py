@@ -32,6 +32,7 @@ from memora_admin.api.utils import (
 from memora_admin.api.utils import (
 	update_mastery_counters as _update_mastery_counters,
 )
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 @frappe.whitelist(allow_guest=False)
@@ -336,9 +337,7 @@ def submit_reviews(player_id: str, subject_id: str, items: str) -> dict:
 
 		# --- Update mastery counters in Redis ---
 		try:
-			import redis
-
-			r = redis.from_url(frappe.conf.redis_cache)
+			r = get_memora_redis()
 			for u in updates:
 				_update_mastery_counters(
 					r,

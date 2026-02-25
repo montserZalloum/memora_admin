@@ -10,7 +10,7 @@ from datetime import datetime
 import frappe
 
 from fastapi_app.core.redis_keys import cache_invalidation_channel, level_config_key
-from memora_admin.events.access_sync import get_fastapi_redis
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 def on_level_settings_updated(doc, method):
@@ -25,7 +25,7 @@ def on_level_settings_updated(doc, method):
 			}
 		)
 
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 		r.set(level_config_key(), payload, ex=3600)
 		r.publish(
 			cache_invalidation_channel(),

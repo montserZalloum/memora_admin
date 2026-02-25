@@ -11,7 +11,7 @@ import time
 import frappe
 
 from fastapi_app.core.redis_keys import cache_invalidation_channel, profile_key
-from memora_admin.events.access_sync import get_fastapi_redis
+from memora_admin.utils.redis_connection import get_memora_redis
 
 # Cache TTL: 1 hour per CONTEXT.md
 CACHE_TTL = 3600
@@ -29,7 +29,7 @@ def on_player_profile_updated(doc, method):
 	Uses two-pronged invalidation (direct SET + pubsub),
 	matching the established pattern in catalog_sync.py.
 	"""
-	r = get_fastapi_redis()
+	r = get_memora_redis()
 	redis_key = profile_key(doc.name)
 
 	# Build profile data

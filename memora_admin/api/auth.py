@@ -240,9 +240,9 @@ def get_registration_options() -> dict:
 def _get_player_xp(player_name: str) -> int:
 	"""Fetch XP from Redis wallet. Returns 0 on miss or failure (non-fatal)."""
 	try:
-		from memora_admin.events.access_sync import get_fastapi_redis
+		from memora_admin.utils.redis_connection import get_memora_redis
 
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 		wk = wallet_key(player_name)
 		xp_value = r.hget(wk, "xp")
 		return int(xp_value) if xp_value else 0
@@ -253,11 +253,13 @@ def _get_player_xp(player_name: str) -> int:
 def _initialize_redis_wallet(player_name: str) -> None:
 	"""Seed Redis wallet with xp=0, streak=0. Non-fatal on failure."""
 	try:
-		from memora_admin.events.access_sync import get_fastapi_redis
+		from fastapi_app.core.redis_keys import WALLET_KEY_TTL
+		from memora_admin.utils.redis_connection import get_memora_redis
 
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 		wk = wallet_key(player_name)
 		r.hset(wk, mapping={"xp": 0, "streak": 0})
+		r.expire(wk, WALLET_KEY_TTL)
 	except Exception:
 		frappe.logger().warning(f"Failed to initialize Redis wallet for {player_name}")
 
@@ -265,9 +267,9 @@ def _initialize_redis_wallet(player_name: str) -> None:
 def _invalidate_player_sessions(player_name: str) -> None:
 	"""Delete session key from Redis to force logout. Non-fatal on failure."""
 	try:
-		from memora_admin.events.access_sync import get_fastapi_redis
+		from memora_admin.utils.redis_connection import get_memora_redis
 
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 		sk = session_key(player_name)
 		r.delete(sk)
 		frappe.logger().info(f"Invalidated session for {player_name}")

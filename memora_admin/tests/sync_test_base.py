@@ -47,9 +47,9 @@ class SyncTestCase(FrappeTestCase):
 		"""
 		super().setUp()
 
-		# Connect to Redis via Frappe config (synchronous client)
+		# Connect to Memora's dedicated Redis instance (synchronous client)
 		# Use decode_responses=False to handle binary bitmap data
-		redis_url = frappe.conf.redis_cache or "redis://127.0.0.1:13000"
+		redis_url = frappe.conf.get("redis_memora", frappe.conf.redis_cache)
 		self.r = redis.from_url(redis_url, decode_responses=False)
 
 		# Generate unique test ID prefix for this test run

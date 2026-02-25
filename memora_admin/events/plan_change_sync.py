@@ -14,7 +14,7 @@ import frappe
 
 from fastapi_app.core.redis_keys import cache_invalidation_channel, player_plan_key, session_key
 from memora_admin.api.utils import invalidate_player_season_seq
-from memora_admin.events.access_sync import get_fastapi_redis
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 def on_player_profile_plan_changed(doc, method):
@@ -34,7 +34,7 @@ def on_player_profile_plan_changed(doc, method):
     # Invalidate cached season_seq (Frappe-side cache)
     invalidate_player_season_seq(doc.name)
 
-    r = get_fastapi_redis()
+    r = get_memora_redis()
 
     # 1. Direct delete: invalidate session + player_plan cache immediately
     # Key pattern matches SessionService: memora:session:{player_id}

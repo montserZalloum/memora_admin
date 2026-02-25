@@ -1,0 +1,114 @@
+# TTL Policy Contract
+# Defines TTL values and refresh triggers for all Memora Redis keys
+
+ttl_constants:
+  # New constants to add to redis_keys.py
+  WALLET_KEY_TTL: 172800        # 48 hours
+  PROGRESS_KEY_TTL: 172800      # 48 hours
+  ACCESS_KEY_TTL: 86400         # 24 hours
+  PLAN_FREE_SUBJECTS_TTL: 43200 # 12 hours
+
+protected_keys:
+  # These MUST NEVER have TTL — data loss if evicted
+  - key: "memora:dirty:progress"
+    type: SET
+    reason: "Contains progress not yet synced to MariaDB"
+  - key: "memora:dirty:wallets"
+    type: SET
+    reason: "Contains wallet changes not yet synced to MariaDB"
+  - key: "memora:buffer:interactions"
+    type: LIST
+    reason: "Contains interactions not yet flushed to MariaDB"
+  - key: "memora:lb:alltime"
+    type: ZSET
+    reason: "Alltime leaderboard is permanent"
+
+ttl_managed_keys:
+  - key_pattern: "memora:wallet:{player}"
+    type: HASH
+    ttl: 172800  # 48h
+    refresh_points:
+      - file: "fastapi_app/services/wallet.py"
+        method: "award_xp"
+        mechanism: "pipeline EXPIRE after HINCRBY"
+      - file: "fastapi_app/services/wallet.py"
+        method: "update_streak (STREAK_UPDATE_SCRIPT)"
+        mechanism: "Add EXPIRE to Lua script"
+      - file: "fastapi_app/services/wallet.py"
+        method: "ensure_hydrated"
+        mechanism: "EXPIRE after HSET during hydration"
+    self_heals: true
+    source: "Memora Player Wallet (MariaDB)"
+
+  - key_pattern: "memora:progress:{user}:{subject}:v{version}"
+    type: STRING (bitmap)
+    ttl: 172800  # 48h
+    refresh_points:
+      - file: "fastapi_app/services/progress.py"
+        method: "complete_lesson"
+        mechanism: "pipeline EXPIRE after SETBIT"
+      - file: "fastapi_app/services/game_session.py"
+        method: "SESSION_COMPLETE_SCRIPT (Lua)"
+        mechanism: "Add redis.call('EXPIRE', KEYS[2], 172800) after SETBIT"
+      - file: "fastapi_app/services/progress.py"
+        method: "ensure_hydrated"
+        mechanism: "EXPIRE after SETRANGE during hydration"
+    self_heals: true
+    source: "Memora Structure Progress (MariaDB)"
+
+  - key_pattern: "memora:access:{player}"
+    type: SET
+    ttl: 86400  # 24h
+    refresh_points:
+      - file: "fastapi_app/services/access.py"
+        method: "ensure_hydrated"
+        mechanism: "EXPIRE after SADD during hydration"
+      - file: "memora_admin/events/access_sync.py"
+        method: "on_subscription_change"
+        mechanism: "EXPIRE after SADD"
+    self_heals: true
+    source: "Memora Player Subscription (MariaDB)"
+
+  - key_pattern: "memora:plan:{plan}:free_subjects"
+    type: SET
+    ttl: 43200  # 12h
+    refresh_points:
+      - file: "memora_admin/events/access_sync.py"
+        method: "rebuild_plan_free_subjects"
+        mechanism: "EXPIRE after SADD"
+      - file: "memora_admin/tasks/plan_sync.py"
+        method: "sync_all_plan_subjects_to_redis"
+        mechanism: "EXPIRE after rebuild"
+    self_heals: true  # via 6h periodic task + event hooks
+    source: "Memora Plan Subject (MariaDB)"
+
+existing_ttl_keys:
+  # Already have TTL — no changes needed
+  - key: "memora:hierarchy:{subject}"
+    ttl: 3600  # 1h
+  - key: "memora:stats:{user}:{subject}:v{version}"
+    ttl: 3600  # 1h
+  - key: "memora:gamesession:{user}"
+    ttl: 3600  # 1h (GAME_SESSION_TTL)
+  - key: "memora:session:{user}"
+    ttl: 2592000  # 30d
+  - key: "memora:daily_xp:{player}"
+    ttl: 691200  # 8d
+  - key: "memora:profile:{player}"
+    ttl: 3600  # 1h
+  - key: "memora:level_config"
+    ttl: 3600  # 1h
+  - key: "memora:lb:daily:*"
+    ttl: 2592000  # 30d
+  - key: "memora:lb:weekly:*"
+    ttl: 7776000  # 90d
+
+dynamic_batch_sizing:
+  file: "memora_admin/tasks/sync.py"
+  function: "flush_interaction_buffer"
+  current_batch_size: 5000
+  new_behavior:
+    default_batch_size: 1000
+    backlog_threshold: 50000
+    backlog_batch_size: 5000
+    critical_log_threshold: 10000

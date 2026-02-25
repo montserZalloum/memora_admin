@@ -40,7 +40,6 @@ import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
 import frappe
-import redis
 
 from fastapi_app.core.redis_keys import (
 	fsrs_card_state_key,
@@ -53,15 +52,11 @@ from memora_admin.api.utils import (
 from memora_admin.api.utils import (
 	update_mastery_counters as _update_mastery_counters,
 )
+from memora_admin.utils.redis_connection import get_memora_redis
 
 logger = logging.getLogger(__name__)
 
 FSRS_PROCESSED_KEY = fsrs_last_processed_key()
-
-
-def get_redis():
-	"""Get Redis connection using Frappe site config."""
-	return redis.from_url(frappe.conf.redis_cache)
 
 
 def _get_skippable_stage_types() -> set[str]:
@@ -274,7 +269,7 @@ def process_fsrs_reviews():
 
 	Scheduled: every 1 minute via hooks.py
 	"""
-	r = get_redis()
+	r = get_memora_redis()
 
 	# Get skippable stage types to exclude
 	skippable_types = _get_skippable_stage_types()

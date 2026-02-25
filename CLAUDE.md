@@ -8,7 +8,7 @@ Memora Admin is a gamified educational platform backend for Arabic-speaking stud
 - **Frappe v15**: Admin panel, content management, ORM, 31 DocTypes
 - **FastAPI sidecar**: High-performance game API (sub-20ms responses)
 
-Key data stores: Redis (hot data: progress bitmaps, wallets, sessions) + MariaDB (cold data via Frappe).
+Key data stores: **Dual Redis** architecture — dedicated Memora Redis on port 13001 (hot data: progress bitmaps, wallets, sessions) isolated from Frappe cache Redis on port 13000. MariaDB remains source of truth (cold data via Frappe). `bench clear-cache` only affects Frappe's Redis (13000), leaving game data safe on 13001.
 
 ## Development Commands
 
@@ -120,10 +120,25 @@ Content hierarchy: Subject → Track → Unit → Topic → Lesson → Stage
 
 - **Services**: Business logic with Redis operations (`services/progress.py`, `services/access.py`)
 - **Dependencies**: Injected via `Annotated` + `Depends`
-- **Redis keys**: ALL keys MUST be defined in `fastapi_app/core/redis_keys.py`. Never use inline `f"memora:..."` strings — always import a key builder function. This is the single source of truth for key formats and documentation.
+- **Redis keys**: ALL keys MUST be defined in `fastapi_app/core/redis_keys.py`. Never use inline `f"memora:..."` strings — always import a key builder function. This is the single source of truth for key formats, TTL constants, and documentation.
+- **TTL constants**: Defined in `fastapi_app/core/redis_keys.py` alongside key builders: `WALLET_KEY_TTL` (48h), `PROGRESS_KEY_TTL` (48h), `ACCESS_KEY_TTL` (24h), `PLAN_FREE_SUBJECTS_TTL` (12h). Lua scripts use literal values (cannot import Python constants) — cross-reference comments in `redis_keys.py` document which Lua scripts duplicate each value.
 - **Logging**: Structured via `structlog`
 - **CRITICAL: `decode_responses=True`**: The Redis pool (`core/redis.py`) uses `decode_responses=True`. ALL Redis responses are **strings**, NEVER bytes. Do NOT use `.encode()` on keys when doing lookups against HGETALL/GET results. This caused a recurring bug in `profile_page.py` activity endpoint.
 - **Sync tasks must MERGE, not REPLACE**: When syncing Redis data to MariaDB (e.g., `daily_xp_json`), always merge with existing DB values. Redis may have sparse data after a flush; replacing would destroy historical data.
+
+### Frappe Redis Connection
+
+All Frappe-side code (background tasks, API endpoints, event handlers) that accesses Memora's dedicated Redis must use `get_memora_redis()` from `memora_admin.utils.redis_connection`:
+
+```python
+from memora_admin.utils.redis_connection import get_memora_redis
+r = get_memora_redis()  # Returns redis.Redis with decode_responses=True
+```
+
+- Reads `redis_memora` from `frappe.conf` (site_config.json)
+- Falls back to `frappe.conf.redis_cache` if `redis_memora` is not configured (backward compat)
+- Do NOT use `frappe.conf.redis_cache` directly for Memora data — that points to Frappe's cache Redis (port 13000)
+- Event handlers using `get_fastapi_redis()` (reads `.env` REDIS_URL) auto-pick up port 13001 — no changes needed
 
 ### Access Control (Double-Gate)
 
@@ -136,19 +151,41 @@ Events in `memora_admin/events/access_sync.py`:
 - `on_season_updated`: Syncs season metadata to Redis
 - `on_subscription_change`: Manages access grants (SADD/SREM)
 
+## Redis Architecture (Dual-Instance)
+
+Memora uses a **dedicated Redis instance** on port 13001, separate from Frappe's cache on port 13000:
+
+| Instance | Port | Purpose | `bench clear-cache` impact |
+|----------|------|---------|---------------------------|
+| Frappe Redis | 13000 | Frappe cache, sessions, queue | FLUSHDB — wipes all keys |
+| **Memora Redis** | **13001** | Game data, wallets, progress, leaderboards | **No impact** — isolated |
+
+**Connection points**:
+- FastAPI: Reads `REDIS_URL` from `.env` → `redis://127.0.0.1:13001`
+- Frappe tasks/API: Uses `get_memora_redis()` from `memora_admin.utils.redis_connection`
+- Frappe event handlers using `get_fastapi_redis()`: Reads `.env` REDIS_URL (auto-picks up 13001)
+
+**AOF persistence**: Enabled with `appendfsync everysec` — data survives Redis restart with max 1-second data loss window.
+
+**Eviction policy**: `volatile-ttl` — only evicts keys that have a TTL set. Protected keys (dirty sets, buffer, alltime leaderboard) have no TTL and are never evicted.
+
 ## Redis Resilience (Cache-Miss Self-Healing)
 
-Redis is a **hot cache**, MariaDB is source of truth. After FLUSHDB/restart/eviction, all services auto-hydrate:
+Redis is a **hot cache**, MariaDB is source of truth. After restart/eviction, all services auto-hydrate:
 
-| Redis Key | Source of Truth | Self-heals? |
-|-----------|----------------|-------------|
-| `memora:access:{player}` | `Memora Player Subscription` | Yes - `AccessService.ensure_hydrated()` on API call |
-| `memora:progress:{user}:{subj}:v{ver}` | `Memora Structure Progress` | Yes - `ProgressService.ensure_hydrated()` on API call |
-| `memora:hierarchy:{subject}` | Frappe hierarchy API | Yes - fetched on cache miss (1h TTL) |
-| `memora:subjects_with_free_content` | Hierarchy fetch | Yes - auto-repaired when hierarchy fetched from Frappe |
-| `memora:plan:{plan}:free_subjects` | `Memora Plan Subject` | Periodic - `plan_sync.py` every 6h + event hooks |
-| `memora:wallet:{player}` | `Memora Player Profile` | Yes - `WalletService` on API call |
-| `memora:stats:{user}:{subj}:v{ver}` | Computed from bitmap | Yes - cold-start recompute |
+| Redis Key | Source of Truth | TTL | Self-heals? |
+|-----------|----------------|-----|-------------|
+| `memora:access:{player}` | `Memora Player Subscription` | 24h | Yes - `AccessService.ensure_hydrated()` on API call |
+| `memora:progress:{user}:{subj}:v{ver}` | `Memora Structure Progress` | 48h | Yes - `ProgressService.ensure_hydrated()` on API call |
+| `memora:hierarchy:{subject}` | Frappe hierarchy API | 1h | Yes - fetched on cache miss |
+| `memora:subjects_with_free_content` | Hierarchy fetch | None | Yes - auto-repaired when hierarchy fetched from Frappe |
+| `memora:plan:{plan}:free_subjects` | `Memora Plan Subject` | 12h | Periodic - `plan_sync.py` every 6h + event hooks |
+| `memora:wallet:{player}` | `Memora Player Profile` | 48h | Yes - `WalletService` on API call |
+| `memora:stats:{user}:{subj}:v{ver}` | Computed from bitmap | 1h | Yes - cold-start recompute |
+| `memora:dirty:progress` | N/A (buffer) | **None** | **Protected** — never evicted |
+| `memora:dirty:wallets` | N/A (buffer) | **None** | **Protected** — never evicted |
+| `memora:buffer:interactions` | N/A (buffer) | **None** | **Protected** — never evicted |
+| `memora:lb:alltime*` | N/A (rankings) | **None** | **Protected** — never evicted |
 
 **Key rules when adding new Redis-cached data:**
 1. Always implement `ensure_hydrated()` pattern - fetch from MariaDB on cache miss
@@ -156,6 +193,8 @@ Redis is a **hot cache**, MariaDB is source of truth. After FLUSHDB/restart/evic
 3. When adding denormalized fields (e.g., `free_units`), verify ALL producer code paths populate them
 4. The hierarchy API (`memora_admin/api/hierarchy.py`) must populate `free_units`/`free_topics` arrays
 5. **Cross-cache dependencies**: When data from one DocType feeds into another cache (e.g., Plan Subject `meta_data` → hierarchy cache `free_units`/`free_topics`), ensure the event hook invalidates ALL affected caches, not just the "obvious" one
+6. **TTL on writes**: All cacheable keys must have TTL set via `EXPIRE` after writes. Import TTL constants from `fastapi_app.core.redis_keys`. Lua scripts use literal values with cross-reference comments.
+7. **Protected keys** (dirty sets, buffer, alltime leaderboard) must NEVER receive TTL — their loss means permanent data loss
 
 ### Cache Invalidation Events (`build_trigger.py`)
 
@@ -195,9 +234,14 @@ A **premium subject** (`is_premium=1`) can contain **individual free topics/unit
 
 Copy `.env.example` to `.env`:
 ```
-REDIS_URL=redis://localhost:6379/0
+REDIS_URL=redis://127.0.0.1:13001
 JWT_SECRET=your-secret-key
 BITMAP_JSON_PATH=/path/to/bitmaps
+```
+
+Also add `redis_memora` to Frappe site config:
+```bash
+bench --site your-site set-config redis_memora "redis://127.0.0.1:13001"
 ```
 
 ## Planning Documents
@@ -223,31 +267,33 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM (card records, batch state, redemption logs, subscription transactions) (007-redemption-flow-tests)
 - Python 3.11+ (Frappe v15) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `hmac`, `decimal.Decimal`, `csv`/`io`, ERPNext Sales Invoice (008-voucher-audit-tests)
 - Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, httpx 0.28.1, redis.asyncio (all pre-installed) (009-fastapi-test-foundation)
-- Redis at `redis://127.0.0.1:13000` (shared with Frappe — prefix isolation required) (009-fastapi-test-foundation)
+- Redis at `redis://127.0.0.1:13001` (dedicated Memora instance) (009-fastapi-test-foundation)
 - Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, redis.asyncio, unittest.mock.AsyncMock (010-core-service-tests)
-- Redis at `redis://127.0.0.1:13000` (real, prefix-isolated), MariaDB via mocked FrappeClient (010-core-service-tests)
+- Redis at `redis://127.0.0.1:13001` (dedicated Memora instance), MariaDB via mocked FrappeClient (010-core-service-tests)
 - Python 3.11+ (Frappe v15 bench environment) + pytest 8.4.2, pytest-asyncio 0.26.0, redis.asyncio, unittest.mock.AsyncMock, user-agents (for DeviceService fingerprinting) (011-session-auth-tests)
-- Redis at `redis://127.0.0.1:13000` (real, shared with Frappe — prefix isolation mandatory) (013-core-endpoint-tests)
-- Redis at `redis://127.0.0.1:13000` (real, shared with Frappe -- prefix isolation mandatory) (014-remaining-endpoint-tests)
+- Redis at `redis://127.0.0.1:13001` (dedicated Memora instance) (013-core-endpoint-tests)
+- Redis at `redis://127.0.0.1:13001` (real, shared with Frappe -- prefix isolation mandatory) (014-remaining-endpoint-tests)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (`frappe.tests.utils.FrappeTestCase`), `redis` (synchronous), `unittest.mock` (016-sync-task-tests)
-- MariaDB via Frappe ORM (Player Wallet, Structure Progress, Interaction Log, Sync Log); Redis at `redis://127.0.0.1:13000` (dirty sets, wallet hashes, progress bitmaps, interaction buffer) (016-sync-task-tests)
+- MariaDB via Frappe ORM (Player Wallet, Structure Progress, Interaction Log, Sync Log); Redis at `redis://127.0.0.1:13001` (dirty sets, wallet hashes, progress bitmaps, interaction buffer) (016-sync-task-tests)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM-blocked, raw SQL only), `fsrs` 6.3.0 (FSRS library), `redis` (synchronous, for background processor) (018-fsrs-card-state)
-- MariaDB 10.6 via `frappe.db.sql()` (RANGE-partitioned `tabMemora Memory State`), Redis at `redis://127.0.0.1:13000` (card state cache) (018-fsrs-card-state)
+- MariaDB 10.6 via `frappe.db.sql()` (RANGE-partitioned `tabMemora Memory State`), Redis at `redis://127.0.0.1:13001` (card state cache) (018-fsrs-card-state)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, whitelist API), FastAPI, Pydantic v2, `redis.asyncio`, `hashlib` (stdlib) (019-stats-content-hash)
-- Redis at `redis://127.0.0.1:13000` (stats hash, hierarchy JSON cache), MariaDB via Frappe ORM (hierarchy source data) (019-stats-content-hash)
+- Redis at `redis://127.0.0.1:13001` (stats hash, hierarchy JSON cache), MariaDB via Frappe ORM (hierarchy source data) (019-stats-content-hash)
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API), `csv` (stdlib), `io` (stdlib) (020-fix-export-redeemed-cards)
 - MariaDB via Frappe ORM (card status lookup), encrypted file on disk (PIN source) (020-fix-export-redeemed-cards)
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, whitelist API, background jobs), `requests` (HTTP client, already available) (021-cdn-cache-purge)
 - MariaDB via Frappe ORM (Memora Settings singleton), no new tables (021-cdn-cache-purge)
 - Python 3.11+ (Frappe v15 bench environment) + FastAPI, Starlette (`BaseHTTPMiddleware`), `redis.asyncio`, `structlog` (022-global-rate-limiting)
-- Redis at `redis://127.0.0.1:13000` (shared with Frappe -- prefix isolation required) (022-global-rate-limiting)
+- Redis at `redis://127.0.0.1:13001` (dedicated Memora instance) (022-global-rate-limiting)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, Single DocType, hooks), FastAPI, `redis.asyncio`, `structlog` (023-dynamic-level-system)
-- MariaDB via Frappe ORM (Level Settings DocType), Redis at `redis://127.0.0.1:13000` (config cache) (023-dynamic-level-system)
+- MariaDB via Frappe ORM (Level Settings DocType), Redis at `redis://127.0.0.1:13001` (config cache) (023-dynamic-level-system)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, Pydantic v2, redis.asyncio (024-review-item-table)
 - MariaDB via Frappe ORM (standard DocType — NOT partitioned) (024-review-item-table)
 - Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log) (025-practice-arena)
-- MariaDB via Frappe ORM (Review Items) + raw SQL (Practice Log, ~500M rows), Redis at `redis://127.0.0.1:13000` (practice sessions, hierarchy cache) (025-practice-arena)
-- Redis at `redis://127.0.0.1:13000` (ZSETs for rankings), MariaDB via Frappe ORM (player profiles, academic plans — read-only for this feature) (026-plan-leaderboard)
+- MariaDB via Frappe ORM (Review Items) + raw SQL (Practice Log, ~500M rows), Redis at `redis://127.0.0.1:13001` (practice sessions, hierarchy cache) (025-practice-arena)
+- Redis at `redis://127.0.0.1:13001` (ZSETs for rankings), MariaDB via Frappe ORM (player profiles, academic plans — read-only for this feature) (026-plan-leaderboard)
+- Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio (FastAPI side), redis (Frappe sync side), Frappe Framework (ORM, hooks, scheduled jobs), structlog (027-redis-hardening)
+- Redis at `redis://127.0.0.1:13001` (dedicated Memora instance), MariaDB via Frappe ORM (source of truth) (027-redis-hardening)
 
 ## Test Environment Configuration
 
@@ -267,9 +313,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 027-redis-hardening: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio (FastAPI side), redis (Frappe sync side), Frappe Framework (ORM, hooks, scheduled jobs), structlog
 - 026-plan-leaderboard: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog
 - 025-practice-arena: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log)
-- 024-review-item-table: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, Pydantic v2, redis.asyncio
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

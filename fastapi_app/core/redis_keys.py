@@ -15,6 +15,37 @@ Usage:
 """
 
 # =============================================================================
+# TTL Constants (seconds)
+# =============================================================================
+# TTL policy for keys that self-heal via ensure_hydrated().
+# Keys with TTL are evictable under memory pressure (volatile-ttl policy).
+# Protected keys (dirty sets, buffer, alltime leaderboard) MUST NEVER have TTL.
+#
+# NOTE: Lua scripts cannot import Python constants, so they use literal values.
+# Cross-references below document which Lua scripts duplicate each constant.
+# If you change a TTL value, update BOTH the constant here AND the Lua literal.
+
+WALLET_KEY_TTL = 172800
+"""48 hours. Applied to wallet:{player} hashes.
+
+Lua duplicates:
+- wallet.py STREAK_UPDATE_SCRIPT uses literal 172800
+"""
+
+PROGRESS_KEY_TTL = 172800
+"""48 hours. Applied to progress:{user}:{subject}:v{version} bitmaps.
+
+Lua duplicates:
+- game_session.py SESSION_COMPLETE_SCRIPT uses literal 172800
+"""
+
+ACCESS_KEY_TTL = 86400
+"""24 hours. Applied to access:{player} sets."""
+
+PLAN_FREE_SUBJECTS_TTL = 43200
+"""12 hours. Applied to plan:{plan}:free_subjects sets."""
+
+# =============================================================================
 # Access & Permissions
 # =============================================================================
 

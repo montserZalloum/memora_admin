@@ -5,8 +5,8 @@ Player identity is PLAYER-##### docname (not email). See Phase 32.
 Provides whitelisted APIs for syncing device data from Redis to Frappe child table
 and removing devices with session invalidation.
 
-IMPORTANT: Uses get_fastapi_redis() (NOT frappe.cache()) to access the correct
-Redis namespace shared with the FastAPI sidecar.
+IMPORTANT: Uses get_memora_redis() (NOT frappe.cache()) to access the dedicated
+Memora Redis instance shared with the FastAPI sidecar.
 """
 
 from datetime import datetime
@@ -15,7 +15,7 @@ import frappe
 import redis
 
 from fastapi_app.core.redis_keys import devices_key, session_key
-from memora_admin.events.access_sync import get_fastapi_redis
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 def _parse_last_login(value: str) -> str | None:
@@ -54,7 +54,7 @@ def sync_devices_from_redis(player_name: str) -> list[dict]:
 	user_id = profile.name  # PLAYER-##### docname is the Redis identity key
 
 	try:
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 		dk = devices_key(user_id)
 		raw_data = r.hgetall(dk)
 	except (redis.ConnectionError, redis.RedisError) as e:
@@ -130,7 +130,7 @@ def remove_device(player_name: str, device_id: str) -> dict:
 	user_id = profile.name  # PLAYER-##### docname is the Redis identity key
 
 	try:
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 		dk = devices_key(user_id)
 		sk = session_key(user_id)
 

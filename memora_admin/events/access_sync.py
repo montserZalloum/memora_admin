@@ -3,43 +3,36 @@
 Sync subscription and season changes to Redis for O(1) access checks.
 Per CONTEXT.md: immediate sync, sub-second propagation.
 
-IMPORTANT: This module writes to TWO Redis instances:
-1. Frappe cache (frappe.cache) - for Frappe-only data
-2. FastAPI Redis (get_fastapi_redis()) - for data shared with FastAPI sidecar
-
-The FastAPI sidecar uses a separate Redis instance without Frappe's site prefix.
+All Redis access goes through get_memora_redis() from utils.redis_connection,
+which reads redis_memora from Frappe site_config (dedicated Memora instance on port 13001).
 """
 # Player identity is PLAYER-##### docname (not email). See Phase 32.
 
 import json
-import os
-from pathlib import Path
 
 import frappe
-import redis
-from dotenv import load_dotenv
 
 from fastapi_app.core.redis_keys import (
+	ACCESS_KEY_TTL,
+	PLAN_FREE_SUBJECTS_TTL,
 	access_key as _access_key,
 	cache_invalidation_channel,
 	plan_free_subjects_key,
 	season_key,
 	subjects_with_free_content_key,
 )
-
-# Load FastAPI .env file
-_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
-load_dotenv(_env_path)
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 def get_fastapi_redis():
-    """Get Redis connection for FastAPI sidecar.
-
-    Uses the REDIS_URL from the FastAPI .env file.
-    This is separate from frappe.cache which has site-specific prefixes.
-    """
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    return redis.from_url(redis_url)
+    """Deprecated: use get_memora_redis() from memora_admin.utils.redis_connection instead."""
+    import warnings
+    warnings.warn(
+        "get_fastapi_redis() is deprecated, use get_memora_redis() from memora_admin.utils.redis_connection",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return get_memora_redis()
 
 
 # =============================================================================
@@ -55,7 +48,7 @@ def on_season_updated(doc, method):
     - Gate 1 validates season is active and not expired
     - Uses Redis hash for atomic multi-field updates
     """
-    r = get_fastapi_redis()
+    r = get_memora_redis()
     redis_key = season_key(doc.name)
 
     # Use single hset with mapping for atomic update
@@ -74,7 +67,7 @@ def on_season_updated(doc, method):
 
 def on_season_deleted(doc, method):
     """Remove season from Redis cache when deleted."""
-    r = get_fastapi_redis()
+    r = get_memora_redis()
     redis_key = season_key(doc.name)
     r.delete(redis_key)
 
@@ -99,14 +92,18 @@ def on_subscription_change(doc, method):
     user_id = doc.player
     access_key = doc.access_key
 
-    r = get_fastapi_redis()
+    r = get_memora_redis()
     redis_key = _access_key(user_id)
 
     if doc.is_active:
         r.sadd(redis_key, access_key)
+        r.expire(redis_key, ACCESS_KEY_TTL)
         frappe.logger().info(f"Granted {access_key} to {user_id}")
     else:
         r.srem(redis_key, access_key)
+        # Refresh TTL so remaining grants don't expire prematurely
+        if r.exists(redis_key):
+            r.expire(redis_key, ACCESS_KEY_TTL)
         frappe.logger().info(f"Revoked {access_key} from {user_id}")
 
     # Notify the player to re-fetch subscriptions
@@ -121,7 +118,7 @@ def on_subscription_deleted(doc, method):
     # doc.player is the PLAYER-##### docname — use directly as Redis identity key
     user_id = doc.player
 
-    r = get_fastapi_redis()
+    r = get_memora_redis()
     redis_key = _access_key(user_id)
     r.srem(redis_key, doc.access_key)
     frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
@@ -148,7 +145,7 @@ def on_plan_subject_changed(doc, method):
     subject_id = doc.subject
     redis_key = plan_free_subjects_key(plan_id)
 
-    r = get_fastapi_redis()
+    r = get_memora_redis()
 
     if method == "on_trash":
         # Remove from set regardless of is_premium (it's being deleted)
@@ -157,6 +154,7 @@ def on_plan_subject_changed(doc, method):
     elif not doc.is_premium:
         # Add to free set (is_premium=0 means free)
         r.sadd(redis_key, subject_id)
+        r.expire(redis_key, PLAN_FREE_SUBJECTS_TTL)
         frappe.logger().info(f"Plan subject {subject_id} marked free in plan {plan_id}")
     else:
         # Remove from free set (is_premium=1 means paid)
@@ -182,13 +180,14 @@ def rebuild_plan_free_subjects(plan_id: str):
         pluck="subject",
     )
 
-    r = get_fastapi_redis()
+    r = get_memora_redis()
     redis_key = plan_free_subjects_key(plan_id)
 
     # Clear and rebuild
     r.delete(redis_key)
     if subjects:
         r.sadd(redis_key, *subjects)
+        r.expire(redis_key, PLAN_FREE_SUBJECTS_TTL)
 
     print(f"Rebuilt plan free subjects for {plan_id}: {len(subjects)} subjects")
 
@@ -213,7 +212,7 @@ def on_unit_free_changed(doc, method):
 
     subject_id = track.subject
     redis_key = subjects_with_free_content_key()
-    r = get_fastapi_redis()
+    r = get_memora_redis()
 
     if method == "on_trash":
         # Check if subject still has free content after this unit is deleted
@@ -246,7 +245,7 @@ def on_topic_free_changed(doc, method):
 
     subject_id = track.subject
     redis_key = subjects_with_free_content_key()
-    r = get_fastapi_redis()
+    r = get_memora_redis()
 
     if method == "on_trash":
         # Check if subject still has free content after this topic is deleted
@@ -267,7 +266,7 @@ def _update_subject_free_content_status(subject_id: str, r, redis_key: str):
 
     Args:
         subject_id: The subject to check
-        r: Redis connection (from get_fastapi_redis())
+        r: Redis connection (from get_memora_redis())
         redis_key: The Redis key for subjects_with_free_content set
     """
     has_free = frappe.db.sql(
@@ -298,7 +297,7 @@ def _update_subject_free_content_status(subject_id: str, r, redis_key: str):
 
 def rebuild_subjects_with_free_content():
     """Rebuild entire subjects_with_free_content set (for initial sync or repair)."""
-    r = get_fastapi_redis()
+    r = get_memora_redis()
     redis_key = subjects_with_free_content_key()
 
     # Clear existing

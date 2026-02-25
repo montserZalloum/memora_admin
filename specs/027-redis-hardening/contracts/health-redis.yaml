@@ -1,0 +1,132 @@
+# Redis Health Check Endpoint
+# GET /api/v1/health/redis
+# No authentication required (internal monitoring)
+
+openapi: "3.1.0"
+info:
+  title: Redis Health Check
+  version: "1.0.0"
+paths:
+  /api/v1/health/redis:
+    get:
+      summary: Redis health and metrics
+      description: |
+        Returns Redis memory usage, buffer sizes, dirty set counts,
+        and overall health status. No authentication required.
+        Used by load balancers, monitoring systems, and operators.
+      operationId: getRedisHealth
+      tags:
+        - health
+      security: []  # No auth
+      responses:
+        "200":
+          description: Redis health report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedisHealthReport"
+              examples:
+                healthy:
+                  summary: All metrics within thresholds
+                  value:
+                    status: "healthy"
+                    used_memory_mb: 42.5
+                    max_memory_mb: 128.0
+                    memory_usage_percent: 33.2
+                    interaction_buffer_length: 234
+                    dirty_wallets_count: 12
+                    dirty_progress_count: 45
+                    connected_clients: 8
+                    aof_enabled: true
+                    uptime_seconds: 86400
+                    total_keys: 15234
+                degraded:
+                  summary: Buffer backlog detected
+                  value:
+                    status: "degraded"
+                    used_memory_mb: 105.0
+                    max_memory_mb: 128.0
+                    memory_usage_percent: 82.0
+                    interaction_buffer_length: 25000
+                    dirty_wallets_count: 1500
+                    dirty_progress_count: 800
+                    connected_clients: 18
+                    aof_enabled: true
+                    uptime_seconds: 3600
+                    total_keys: 45000
+        "503":
+          description: Redis unreachable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RedisHealthReport"
+              example:
+                status: "unhealthy"
+                used_memory_mb: 0
+                max_memory_mb: 0
+                memory_usage_percent: 0
+                interaction_buffer_length: -1
+                dirty_wallets_count: -1
+                dirty_progress_count: -1
+                connected_clients: 0
+                aof_enabled: false
+                uptime_seconds: 0
+                total_keys: 0
+
+components:
+  schemas:
+    RedisHealthReport:
+      type: object
+      required:
+        - status
+        - used_memory_mb
+        - max_memory_mb
+        - memory_usage_percent
+        - interaction_buffer_length
+        - dirty_wallets_count
+        - dirty_progress_count
+        - connected_clients
+        - aof_enabled
+        - uptime_seconds
+        - total_keys
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+          description: |
+            healthy: memory <80%, buffer <10000, dirty sets <1000
+            degraded: memory 80-95% OR buffer 10000-50000 OR dirty sets >1000
+            unhealthy: memory >95% OR buffer >50000 OR Redis unreachable
+        used_memory_mb:
+          type: number
+          format: float
+          description: Current Redis memory usage in MB
+        max_memory_mb:
+          type: number
+          format: float
+          description: Configured maxmemory in MB
+        memory_usage_percent:
+          type: number
+          format: float
+          description: used_memory / maxmemory * 100
+        interaction_buffer_length:
+          type: integer
+          description: Number of items in interaction buffer (LLEN)
+        dirty_wallets_count:
+          type: integer
+          description: Number of players in dirty wallets set (SCARD)
+        dirty_progress_count:
+          type: integer
+          description: Number of entries in dirty progress set (SCARD)
+        connected_clients:
+          type: integer
+          description: Number of connected Redis clients
+        aof_enabled:
+          type: boolean
+          description: Whether AOF persistence is enabled
+        uptime_seconds:
+          type: integer
+          description: Redis server uptime in seconds
+        total_keys:
+          type: integer
+          description: Total number of keys in database

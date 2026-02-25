@@ -267,6 +267,10 @@ scheduler_events = {
 		"30 * * * *": ["memora_admin.tasks.profile_cache.warm_profile_cache"],
 		# Every 6 hours: Sync all plan subjects to Redis (safety net)
 		"0 */6 * * *": ["memora_admin.tasks.plan_sync.sync_all_plan_subjects_to_redis"],
+		# Every 5 minutes: Redis health monitoring with threshold alerting
+		"*/5 * * * *": ["memora_admin.tasks.redis_monitor.monitor_redis_health"],
+		# Daily at 03:00: Clean up old leaderboard keys (30d daily, 90d weekly/archive)
+		"0 3 * * *": ["memora_admin.tasks.leaderboard_cleanup.cleanup_old_leaderboards"],
 		# Daily at 01:05: Expire cards linked to ended/unpublished seasons
 		"5 1 * * *": ["memora_admin.tasks.season_expiration.expire_season_cards"],
 		# Daily at 02:30: Delete encrypted voucher exports older than 30 days

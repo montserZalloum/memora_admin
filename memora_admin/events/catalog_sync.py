@@ -11,7 +11,7 @@ import json
 import frappe
 
 from fastapi_app.core.redis_keys import cache_invalidation_channel, catalog_key
-from memora_admin.events.access_sync import get_fastapi_redis
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 def on_product_grant_changed(doc, method):
@@ -30,7 +30,7 @@ def on_product_grant_changed(doc, method):
 		frappe.logger().warning("Product Grant %s has no plan, skipping catalog invalidation", doc.name)
 		return
 
-	r = get_fastapi_redis()
+	r = get_memora_redis()
 
 	# 1. Direct cache delete (immediate effect)
 	r.delete(catalog_key(plan_id))

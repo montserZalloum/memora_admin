@@ -8,7 +8,7 @@ from frappe.model.document import Document
 
 from fastapi_app.core.redis_keys import notify_channel, pending_key
 from memora_admin.api.products import get_grant_keys
-from memora_admin.events.access_sync import get_fastapi_redis
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 class MemoraSubscriptionTransaction(Document):
@@ -71,7 +71,7 @@ class MemoraSubscriptionTransaction(Document):
 			frappe.throw("Failed to create subscriptions. Transaction not approved.")
 
 		# Clean up pending set (player docname = user email since autoname: field:user)
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 		r.srem(pending_key(self.player), self.related_grant)
 
 		# Publish real-time notification to player via Redis pub/sub
@@ -91,7 +91,7 @@ class MemoraSubscriptionTransaction(Document):
 	def _handle_rejection(self):
 		"""Clean up pending set so the product reappears in catalog."""
 		if self.related_grant:
-			r = get_fastapi_redis()
+			r = get_memora_redis()
 			r.srem(pending_key(self.player), self.related_grant)
 
 		# Publish real-time notification to player via Redis pub/sub
@@ -134,7 +134,7 @@ class MemoraSubscriptionTransaction(Document):
 			"timestamp": frappe.utils.now_datetime().isoformat(),
 		}
 
-		r = get_fastapi_redis()
+		r = get_memora_redis()
 		r.publish(notify_channel(self.player), json.dumps(payload))
 
 		frappe.logger().info(f"Notification published for {self.player}: {status}")

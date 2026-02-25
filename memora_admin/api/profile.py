@@ -20,6 +20,7 @@ from memora_admin.api.utils import (
 	get_player_season_seq as _get_player_season_seq,
 	_MASTERY_COUNTER_TTL,
 )
+from memora_admin.utils.redis_connection import get_memora_redis
 
 
 @frappe.whitelist(allow_guest=False)
@@ -184,7 +185,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 
 	# --- Try Redis counters first ---
 	try:
-		r = _redis.from_url(frappe.conf.redis_cache)
+		r = get_memora_redis()
 		counter_key = mastery_key(player_id, subject_id, season_seq)
 		data = r.hgetall(counter_key)
 		if data:
@@ -221,7 +222,7 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 	# --- Populate Redis counters as side effect ---
 	try:
 		if r is None:
-			r = _redis.from_url(frappe.conf.redis_cache)
+			r = get_memora_redis()
 		counter_key = mastery_key(player_id, subject_id, season_seq)
 		pipe = r.pipeline(transaction=False)
 		pipe.hset(counter_key, mapping={"mature": mature, "learning": learning})

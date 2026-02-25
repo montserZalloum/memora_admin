@@ -1,0 +1,94 @@
+# Redis Monitoring Scheduled Task
+# Runs every 5 minutes via Frappe scheduler
+# Logs Redis metrics and raises warnings
+
+name: monitor_redis_health
+schedule: "*/5 * * * *"
+description: Periodic Redis health monitoring with threshold-based alerting
+
+behavior:
+  connection: redis_memora (with fallback to redis_cache)
+
+  metrics_collected:
+    - source: "INFO memory"
+      fields:
+        - used_memory (bytes → MB)
+        - maxmemory (bytes → MB)
+    - source: "LLEN memora:buffer:interactions"
+      field: interaction_buffer_length
+    - source: "SCARD memora:dirty:wallets"
+      field: dirty_wallets_count
+    - source: "SCARD memora:dirty:progress"
+      field: dirty_progress_count
+    - source: "DBSIZE"
+      field: total_keys
+    - source: "INFO clients"
+      field: connected_clients
+
+  thresholds:
+    memory_warning_percent: 80
+    memory_critical_percent: 95
+    buffer_warning: 10000
+    buffer_critical: 50000
+    dirty_set_warning: 1000
+
+  logging:
+    # Always log (INFO level)
+    - level: INFO
+      message: "redis_monitor"
+      fields: [used_memory_mb, max_memory_mb, memory_pct, buffer_len, dirty_wallets, dirty_progress, total_keys]
+
+    # Conditional warnings
+    - level: WARNING
+      condition: "memory_pct > 80"
+      message: "redis_memory_high"
+
+    - level: WARNING
+      condition: "dirty_wallets > 1000 OR dirty_progress > 1000"
+      message: "redis_sync_falling_behind"
+
+    - level: CRITICAL
+      condition: "buffer_len > 10000"
+      message: "redis_buffer_backlog"
+
+---
+# Leaderboard Cleanup Scheduled Task
+# Runs daily at 03:00 Asia/Amman
+# Cleans up old daily/weekly leaderboard keys
+
+name: cleanup_old_leaderboards
+schedule: "0 3 * * *"
+description: Remove stale leaderboard keys past retention period
+
+behavior:
+  connection: redis_memora (with fallback to redis_cache)
+
+  cleanup_rules:
+    - pattern: "memora:lb:daily:*"
+      retention_days: 30
+      includes_variants:
+        - "memora:lb:daily:{date}"
+        - "memora:lb:daily:{date}:subject:{id}"
+        - "memora:lb:daily:{date}:plan:{id}"
+        - "memora:lb:daily:{date}:plan:{id}:subject:{id}"
+
+    - pattern: "memora:lb:weekly:*"
+      retention_days: 90
+      includes_variants:
+        - "memora:lb:weekly:{date}"
+        - "memora:lb:weekly:{date}:subject:{id}"
+        - "memora:lb:weekly:{date}:plan:{id}"
+        - "memora:lb:weekly:{date}:plan:{id}:subject:{id}"
+
+    - pattern: "memora:lb:archive:daily:*"
+      retention_days: 90
+
+    - pattern: "memora:lb:archive:weekly:*"
+      retention_days: 90
+
+    - pattern: "memora:lb:alltime*"
+      retention_days: null  # Never cleaned
+
+  method: SCAN + date extraction from key name + pipeline DEL
+  idempotent: true
+  safe_on_empty: true  # No error if no keys found

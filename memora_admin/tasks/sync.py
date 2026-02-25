@@ -18,7 +18,6 @@ import os
 from datetime import datetime
 
 import frappe
-import redis
 
 from fastapi_app.core.constants import (
 	DIRTY_PROGRESS_KEY,
@@ -31,6 +30,7 @@ from fastapi_app.core.redis_keys import (
 	subject_total_lessons_key,
 	wallet_key,
 )
+from memora_admin.utils.redis_connection import get_memora_redis
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +76,6 @@ def _parse_timestamp(timestamp_str: str) -> str:
 	except Exception as e:
 		logger.warning(f"Failed to parse timestamp {timestamp_str}: {e}")
 		return frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S")
-
-def get_redis():
-	"""Get Redis connection using Frappe site config."""
-	return redis.from_url(frappe.conf.redis_cache)
-
 
 # ---------------------------------------------------------------------------
 # Shared batch helpers
@@ -368,7 +363,7 @@ def sync_dirty_progress():
 	Scheduled: every 1 minute via hooks.py
 	"""
 	_write_debug_log("=== sync_dirty_progress STARTED ===")
-	r = get_redis()
+	r = get_memora_redis()
 
 	# Get all dirty items
 	dirty_items = r.smembers(DIRTY_PROGRESS_KEY)
@@ -477,7 +472,7 @@ def sync_dirty_wallets():
 
 	Scheduled: every 1 minute via hooks.py
 	"""
-	r = get_redis()
+	r = get_memora_redis()
 
 	# Get all dirty players
 	dirty_players = r.smembers(DIRTY_WALLETS_KEY)
@@ -618,12 +613,17 @@ def flush_interaction_buffer():
 	_write_debug_log("=== flush_interaction_buffer STARTED ===")
 
 	try:
-		r = get_redis()
+		r = get_memora_redis()
 
-		BATCH_SIZE = 5000
+		batch_size = 5000
+
+		# Log critical alert on large backlog (monitor threshold: 10000)
+		buffer_len = r.llen(INTERACTION_BUFFER_KEY)
+		if buffer_len > 10000:
+			frappe.logger().critical(f"redis_buffer_backlog buffer_len={buffer_len}")
 
 		# Get batch of items from head of list
-		items = r.lrange(INTERACTION_BUFFER_KEY, 0, BATCH_SIZE - 1)
+		items = r.lrange(INTERACTION_BUFFER_KEY, 0, batch_size - 1)
 		_write_debug_log(f"Found {len(items)} items in buffer")
 
 		if not items:
