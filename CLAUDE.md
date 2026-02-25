@@ -247,6 +247,7 @@ BITMAP_JSON_PATH=/path/to/bitmaps
 - MariaDB via Frappe ORM (standard DocType — NOT partitioned) (024-review-item-table)
 - Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log) (025-practice-arena)
 - MariaDB via Frappe ORM (Review Items) + raw SQL (Practice Log, ~500M rows), Redis at `redis://127.0.0.1:13000` (practice sessions, hierarchy cache) (025-practice-arena)
+- Redis at `redis://127.0.0.1:13000` (ZSETs for rankings), MariaDB via Frappe ORM (player profiles, academic plans — read-only for this feature) (026-plan-leaderboard)
 
 ## Test Environment Configuration
 
@@ -266,9 +267,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 026-plan-leaderboard: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog
 - 025-practice-arena: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log)
 - 024-review-item-table: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, Pydantic v2, redis.asyncio
-- 023-dynamic-level-system: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, Single DocType, hooks), FastAPI, `redis.asyncio`, `structlog`
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

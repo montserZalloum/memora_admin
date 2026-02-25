@@ -391,6 +391,7 @@ async def end_session(
 		xp_amount=xp_awarded,
 		new_total_xp=new_total_xp,
 		subject_id=session.subject_id,
+		plan_id=user.plan,
 	)
 
 	logger.info(

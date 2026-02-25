@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
-LeaderboardTypeParam = Literal["daily", "weekly", "alltime"]
+LeaderboardTypeParam = Literal["daily", "weekly"]
 
 
 @router.get("/{lb_type}", response_model=LeaderboardResponse)
@@ -30,33 +30,40 @@ async def get_leaderboard(
     user: CurrentUser,
     leaderboard_service: LeaderboardServiceDep,
     profile_service: ProfileServiceDep,
-    limit: int = Query(10, ge=1, le=100, description="Number of entries to return"),
     subject_id: str | None = Query(None, description="Optional subject filter"),
 ) -> LeaderboardResponse:
     """
-    Get top N players from a leaderboard.
+    Get top 20 students in the authenticated player's plan.
 
-    Per CONTEXT.md:
-    - Three types: daily, weekly, alltime
-    - Optional subject filtering for class-specific competitions
-    - Dense ranking: tied players share same rank number
+    Plan-scoped: returns only students within the same academic plan.
+    Supports daily and weekly time periods with optional subject filter.
 
     Args:
-        lb_type: Leaderboard type (daily, weekly, alltime)
+        lb_type: Leaderboard type (daily, weekly)
         user: Current authenticated user
         leaderboard_service: Service for leaderboard operations
         profile_service: Service for profile lookups
-        limit: Maximum entries to return (1-100, default 10)
         subject_id: Optional subject for filtered leaderboards
 
     Returns:
         LeaderboardResponse with entries and total_players
     """
-    # Fetch top players from service
-    raw_entries = await leaderboard_service.get_top(lb_type, limit, subject_id)
+    plan_id = user.plan
 
-    # Get total players count (ZCARD)
-    key = leaderboard_service._get_key(lb_type, subject_id)
+    # No plan assigned — return empty leaderboard
+    if not plan_id:
+        return LeaderboardResponse(
+            leaderboard_type=lb_type,
+            subject_id=subject_id,
+            entries=[],
+            total_players=0,
+        )
+
+    # Fetch top 20 players from plan-scoped leaderboard
+    raw_entries = await leaderboard_service.get_top(lb_type, limit=20, subject_id=subject_id, plan_id=plan_id)
+
+    # Get total players count (ZCARD) from plan-scoped key
+    key = leaderboard_service._get_plan_key(lb_type, plan_id, subject_id)
     total_players = await leaderboard_service.redis.zcard(key)
 
     # Batch fetch profiles for all entries (single round-trip)
@@ -81,7 +88,7 @@ async def get_leaderboard(
         user_id=user.sub,
         lb_type=lb_type,
         subject_id=subject_id,
-        limit=limit,
+        plan_id=plan_id,
         returned=len(entries),
         total_players=total_players,
     )
@@ -103,16 +110,13 @@ async def get_my_rank(
     subject_id: str | None = Query(None, description="Optional subject filter"),
 ) -> MyRankResponse:
     """
-    Get user's rank with surrounding neighbors.
+    Get player's rank and ±2 neighbors within their plan.
 
-    Per CONTEXT.md:
-    - Separate endpoint from main leaderboard
-    - Include +/-2 neighbors for context around user's position
-    - Include distance to next tier (XP needed to pass player above)
-    - Unranked users (0 XP) treated as tied for last place
+    Plan-scoped: rank computed against students in the same academic plan.
+    Unranked players get rank: null. Supports optional subject filter.
 
     Args:
-        lb_type: Leaderboard type (daily, weekly, alltime)
+        lb_type: Leaderboard type (daily, weekly)
         user: Current authenticated user
         leaderboard_service: Service for leaderboard operations
         profile_service: Service for profile lookups
@@ -121,12 +125,25 @@ async def get_my_rank(
     Returns:
         MyRankResponse with rank, xp, xp_to_next, neighbors
     """
-    # Get user's rank with neighbors from service
+    plan_id = user.plan
+
+    # No plan assigned — return unranked response
+    if not plan_id:
+        return MyRankResponse(
+            rank=None,
+            xp=0,
+            xp_to_next=None,
+            neighbors=[],
+            total_players=0,
+        )
+
+    # Get user's rank with neighbors from plan-scoped leaderboard
     result = await leaderboard_service.get_my_rank(
         player_id=user.sub,
         lb_type=lb_type,
         subject_id=subject_id,
-        neighbor_count=2,  # Per CONTEXT.md: +/-2 neighbors
+        neighbor_count=2,
+        plan_id=plan_id,
     )
 
     # Batch fetch profiles for neighbors (single round-trip)
@@ -151,6 +168,7 @@ async def get_my_rank(
         user_id=user.sub,
         lb_type=lb_type,
         subject_id=subject_id,
+        plan_id=plan_id,
         rank=result["rank"],
         xp=result["xp"],
         xp_to_next=result["xp_to_next"],

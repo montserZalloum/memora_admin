@@ -19,7 +19,17 @@ from zoneinfo import ZoneInfo
 import redis.asyncio as redis
 import structlog
 
-from fastapi_app.core.redis_keys import LB_PREFIX, daily_xp_key as _daily_xp_key_fn, lb_alltime_key, lb_daily_key, lb_weekly_key
+from fastapi_app.core.redis_keys import (
+	LB_PREFIX,
+	PLAN_DAILY_KEY_TTL,
+	PLAN_WEEKLY_KEY_TTL,
+	daily_xp_key as _daily_xp_key_fn,
+	lb_alltime_key,
+	lb_daily_key,
+	lb_daily_plan_key,
+	lb_weekly_key,
+	lb_weekly_plan_key,
+)
 
 logger = structlog.get_logger()
 
@@ -92,15 +102,10 @@ class LeaderboardService:
 		self.redis = redis_client
 
 	def _get_key(self, lb_type: str, subject_id: str | None = None) -> str:
-		"""Generate Redis key for a leaderboard.
-
-		Per CONTEXT.md:
-		- Daily: resets at midnight Asia/Amman
-		- Weekly: resets Friday midnight Asia/Amman (Islamic week: Fri-Thu)
-		- All-time: no reset
+		"""Generate Redis key for a global leaderboard (daily/weekly only).
 
 		Args:
-			lb_type: One of "daily", "weekly", "alltime"
+			lb_type: One of "daily", "weekly"
 			subject_id: Optional subject for filtered leaderboards
 
 		Returns:
@@ -111,9 +116,7 @@ class LeaderboardService:
 		"""
 		now = datetime.now(AMMAN_TZ)
 
-		if lb_type == "alltime":
-			return lb_alltime_key(subject_id)
-		elif lb_type == "daily":
+		if lb_type == "daily":
 			date_str = now.strftime("%Y-%m-%d")
 			return lb_daily_key(date_str, subject_id)
 		elif lb_type == "weekly":
@@ -126,11 +129,42 @@ class LeaderboardService:
 		else:
 			raise ValueError(f"Invalid leaderboard type: {lb_type}")
 
+	def _get_plan_key(self, lb_type: str, plan_id: str, subject_id: str | None = None) -> str:
+		"""Generate Redis key for a plan-scoped leaderboard.
+
+		Args:
+			lb_type: One of "daily", "weekly"
+			plan_id: Plan document name
+			subject_id: Optional subject for filtered leaderboards
+
+		Returns:
+			Redis key string
+
+		Raises:
+			ValueError: If lb_type is "alltime" (not supported for plan-scoped)
+		"""
+		if lb_type == "alltime":
+			raise ValueError("Plan-scoped leaderboards do not support alltime type")
+
+		now = datetime.now(AMMAN_TZ)
+
+		if lb_type == "daily":
+			date_str = now.strftime("%Y-%m-%d")
+			return lb_daily_plan_key(date_str, plan_id, subject_id)
+		elif lb_type == "weekly":
+			weekday = now.isoweekday()
+			days_since_friday = (weekday - 5) % 7
+			friday = (now - timedelta(days=days_since_friday)).strftime("%Y-%m-%d")
+			return lb_weekly_plan_key(friday, plan_id, subject_id)
+		else:
+			raise ValueError(f"Invalid leaderboard type: {lb_type}")
+
 	async def get_top(
 		self,
 		lb_type: str,
 		limit: int = 10,
 		subject_id: str | None = None,
+		plan_id: str | None = None,
 	) -> list[dict]:
 		"""Get top N players from a leaderboard.
 
@@ -144,11 +178,15 @@ class LeaderboardService:
 			lb_type: One of "daily", "weekly", "alltime"
 			limit: Maximum entries to return (default 10)
 			subject_id: Optional subject filter
+			plan_id: Optional plan for plan-scoped leaderboard
 
 		Returns:
 			List of dicts with rank, player_id, xp
 		"""
-		key = self._get_key(lb_type, subject_id)
+		if plan_id:
+			key = self._get_plan_key(lb_type, plan_id, subject_id)
+		else:
+			key = self._get_key(lb_type, subject_id)
 
 		# ZRANGE with desc=True returns [(member, score), ...]
 		# Equivalent to deprecated ZREVRANGE
@@ -199,13 +237,14 @@ class LeaderboardService:
 		lb_type: str,
 		subject_id: str | None = None,
 		neighbor_count: int = 2,
+		plan_id: str | None = None,
 	) -> dict | None:
 		"""Get player's rank with surrounding neighbors.
 
 		Per CONTEXT.md:
 		- Include +/-2 neighbors for context around user's position
 		- Include distance to next tier (XP to match player in rank above)
-		- Unranked users (0 XP) treated as tied for last place
+		- Unranked players get rank: None (plan-scoped) or total + 1 (global)
 		- Competition ranking: tied players share rank, next rank = count of players above + 1
 
 		Args:
@@ -213,11 +252,15 @@ class LeaderboardService:
 			lb_type: One of "daily", "weekly", "alltime"
 			subject_id: Optional subject filter
 			neighbor_count: Players above/below to include (default 2)
+			plan_id: Optional plan for plan-scoped leaderboard
 
 		Returns:
 			Dict with rank, xp, xp_to_next, neighbors, or None if error
 		"""
-		key = self._get_key(lb_type, subject_id)
+		if plan_id:
+			key = self._get_plan_key(lb_type, plan_id, subject_id)
+		else:
+			key = self._get_key(lb_type, subject_id)
 
 		# Stage 1: Get position, total, score in one pipeline (1 RTT)
 		pipe = self.redis.pipeline()
@@ -228,7 +271,8 @@ class LeaderboardService:
 
 		# Handle unranked users (never earned XP in this period)
 		if position is None:
-			# Provide xp_to_next: XP needed to match the last-ranked player
+			# Plan-scoped: rank is None per contract; global: total + 1
+			unranked_rank = None if plan_id else total + 1
 			xp_to_next = None
 			if total > 0:
 				bottom = await self.redis.zrange(key, 0, 0, withscores=True)
@@ -244,7 +288,7 @@ class LeaderboardService:
 				total_players=total,
 			)
 			return {
-				"rank": total + 1,
+				"rank": unranked_rank,
 				"xp": 0,
 				"xp_to_next": xp_to_next,
 				"neighbors": [],
@@ -321,25 +365,24 @@ class LeaderboardService:
 		xp_amount: int,
 		new_total_xp: int,
 		subject_id: str | None = None,
+		plan_id: str | None = None,
 	) -> None:
 		"""Update all relevant leaderboards after XP award.
 
 		Called after wallet.award_xp() to maintain leaderboard consistency.
-
-		Per CONTEXT.md:
-		- All-time: Use composite score (total XP + timestamp for tie-breaking)
-		- Daily/Weekly: Increment by amount earned (not total)
+		Writes to both global ZSETs (backup) and plan-scoped ZSETs (primary read source).
 
 		Args:
 			player_id: Player's user ID
 			xp_amount: XP just awarded (for daily/weekly increment)
 			new_total_xp: Total XP after award (for all-time composite score)
 			subject_id: Optional subject for filtered leaderboards
+			plan_id: Player's plan ID for plan-scoped leaderboards
 		"""
 		timestamp = time.time()
 		composite_score = compute_composite_score(new_total_xp, timestamp)
 
-		alltime_key = self._get_key("alltime")
+		alltime_key = lb_alltime_key()
 		daily_key = self._get_key("daily")
 		weekly_key = self._get_key("weekly")
 
@@ -367,7 +410,7 @@ class LeaderboardService:
 
 		# Subject-specific leaderboards (if context available)
 		if subject_id:
-			alltime_subj_key = self._get_key("alltime", subject_id)
+			alltime_subj_key = lb_alltime_key(subject_id)
 			daily_subj_key = self._get_key("daily", subject_id)
 			weekly_subj_key = self._get_key("weekly", subject_id)
 
@@ -379,6 +422,34 @@ class LeaderboardService:
 			pipe.zincrby(weekly_subj_key, xp_amount, player_id)
 			pipe.expire(weekly_subj_key, WEEKLY_KEY_TTL)
 
+		# Plan-scoped leaderboards (dual-write for plan-scoped rankings)
+		if plan_id:
+			now = datetime.now(AMMAN_TZ)
+			date_str = now.strftime("%Y-%m-%d")
+			weekday = now.isoweekday()
+			days_since_friday = (weekday - 5) % 7
+			friday = (now - timedelta(days=days_since_friday)).strftime("%Y-%m-%d")
+
+			# Plan-scoped daily
+			plan_daily = lb_daily_plan_key(date_str, plan_id)
+			pipe.zincrby(plan_daily, xp_amount, player_id)
+			pipe.expire(plan_daily, PLAN_DAILY_KEY_TTL)
+
+			# Plan-scoped weekly
+			plan_weekly = lb_weekly_plan_key(friday, plan_id)
+			pipe.zincrby(plan_weekly, xp_amount, player_id)
+			pipe.expire(plan_weekly, PLAN_WEEKLY_KEY_TTL)
+
+			# Plan-scoped subject variants
+			if subject_id:
+				plan_daily_subj = lb_daily_plan_key(date_str, plan_id, subject_id)
+				pipe.zincrby(plan_daily_subj, xp_amount, player_id)
+				pipe.expire(plan_daily_subj, PLAN_DAILY_KEY_TTL)
+
+				plan_weekly_subj = lb_weekly_plan_key(friday, plan_id, subject_id)
+				pipe.zincrby(plan_weekly_subj, xp_amount, player_id)
+				pipe.expire(plan_weekly_subj, PLAN_WEEKLY_KEY_TTL)
+
 		await pipe.execute()
 
 		logger.debug(
@@ -387,5 +458,6 @@ class LeaderboardService:
 			xp_amount=xp_amount,
 			new_total_xp=new_total_xp,
 			subject_id=subject_id,
+			plan_id=plan_id,
 			composite_score=composite_score,
 		)

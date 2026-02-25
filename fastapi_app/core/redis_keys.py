@@ -240,6 +240,10 @@ def practice_hierarchy_meta_key(subject_id: str) -> str:
 # Leaderboard prefix used by both FastAPI and Frappe tasks
 LB_PREFIX = "memora:lb"
 
+# Plan-scoped leaderboard TTLs
+PLAN_DAILY_KEY_TTL = 48 * 3600  # 48 hours
+PLAN_WEEKLY_KEY_TTL = 8 * 86400  # 8 days
+
 
 def lb_alltime_key(subject_id: str | None = None) -> str:
 	"""All-time leaderboard sorted set.
@@ -274,6 +278,30 @@ def lb_weekly_key(friday_date: str, subject_id: str | None = None) -> str:
 	TTL: 90 days
 	"""
 	base = f"{LB_PREFIX}:weekly:{friday_date}"
+	return f"{base}:subject:{subject_id}" if subject_id else base
+
+
+def lb_daily_plan_key(date_str: str, plan_id: str, subject_id: str | None = None) -> str:
+	"""Daily plan-scoped leaderboard sorted set.
+
+	Type: ZSET (player_id -> XP earned today within plan)
+	Producers: LeaderboardService.update_leaderboards()
+	Consumers: LeaderboardService.get_top(), get_my_rank()
+	TTL: 48 hours (PLAN_DAILY_KEY_TTL)
+	"""
+	base = f"{LB_PREFIX}:daily:{date_str}:plan:{plan_id}"
+	return f"{base}:subject:{subject_id}" if subject_id else base
+
+
+def lb_weekly_plan_key(friday_date: str, plan_id: str, subject_id: str | None = None) -> str:
+	"""Weekly plan-scoped leaderboard sorted set (Islamic week: Fri-Thu).
+
+	Type: ZSET (player_id -> XP earned this week within plan)
+	Producers: LeaderboardService.update_leaderboards()
+	Consumers: LeaderboardService.get_top(), get_my_rank()
+	TTL: 8 days (PLAN_WEEKLY_KEY_TTL)
+	"""
+	base = f"{LB_PREFIX}:weekly:{friday_date}:plan:{plan_id}"
 	return f"{base}:subject:{subject_id}" if subject_id else base
 
 

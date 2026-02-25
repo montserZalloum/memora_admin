@@ -1,0 +1,245 @@
+openapi: "3.1.0"
+info:
+  title: Plan-Scoped Leaderboard API
+  version: "2.0.0"
+  description: |
+    Leaderboard endpoints scoped to the authenticated student's academic plan.
+    Supports daily and weekly time periods with optional subject filtering.
+    All endpoints require a valid access token with plan field.
+
+servers:
+  - url: http://127.0.0.1:8002/api/v1
+
+paths:
+  /leaderboard/{lb_type}:
+    get:
+      operationId: getLeaderboard
+      summary: Get top 20 students in my plan
+      description: |
+        Returns the top 20 students ranked by XP within the authenticated
+        student's academic plan for the given time period. Optionally filtered
+        by subject. Plan is resolved automatically from the JWT token.
+      tags: [leaderboard]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lb_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [daily, weekly]
+          description: Leaderboard time period
+        - name: subject_id
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+          description: Optional subject filter (e.g., "SUBJ-00001")
+      responses:
+        "200":
+          description: Top students in plan
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardResponse"
+              examples:
+                weekly_top:
+                  summary: Weekly top with 3 students
+                  value:
+                    leaderboard_type: weekly
+                    subject_id: null
+                    entries:
+                      - rank: 1
+                        player_id: "PLAYER-00050"
+                        display_name: "Ahmed"
+                        xp: 1200
+                        avatar: "avatar_03"
+                        is_me: false
+                      - rank: 2
+                        player_id: "PLAYER-00100"
+                        display_name: "Sara"
+                        xp: 950
+                        avatar: "avatar_07"
+                        is_me: true
+                      - rank: 3
+                        player_id: "PLAYER-00075"
+                        display_name: "Omar"
+                        xp: 800
+                        avatar: null
+                        is_me: false
+                    total_players: 45
+        "401":
+          description: Missing or invalid token
+        "422":
+          description: Invalid lb_type or subject_id
+
+  /leaderboard/{lb_type}/me:
+    get:
+      operationId: getMyRank
+      summary: Get my rank and neighbors in my plan
+      description: |
+        Returns the authenticated student's rank, XP, gap to next rank,
+        and ±2 neighboring students within their academic plan for the
+        given time period. Optionally filtered by subject.
+      tags: [leaderboard]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lb_type
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [daily, weekly]
+          description: Leaderboard time period
+        - name: subject_id
+          in: query
+          required: false
+          schema:
+            type: string
+            nullable: true
+          description: Optional subject filter
+      responses:
+        "200":
+          description: My rank with neighbors
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MyRankResponse"
+              examples:
+                ranked:
+                  summary: Student ranked #5
+                  value:
+                    rank: 5
+                    xp: 600
+                    xp_to_next: 50
+                    neighbors:
+                      - rank: 3
+                        player_id: "PLAYER-00040"
+                        display_name: "Lina"
+                        xp: 700
+                        avatar: "avatar_02"
+                        is_me: false
+                      - rank: 4
+                        player_id: "PLAYER-00060"
+                        display_name: "Khaled"
+                        xp: 650
+                        avatar: null
+                        is_me: false
+                      - rank: 5
+                        player_id: "PLAYER-00100"
+                        display_name: "Sara"
+                        xp: 600
+                        avatar: "avatar_07"
+                        is_me: true
+                      - rank: 6
+                        player_id: "PLAYER-00080"
+                        display_name: "Nour"
+                        xp: 550
+                        avatar: "avatar_01"
+                        is_me: false
+                      - rank: 7
+                        player_id: "PLAYER-00090"
+                        display_name: "Youssef"
+                        xp: 500
+                        avatar: null
+                        is_me: false
+                    total_players: 45
+                unranked:
+                  summary: Student with no XP this period
+                  value:
+                    rank: null
+                    xp: 0
+                    xp_to_next: null
+                    neighbors: []
+                    total_players: 45
+        "401":
+          description: Missing or invalid token
+        "422":
+          description: Invalid lb_type or subject_id
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    LeaderboardEntry:
+      type: object
+      required: [rank, player_id, display_name, xp, is_me]
+      properties:
+        rank:
+          type: integer
+          minimum: 1
+          description: Dense rank (tied players share rank)
+        player_id:
+          type: string
+          description: Player identifier
+        display_name:
+          type: string
+          description: Player display name
+        xp:
+          type: integer
+          minimum: 0
+          description: XP earned in the period
+        avatar:
+          type: string
+          nullable: true
+          description: Avatar identifier or URL
+        is_me:
+          type: boolean
+          description: True if this entry is the requesting player
+
+    LeaderboardResponse:
+      type: object
+      required: [leaderboard_type, entries, total_players]
+      properties:
+        leaderboard_type:
+          type: string
+          enum: [daily, weekly]
+        subject_id:
+          type: string
+          nullable: true
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+          maxItems: 20
+          description: Top 20 students in the plan (fixed, not configurable)
+        total_players:
+          type: integer
+          minimum: 0
+          description: Total ranked students in plan for this period/subject
+
+    MyRankResponse:
+      type: object
+      required: [xp, neighbors, total_players]
+      properties:
+        rank:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: Dense rank within plan (null if unranked)
+        xp:
+          type: integer
+          minimum: 0
+          description: XP earned in the period
+        xp_to_next:
+          type: integer
+          nullable: true
+          minimum: 1
+          description: XP needed to reach the next higher rank (null if #1 or unranked)
+        neighbors:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+          maxItems: 5
+          description: ±2 neighbors around the player (includes self)
+        total_players:
+          type: integer
+          minimum: 0
+          description: Total ranked students in plan for this period/subject

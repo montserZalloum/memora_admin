@@ -12,7 +12,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 # Leaderboard type as Literal for type safety and validation
-LeaderboardType = Literal["daily", "weekly", "alltime"]
+LeaderboardType = Literal["daily", "weekly"]
 
 
 class LeaderboardEntry(BaseModel):
@@ -62,8 +62,8 @@ class MyRankResponse(BaseModel):
 	- Unranked users (0 XP) treated as tied for last place
 	"""
 
-	rank: int
+	rank: int | None  # Dense rank within plan (None if unranked)
 	xp: int
-	xp_to_next: int | None  # XP needed to match next higher tier, None if #1 or unranked on empty board
+	xp_to_next: int | None  # XP needed to match next higher tier, None if #1 or unranked
 	neighbors: list[LeaderboardEntry]  # Includes is_me=True for requesting user
 	total_players: int
