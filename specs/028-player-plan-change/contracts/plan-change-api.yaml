@@ -1,0 +1,223 @@
+openapi: "3.1.0"
+info:
+  title: Player Plan Change API
+  version: "1.0.0"
+  description: |
+    Endpoints for player self-service plan changes.
+    FastAPI sidecar (port 8002) under /api/v1/ prefix.
+
+paths:
+  /api/v1/plans/available:
+    get:
+      operationId: getAvailablePlans
+      summary: Browse plans available for switching
+      description: |
+        Returns all plans linked to active seasons (is_published=1, end_date >= today),
+        excluding the player's current plan, grouped by grade and major.
+        FR-002, FR-003, US-3.
+      tags: [Plans]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Available plans grouped by grade/major
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AvailablePlansResponse"
+        "401":
+          description: Not authenticated
+        "500":
+          description: Internal server error
+
+  /api/v1/plans/change:
+    post:
+      operationId: changePlan
+      summary: Execute a plan change with clean slate
+      description: |
+        Changes the player's plan to a new eligible plan. Performs complete
+        data reset: snapshot preservation, subscription/progress deletion,
+        wallet zeroing, leaderboard removal, cache cleanup, and session
+        invalidation. Player must re-login after success.
+        FR-001 through FR-023.
+      tags: [Plans]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PlanChangeRequest"
+      responses:
+        "200":
+          description: Plan change successful. Player must re-login.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanChangeResponse"
+        "400":
+          description: Invalid request (same plan, invalid plan ID)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                samePlan:
+                  summary: Already on this plan
+                  value:
+                    error: "SAME_PLAN"
+                    message: "You are already on this plan."
+                invalidPlan:
+                  summary: Plan not eligible
+                  value:
+                    error: "INVALID_PLAN"
+                    message: "The selected plan is not available."
+        "401":
+          description: Not authenticated
+        "409":
+          description: Conflict (another plan change in progress)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "PLAN_CHANGE_IN_PROGRESS"
+                message: "A plan change is already in progress. Please try again."
+        "429":
+          description: Cooldown not expired (24h rate limit)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "COOLDOWN_ACTIVE"
+                message: "You can change your plan again after {retry_after}."
+                retry_after: "2026-02-27T14:30:00"
+        "500":
+          description: Internal server error
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    PlanChangeRequest:
+      type: object
+      required: [new_plan_id]
+      properties:
+        new_plan_id:
+          type: string
+          description: ID of the target plan (e.g., "PLAN-00042")
+          example: "PLAN-00042"
+
+    PlanChangeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Plan changed successfully. Please log in again."
+        history_id:
+          type: string
+          description: ID of the created history record
+          example: "PLHIST-00001"
+        previous_plan_id:
+          type: string
+          example: "PLAN-00015"
+        new_plan_id:
+          type: string
+          example: "PLAN-00042"
+
+    AvailablePlansResponse:
+      type: object
+      properties:
+        grades:
+          type: array
+          items:
+            $ref: "#/components/schemas/GradePlanGroup"
+        total:
+          type: integer
+          description: Total number of available plans
+          example: 8
+
+    GradePlanGroup:
+      type: object
+      properties:
+        grade_id:
+          type: string
+          example: "GRD-00003"
+        grade_name:
+          type: string
+          example: "Grade 10"
+        plans:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailablePlan"
+
+    AvailablePlan:
+      type: object
+      properties:
+        plan_id:
+          type: string
+          example: "PLAN-00042"
+        plan_name:
+          type: string
+          example: "Grade 10 - Scientific Track"
+        grade_id:
+          type: string
+          example: "GRD-00003"
+        grade_name:
+          type: string
+          example: "Grade 10"
+        major_id:
+          type: string
+          nullable: true
+          example: "MJR-00002"
+        major_name:
+          type: string
+          nullable: true
+          example: "Scientific"
+        season_id:
+          type: string
+          example: "SEAS-00030"
+        season_title:
+          type: string
+          example: "2026 Spring"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable error message
+        retry_after:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the player can retry (for cooldown errors)
+
+# --- Frappe Whitelisted API Contracts (called via FrappeClient) ---
+# These are internal APIs, not exposed to the mobile client.
+#
+# memora_admin.api.plan_change.execute_plan_change
+#   Input:  {"player_id": "PLAYER-00001", "new_plan_id": "PLAN-00042"}
+#   Output: {"status": "ok", "history_id": "PLHIST-00001",
+#            "previous_plan": "PLAN-00015", "trigger_reason": "Season Expired"}
+#   Errors: {"status": "error", "code": "COOLDOWN_ACTIVE|INVALID_PLAN|SAME_PLAN",
+#            "message": "...", "retry_after": "2026-02-27T14:30:00" (optional)}
+#
+# memora_admin.api.plan_change.get_available_plans
+#   Input:  {"current_plan_id": "PLAN-00015"}
+#   Output: {"plans": [{"name": "PLAN-00042", "plan_name": "...",
+#            "grade": "GRD-00003", "grade_name": "...",
+#            "major": "MJR-00002", "major_name": "...",
+#            "season": "SEAS-00030", "season_title": "..."}]}
