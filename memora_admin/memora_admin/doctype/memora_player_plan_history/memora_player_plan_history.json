@@ -1,0 +1,184 @@
+{
+ "actions": [],
+ "autoname": "PLHIST-.#####.",
+ "creation": "2026-02-26 10:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "player",
+  "trigger_reason",
+  "changed_at",
+  "sb_previous",
+  "previous_plan",
+  "previous_grade",
+  "previous_major",
+  "previous_season",
+  "sb_new",
+  "new_plan",
+  "new_grade",
+  "new_major",
+  "new_season",
+  "sb_snapshot",
+  "snapshot_total_xp",
+  "snapshot_current_streak",
+  "snapshot_total_lessons",
+  "snapshot_total_time_min",
+  "snapshot_subscriptions_json",
+  "snapshot_progress_json",
+  "snapshot_memory_states"
+ ],
+ "fields": [
+  {
+   "fieldname": "player",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Player",
+   "options": "Memora Player Profile",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "trigger_reason",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Trigger Reason",
+   "options": "Season Expired\nVoluntary Change",
+   "reqd": 1
+  },
+  {
+   "fieldname": "changed_at",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Changed At",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sb_previous",
+   "fieldtype": "Section Break",
+   "label": "Previous Plan"
+  },
+  {
+   "fieldname": "previous_plan",
+   "fieldtype": "Link",
+   "label": "Previous Plan",
+   "options": "Memora Academic Plan",
+   "reqd": 1
+  },
+  {
+   "fieldname": "previous_grade",
+   "fieldtype": "Link",
+   "label": "Previous Grade",
+   "options": "Memora Grade",
+   "reqd": 1
+  },
+  {
+   "fieldname": "previous_major",
+   "fieldtype": "Link",
+   "label": "Previous Major",
+   "options": "Memora Major"
+  },
+  {
+   "fieldname": "previous_season",
+   "fieldtype": "Link",
+   "label": "Previous Season",
+   "options": "Memora Season",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sb_new",
+   "fieldtype": "Section Break",
+   "label": "New Plan"
+  },
+  {
+   "fieldname": "new_plan",
+   "fieldtype": "Link",
+   "label": "New Plan",
+   "options": "Memora Academic Plan",
+   "reqd": 1
+  },
+  {
+   "fieldname": "new_grade",
+   "fieldtype": "Link",
+   "label": "New Grade",
+   "options": "Memora Grade",
+   "reqd": 1
+  },
+  {
+   "fieldname": "new_major",
+   "fieldtype": "Link",
+   "label": "New Major",
+   "options": "Memora Major"
+  },
+  {
+   "fieldname": "new_season",
+   "fieldtype": "Link",
+   "label": "New Season",
+   "options": "Memora Season",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sb_snapshot",
+   "fieldtype": "Section Break",
+   "label": "Snapshot"
+  },
+  {
+   "default": "0",
+   "fieldname": "snapshot_total_xp",
+   "fieldtype": "Int",
+   "label": "Snapshot Total XP"
+  },
+  {
+   "default": "0",
+   "fieldname": "snapshot_current_streak",
+   "fieldtype": "Int",
+   "label": "Snapshot Current Streak"
+  },
+  {
+   "default": "0",
+   "fieldname": "snapshot_total_lessons",
+   "fieldtype": "Int",
+   "label": "Snapshot Total Lessons"
+  },
+  {
+   "default": "0",
+   "fieldname": "snapshot_total_time_min",
+   "fieldtype": "Int",
+   "label": "Snapshot Total Time (Min)"
+  },
+  {
+   "fieldname": "snapshot_subscriptions_json",
+   "fieldtype": "Long Text",
+   "label": "Snapshot Subscriptions JSON"
+  },
+  {
+   "fieldname": "snapshot_progress_json",
+   "fieldtype": "Long Text",
+   "label": "Snapshot Progress JSON"
+  },
+  {
+   "default": "0",
+   "fieldname": "snapshot_memory_states",
+   "fieldtype": "Int",
+   "label": "Snapshot Memory States"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-02-26 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Player Plan History",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

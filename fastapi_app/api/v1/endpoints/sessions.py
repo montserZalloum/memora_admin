@@ -23,7 +23,7 @@ from fastapi_app.api.deps import (
 	require_rate_limit,
 )
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
-from fastapi_app.core.redis_keys import stats_key, wallet_key
+from fastapi_app.core.redis_keys import freeze_key, stats_key, wallet_key
 from fastapi_app.models.game_session import (
 	CurrentSessionResponse,
 	EndSessionRequest,
@@ -91,6 +91,7 @@ async def start_session(
 	game_session_service: GameSessionServiceDep,
 	hierarchy_service: HierarchyServiceDep,
 	access_service: AccessServiceDep,
+	redis_client: RedisClient,
 	_rate_limit=Depends(require_rate_limit("session_start")),
 	x_device_id: str | None = Header(None, alias="X-Device-ID"),
 ) -> StartSessionResponse:
@@ -117,6 +118,16 @@ async def start_session(
 		404: Subject or lesson not found
 		403: No content access
 	"""
+	# Check if player is frozen (plan change in progress)
+	if await redis_client.exists(freeze_key(user.sub)):
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={
+				"code": "PLAN_CHANGE_IN_PROGRESS",
+				"message": "A plan change is in progress. Please try again shortly.",
+			},
+		)
+
 	# Validate subject exists
 	hierarchy = await hierarchy_service.get_hierarchy(request.subject_id)
 	if not hierarchy:
@@ -216,6 +227,16 @@ async def end_session(
 		403: No active session
 		404: Subject or lesson not found
 	"""
+	# Check if player is frozen (plan change in progress)
+	if await redis_client.exists(freeze_key(user.sub)):
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={
+				"code": "PLAN_CHANGE_IN_PROGRESS",
+				"message": "A plan change is in progress. Please try again shortly.",
+			},
+		)
+
 	# RT1: Get active session
 	session = await game_session_service.get_active_session(user.sub)
 	if not session:

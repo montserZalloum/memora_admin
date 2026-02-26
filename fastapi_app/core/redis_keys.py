@@ -723,6 +723,101 @@ def hydration_lock_key(cache_key: str) -> str:
 # =============================================================================
 
 
+# =============================================================================
+# Plan Change
+# =============================================================================
+
+FREEZE_KEY_TTL = 30
+"""30 seconds. Safety-net auto-expire for per-player freeze during plan change.
+
+If the plan change operation crashes mid-way, the freeze key expires and
+normal operations (sync jobs, session endpoints) resume automatically.
+"""
+
+PLAN_CHANGE_COOLDOWN_TTL = 86400
+"""24 hours. Cooldown window between successive plan changes (FR-004)."""
+
+
+def freeze_key(player_id: str) -> str:
+	"""Per-player freeze during plan change.
+
+	Type: STRING (value: Unix timestamp of freeze start)
+	Producers: PlanChangeService.execute()
+	Consumers: sync_dirty_wallets(), sync_dirty_progress(),
+	           POST /sessions/start, POST /sessions/end
+	TTL: 30s (FREEZE_KEY_TTL — safety net auto-expire)
+	"""
+	return f"memora:freeze:{player_id}"
+
+
+def plan_change_ts_key(player_id: str) -> str:
+	"""Cooldown timestamp for plan change rate limiting.
+
+	Type: STRING (value: Unix timestamp of last plan change)
+	Producers: PlanChangeService.execute() (after successful change)
+	Consumers: PlanChangeService._check_cooldown()
+	TTL: 24h (PLAN_CHANGE_COOLDOWN_TTL)
+	"""
+	return f"memora:plan_change_ts:{player_id}"
+
+
+# --- SCAN patterns for per-player cache cleanup (plan change) ---
+
+
+def player_progress_pattern(player_id: str) -> str:
+	"""SCAN pattern matching all progress bitmaps for a player.
+
+	Matches keys produced by progress_key(player_id, *, *).
+	Consumers: PlanChangeService._pre_cleanup(), _post_cleanup()
+	"""
+	return f"memora:progress:{player_id}:*"
+
+
+def player_stats_pattern(player_id: str) -> str:
+	"""SCAN pattern matching all stats hashes for a player.
+
+	Matches keys produced by stats_key(player_id, *, *).
+	Consumers: PlanChangeService._post_cleanup()
+	"""
+	return f"memora:stats:{player_id}:*"
+
+
+def player_items_learned_pattern(player_id: str) -> str:
+	"""SCAN pattern matching all items-learned counts for a player.
+
+	Matches keys produced by items_learned_key(player_id, *).
+	Consumers: PlanChangeService._post_cleanup()
+	"""
+	return f"memora:items_learned:{player_id}:*"
+
+
+def player_mastery_pattern(player_id: str) -> str:
+	"""SCAN pattern matching all mastery hashes for a player.
+
+	Matches keys produced by mastery_key(player_id, *, *).
+	Consumers: PlanChangeService._post_cleanup()
+	"""
+	return f"memora:mastery:{player_id}:*"
+
+
+def player_fsrs_pattern(player_id: str) -> str:
+	"""SCAN pattern matching all FSRS card state keys for a player.
+
+	Matches keys produced by fsrs_card_state_key(player_id, *).
+	Consumers: PlanChangeService._post_cleanup()
+	"""
+	return f"memora:fsrs:{player_id}:*"
+
+
+def player_fsrs_processed_pattern(player_id: str) -> str:
+	"""SCAN pattern matching all FSRS processed keys for a player.
+
+	Matches keys produced by fsrs_processed_key(player_id, *, *).
+	Consumers: PlanChangeService._post_cleanup()
+	"""
+	return f"memora:fsrs:processed:{player_id}:*"
+
+
 def report_cooldown_key(player_id: str) -> str:
 	"""Cooldown for player content reports (1 per 60s).
 

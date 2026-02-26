@@ -34,6 +34,7 @@ from fastapi_app.services.review import ReviewService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.stats import StatsService
+from fastapi_app.services.plan_change import PlanChangeService
 from fastapi_app.services.voucher import VoucherService
 from fastapi_app.services.wallet import WalletService
 
@@ -360,6 +361,15 @@ async def get_practice_service(
 
 
 PracticeServiceDep = Annotated[PracticeService, Depends(get_practice_service)]
+
+
+async def get_plan_change_service(redis_client: RedisClient) -> PlanChangeService:
+	"""Get PlanChangeService with Redis and FrappeClient."""
+	frappe_client = await get_frappe_client()
+	return PlanChangeService(redis_client, frappe_client)
+
+
+PlanChangeServiceDep = Annotated[PlanChangeService, Depends(get_plan_change_service)]
 
 
 async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) -> VoucherService:

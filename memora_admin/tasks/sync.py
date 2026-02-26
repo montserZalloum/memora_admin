@@ -26,6 +26,7 @@ from fastapi_app.core.constants import (
 )
 from fastapi_app.core.redis_keys import (
 	daily_xp_key,
+	freeze_key,
 	progress_key as _progress_key,
 	subject_total_lessons_key,
 	wallet_key,
@@ -404,6 +405,21 @@ def sync_dirty_progress():
 	# Phase 2: Process in chunks
 	for chunk in _chunks(parsed_items, SYNC_CHUNK_SIZE):
 		try:
+			# 0. Filter out frozen players (plan change in progress)
+			active_chunk = []
+			frozen_count = 0
+			for item in chunk:
+				_, uid, _, _ = item
+				if r.exists(freeze_key(uid)):
+					frozen_count += 1
+				else:
+					active_chunk.append(item)
+			if frozen_count:
+				logger.info(f"Progress sync: skipped {frozen_count} frozen entries")
+			if not active_chunk:
+				continue
+			chunk = active_chunk
+
 			# 1. Pipeline GET + BITCOUNT for all bitmap keys
 			bitmap_keys = [
 				_progress_key(uid, sid, ver)
@@ -491,6 +507,20 @@ def sync_dirty_wallets():
 
 	for chunk in _chunks(player_ids, SYNC_CHUNK_SIZE):
 		try:
+			# 0. Filter out frozen players (plan change in progress)
+			frozen_players = []
+			active_chunk = []
+			for pid in chunk:
+				if r.exists(freeze_key(pid)):
+					frozen_players.append(pid)
+				else:
+					active_chunk.append(pid)
+			if frozen_players:
+				logger.info(f"Wallet sync: skipped {len(frozen_players)} frozen players")
+			if not active_chunk:
+				continue
+			chunk = active_chunk
+
 			# 1. Pipeline HGETALL for all wallets in chunk
 			wallet_data = _batch_hgetall_wallets(r, chunk)
 

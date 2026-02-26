@@ -143,6 +143,10 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 		"memora:profile:PLAYER-TEST-*",
 		"memora:practice:PLAYER-TEST-*",
 		"memora:practice:hierarchy_meta:*",
+		"memora:freeze:PLAYER-TEST-*",
+		"memora:plan_change_ts:PLAYER-TEST-*",
+		"memora:daily_xp:PLAYER-TEST-*",
+		"memora:player_plan:PLAYER-TEST-*",
 		registration_options_key(),
 	]
 
