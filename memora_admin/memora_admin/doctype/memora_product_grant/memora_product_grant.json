@@ -7,12 +7,27 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "grade",
+  "major",
   "plan",
   "item_code",
   "is_published",
   "grant_components"
  ],
  "fields": [
+  {
+   "fieldname": "grade",
+   "fieldtype": "Link",
+   "label": "Grade",
+   "options": "Memora Grade"
+  },
+  {
+   "depends_on": "grade",
+   "fieldname": "major",
+   "fieldtype": "Link",
+   "label": "Major",
+   "options": "Memora Major"
+  },
   {
    "fieldname": "plan",
    "fieldtype": "Link",

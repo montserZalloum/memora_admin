@@ -12,10 +12,10 @@
  "fields": [
   {
    "fieldname": "target_doctype",
-   "fieldtype": "Link",
+   "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Target Doctype",
-   "options": "DocType",
+   "options": "Memora Subject\nMemora Track",
    "reqd": 1
   },
   {

@@ -5,12 +5,35 @@ frappe.ui.form.on("Memora Academic Plan", {
 	refresh(frm) {
 		// Set up Major filter on form load
 		frm.trigger("setup_major_filter");
+		frm.trigger("setup_subject_filter");
 	},
 
 	grade(frm) {
 		// When Grade changes, clear Major and refresh filter
 		frm.set_value("major", null);
 		frm.trigger("setup_major_filter");
+		frm.trigger("setup_subject_filter");
+	},
+
+	major(frm) {
+		// When Major changes, refresh subject filter
+		frm.trigger("setup_subject_filter");
+	},
+
+	setup_subject_filter(frm) {
+		// Filter Subject dropdown in plan_subjects based on grade/major applicability
+		frm.fields_dict.plan_subjects.grid.get_field("subject").get_query = function () {
+			if (!frm.doc.grade) {
+				return { filters: { name: ["in", []] } };
+			}
+			return {
+				query: "memora_admin.memora_admin.doctype.memora_subject.memora_subject.get_applicable_subjects",
+				filters: {
+					grade: frm.doc.grade,
+					major: frm.doc.major || "",
+				},
+			};
+		};
 	},
 
 	setup_major_filter(frm) {

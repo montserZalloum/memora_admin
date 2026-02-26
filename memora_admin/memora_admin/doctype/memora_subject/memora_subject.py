@@ -1,9 +1,40 @@
 # Copyright (c) 2026, corex and contributors
 # For license information, please see license.txt
 
-# import frappe
+import frappe
 from frappe.model.document import Document
 
 
 class MemoraSubject(Document):
 	pass
+
+
+@frappe.whitelist()
+@frappe.validate_and_sanitize_search_inputs
+def get_applicable_subjects(doctype, txt, searchfield, start, page_len, filters):
+	grade = filters.get("grade")
+	major = filters.get("major")
+	if not grade:
+		return []
+
+	conditions = [
+		"sa.parent = sub.name",
+		"sa.parenttype = 'Memora Subject'",
+		"sa.grade = %(grade)s",
+	]
+	if major:
+		conditions.append("(sa.major = %(major)s OR sa.major IS NULL OR sa.major = '')")
+	if txt:
+		conditions.append("(sub.name LIKE %(txt)s OR sub.subject_title LIKE %(txt)s)")
+
+	return frappe.db.sql(
+		f"""
+		SELECT DISTINCT sub.name, sub.subject_title
+		FROM `tabMemora Subject` sub
+		INNER JOIN `tabMemora Subject Applicability` sa ON sa.parent = sub.name
+		WHERE {" AND ".join(conditions)}
+		ORDER BY sub.subject_title
+		LIMIT %(page_len)s OFFSET %(start)s
+		""",
+		{"grade": grade, "major": major, "txt": f"%{txt}%", "page_len": page_len, "start": start},
+	)

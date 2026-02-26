@@ -13,6 +13,8 @@
   "is_published",
   "last_bit_index",
   "sort_order",
+  "sb_applicability",
+  "applicable_to",
   "json_generated_at",
   "sb_stats",
   "total_tracks",
@@ -57,6 +59,17 @@
    "fieldname": "sort_order",
    "fieldtype": "Int",
    "label": "Sort Order"
+  },
+  {
+   "fieldname": "sb_applicability",
+   "fieldtype": "Section Break",
+   "label": "Applicability"
+  },
+  {
+   "fieldname": "applicable_to",
+   "fieldtype": "Table",
+   "label": "Applicable To",
+   "options": "Memora Subject Applicability"
   },
   {
    "fieldname": "json_generated_at",
@@ -109,7 +122,7 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-12 14:35:06.255258",
+ "modified": "2026-02-26 10:00:00.000000",
  "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Subject",
