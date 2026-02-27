@@ -9,7 +9,7 @@ import pytest
 import redis.asyncio as redis
 
 from fastapi_app.core.redis_keys import progress_key
-from fastapi_app.services.progress import ProgressService
+from fastapi_app.services.progress import BITFIELD_CHUNK_SIZE, ProgressService
 
 
 # Use a unique user/subject per test to avoid cross-test pollution
@@ -164,3 +164,50 @@ class TestBitmapDecodePartial:
 
 		result = await svc.get_completed_bits(TEST_USER, TEST_SUBJECT, bit_range=100)
 		assert result == {50}  # bit 200 is beyond bit_range=100
+
+
+class TestBitmapDecodeChunked:
+	"""Chunked BITFIELD path: bitmaps larger than BITFIELD_CHUNK_SIZE bytes."""
+
+	@pytest.mark.asyncio
+	async def test_chunked_path_sparse(self, svc: ProgressService, redis_client: redis.Redis):
+		"""Bits spread across multiple chunks are all returned correctly."""
+		# bit_range that exceeds BITFIELD_CHUNK_SIZE bytes → forces chunked path
+		bits_per_chunk = BITFIELD_CHUNK_SIZE * 8
+		bit_range = bits_per_chunk * 2 + 100  # 2 full chunks + partial 3rd
+
+		# Place one bit in each chunk
+		expected = {
+			0,                         # first bit of chunk 0
+			bits_per_chunk - 1,        # last bit of chunk 0
+			bits_per_chunk,            # first bit of chunk 1
+			bits_per_chunk * 2 + 50,   # middle of chunk 2
+		}
+		for bit in expected:
+			await redis_client.setbit(_key(), bit, 1)
+
+		result = await svc.get_completed_bits(TEST_USER, TEST_SUBJECT, bit_range=bit_range)
+		assert result == expected
+
+	@pytest.mark.asyncio
+	async def test_chunked_path_ordering(self, svc: ProgressService, redis_client: redis.Redis):
+		"""Chunk flattening preserves correct byte ordering across boundaries."""
+		bits_per_chunk = BITFIELD_CHUNK_SIZE * 8
+		bit_range = bits_per_chunk + 16  # just over 1 chunk
+
+		# Set the last bit of chunk 0 and first bit of chunk 1
+		boundary_bits = {bits_per_chunk - 1, bits_per_chunk}
+		for bit in boundary_bits:
+			await redis_client.setbit(_key(), bit, 1)
+
+		result = await svc.get_completed_bits(TEST_USER, TEST_SUBJECT, bit_range=bit_range)
+		assert result == boundary_bits
+
+	@pytest.mark.asyncio
+	async def test_chunked_empty_key(self, svc: ProgressService):
+		"""Chunked path on missing key returns empty set."""
+		bits_per_chunk = BITFIELD_CHUNK_SIZE * 8
+		bit_range = bits_per_chunk * 3  # forces 3 chunks
+
+		result = await svc.get_completed_bits(TEST_USER, TEST_SUBJECT, bit_range=bit_range)
+		assert result == set()

@@ -16,6 +16,11 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+# Max bytes per BITFIELD call. 512 bytes = 4096 bits per subcommand batch.
+# Keeps each BITFIELD invocation well under Redis proxy/cluster limits (~512 subcommands).
+# Multiple batches are pipelined into a single Redis round-trip.
+BITFIELD_CHUNK_SIZE = 512
+
 
 class ProgressService:
     """Manages lesson completion via Redis bitmaps.
@@ -31,7 +36,7 @@ class ProgressService:
     - complete_lesson: SETBIT O(1) - marks lesson complete
     - is_complete: GETBIT O(1) - checks single lesson status
     - get_completed_count: BITCOUNT O(N) on bitmap size
-    - get_completed_bits: Single GET + client-side bitmap decode for unlock calculation
+    - get_completed_bits: BITFIELD GET u8 + client-side bitmap decode for unlock calculation
 
     Hydration: After a Redis flush, progress bitmaps are lost. The ensure_hydrated()
     method restores them from MariaDB via the Frappe API, following the same
@@ -210,11 +215,13 @@ class ProgressService:
         bit_range: int,
         version: int = 1,
     ) -> set[int]:
-        """Get set of completed bit indexes via single-fetch bitmap decode.
+        """Get set of completed bit indexes via BITFIELD bitmap decode.
 
-        Uses a single Redis GET + client-side latin-1 decode instead of
-        N GETBIT commands, reducing Redis command volume by ~99.8% for
-        large subjects (e.g., 500 lessons → 1 command instead of 500).
+        Uses BITFIELD GET u8 subcommands to read each byte as an integer,
+        immune to decode_responses=True UTF-8 corruption. For large bitmaps
+        (>512 bytes / 4096 bits), chunks into pipelined BITFIELD calls to
+        stay under Redis proxy subcommand limits while keeping a single
+        round-trip.
 
         Args:
             user_id: Player's user ID
@@ -238,15 +245,35 @@ class ProgressService:
         # Use BITFIELD GET u8 to read each byte as an integer.
         # Returns integers — immune to decode_responses=True UTF-8 decode
         # (plain GET fails on bitmap bytes > 0x7F like 0xFF).
-        # Single command with multiple sub-operations = single Redis round-trip.
-        args = []
-        for byte_idx in range(num_bytes):
-            args.extend(["GET", "u8", str(byte_idx * 8)])
-
-        byte_values = await self.redis.execute_command("BITFIELD", key, *args)
-
-        if not byte_values:
-            return set()
+        #
+        # Chunk into batches of BITFIELD_CHUNK_SIZE bytes per call to stay
+        # under Redis proxy/cluster subcommand limits (~512). All chunks
+        # are pipelined into a single Redis round-trip.
+        if num_bytes <= BITFIELD_CHUNK_SIZE:
+            # Fast path: small bitmap fits in one BITFIELD call
+            args = []
+            for byte_idx in range(num_bytes):
+                args.extend(["GET", "u8", str(byte_idx * 8)])
+            byte_values = await self.redis.execute_command("BITFIELD", key, *args)
+            if not byte_values:
+                return set()
+        else:
+            # Chunked path: pipeline multiple BITFIELD calls
+            pipe = self.redis.pipeline(transaction=False)
+            for offset in range(0, num_bytes, BITFIELD_CHUNK_SIZE):
+                count = min(BITFIELD_CHUNK_SIZE, num_bytes - offset)
+                args = []
+                for i in range(count):
+                    args.extend(["GET", "u8", str((offset + i) * 8)])
+                pipe.execute_command("BITFIELD", key, *args)
+            results = await pipe.execute()
+            # Flatten list-of-lists into single byte_values list
+            byte_values = []
+            for chunk in results:
+                if chunk:
+                    byte_values.extend(chunk)
+            if not byte_values:
+                return set()
 
         completed = set()
         for i in range(bit_range):
