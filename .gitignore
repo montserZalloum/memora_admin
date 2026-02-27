@@ -19,3 +19,6 @@ build/
 htmlcov/
 .coverage
 *.egg-info/
+
+# Load test config (contains real credentials)
+load_tests/config.py

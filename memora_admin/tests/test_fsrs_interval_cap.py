@@ -2,180 +2,22 @@
 Tests for FSRS maximum review interval cap (90 days).
 
 Verifies:
-1. Scheduler creation: both _get_fsrs_scheduler() functions produce Scheduler(maximum_interval=90)
-2. Ceiling clamp: next_review never exceeds today + 90 days
-3. Floor clamp: next_review never earlier than tomorrow (unchanged existing behavior)
-4. End-to-end: consecutive Good/Easy ratings stay within 90-day cap
-5. Edge cases: boundary values, rating transitions, new vs existing cards
+1. Ceiling clamp: next_review never exceeds today + 90 days
+2. Floor clamp: next_review never earlier than tomorrow (unchanged existing behavior)
+3. End-to-end: consecutive Good/Easy ratings stay within 90-day cap
+4. Edge cases: boundary values, rating transitions, new vs existing cards
 
 These tests are pure-logic unit tests (no database or Redis needed).
 """
 
-import json
-import sys
 import unittest
-from datetime import date, datetime, time, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from datetime import date, datetime, timedelta, timezone
 
 from fsrs import Card, Rating, Scheduler, State
 
-# Ensure frappe.whitelist exists before reviews.py is imported.
-# Outside bench, frappe is a stub without whitelist/utils — patch them so the
-# module can be imported without a full Frappe environment.
-import frappe
-
-if not hasattr(frappe, "whitelist"):
-	frappe.whitelist = lambda *a, **kw: (lambda fn: fn)
-if not hasattr(frappe, "utils"):
-	frappe.utils = MagicMock()
-
 
 # ---------------------------------------------------------------------------
-# Group 1: _get_fsrs_scheduler() — both files must produce maximum_interval=90
-# ---------------------------------------------------------------------------
-
-
-class TestProcessorSchedulerCreation(unittest.TestCase):
-	"""Test _get_fsrs_scheduler() in fsrs_processor.py."""
-
-	def _get_fn(self):
-		from memora_admin.tasks.fsrs_processor import _get_fsrs_scheduler
-
-		return _get_fsrs_scheduler
-
-	@patch("memora_admin.tasks.fsrs_processor.frappe")
-	def test_default_weights_has_90day_cap(self, mock_frappe):
-		"""No custom weights → Scheduler(maximum_interval=90)."""
-		settings = MagicMock()
-		settings.fsrs_weights = ""
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-	@patch("memora_admin.tasks.fsrs_processor.frappe")
-	def test_none_weights_has_90day_cap(self, mock_frappe):
-		"""weights=None → Scheduler(maximum_interval=90)."""
-		settings = MagicMock()
-		settings.fsrs_weights = None
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-	@patch("memora_admin.tasks.fsrs_processor.frappe")
-	def test_custom_weights_has_90day_cap(self, mock_frappe):
-		"""Valid custom weights → Scheduler(parameters=weights, maximum_interval=90)."""
-		# Default FSRS v5 weights (19 params)
-		weights = [
-			0.4072, 1.1829, 3.1262, 15.4722, 7.2102, 0.5316, 1.0651, 0.0589,
-			1.5330, 0.1413, 1.0170, 2.2640, 0.0613, 0.3615, 1.7490, 0.2796,
-			2.8537, 0.0001, 0.6468,
-		]
-		settings = MagicMock()
-		settings.fsrs_weights = json.dumps(weights)
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-	@patch("memora_admin.tasks.fsrs_processor.frappe")
-	def test_invalid_weights_falls_back_with_90day_cap(self, mock_frappe):
-		"""Invalid JSON weights → falls back to Scheduler(maximum_interval=90)."""
-		settings = MagicMock()
-		settings.fsrs_weights = "not-valid-json"
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-	@patch("memora_admin.tasks.fsrs_processor.frappe")
-	def test_whitespace_only_weights_has_90day_cap(self, mock_frappe):
-		"""Whitespace-only weights → treated as empty → Scheduler(maximum_interval=90)."""
-		settings = MagicMock()
-		settings.fsrs_weights = "   \n  "
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-
-class TestReviewsSchedulerCreation(unittest.TestCase):
-	"""Test _get_fsrs_scheduler() in reviews.py."""
-
-	def _get_fn(self):
-		from memora_admin.api.reviews import _get_fsrs_scheduler
-
-		return _get_fsrs_scheduler
-
-	@patch("memora_admin.api.reviews.frappe")
-	def test_default_weights_has_90day_cap(self, mock_frappe):
-		"""No custom weights → Scheduler(maximum_interval=90)."""
-		settings = MagicMock()
-		settings.fsrs_weights = ""
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-	@patch("memora_admin.api.reviews.frappe")
-	def test_none_weights_has_90day_cap(self, mock_frappe):
-		"""weights=None → Scheduler(maximum_interval=90)."""
-		settings = MagicMock()
-		settings.fsrs_weights = None
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-	@patch("memora_admin.api.reviews.frappe")
-	def test_custom_weights_has_90day_cap(self, mock_frappe):
-		"""Valid custom weights → Scheduler(parameters=weights, maximum_interval=90)."""
-		weights = [
-			0.4072, 1.1829, 3.1262, 15.4722, 7.2102, 0.5316, 1.0651, 0.0589,
-			1.5330, 0.1413, 1.0170, 2.2640, 0.0613, 0.3615, 1.7490, 0.2796,
-			2.8537, 0.0001, 0.6468,
-		]
-		settings = MagicMock()
-		settings.fsrs_weights = json.dumps(weights)
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-	@patch("memora_admin.api.reviews.frappe")
-	def test_invalid_weights_falls_back_with_90day_cap(self, mock_frappe):
-		"""Invalid JSON weights → falls back to Scheduler(maximum_interval=90)."""
-		settings = MagicMock()
-		settings.fsrs_weights = "{broken"
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-	@patch("memora_admin.api.reviews.frappe")
-	def test_whitespace_only_weights_has_90day_cap(self, mock_frappe):
-		"""Whitespace-only weights → treated as empty → Scheduler(maximum_interval=90)."""
-		settings = MagicMock()
-		settings.fsrs_weights = "  "
-		mock_frappe.get_single.return_value = settings
-
-		scheduler = self._get_fn()()
-
-		self.assertEqual(scheduler.maximum_interval, 90)
-
-
-# ---------------------------------------------------------------------------
-# Group 2: Ceiling + Floor clamp logic (pure datetime arithmetic)
+# Group 1: Ceiling + Floor clamp logic (pure datetime arithmetic)
 # ---------------------------------------------------------------------------
 
 

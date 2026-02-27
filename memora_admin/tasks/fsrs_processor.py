@@ -70,22 +70,8 @@ def _get_skippable_stage_types() -> set[str]:
 
 
 def _get_fsrs_scheduler():
-	"""Create FSRS scheduler with weights from Memora Settings.
-
-	Returns:
-		fsrs.Scheduler instance configured with admin weights (if set)
-	"""
+	"""Create FSRS scheduler with default weights and 90-day cap."""
 	from fsrs import Scheduler
-
-	settings = frappe.get_single("Memora Settings")
-	weights_str = settings.fsrs_weights
-
-	if weights_str and weights_str.strip():
-		try:
-			weights = json.loads(weights_str)
-			return Scheduler(parameters=weights, maximum_interval=90)
-		except (json.JSONDecodeError, ValueError, TypeError) as e:
-			logger.warning(f"Invalid FSRS weights, using defaults: {e}")
 
 	return Scheduler(maximum_interval=90)
 
