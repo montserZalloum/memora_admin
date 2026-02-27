@@ -143,19 +143,17 @@ async def payment_webhook(
         player_id=payload.player_id,
     )
 
-    # Check idempotency
+    # Atomic idempotency check-and-set (SET NX = set only if key doesn't exist)
     idempotency_key = webhook_idempotency_key(payload.event_id)
-    existing = await redis.get(idempotency_key)
+    was_set = await redis.set(idempotency_key, "processing", nx=True, ex=IDEMPOTENCY_TTL)
 
-    if existing:
+    if not was_set:
+        # Another request already claimed this event_id
+        existing = await redis.get(idempotency_key)
         status_value = existing.decode() if isinstance(existing, bytes) else existing
         if status_value == "completed":
             return WebhookResponse(status="already_processed", message="Event already completed")
-        elif status_value == "processing":
-            return WebhookResponse(status="already_processed", message="Event currently processing")
-
-    # Mark as processing
-    await redis.set(idempotency_key, "processing", ex=IDEMPOTENCY_TTL)
+        return WebhookResponse(status="already_processed", message="Event currently processing")
 
     # Process in background for fast acknowledgment
     frappe_client = await get_frappe_client()

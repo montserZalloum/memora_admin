@@ -56,7 +56,7 @@ class ConnectionManager:
 		"""Return total connection count across all users."""
 		return sum(len(ws_set) for ws_set in self._connections.values())
 
-	async def connect(self, user_id: str, websocket: WebSocket) -> bool:
+	async def connect(self, user_id: str, websocket: WebSocket) -> bool | None:
 		"""Accept WebSocket and add to user's connection set.
 
 		Args:
@@ -66,7 +66,8 @@ class ConnectionManager:
 		Returns:
 			True if this is the first connection for the user
 			(caller should subscribe to pub/sub channel).
-			False if this is an additional connection or if rejected.
+			False if this is an additional connection.
+			None if the connection was rejected (max limit reached).
 		"""
 		user_lock = await self._get_user_lock(user_id)
 		async with user_lock:
@@ -78,7 +79,7 @@ class ConnectionManager:
 					max=self._max_connections_per_user,
 				)
 				await websocket.close(code=4029, reason="Too many connections")
-				return False
+				return None
 
 			await websocket.accept()
 			is_first = len(self._connections[user_id]) == 0

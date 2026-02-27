@@ -51,8 +51,13 @@ async def notifications_ws(
 	# Get ConnectionManager from app state
 	ws_manager: ConnectionManager = websocket.app.state.ws_manager
 
-	# Connect (accept + register)
+	# Connect (accept + register). Returns None if rejected (max connections).
 	is_first = await ws_manager.connect(user_id, websocket)
+
+	if is_first is None:
+		# Connection was rejected and already closed by the manager
+		logger.info("ws_rejected", user_id=user_id, reason="max_connections")
+		return
 
 	# If first connection for this user, subscribe to their notification channel
 	notify_pubsub = websocket.app.state.notify_pubsub
