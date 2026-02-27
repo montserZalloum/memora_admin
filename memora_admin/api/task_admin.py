@@ -32,10 +32,10 @@ def trigger_task(task_name: str) -> dict:
 
 	# Map task names to task function paths
 	task_map = {
-		"streak_reset": "memora_admin.memora_admin.tasks.streak_reset.reset_broken_streaks",
-		"session_cleanup": "memora_admin.memora_admin.tasks.session_cleanup.cleanup_expired_sessions",
-		"leaderboard_daily": "memora_admin.memora_admin.tasks.leaderboard_reset.archive_daily_leaderboard",
-		"leaderboard_weekly": "memora_admin.memora_admin.tasks.leaderboard_reset.archive_weekly_leaderboard",
+		"streak_reset": "memora_admin.tasks.streak_reset.reset_broken_streaks",
+		"session_cleanup": "memora_admin.tasks.session_cleanup.cleanup_expired_sessions",
+		"leaderboard_daily": "memora_admin.tasks.leaderboard_reset.archive_daily_leaderboard",
+		"leaderboard_weekly": "memora_admin.tasks.leaderboard_reset.archive_weekly_leaderboard",
 	}
 
 	if task_name not in task_map:

@@ -400,6 +400,7 @@ _ERROR_TO_LOG_STATUS = {
 	"ALL_GRANTS_OWNED": "All Grants Owned",
 	"GRANT_NOT_IN_BATCH": "Grant Not In Batch",
 	"ALREADY_OWNED": "Already Owned",
+	"REDEMPTION_FAILED": "Error",
 }
 
 # Map card statuses to error codes for non-Allocated cards
@@ -409,6 +410,13 @@ _CARD_STATUS_ERRORS = {
 	"Void": "VOID",
 	"Expired": "EXPIRED",
 }
+
+
+def _check_voucher_permission():
+	"""Ensure caller has permission to perform voucher operations."""
+	allowed_roles = {"System Manager", "Voucher Manager", "Memora Admin"}
+	if not allowed_roles.intersection(frappe.get_roles()):
+		frappe.throw("Insufficient permissions for voucher operations", frappe.PermissionError)
 
 
 def _log_attempt(
@@ -499,6 +507,8 @@ def preview_voucher(pin_hmac: str, player_id: str) -> dict:
 		Dict with ``face_value`` and ``grants`` list, or ``{"error": "..."}``
 		with a machine-readable error code.
 	"""
+	_check_voucher_permission()
+
 	# 1. Look up card by HMAC (read-only -- no FOR UPDATE)
 	cards = frappe.db.sql(
 		"SELECT name, status, batch, pin_hmac FROM `tabMemora Voucher Card` WHERE pin_hmac = %s LIMIT 1",
@@ -595,6 +605,8 @@ def redeem_voucher(
 		``{"status": "success", "transaction_id": "..."}`` on success,
 		or ``{"error": "ERROR_CODE"}`` on failure.
 	"""
+	_check_voucher_permission()
+
 	# 1. Lock card row with SELECT FOR UPDATE
 	cards = frappe.db.sql(
 		"SELECT name, status, batch, pin_hmac FROM `tabMemora Voucher Card` "
@@ -692,27 +704,52 @@ def redeem_voucher(
 	# 10. Get face_value from batch
 	face_value = frappe.db.get_value("Memora Voucher Batch", card.batch, "face_value") or 0
 
-	# 11. Create Subscription Transaction with TWO-STEP SAVE
-	# Step 1: Insert with Pending Approval (triggers after_insert hook)
-	trx = frappe.get_doc({
-		"doctype": "Memora Subscription Transaction",
-		"player": player_id,
-		"payment_method": "Voucher",
-		"status": "Pending Approval",
-		"related_grant": product_grant_id,
-		"amount_paid": face_value,
-		"transaction_id": card.name,
-	})
-	trx.insert(ignore_permissions=True)
+	try:
+		# 11. Create Subscription Transaction with TWO-STEP SAVE
+		# Step 1: Insert with Pending Approval (triggers after_insert hook)
+		trx = frappe.get_doc({
+			"doctype": "Memora Subscription Transaction",
+			"player": player_id,
+			"payment_method": "Voucher",
+			"status": "Pending Approval",
+			"related_grant": product_grant_id,
+			"amount_paid": face_value,
+			"transaction_id": card.name,
+		})
+		trx.insert(ignore_permissions=True)
 
-	# Step 2: Change status to Completed and save
-	# This triggers on_update -> _handle_approval() which creates
-	# Player Subscriptions and syncs access to Redis
-	trx.status = "Completed"
-	trx.save(ignore_permissions=True)
+		# Step 2: Change status to Completed and save
+		# This triggers on_update -> _handle_approval() which creates
+		# Player Subscriptions and commits them (frappe.db.commit in _handle_approval)
+		trx.status = "Completed"
+		trx.save(ignore_permissions=True)
+	except Exception:
+		# Only revert card if subscription creation failed BEFORE _handle_approval's commit.
+		# Check if subscriptions were actually created — if so, card must stay Redeemed.
+		subs_exist = frappe.db.exists(
+			"Memora Player Subscription",
+			{"player": player_id, "access_key": ["in", grant_keys]},
+		)
+		if not subs_exist:
+			frappe.db.set_value("Memora Voucher Card", card.name, {
+				"status": "Allocated",
+				"redeemed_by": "",
+				"redeemed_at": None,
+				"redeemed_grant": "",
+			})
+			frappe.db.commit()
+		frappe.log_error(title=f"Voucher redemption failed: {card.name}")
+		_log_attempt(
+			player_id, pin_hmac[-4:], card.name, library, card.batch,
+			product_grant_id, "Error", "REDEMPTION_FAILED", ip_address,
+		)
+		return {"error": "REDEMPTION_FAILED"}
 
-	# 12. Link transaction back to card
-	frappe.db.set_value("Memora Voucher Card", card.name, "subscription_transaction", trx.name)
+	# 12. Link transaction back to card (non-critical — log but don't fail redemption)
+	try:
+		frappe.db.set_value("Memora Voucher Card", card.name, "subscription_transaction", trx.name)
+	except Exception:
+		frappe.log_error(title=f"Failed to link transaction {trx.name} to card {card.name}")
 
 	# 13. Log success
 	_log_attempt(

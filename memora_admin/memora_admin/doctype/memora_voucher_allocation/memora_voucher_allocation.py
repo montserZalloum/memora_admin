@@ -104,14 +104,27 @@ class MemoraVoucherAllocation(Document):
 	def _apply_allocation(self):
 		"""Bulk-update cards to Allocated status with library, allocation, sale_model.
 
-		Targets status IN ('Available', 'Allocated') to support both fresh allocation
-		and re-allocation of cards from another library.
+		Only targets Available cards or cards already allocated to this customer.
+		Cards allocated to a different library must be returned first.
 		"""
 		card_names = [row.voucher_card for row in self.allocation_cards]
 		if not card_names:
 			return
 
+		# Guard: prevent stealing cards from another library
 		placeholders = ", ".join(["%s"] * len(card_names))
+		stolen = frappe.db.sql(
+			f"""SELECT name, library FROM `tabMemora Voucher Card`
+			WHERE name IN ({placeholders}) AND status = 'Allocated' AND library != %s""",
+			[*card_names, self.customer],
+			as_dict=True,
+		)
+		if stolen:
+			names = ", ".join(c["name"] for c in stolen)
+			frappe.throw(
+				f"Cannot allocate: cards {names} belong to another library. Return them first.",
+				frappe.ValidationError,
+			)
 		frappe.db.sql(
 			f"""
 			UPDATE `tabMemora Voucher Card`
