@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 import redis.asyncio as redis
 import structlog
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi_app.api.v1.router import router as v1_router
 from fastapi_app.core.config import get_settings
@@ -141,6 +142,17 @@ app.add_middleware(
 	window=settings.global_rate_limit_window,
 )
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(
+	CORSMiddleware,
+	allow_origins=[
+		"https://skrterak.com",
+		"https://www.skrterak.com",
+	],
+	allow_credentials=True,
+	allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+	allow_headers=["Content-Type", "Authorization", "X-Plan-ID", "X-Device-ID", "X-Request-ID"],
+	expose_headers=["Content-Type"],
+)
 
 
 @app.exception_handler(RateLimitExceeded)
