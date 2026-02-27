@@ -1,0 +1,63 @@
+# Contract: ConnectionManager — Per-User Locks + Parallel Broadcast
+# Source: fastapi_app/core/ws_manager.py
+
+class: ConnectionManager
+file: fastapi_app/core/ws_manager.py
+
+# --- Per-User Lock Changes ---
+
+constructor:
+  before:
+    params: [max_connections_per_user]
+    state:
+      _lock: "asyncio.Lock()"  # Global lock for ALL users
+  after:
+    params: [max_connections_per_user, broadcast_concurrency]
+    state:
+      _user_locks: "dict[str, asyncio.Lock]"  # Per-user locks
+      _lock_guard: "asyncio.Lock()"  # Guard for lock dict mutations
+      _broadcast_concurrency: "int"  # 0=sequential, >0=parallel
+
+connect:
+  signature: "async (user_id: str, websocket: WebSocket, plan_id: str = '') -> bool"
+  behavior:
+    - Acquire per-user lock via _get_user_lock(user_id)
+    - Same logic as before (max check, accept, add to set, track plan)
+    - Return is_first indicator
+  lock_scope: "user_id only — no cross-user contention"
+
+disconnect:
+  signature: "async (user_id: str, websocket: WebSocket) -> bool"
+  behavior:
+    - Acquire per-user lock
+    - Remove websocket from set
+    - If is_last: cleanup user data AND delete per-user lock
+    - Return is_last indicator
+  lock_cleanup: "Lock deleted when user has zero connections"
+
+_get_user_lock:
+  signature: "async (user_id: str) -> asyncio.Lock"
+  behavior:
+    - Fast path: return existing lock from dict (no guard needed)
+    - Slow path: acquire _lock_guard, use setdefault to create lock
+  note: "Guard held only for dict mutation, never during WS operations"
+
+# --- Parallel Broadcast Changes ---
+
+send_to_user:
+  signature: "async (user_id: str, message: str) -> int"
+  behavior:
+    - "Snapshot connections set at entry"
+    - "If broadcast_concurrency == 0: sequential sends (current behavior)"
+    - "If broadcast_concurrency > 0: asyncio.gather() with semaphore"
+    - "Dead connection cleanup after all sends complete"
+  note: "Per-user sends are already typically 1-5 connections, so parallelism helps less here"
+
+send_to_plan:
+  signature: "async (plan_id: str, message: str) -> int"
+  behavior:
+    - "Snapshot user_ids list at entry"
+    - "If broadcast_concurrency == 0: sequential per-user sends"
+    - "If broadcast_concurrency > 0: asyncio.gather() with Semaphore(broadcast_concurrency)"
+    - "Each coroutine calls send_to_user() for one user"
+  note: "This is where parallelism matters most — many users per plan"

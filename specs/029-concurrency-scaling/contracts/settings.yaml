@@ -1,0 +1,58 @@
+# Settings Contract: New Scaling Configuration Fields
+# Added to fastapi_app/core/config.py → Settings class
+# All fields loaded via pydantic-settings from environment variables
+
+scaling_settings:
+  redis_max_connections:
+    type: int
+    default: 20
+    env_var: REDIS_MAX_CONNECTIONS
+    validation: "ge=1"
+    description: "Redis connection pool size per uvicorn worker"
+    consumers:
+      - fastapi_app/core/redis.py::create_redis_pool()
+
+  ws_broadcast_concurrency:
+    type: int
+    default: 0
+    env_var: WS_BROADCAST_CONCURRENCY
+    validation: "ge=0"
+    description: "0=sequential broadcast, >0=parallel with semaphore limit"
+    consumers:
+      - fastapi_app/core/ws_manager.py::ConnectionManager
+
+  rate_limit_fail_open:
+    type: bool
+    default: true
+    env_var: RATE_LIMIT_FAIL_OPEN
+    description: "true=pass requests on Redis failure, false=return 503"
+    consumers:
+      - fastapi_app/middleware/rate_limit.py::GlobalRateLimitMiddleware
+
+  frappe_timeout:
+    type: float
+    default: 30.0
+    env_var: FRAPPE_TIMEOUT
+    validation: "gt=0"
+    description: "Upstream Frappe API HTTP timeout in seconds"
+    consumers:
+      - fastapi_app/services/frappe_client.py::FrappeClient
+
+  frappe_max_connections:
+    type: int
+    default: 100
+    env_var: FRAPPE_MAX_CONNECTIONS
+    validation: "ge=1"
+    description: "Upstream Frappe API connection pool size"
+    consumers:
+      - fastapi_app/services/frappe_client.py::FrappeClient
+
+  frappe_max_keepalive:
+    type: int
+    default: 20
+    env_var: FRAPPE_MAX_KEEPALIVE
+    validation: "ge=0, le=frappe_max_connections"
+    cross_field_validator: "frappe_max_keepalive must be <= frappe_max_connections (raise ValueError otherwise)"
+    description: "Upstream Frappe API keepalive connection pool size"
+    consumers:
+      - fastapi_app/services/frappe_client.py::FrappeClient

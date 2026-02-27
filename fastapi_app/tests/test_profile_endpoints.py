@@ -8,7 +8,11 @@ Tests verify all profile endpoints:
 
 Reference: contracts/endpoint-test-contracts.md §4
 """
+from unittest.mock import AsyncMock, patch
+
 import pytest
+
+from fastapi_app.services.profile_page import ProfilePageService
 
 
 @pytest.mark.asyncio
@@ -19,9 +23,8 @@ class TestProfileHero:
 		"""Authenticated player gets hero profile section."""
 		client, token, player_id, family_id = authed_client
 
-		try:
-			# Mock ProfilePageService.get_hero()
-			mock_frappe.call.return_value = {
+		with patch.object(ProfilePageService, "get_hero", new_callable=AsyncMock) as mock_hero:
+			mock_hero.return_value = {
 				"display_name": "Ahmed",
 				"avatar": "avatar_01",
 				"level": 5,
@@ -29,6 +32,8 @@ class TestProfileHero:
 				"current_xp": 500,
 				"xp_in_level": 200,
 				"xp_for_next_level": 100,
+				"xp_level_start": 300,
+				"xp_level_end": 600,
 			}
 
 			resp = await client.get("/api/v1/profile")
@@ -39,8 +44,6 @@ class TestProfileHero:
 			assert data["avatar"] == "avatar_01"
 			assert data["level"] == 5
 			assert "current_xp" in data
-		finally:
-			pass
 
 
 @pytest.mark.asyncio
@@ -51,13 +54,12 @@ class TestProfileStats:
 		"""Authenticated player gets profile stats."""
 		client, token, player_id, family_id = authed_client
 
-		try:
-			# Mock ProfilePageService.get_stats()
-			mock_frappe.call.return_value = {
+		with patch.object(ProfilePageService, "get_stats", new_callable=AsyncMock) as mock_stats:
+			mock_stats.return_value = {
+				"subject": None,
 				"streak": 7,
 				"items_learned": 42,
 				"total_xp": 5000,
-				"rank": 123,
 			}
 
 			resp = await client.get("/api/v1/profile/stats")
@@ -67,8 +69,6 @@ class TestProfileStats:
 			assert data["streak"] == 7
 			assert data["items_learned"] == 42
 			assert "total_xp" in data
-		finally:
-			pass
 
 
 @pytest.mark.asyncio
@@ -79,9 +79,8 @@ class TestProfileAvatar:
 		"""Authenticated player successfully updates avatar."""
 		client, token, player_id, family_id = authed_client
 
-		try:
-			# Mock ProfilePageService.update_avatar()
-			mock_frappe.call.return_value = {
+		with patch.object(ProfilePageService, "update_avatar", new_callable=AsyncMock) as mock_update:
+			mock_update.return_value = {
 				"avatar": "avatar_02",
 				"success": True,
 			}
@@ -95,16 +94,15 @@ class TestProfileAvatar:
 			data = resp.json()
 			assert data["avatar"] == "avatar_02"
 			assert data["success"] is True
-		finally:
-			pass
 
 	async def test_update_avatar_invalid_400(self, authed_client, redis_client, mock_frappe):
 		"""Invalid avatar ID returns 400."""
 		client, token, player_id, family_id = authed_client
 
-		try:
-			# Mock raises error for invalid avatar
-			mock_frappe.call.side_effect = ValueError("Invalid avatar")
+		from fastapi_app.services.frappe_client import FrappeAPIError
+
+		with patch.object(ProfilePageService, "update_avatar", new_callable=AsyncMock) as mock_update:
+			mock_update.side_effect = FrappeAPIError(400, "Invalid avatar")
 
 			resp = await client.put(
 				"/api/v1/profile/avatar",
@@ -112,8 +110,6 @@ class TestProfileAvatar:
 			)
 
 			assert resp.status_code == 400
-		finally:
-			mock_frappe.call.side_effect = None
 
 
 @pytest.mark.asyncio
@@ -124,9 +120,8 @@ class TestProfileLogout:
 		"""Authenticated player successfully logs out."""
 		client, token, player_id, family_id = authed_client
 
-		try:
-			# Mock ProfilePageService.logout()
-			mock_frappe.call.return_value = {
+		with patch.object(ProfilePageService, "logout", new_callable=AsyncMock) as mock_logout:
+			mock_logout.return_value = {
 				"success": True,
 			}
 
@@ -135,8 +130,6 @@ class TestProfileLogout:
 			assert resp.status_code == 200
 			data = resp.json()
 			assert data["success"] is True
-		finally:
-			pass
 
 
 @pytest.mark.asyncio

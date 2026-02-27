@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -64,6 +65,59 @@ class Settings(BaseSettings):
 	# Practice Arena Session Settings
 	practice_session_size: int = 20
 	practice_session_ttl: int = 3600
+
+	# Scaling: Redis Connection Pool
+	redis_max_connections: int = 20  # Pool size per uvicorn worker
+
+	# Scaling: WebSocket Broadcast
+	ws_broadcast_concurrency: int = 0  # 0=sequential, >0=parallel with semaphore
+
+	# Scaling: Rate Limiter Fail Behavior
+	rate_limit_fail_open: bool = True  # True=pass on Redis failure, False=503
+
+	# Scaling: Upstream Frappe API Client
+	frappe_timeout: float = 30.0  # HTTP timeout in seconds
+	frappe_max_connections: int = 100  # Connection pool size
+	frappe_max_keepalive: int = 20  # Keepalive connection pool size
+
+	@field_validator("redis_max_connections")
+	@classmethod
+	def redis_max_connections_ge_1(cls, v: int) -> int:
+		if v < 1:
+			raise ValueError("redis_max_connections must be >= 1")
+		return v
+
+	@field_validator("ws_broadcast_concurrency")
+	@classmethod
+	def ws_broadcast_concurrency_ge_0(cls, v: int) -> int:
+		if v < 0:
+			raise ValueError("ws_broadcast_concurrency must be >= 0")
+		return v
+
+	@field_validator("frappe_timeout")
+	@classmethod
+	def frappe_timeout_gt_0(cls, v: float) -> float:
+		if v <= 0:
+			raise ValueError("frappe_timeout must be > 0")
+		return v
+
+	@field_validator("frappe_max_connections")
+	@classmethod
+	def frappe_max_connections_ge_1(cls, v: int) -> int:
+		if v < 1:
+			raise ValueError("frappe_max_connections must be >= 1")
+		return v
+
+	@model_validator(mode="after")
+	def keepalive_le_max_connections(self) -> "Settings":
+		if self.frappe_max_keepalive < 0:
+			raise ValueError("frappe_max_keepalive must be >= 0")
+		if self.frappe_max_keepalive > self.frappe_max_connections:
+			raise ValueError(
+				f"frappe_max_keepalive ({self.frappe_max_keepalive}) "
+				f"must be <= frappe_max_connections ({self.frappe_max_connections})"
+			)
+		return self
 
 
 @lru_cache

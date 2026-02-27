@@ -1,0 +1,47 @@
+# Contract: ProgressService.get_completed_bits() — Single-Fetch Bitmap Decode
+# Source: fastapi_app/services/progress.py
+
+method: get_completed_bits
+class: ProgressService
+file: fastapi_app/services/progress.py
+
+# Before: Pipeline of N GETBIT commands
+# After: Single GET + client-side bitmap decode
+
+signature:
+  input:
+    user_id: str
+    subject_id: str
+    bit_range: int
+    version: int  # default=1
+  output: set[int]  # set of completed bit indexes
+
+behavior:
+  - ensure_hydrated() called first (unchanged)
+  - Single Redis GET on progress key
+  - If key missing (None): return empty set
+  - If bit_range == 0: return empty set (no iteration)
+  - Decode text string to bytes via latin-1 encoding
+  - Iterate bits 0..bit_range-1 using MSB-first ordering
+  - Return set of bit indexes where bit is set
+
+redis_operations:
+  before:
+    commands: ["GETBIT x N (via pipeline)"]
+    round_trips: 1  # pipeline batches, but N commands queued
+    command_count: N  # where N = bit_range (e.g., 500)
+  after:
+    commands: ["GET"]
+    round_trips: 1
+    command_count: 1
+
+edge_cases:
+  - bit_range_zero: "return set()"
+  - key_missing: "return set()"
+  - partial_bitmap: "bits beyond bitmap length treated as 0 (unset)"
+  - all_byte_values: "latin-1 handles 0x00-0xFF losslessly"
+
+performance:
+  before: "500 lessons → 500 GETBIT commands in 1 pipeline round-trip"
+  after: "500 lessons → 1 GET command, ~0.1ms decode in Python"
+  improvement: "~99.8% reduction in Redis command volume"

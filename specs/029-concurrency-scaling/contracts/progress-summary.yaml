@@ -1,0 +1,40 @@
+# Contract: Progress Summary Endpoint — Parallel Per-Subject Lookups
+# Source: fastapi_app/api/v1/endpoints/progress.py
+
+endpoint: GET /api/v1/progress/
+handler: get_progress_summary
+file: fastapi_app/api/v1/endpoints/progress.py
+
+behavior:
+  before:
+    - "Sequential for-loop over all_accessible subjects"
+    - "Each iteration: await hierarchy + await get_completed_count"
+    - "Total latency: ~10ms × N subjects"
+  after:
+    - "Access resolution unchanged (3 await calls — fast, <2ms each)"
+    - "Per-subject work wrapped in async helper function"
+    - "asyncio.gather(*[_fetch_subject(s) for s in all_accessible], return_exceptions=True)"
+    - "Filter out exceptions, log warnings for failed subjects"
+    - "Total latency: ~10ms (single slowest subject)"
+
+async_helper:
+  name: "_fetch_subject_summary"
+  input: [subject_id, hierarchy_service, progress_service]
+  output: "SubjectSummary | None"
+  behavior:
+    - "Get hierarchy (O(1) Redis cache hit)"
+    - "Get completed count (BITCOUNT — O(1) single command)"
+    - "Calculate percentage"
+    - "Return SubjectSummary"
+    - "Return None if hierarchy missing"
+    - "Raise on unexpected errors (caught by gather)"
+
+error_handling:
+  - "Individual subject failures logged as warnings"
+  - "Successful subjects still returned"
+  - "No partial results hidden — client sees all available data"
+
+performance:
+  before: "8 subjects × ~10ms = ~80ms"
+  after: "8 subjects in parallel = ~10ms (slowest subject)"
+  improvement: "~8x reduction for 8-subject student"

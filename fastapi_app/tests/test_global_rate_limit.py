@@ -343,7 +343,7 @@ class TestWebSocketConnectionLimit:
 
 		for i in range(3):
 			ws = _make_mock_ws()
-			is_first = await mgr.connect("PLAYER-WS-001", ws, plan_id="PLAN-001")
+			is_first = await mgr.connect("PLAYER-WS-001", ws)
 			ws.accept.assert_awaited_once()
 			ws.close.assert_not_awaited()
 			accepted.append(ws)

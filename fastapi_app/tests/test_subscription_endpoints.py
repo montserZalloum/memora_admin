@@ -39,6 +39,6 @@ class TestSubscriptionEndpoints:
 
 	async def test_subscriptions_unauthenticated_401(self, app_client):
 		"""Unauthenticated request returns 401."""
-		resp = await app_client.get("/api/v1/subscriptions/")
+		resp = await app_client.get("/api/v1/subscriptions")
 
 		assert resp.status_code == 401

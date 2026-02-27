@@ -1,0 +1,42 @@
+# Contract: Rate Limiter Middleware — Configurable Fail Behavior
+# Source: fastapi_app/middleware/rate_limit.py
+
+class: GlobalRateLimitMiddleware
+file: fastapi_app/middleware/rate_limit.py
+
+constructor:
+  before:
+    params: [app, limit, window]
+  after:
+    params: [app, limit, window, fail_open]
+
+dispatch_behavior:
+  redis_available:
+    under_limit: "Allow request, add X-RateLimit-* headers"
+    over_limit: "Return 429 with Retry-After header"
+  redis_unavailable:
+    fail_open_true: "Log warning, allow request through (current behavior)"
+    fail_open_false:
+      status: 503
+      body:
+        error: "SERVICE_UNAVAILABLE"
+        message: "Rate limiting service temporarily unavailable"
+        retry_after: 5
+      headers:
+        Retry-After: "5"
+
+middleware_registration:
+  file: fastapi_app/main.py
+  before: |
+    app.add_middleware(
+        GlobalRateLimitMiddleware,
+        limit=settings.global_rate_limit,
+        window=settings.global_rate_limit_window,
+    )
+  after: |
+    app.add_middleware(
+        GlobalRateLimitMiddleware,
+        limit=settings.global_rate_limit,
+        window=settings.global_rate_limit_window,
+        fail_open=settings.rate_limit_fail_open,
+    )

@@ -84,7 +84,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Note: Per-message deflate compression must be disabled at the ASGI server level
     # (uvicorn --ws none or nginx proxy_set_header) to achieve 14 KiB/connection at 100K scale.
     # Default uvicorn websockets library does NOT enable per-message-deflate.
-    ws_manager = ConnectionManager(max_connections_per_user=settings.ws_max_connections_per_user)
+    ws_manager = ConnectionManager(
+        max_connections_per_user=settings.ws_max_connections_per_user,
+        broadcast_concurrency=settings.ws_broadcast_concurrency,
+    )
     app.state.ws_manager = ws_manager
 
     # Start pub/sub listener background task (cache invalidation)
@@ -140,6 +143,7 @@ app.add_middleware(
 	GlobalRateLimitMiddleware,
 	limit=settings.global_rate_limit,
 	window=settings.global_rate_limit_window,
+	fail_open=settings.rate_limit_fail_open,
 )
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(

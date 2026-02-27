@@ -35,8 +35,11 @@ class FrappeClient:
                     "Content-Type": "application/json",
                     "Host": self.settings.frappe_site,
                 },
-                timeout=30.0,
-                limits=httpx.Limits(max_connections=100, max_keepalive_connections=20),
+                timeout=self.settings.frappe_timeout,
+                limits=httpx.Limits(
+                    max_connections=self.settings.frappe_max_connections,
+                    max_keepalive_connections=self.settings.frappe_max_keepalive,
+                ),
             )
         return self._client
 

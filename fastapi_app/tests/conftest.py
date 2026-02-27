@@ -284,6 +284,8 @@ async def app_client(redis_client: redis.Redis, mock_frappe: AsyncMock) -> Async
 		httpx.AsyncClient configured with FastAPI app and dependency
 		overrides for testing.
 	"""
+	import fastapi_app.api.deps as deps_mod
+
 	# Override dependencies to use test instances
 	app.dependency_overrides[get_redis] = lambda: redis_client
 
@@ -294,6 +296,11 @@ async def app_client(redis_client: redis.Redis, mock_frappe: AsyncMock) -> Async
 
 	app.dependency_overrides[get_frappe_client] = get_mock_frappe_client
 
+	# CRITICAL: Also set the _frappe_client singleton so that service factory
+	# functions (get_plan_service, get_settings_service, etc.) which call
+	# get_frappe_client() directly (not via Depends) also get the mock.
+	deps_mod._frappe_client = mock_frappe
+
 	# Set redis_pool on app.state so middleware (e.g., GlobalRateLimitMiddleware) can access it
 	app.state.redis_pool = redis_client.connection_pool
 
@@ -302,9 +309,10 @@ async def app_client(redis_client: redis.Redis, mock_frappe: AsyncMock) -> Async
 
 	yield client
 
-	# Cleanup: Close client and clear dependency overrides
+	# Cleanup: Close client, clear dependency overrides, reset singleton
 	await client.aclose()
 	app.dependency_overrides.clear()
+	deps_mod._frappe_client = None
 
 
 @pytest.fixture

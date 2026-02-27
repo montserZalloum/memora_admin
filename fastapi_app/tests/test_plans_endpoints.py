@@ -16,72 +16,67 @@ class TestPlansEndpoints:
 		"""Public request returns plan manifest with subjects."""
 		plan_id = "PLAN-TEST-001"
 
-		try:
-			# Mock PlanService.get_manifest()
-			mock_frappe.call.return_value = {
-				"schema_version": 1,
-				"version": 1708000000,
-				"generated_at": "2026-02-17T12:00:00Z",
-				"plan_id": plan_id,
-				"title": "Grade 6 Plan",
-				"grade_id": "GRD-001",
-				"subjects": [
-					{
-						"id": "SUB-MATH",
-						"title": "Mathematics",
-						"total_lessons": 100,
-					},
-					{
-						"id": "SUB-SCIENCE",
-						"title": "Science",
-						"total_lessons": 80,
-					},
-				],
-			}
+		# Mock must return all PlanManifest required fields
+		mock_frappe.call.return_value = {
+			"schema_version": 1,
+			"version": 1708000000,
+			"generated_at": "2026-02-17T12:00:00Z",
+			"plan_id": plan_id,
+			"title": "Grade 6 Plan",
+			"grade_id": "GRD-001",
+			"subjects": [
+				{
+					"id": "SUB-MATH",
+					"title": "Mathematics",
+					"total_lessons": 100,
+					"hierarchy_url": "/api/v1/hierarchy/SUB-MATH",
+				},
+				{
+					"id": "SUB-SCIENCE",
+					"title": "Science",
+					"total_lessons": 80,
+					"hierarchy_url": "/api/v1/hierarchy/SUB-SCIENCE",
+				},
+			],
+		}
 
-			resp = await app_client.get(f"/api/v1/plans/{plan_id}/manifest")
+		resp = await app_client.get(f"/api/v1/plans/{plan_id}/manifest")
 
-			assert resp.status_code == 200
-			data = resp.json()
-			assert data["plan_id"] == plan_id
-			assert "subjects" in data
-			assert len(data["subjects"]) == 2
-			assert data["subjects"][0]["id"] == "SUB-MATH"
-		finally:
-			pass
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["plan_id"] == plan_id
+		assert "subjects" in data
+		assert len(data["subjects"]) == 2
+		assert data["subjects"][0]["id"] == "SUB-MATH"
 
 	async def test_plans_manifest_nonexistent_plan_404(self, app_client, mock_frappe):
 		"""Nonexistent plan returns 404."""
 		plan_id = "PLAN-NONEXISTENT"
 
-		try:
-			# Mock returns None for nonexistent plan
-			mock_frappe.call.return_value = None
+		# Mock returns None for nonexistent plan
+		mock_frappe.call.return_value = None
 
-			resp = await app_client.get(f"/api/v1/plans/{plan_id}/manifest")
+		resp = await app_client.get(f"/api/v1/plans/{plan_id}/manifest")
 
-			assert resp.status_code == 404
-		finally:
-			pass
+		assert resp.status_code == 404
 
 	async def test_plans_manifest_public_no_auth_required(self, app_client, mock_frappe):
 		"""Plans manifest endpoint is public - no auth required."""
 		plan_id = "PLAN-TEST-002"
 
-		try:
-			# Mock successful response
-			mock_frappe.call.return_value = {
-				"schema_version": 1,
-				"plan_id": plan_id,
-				"title": "Public Plan",
-				"subjects": [],
-			}
+		# Mock must return all PlanManifest required fields
+		mock_frappe.call.return_value = {
+			"schema_version": 1,
+			"version": 1708000000,
+			"generated_at": "2026-02-17T12:00:00Z",
+			"plan_id": plan_id,
+			"title": "Public Plan",
+			"subjects": [],
+		}
 
-			# No Authorization header - but should succeed because endpoint is public
-			resp = await app_client.get(f"/api/v1/plans/{plan_id}/manifest")
+		# No Authorization header - but should succeed because endpoint is public
+		resp = await app_client.get(f"/api/v1/plans/{plan_id}/manifest")
 
-			assert resp.status_code == 200  # Not 401
-			data = resp.json()
-			assert data["plan_id"] == plan_id
-		finally:
-			pass
+		assert resp.status_code == 200  # Not 401
+		data = resp.json()
+		assert data["plan_id"] == plan_id

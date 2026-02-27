@@ -155,15 +155,12 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 					plan_id=plan_id,
 				)
 		elif msg_type == "plan_subjects" and plan_id:
-			ws_manager = getattr(app_state, "ws_manager", None)
-			if ws_manager:
-				event = json.dumps({"type": "subscriptions_changed"})
-				sent = await ws_manager.send_to_plan(plan_id, event)
-				logger.info(
-					"plan_subjects_notification_sent",
-					plan_id=plan_id,
-					sent=sent,
-				)
+			# Plan-wide fanout is intentionally not supported in-process.
+			# If this is needed later, implement it as a dedicated queued feature.
+			logger.info(
+				"plan_subjects_ignored",
+				plan_id=plan_id,
+			)
 		elif msg_type == "level_config":
 			logger.info(
 				"level_config_updated",

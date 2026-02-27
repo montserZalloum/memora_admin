@@ -45,15 +45,19 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 
 	Applied to all requests except exempt paths (health checks, webhooks).
 	Adds X-RateLimit-* headers to all non-exempt responses.
-	Fails open on Redis errors (request passes through).
+
+	Fail behavior on Redis errors is configurable:
+	- fail_open=True (default): request passes through with warning log
+	- fail_open=False: returns 503 Service Unavailable with Retry-After header
 
 	Redis pool is retrieved from request.app.state.redis_pool (set during lifespan).
 	"""
 
-	def __init__(self, app, limit: int, window: int):
+	def __init__(self, app, limit: int, window: int, fail_open: bool = True):
 		super().__init__(app)
 		self.limit = limit
 		self.window = window
+		self.fail_open = fail_open
 
 	async def dispatch(self, request: Request, call_next) -> Response:
 		"""Check rate limit before passing request through."""
@@ -74,8 +78,21 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 			key = global_ratelimit_key(client_ip)
 			allowed, count, ttl = await limiter.check(key, self.limit, self.window)
 		except Exception:
-			logger.warning("rate_limit_redis_unavailable", path=path, ip=client_ip)
-			return await call_next(request)
+			if self.fail_open:
+				logger.warning("rate_limit_redis_unavailable", path=path, ip=client_ip, fail_open=True)
+				return await call_next(request)
+			else:
+				logger.warning("rate_limit_redis_unavailable_closed", path=path, ip=client_ip, fail_open=False)
+				response = JSONResponse(
+					status_code=503,
+					content={
+						"error": "SERVICE_UNAVAILABLE",
+						"message": "Rate limiting service temporarily unavailable",
+						"retry_after": 5,
+					},
+				)
+				response.headers["Retry-After"] = "5"
+				return response
 
 		if not allowed:
 			# 429 Too Many Requests

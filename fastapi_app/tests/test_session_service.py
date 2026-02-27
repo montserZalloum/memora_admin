@@ -51,10 +51,11 @@ class TestSessionManagement:
 		"""TC-SS-02: Validate matching family_id returns (True, plan)."""
 		family_id = await session_service.create_session(TEST_USER, TEST_PLAN)
 
-		is_valid, plan = await session_service.validate_session(TEST_USER, family_id)
+		is_valid, plan, season = await session_service.validate_session(TEST_USER, family_id)
 
 		assert is_valid is True, "Should return True for matching family_id"
 		assert plan == TEST_PLAN, "Should return correct plan_id"
+		assert season is None, "Should return None for session without season"
 
 	async def test_tc_ss_03_validate_mismatched_returns_false_and_none(
 		self, session_service: SessionService
@@ -64,10 +65,11 @@ class TestSessionManagement:
 		await session_service.create_session(TEST_USER, TEST_PLAN)
 
 		# Validate with different family_id
-		is_valid, plan = await session_service.validate_session(TEST_USER, "wrong-family-id")
+		is_valid, plan, season = await session_service.validate_session(TEST_USER, "wrong-family-id")
 
 		assert is_valid is False, "Should return False for mismatched family_id"
 		assert plan is None, "Should return None on mismatch"
+		assert season is None, "Should return None on mismatch"
 
 	async def test_tc_ss_04_invalidate_deletes_key(
 		self, session_service: SessionService, redis_client: redis.Redis, test_prefix: str
@@ -100,10 +102,10 @@ class TestSessionManagement:
 		assert family_id_1 != family_id_2, "New session should have different family_id"
 
 		# Verify first family_id is no longer valid
-		is_valid, plan = await session_service.validate_session(TEST_USER, family_id_1)
+		is_valid, plan, season = await session_service.validate_session(TEST_USER, family_id_1)
 		assert is_valid is False, "Old family_id should be invalidated"
 
 		# Verify second family_id is valid
-		is_valid, plan = await session_service.validate_session(TEST_USER, family_id_2)
+		is_valid, plan, season = await session_service.validate_session(TEST_USER, family_id_2)
 		assert is_valid is True, "New family_id should be valid"
 		assert plan == "PLAN-B", "New plan should be returned"

@@ -58,8 +58,8 @@ class TestCatalogEndpoints:
 		client, token, player_id, family_id = authed_client
 
 		try:
-			# Mock empty catalog response
-			mock_frappe.call.return_value = {"products": []}
+			# Service expects a list (or falsy value for empty catalog)
+			mock_frappe.call.return_value = []
 
 			resp = await client.get("/api/v1/catalog/")
 

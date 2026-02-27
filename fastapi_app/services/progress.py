@@ -31,7 +31,7 @@ class ProgressService:
     - complete_lesson: SETBIT O(1) - marks lesson complete
     - is_complete: GETBIT O(1) - checks single lesson status
     - get_completed_count: BITCOUNT O(N) on bitmap size
-    - get_completed_bits: Pipeline GETBIT for unlock calculation
+    - get_completed_bits: Single GET + client-side bitmap decode for unlock calculation
 
     Hydration: After a Redis flush, progress bitmaps are lost. The ensure_hydrated()
     method restores them from MariaDB via the Frappe API, following the same
@@ -210,10 +210,11 @@ class ProgressService:
         bit_range: int,
         version: int = 1,
     ) -> set[int]:
-        """Get set of completed bit indexes using pipeline.
+        """Get set of completed bit indexes via single-fetch bitmap decode.
 
-        Used for unlock state calculation. Batches GETBIT calls
-        for efficiency.
+        Uses a single Redis GET + client-side latin-1 decode instead of
+        N GETBIT commands, reducing Redis command volume by ~99.8% for
+        large subjects (e.g., 500 lessons → 1 command instead of 500).
 
         Args:
             user_id: Player's user ID
@@ -224,18 +225,34 @@ class ProgressService:
         Returns:
             Set of bit indexes that are set (completed lessons)
         """
+        if bit_range <= 0:
+            return set()
+
         await self.ensure_hydrated(user_id, subject_id, version)
         key = self._progress_key(user_id, subject_id, version)
+
+        num_bytes = (bit_range + 7) // 8
+        if num_bytes == 0:
+            return set()
+
+        # Use BITFIELD GET u8 to read each byte as an integer.
+        # Returns integers — immune to decode_responses=True UTF-8 decode
+        # (plain GET fails on bitmap bytes > 0x7F like 0xFF).
+        # Single command with multiple sub-operations = single Redis round-trip.
+        args = []
+        for byte_idx in range(num_bytes):
+            args.extend(["GET", "u8", str(byte_idx * 8)])
+
+        byte_values = await self.redis.execute_command("BITFIELD", key, *args)
+
+        if not byte_values:
+            return set()
+
         completed = set()
-
-        # Use pipeline for batch GETBIT operations
-        pipe = self.redis.pipeline()
         for i in range(bit_range):
-            pipe.getbit(key, i)
-        results = await pipe.execute()
-
-        for i, is_set in enumerate(results):
-            if is_set:
-                completed.add(i)
-
+            byte_idx, bit_offset = divmod(i, 8)
+            if byte_idx < len(byte_values):
+                # Redis bitmaps use MSB-first bit ordering within each byte
+                if byte_values[byte_idx] & (0x80 >> bit_offset):
+                    completed.add(i)
         return completed

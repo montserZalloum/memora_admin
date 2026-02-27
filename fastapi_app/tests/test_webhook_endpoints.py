@@ -10,6 +10,22 @@ import pytest
 from fastapi_app.core.redis_keys import webhook_idempotency_key
 
 
+def _make_webhook_payload(event_id: str, **overrides) -> dict:
+	"""Build a valid WebhookPayload dict with all required fields."""
+	payload = {
+		"event_id": event_id,
+		"event_type": "payment.completed",
+		"transaction_id": f"TXN-{event_id}",
+		"player_id": "PLAYER-001",
+		"product_grant_id": "GRNT-001",
+		"amount": 50.0,
+		"currency": "EGP",
+		"timestamp": "2026-02-27T12:00:00Z",
+	}
+	payload.update(overrides)
+	return payload
+
+
 @pytest.mark.asyncio
 class TestWebhookEndpoints:
 	"""Webhook transaction tests."""
@@ -17,15 +33,7 @@ class TestWebhookEndpoints:
 	async def test_webhook_payment_accepted(self, app_client, redis_client, mock_frappe):
 		"""Webhook payment event accepted returns 200."""
 		try:
-			# Mock is NOT needed - webhooks don't require auth and just track event_id
-
-			payload = {
-				"event_id": "evt-001",
-				"event_type": "payment.completed",
-				"transaction_id": "TXN-001",
-				"player_id": "PLAYER-001",
-				"product_grant_id": "GRNT-001",
-			}
+			payload = _make_webhook_payload("evt-001")
 
 			resp = await app_client.post(
 				"/api/v1/webhooks/payment",
@@ -43,14 +51,7 @@ class TestWebhookEndpoints:
 		event_id = "evt-002"
 
 		try:
-			# First request
-			payload = {
-				"event_id": event_id,
-				"event_type": "payment.completed",
-				"transaction_id": "TXN-002",
-				"player_id": "PLAYER-002",
-				"product_grant_id": "GRNT-002",
-			}
+			payload = _make_webhook_payload(event_id)
 
 			resp1 = await app_client.post("/api/v1/webhooks/payment", json=payload)
 			assert resp1.status_code == 200
@@ -75,21 +76,18 @@ class TestWebhookEndpoints:
 
 		assert resp.status_code == 422
 
-	async def test_webhook_payment_no_auth_needed(self, app_client):
+	async def test_webhook_payment_no_auth_needed(self, app_client, redis_client, mock_frappe):
 		"""Webhook endpoint accepts requests without auth."""
-		# This is an external webhook - should not require Bearer token
-		payload = {
-			"event_id": "evt-004",
-			"event_type": "payment.completed",
-			"transaction_id": "TXN-004",
-			"player_id": "PLAYER-004",
-			"product_grant_id": "GRNT-004",
-		}
+		event_id = "evt-004"
+		try:
+			payload = _make_webhook_payload(event_id)
 
-		resp = await app_client.post(
-			"/api/v1/webhooks/payment",
-			json=payload,
-		)
+			resp = await app_client.post(
+				"/api/v1/webhooks/payment",
+				json=payload,
+			)
 
-		# Should succeed without auth
-		assert resp.status_code == 200
+			# Should succeed without auth
+			assert resp.status_code == 200
+		finally:
+			await redis_client.delete(webhook_idempotency_key(event_id))

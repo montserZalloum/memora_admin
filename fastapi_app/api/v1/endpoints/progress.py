@@ -1,5 +1,7 @@
 """Progress tracking endpoints for completion and percentages."""
 
+import asyncio
+
 import structlog
 from fastapi import APIRouter, HTTPException, status
 
@@ -28,6 +30,7 @@ from fastapi_app.models.progress import (
 	UnitProgress,
 	UnitSummary,
 )
+
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/progress", tags=["progress"])
@@ -204,14 +207,11 @@ async def get_progress_summary(
 	# Combine all accessible subjects (deduplicated via set union)
 	all_accessible = granted_subjects | plan_subjects | subjects_with_free
 
-	summaries = []
-	for subject_id in all_accessible:
-		# Get hierarchy to calculate total
+	async def _fetch_subject_summary(subject_id: str) -> SubjectSummary | None:
 		hierarchy = await hierarchy_service.get_hierarchy(subject_id)
 		if not hierarchy:
-			continue
+			return None
 
-		# Count completed lessons
 		total = hierarchy.bit_range - len(hierarchy.excluded_bits)
 		completed = await progress_service.get_completed_count(
 			user_id=user.sub,
@@ -220,19 +220,28 @@ async def get_progress_summary(
 		)
 		# Clamp completed to total (BITCOUNT may exceed total if bitmap has stale bits)
 		completed = min(completed, total)
-
-		# Calculate percentage
 		percentage = round(completed / total * 100, 1) if total > 0 else 0.0
 
-		summaries.append(
-			SubjectSummary(
-				subject_id=subject_id,
-				subject_name=subject_id,  # TODO: fetch from Frappe
-				percentage=percentage,
-				completed=completed,
-				total=total,
-			)
+		return SubjectSummary(
+			subject_id=subject_id,
+			subject_name=subject_id,  # TODO: fetch from Frappe
+			percentage=percentage,
+			completed=completed,
+			total=total,
 		)
+
+	results = await asyncio.gather(
+		*(_fetch_subject_summary(sid) for sid in all_accessible),
+		return_exceptions=True,
+	)
+
+	summaries = []
+	for subject_id, result in zip(all_accessible, results, strict=True):
+		if isinstance(result, Exception):
+			logger.warning("subject_summary_failed", subject_id=subject_id, error=str(result))
+			continue
+		if result is not None:
+			summaries.append(result)
 
 	return summaries
 

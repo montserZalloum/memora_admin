@@ -101,7 +101,7 @@ class TestReviewEndpoints:
 
 	async def test_review_unauthenticated_401(self, app_client):
 		"""Unauthenticated request returns 401."""
-		resp = await app_client.get("/api/v1/reviews/")
+		resp = await app_client.get("/api/v1/reviews")
 
 		assert resp.status_code == 401
 

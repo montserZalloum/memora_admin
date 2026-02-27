@@ -296,6 +296,8 @@ bench --site your-site set-config redis_memora "redis://127.0.0.1:13001"
 - Redis at `redis://127.0.0.1:13001` (dedicated Memora instance), MariaDB via Frappe ORM (source of truth) (027-redis-hardening)
 - Python 3.11+ (Frappe v15 bench environment) + FastAPI, Frappe Framework (ORM, whitelist API, hooks), redis.asyncio (FastAPI), redis (Frappe sync tasks), Pydantic v2, structlog (028-player-plan-change)
 - MariaDB via Frappe ORM (source of truth), Redis at `redis://127.0.0.1:13001` (hot cache) (028-player-plan-change)
+- Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, pydantic-settings, httpx, structlog, asyncio (029-concurrency-scaling)
+- Redis at `redis://127.0.0.1:13001` (dedicated Memora instance), MariaDB via Frappe ORM (unchanged) (029-concurrency-scaling)
 
 ## Test Environment Configuration
 
@@ -315,9 +317,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 029-concurrency-scaling: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, pydantic-settings, httpx, structlog, asyncio
 - 028-player-plan-change: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Frappe Framework (ORM, whitelist API, hooks), redis.asyncio (FastAPI), redis (Frappe sync tasks), Pydantic v2, structlog
 - 027-redis-hardening: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio (FastAPI side), redis (Frappe sync side), Frappe Framework (ORM, hooks, scheduled jobs), structlog
-- 026-plan-leaderboard: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

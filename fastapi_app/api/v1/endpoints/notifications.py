@@ -38,7 +38,6 @@ async def notifications_ws(
 	try:
 		payload = decode_token(token, verify_type="access")
 		user_id = payload["sub"]
-		plan_id = payload.get("plan", "")
 	except jwt.ExpiredSignatureError:
 		await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
 		return
@@ -52,8 +51,8 @@ async def notifications_ws(
 	# Get ConnectionManager from app state
 	ws_manager: ConnectionManager = websocket.app.state.ws_manager
 
-	# Connect (accept + register with plan tracking)
-	is_first = await ws_manager.connect(user_id, websocket, plan_id=plan_id)
+	# Connect (accept + register)
+	is_first = await ws_manager.connect(user_id, websocket)
 
 	# If first connection for this user, subscribe to their notification channel
 	notify_pubsub = websocket.app.state.notify_pubsub
