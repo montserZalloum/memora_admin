@@ -106,6 +106,9 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 	import fastapi_app.api.deps as deps_module
 	deps_module._frappe_client = None
 	deps_module._session_fid_cache.clear()
+	# Clear process-local hierarchy cache to prevent order-dependent stale data
+	from fastapi_app.services.hierarchy import _local_hierarchy_cache
+	_local_hierarchy_cache.clear()
 
 	yield
 

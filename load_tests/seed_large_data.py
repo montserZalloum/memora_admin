@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed Redis with 5 large subjects (10,000 lessons each) for load testing.
+"""Seed Redis with 5 large subjects (50,000 lessons each) for load testing.
 
 Run from repo root:
     cd load_tests && python3 seed_large_data.py
@@ -42,12 +42,12 @@ PLAYER_IDS = [
 	"PLAYER-00328",
 ]
 
-# Structure: 10 tracks × 10 units × 10 topics × 10 lessons = 10,000
+# Structure: 10 tracks x 10 units x 10 topics x 50 lessons = 50,000
 TRACKS_PER_SUBJECT = 10
 UNITS_PER_TRACK = 10
 TOPICS_PER_UNIT = 10
-LESSONS_PER_TOPIC = 10
-TOTAL_LESSONS = TRACKS_PER_SUBJECT * UNITS_PER_TRACK * TOPICS_PER_UNIT * LESSONS_PER_TOPIC  # 10,000
+LESSONS_PER_TOPIC = 50
+TOTAL_LESSONS = TRACKS_PER_SUBJECT * UNITS_PER_TRACK * TOPICS_PER_UNIT * LESSONS_PER_TOPIC  # 50,000
 
 COMPLETION_RATE = 0.4  # 40% of lessons completed
 BITMAP_VERSION = 1
@@ -184,7 +184,7 @@ async def seed():
 				await raw_redis.setrange(key.encode(), 0, bitmap)
 				await raw_redis.expire(key.encode(), 172800)  # 48h (PROGRESS_KEY_TTL)
 				bitmap_count += 1
-		print(f"  {bitmap_count} bitmaps ({len(PLAYER_IDS)} players × {len(SUBJECTS)} subjects)")
+		print(f"  {bitmap_count} bitmaps ({len(PLAYER_IDS)} players x {len(SUBJECTS)} subjects)")
 		print(f"  Each: {(TOTAL_LESSONS + 7) // 8} bytes, ~{int(TOTAL_LESSONS * COMPLETION_RATE)} bits set")
 		print(f"  Done in {time.perf_counter() - t0:.2f}s\n")
 
@@ -196,7 +196,7 @@ async def seed():
 			access_keys = [f"SUB-{s}" for s in SUBJECTS]
 			await str_redis.sadd(key, *access_keys)
 			# Don't set TTL — access grants are persistent
-		print(f"  {len(PLAYER_IDS)} players × {len(SUBJECTS)} subjects")
+		print(f"  {len(PLAYER_IDS)} players x {len(SUBJECTS)} subjects")
 		print(f"  Done in {time.perf_counter() - t0:.2f}s\n")
 
 		# --- 4. Verification ---
@@ -227,8 +227,8 @@ async def seed():
 		s_exists = await str_redis.exists(s_key)
 		print(f"  {s_key} — {'exists (unexpected!)' if s_exists else 'empty (cold-start ready)'}")
 
-		print(f"\nSeeded {len(SUBJECTS)} subjects × {TOTAL_LESSONS:,} lessons = {len(SUBJECTS) * TOTAL_LESSONS:,} total lessons")
-		print(f"Seeded bitmaps for {len(PLAYER_IDS)} players × {len(SUBJECTS)} subjects ({COMPLETION_RATE:.0%} completion)")
+		print(f"\nSeeded {len(SUBJECTS)} subjects x {TOTAL_LESSONS:,} lessons = {len(SUBJECTS) * TOTAL_LESSONS:,} total lessons")
+		print(f"Seeded bitmaps for {len(PLAYER_IDS)} players x {len(SUBJECTS)} subjects ({COMPLETION_RATE:.0%} completion)")
 		print(f"Seeded access grants for {len(PLAYER_IDS)} players ({len(SUBJECTS)} LOAD-* subjects each)")
 
 	finally:

@@ -62,6 +62,10 @@ class DashboardUser(AuthMixin, HttpUser):
 	def check_progress(self):
 		api_get(self, "/api/v1/progress")
 
+	@task(2)
+	def check_catalog(self):
+		api_get(self, "/api/v1/catalog/")
+
 
 class LessonPlayer(AuthMixin, HttpUser):
 	"""Simulates a student completing a lesson.

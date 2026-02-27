@@ -1,11 +1,12 @@
 """Tests for HierarchyService - Subject hierarchy caching."""
 
-import json
+from unittest.mock import patch
+
 import pytest
 
 from fastapi_app.core.redis_keys import hierarchy_key, subjects_with_free_content_key
-from fastapi_app.models.progress import SubjectHierarchy, TrackInfo, UnitInfo, TopicInfo, LessonInfo
-from fastapi_app.services.hierarchy import HierarchyService
+from fastapi_app.models.progress import LessonInfo, SubjectHierarchy, TopicInfo, TrackInfo, UnitInfo
+from fastapi_app.services.hierarchy import HierarchyService, _local_hierarchy_cache
 
 # Test constants
 TEST_SUBJECT = "SUBJ-TEST-HIR-001"
@@ -14,7 +15,9 @@ TEST_SUBJECT = "SUBJ-TEST-HIR-001"
 @pytest.fixture
 async def hierarchy_svc(redis_client, test_prefix, mock_frappe):
 	"""HierarchyService with test dependencies."""
-	return HierarchyService(redis_client, frappe_client=mock_frappe)
+	_local_hierarchy_cache.clear()
+	yield HierarchyService(redis_client, frappe_client=mock_frappe)
+	_local_hierarchy_cache.clear()
 
 
 def _make_test_hierarchy() -> SubjectHierarchy:
@@ -99,22 +102,98 @@ class TestCacheMiss:
 		assert ttl > 0 and ttl <= 3600
 
 
-class TestInvalidation:
-	"""Invalidate removes cache key."""
+class TestLocalCache:
+	"""In-process local cache for parsed SubjectHierarchy objects."""
 
-	async def test_tc_hir_03_invalidate_deletes_key(self, hierarchy_svc, redis_client, test_prefix):
-		"""TC-HIR-03: invalidate deletes Redis key."""
-		# Setup: pre-seed hierarchy
+	async def test_local_cache_hit_skips_redis(self, hierarchy_svc, redis_client, test_prefix):
+		"""T005: Second get_hierarchy() call uses local cache — Redis NOT called again."""
+		# Setup: pre-seed hierarchy in Redis
 		hierarchy = _make_test_hierarchy()
 		key = hierarchy_key(TEST_SUBJECT)
 		await redis_client.set(key, hierarchy.model_dump_json())
 
+		# First call — should hit Redis and populate local cache
+		result1 = await hierarchy_svc.get_hierarchy(TEST_SUBJECT)
+		assert result1 is not None
+		assert result1.subject_id == TEST_SUBJECT
+
+		# Spy on redis.get to track subsequent calls
+		original_get = hierarchy_svc.redis.get
+		call_count = 0
+
+		async def counting_get(*args, **kwargs):
+			nonlocal call_count
+			call_count += 1
+			return await original_get(*args, **kwargs)
+
+		hierarchy_svc.redis.get = counting_get
+
+		# Second call — should use local cache, NOT Redis
+		result2 = await hierarchy_svc.get_hierarchy(TEST_SUBJECT)
+		assert result2 is not None
+		assert result2.subject_id == TEST_SUBJECT
+		assert call_count == 0, f"Expected 0 Redis get calls on cache hit, got {call_count}"
+
+	async def test_local_cache_ttl_expiry_refetches_from_redis(self, hierarchy_svc, redis_client, test_prefix):
+		"""T006: After LOCAL_TTL expires, get_hierarchy() re-fetches from Redis."""
+		# Setup: pre-seed hierarchy in Redis
+		hierarchy = _make_test_hierarchy()
+		key = hierarchy_key(TEST_SUBJECT)
+		await redis_client.set(key, hierarchy.model_dump_json())
+
+		# First call at t=1000 — populates local cache
+		with patch("fastapi_app.services.hierarchy.time") as mock_time:
+			mock_time.monotonic.return_value = 1000.0
+			result1 = await hierarchy_svc.get_hierarchy(TEST_SUBJECT)
+			assert result1 is not None
+
+		# Verify local cache is populated
+		assert TEST_SUBJECT in _local_hierarchy_cache
+
+		# Spy on redis.get for the second call
+		original_get = hierarchy_svc.redis.get
+		call_count = 0
+
+		async def counting_get(*args, **kwargs):
+			nonlocal call_count
+			call_count += 1
+			return await original_get(*args, **kwargs)
+
+		hierarchy_svc.redis.get = counting_get
+
+		# Second call at t=1400 (400s later, still within 300s TTL? No — 400 > 300, expired)
+		with patch("fastapi_app.services.hierarchy.time") as mock_time:
+			mock_time.monotonic.return_value = 1400.0
+			result2 = await hierarchy_svc.get_hierarchy(TEST_SUBJECT)
+			assert result2 is not None
+			assert result2.subject_id == TEST_SUBJECT
+
+		# Redis should have been called because local cache expired
+		assert call_count > 0, "Expected Redis get to be called after local TTL expiry"
+
+
+class TestInvalidation:
+	"""Invalidate removes cache key."""
+
+	async def test_tc_hir_03_invalidate_deletes_key(self, hierarchy_svc, redis_client, test_prefix):
+		"""TC-HIR-03: invalidate deletes Redis key and local cache entry."""
+		# Setup: pre-seed hierarchy in Redis
+		hierarchy = _make_test_hierarchy()
+		key = hierarchy_key(TEST_SUBJECT)
+		await redis_client.set(key, hierarchy.model_dump_json())
+
+		# Pre-populate local cache (simulate a previous get_hierarchy call)
+		_local_hierarchy_cache[TEST_SUBJECT] = (hierarchy, float("inf"))
+
 		# Action: invalidate
 		await hierarchy_svc.invalidate(TEST_SUBJECT)
 
-		# Assert: key deleted
+		# Assert: Redis key deleted
 		exists = await redis_client.exists(key)
 		assert exists == 0
+
+		# Assert: local cache entry removed (T007)
+		assert TEST_SUBJECT not in _local_hierarchy_cache
 
 
 class TestFreeContent:

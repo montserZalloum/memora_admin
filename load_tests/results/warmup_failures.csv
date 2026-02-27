@@ -1,0 +1,3 @@
+Method,Name,Error,Occurrences
+POST,/api/v1/auth/player/login,CatchResponseError('Login failed: 500'),23
+POST,/api/v1/auth/player/login,CatchResponseError('Login failed: 0'),2

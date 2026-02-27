@@ -395,8 +395,8 @@ class TestWebSocketConnectionRejection:
 		# close() called BEFORE accept()
 		ws4.accept.assert_not_awaited()
 		ws4.close.assert_awaited_once_with(code=4029, reason="Too many connections")
-		# connect() returns False (not a "first" connection, and not actually connected)
-		assert result is False
+		# connect() returns None when rejected (see ConnectionManager contract)
+		assert result is None
 		# Still only 3 connections
 		assert mgr.active_connections == 3
 

@@ -12,10 +12,43 @@ from fastapi_app.models.progress import SubjectHierarchy
 logger = structlog.get_logger()
 
 # Process-local semaphore. With N uvicorn workers, effective system-wide
-# limit is N × MAX_CONCURRENT_STATS_RECOMPUTES (e.g., 4 workers × 30 = 120).
+# limit is N x MAX_CONCURRENT_STATS_RECOMPUTES (e.g., 4 workers x 30 = 120).
 # Sufficient for single-server deployment.
 MAX_CONCURRENT_STATS_RECOMPUTES = 30
 _stats_recompute_semaphore: asyncio.Semaphore | None = None
+
+# Process-local per-key locks for stats recompute coalescing.
+# Prevents thundering herd when multiple requests trigger cold-start recompute for the same key.
+# Soft-bounded to _MAX_COMPUTE_LOCKS: unlocked entries are pruned on overflow. The dict may
+# temporarily exceed the cap by the number of concurrent unique in-flight keys (each holds its
+# per-key lock before reaching the semaphore). In practice this is bounded by uvicorn's worker
+# concurrency. The dict shrinks back on the next insertion once those requests complete.
+_compute_locks: dict[str, asyncio.Lock] = {}
+_MAX_COMPUTE_LOCKS = 10_000
+
+
+def _get_compute_lock(key: str) -> asyncio.Lock:
+	"""Get or create a per-key asyncio.Lock for compute coalescing.
+
+	Uses setdefault for atomicity: concurrent callers for the same key
+	always get the same Lock instance. Pruning of unlocked entries runs
+	after insertion to keep the dict near _MAX_COMPUTE_LOCKS. The new
+	key is excluded from pruning so same-key coalescing is never broken.
+	The dict may temporarily exceed the cap by the number of concurrent
+	unique in-flight keys (per-key locks are acquired before the
+	semaphore). Bounded by uvicorn worker concurrency in practice.
+	"""
+	lock = _compute_locks.get(key)
+	if lock is not None:
+		return lock
+	# setdefault is atomic: if another call raced us, we get their lock
+	lock = _compute_locks.setdefault(key, asyncio.Lock())
+	# Prune unlocked entries if over capacity, but never the key we just inserted
+	if len(_compute_locks) > _MAX_COMPUTE_LOCKS:
+		to_remove = [k for k, v in _compute_locks.items() if k != key and not v.locked()]
+		for k in to_remove:
+			_compute_locks.pop(k, None)
+	return lock
 
 
 def get_stats_recompute_semaphore() -> asyncio.Semaphore:
@@ -209,37 +242,42 @@ class StatsService:
 		Returns:
 			Dict of field->value stats (always valid)
 		"""
-		# Fast path: cache hit with matching hash
+		key = self._stats_key(user_id, subject_id, version)
+
+		# Fast path: cache hit with matching hash (no lock, no semaphore)
 		stats = await self.get_stats(user_id, subject_id, version)
 		if stats is not None and "total" in stats and stats.get("_content_hash") == content_hash:
 			return stats
 
-		sem = get_stats_recompute_semaphore()
-		acquired = False
-		try:
-			await asyncio.wait_for(sem.acquire(), timeout=self.RECOMPUTE_TIMEOUT)
-			acquired = True
-		except asyncio.TimeoutError:
-			logger.warning(
-				"stats_recompute_semaphore_timeout",
-				user_id=user_id,
-				subject_id=subject_id,
-				version=version,
-			)
+		# Slow path: per-key lock prevents thundering herd for same key
+		lock = _get_compute_lock(key)
+		async with lock:
+			# Double-check after acquiring per-key lock
+			stats = await self.get_stats(user_id, subject_id, version)
+			if stats is not None and "total" in stats and stats.get("_content_hash") == content_hash:
+				return stats
 
-		try:
-			if acquired:
-				# Double-check: another coroutine may have filled this while we waited
-				stats = await self.get_stats(user_id, subject_id, version)
-				if stats is not None and "total" in stats and stats.get("_content_hash") == content_hash:
-					return stats
+			# System-wide semaphore limits total concurrent recomputes
+			sem = get_stats_recompute_semaphore()
+			acquired = False
+			try:
+				await asyncio.wait_for(sem.acquire(), timeout=self.RECOMPUTE_TIMEOUT)
+				acquired = True
+			except asyncio.TimeoutError:
+				logger.warning(
+					"stats_recompute_semaphore_timeout",
+					user_id=user_id,
+					subject_id=subject_id,
+					version=version,
+				)
 
-			stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-			await self.set_stats(user_id, subject_id, version, stats)
-			return stats
-		finally:
-			if acquired:
-				sem.release()
+			try:
+				stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+				await self.set_stats(user_id, subject_id, version, stats)
+				return stats
+			finally:
+				if acquired:
+					sem.release()
 
 
 def compute_stats_from_hierarchy(

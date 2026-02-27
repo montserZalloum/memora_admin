@@ -1,12 +1,18 @@
 """Tests for StatsService - Pre-computed progress statistics."""
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 
 from fastapi_app.core.redis_keys import stats_key
-from fastapi_app.models.progress import SubjectHierarchy, TrackInfo, UnitInfo, TopicInfo, LessonInfo
-from fastapi_app.services.stats import StatsService, compute_stats_from_hierarchy, get_stats_recompute_semaphore
+from fastapi_app.models.progress import LessonInfo, SubjectHierarchy, TopicInfo, TrackInfo, UnitInfo
+from fastapi_app.services.stats import (
+	StatsService,
+	_compute_locks,
+	compute_stats_from_hierarchy,
+	get_stats_recompute_semaphore,
+)
 
 # Test constants
 TEST_USER = "USER-TEST-STS-001"
@@ -17,7 +23,9 @@ TEST_VERSION = 1
 @pytest.fixture
 async def stats_svc(redis_client, test_prefix, mock_frappe):
 	"""StatsService with test dependencies."""
-	return StatsService(redis_client)
+	_compute_locks.clear()
+	yield StatsService(redis_client)
+	_compute_locks.clear()
 
 
 class TestCacheHit:
@@ -315,7 +323,7 @@ class TestSemaphoreTimeoutDegradation:
 		completed_bits = {0}
 
 		# Saturate the semaphore by acquiring all permits
-		sem = get_stats_recompute_semaphore()
+		get_stats_recompute_semaphore()
 		# Save original and replace with a semaphore of 1 for easier testing
 		original_sem = stats_module._stats_recompute_semaphore
 		stats_module._stats_recompute_semaphore = asyncio.Semaphore(1)
@@ -340,3 +348,44 @@ class TestSemaphoreTimeoutDegradation:
 			# Release the permit and restore original semaphore
 			test_sem.release()
 			stats_module._stats_recompute_semaphore = original_sem
+
+
+class TestLockCoalescing:
+	"""Per-key lock coalescing prevents redundant recomputation on cold start."""
+
+	async def test_lock_coalescing_single_compute(self, stats_svc):
+		"""10 concurrent get_or_recompute() calls for same key execute compute only once."""
+		hierarchy = _make_hierarchy(content_hash="coalesce01", num_lessons=3)
+		completed_bits = {0, 1}
+
+		call_count = 0
+		original_compute = compute_stats_from_hierarchy
+
+		def counting_compute(h, bits):
+			nonlocal call_count
+			call_count += 1
+			return original_compute(h, bits)
+
+		with patch("fastapi_app.services.stats.compute_stats_from_hierarchy", side_effect=counting_compute):
+			# Launch 10 concurrent requests for the same key with empty cache
+			tasks = [
+				stats_svc.get_or_recompute(
+					user_id=TEST_USER,
+					subject_id=TEST_SUBJECT,
+					version=TEST_VERSION,
+					content_hash="coalesce01",
+					completed_bits=completed_bits,
+					hierarchy=hierarchy,
+				)
+				for _ in range(10)
+			]
+			results = await asyncio.gather(*tasks)
+
+		# Assert: compute function called exactly once (lock coalesced the rest)
+		assert call_count == 1, f"Expected compute called once, got {call_count}"
+
+		# Assert: all 10 results are valid and identical
+		for i, result in enumerate(results):
+			assert result["_content_hash"] == "coalesce01", f"Result {i} has wrong hash"
+			assert result["completed"] == "2", f"Result {i} has wrong completed count"
+			assert result["total"] == "3", f"Result {i} has wrong total count"
