@@ -64,7 +64,9 @@ class HierarchyService:
         if entry is not None:
             hierarchy, expires_at = entry
             if time.monotonic() < expires_at:
-                return hierarchy.model_copy(deep=True)
+                # WARNING: Returns shared cached object — callers MUST NOT mutate.
+                # If mutation is needed, caller must do their own copy.
+                return hierarchy
             # Expired - remove stale entry and fall through
             _local_hierarchy_cache.pop(subject_id, None)
 
@@ -79,7 +81,7 @@ class HierarchyService:
             # Sweep expired entries then store in local cache
             _sweep_expired_local_cache()
             _local_hierarchy_cache[subject_id] = (hierarchy, time.monotonic() + self.LOCAL_TTL)
-            return hierarchy.model_copy(deep=True)
+            return hierarchy
 
         # Cache miss - fetch from Frappe
         result = await self.frappe.call(
@@ -106,7 +108,7 @@ class HierarchyService:
         if hierarchy.has_any_free_content():
             await self.redis.sadd(self._free_content_subjects_key(), subject_id)
 
-        return hierarchy.model_copy(deep=True)
+        return hierarchy
 
     async def invalidate(self, subject_id: str) -> None:
         """

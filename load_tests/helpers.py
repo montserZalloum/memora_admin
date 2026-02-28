@@ -1,16 +1,35 @@
-"""Shared authentication mixin and request helpers for Locust load tests."""
+"""Shared authentication mixin and request helpers for Locust load tests.
 
+Token warmup mode:
+    Run `python3 -m load_tests.warmup` before Locust to pre-authenticate all
+    test players. Locust then picks tokens from the pool — zero login calls.
+    Falls back to live login if tokens.json is missing.
+"""
+
+import json
 import random
+from pathlib import Path
 from uuid import uuid4
 
 from load_tests import config
+
+# Load pre-authenticated tokens if available (created by warmup.py)
+_TOKENS_PATH = Path(__file__).parent / "tokens.json"
+_TOKEN_POOL: list[dict] = []
+if _TOKENS_PATH.exists():
+	with open(_TOKENS_PATH) as _f:
+		_TOKEN_POOL = json.load(_f)
+	print(f"[warmup] Loaded {len(_TOKEN_POOL)} pre-authenticated tokens")
+else:
+	print("[warmup] No tokens.json found — will use live login")
 
 
 class AuthMixin:
 	"""Mixin providing on_start() authentication for all Locust user classes.
 
-	Authenticates via POST /api/v1/auth/player/login with a random player
-	from config.TEST_PLAYERS. Stores self.token, self.device_id, and self.fake_ip.
+	If tokens.json exists (from warmup.py), picks a pre-authenticated token
+	from the pool — zero HTTP calls, instant startup. Falls back to live
+	login via POST /api/v1/auth/player/login if no token pool is available.
 
 	Each virtual user gets a unique fake IP via X-Forwarded-For to simulate
 	real-world traffic where each player has a distinct IP address. This prevents
@@ -18,9 +37,18 @@ class AuthMixin:
 	"""
 
 	def on_start(self):
+		self.fake_ip = f"10.{random.randint(1, 254)}.{random.randint(1, 254)}.{random.randint(1, 254)}"
+
+		if _TOKEN_POOL:
+			# Warmup mode: pick a pre-authenticated token (no HTTP call)
+			entry = random.choice(_TOKEN_POOL)
+			self.token = entry["token"]
+			self.device_id = entry["device_id"]
+			return
+
+		# Fallback: live login
 		player = random.choice(config.TEST_PLAYERS)
 		self.device_id = f"locust-{uuid4().hex[:12]}"
-		self.fake_ip = f"10.{random.randint(1, 254)}.{random.randint(1, 254)}.{random.randint(1, 254)}"
 		self.token = None
 
 		with self.client.post(
