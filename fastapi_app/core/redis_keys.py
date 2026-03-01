@@ -279,9 +279,15 @@ def practice_hierarchy_meta_key(subject_id: str) -> str:
 # Leaderboard prefix used by both FastAPI and Frappe tasks
 LB_PREFIX = "memora:lb"
 
+# Leaderboard metadata prefix (tier index + tier counts)
+LBMETA_PREFIX = "memora:lbmeta"
+
 # Plan-scoped leaderboard TTLs
 PLAN_DAILY_KEY_TTL = 48 * 3600  # 48 hours
 PLAN_WEEKLY_KEY_TTL = 8 * 86400  # 8 days
+
+# Backfill lock TTL
+LBMETA_LOCK_TTL = 30  # 30 seconds — auto-expire safety net
 
 
 def lb_daily_key(date_str: str, subject_id: str | None = None) -> str:
@@ -342,6 +348,93 @@ def lb_archive_daily_key(date_str: str, subject_id: str | None = None) -> str:
 	"""
 	base = f"{LB_PREFIX}:archive:daily:{date_str}"
 	return f"{base}:subject:{subject_id}" if subject_id else base
+
+
+# =============================================================================
+# Leaderboard Metadata (Tier Index)
+# =============================================================================
+
+
+def _lbmeta_scope_suffix(
+	period: str,
+	date_str: str,
+	plan_id: str | None = None,
+	subject_id: str | None = None,
+) -> str:
+	"""Build the scope segment shared by tieridx/tiercnt keys.
+
+	Internal helper — use lbmeta_tieridx_key() or lbmeta_tiercnt_key() instead.
+	"""
+	parts = [LBMETA_PREFIX, period, date_str]
+	if plan_id:
+		parts.extend(["plan", plan_id])
+	if subject_id:
+		parts.extend(["subject", subject_id])
+	return ":".join(parts)
+
+
+def lbmeta_tieridx_key(
+	period: str,
+	date_str: str,
+	plan_id: str | None = None,
+	subject_id: str | None = None,
+) -> str:
+	"""Tier index ZSET for a leaderboard (member=XP tier string, score=XP tier value).
+
+	Type: ZSET (e.g., member="193", score=193.0)
+	Producers: _TIER_AWARE_ZINCRBY_LUA (atomic write), backfill_tier_metadata()
+	Consumers: get_my_rank() indexed read path (ZCOUNT + ZRANGEBYSCORE)
+	TTL: Same as parent leaderboard (set via EXPIRE after Lua eval)
+	"""
+	return f"{_lbmeta_scope_suffix(period, date_str, plan_id, subject_id)}:tieridx"
+
+
+def lbmeta_tiercnt_key(
+	period: str,
+	date_str: str,
+	plan_id: str | None = None,
+	subject_id: str | None = None,
+) -> str:
+	"""Tier counts HASH for a leaderboard (field=XP tier string, value=player count).
+
+	Type: HASH (e.g., field="193", value="5")
+	Producers: _TIER_AWARE_ZINCRBY_LUA (atomic write), backfill_tier_metadata()
+	Consumers: Internal (used by Lua script for tier lifecycle management)
+	TTL: Same as parent leaderboard (set via EXPIRE after Lua eval)
+	"""
+	return f"{_lbmeta_scope_suffix(period, date_str, plan_id, subject_id)}:tiercnt"
+
+
+def lbmeta_lock_key(lb_key_suffix: str) -> str:
+	"""Per-leaderboard lock for backfill (SET NX EX 30 pattern).
+
+	Type: STRING (value: "backfill:{timestamp}")
+	Producers: backfill_tier_metadata()
+	Consumers: backfill_tier_metadata()
+	TTL: 30 seconds (LBMETA_LOCK_TTL — auto-expire safety net)
+	"""
+	return f"{LBMETA_PREFIX}:lock:{lb_key_suffix}"
+
+
+def lbmeta_keys_from_lb_key(lb_key: str) -> tuple[str, str]:
+	"""Derive tier metadata keys from an existing leaderboard key.
+
+	Replaces the 'memora:lb:' prefix with 'memora:lbmeta:' and appends
+	':tieridx' / ':tiercnt' suffixes.
+
+	Args:
+		lb_key: Full leaderboard key (e.g., 'memora:lb:daily:2026-03-01:subject:SUBJ-001')
+
+	Returns:
+		Tuple of (tieridx_key, tiercnt_key)
+
+	Example:
+		>>> lbmeta_keys_from_lb_key("memora:lb:daily:2026-03-01")
+		('memora:lbmeta:daily:2026-03-01:tieridx', 'memora:lbmeta:daily:2026-03-01:tiercnt')
+	"""
+	suffix = lb_key.replace(f"{LB_PREFIX}:", "", 1)
+	base = f"{LBMETA_PREFIX}:{suffix}"
+	return (f"{base}:tieridx", f"{base}:tiercnt")
 
 
 # =============================================================================

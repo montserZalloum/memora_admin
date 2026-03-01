@@ -97,16 +97,21 @@ async def _authed_request(app_client, redis_client, player_id, plan_id, path, me
 		await redis_client.delete(sess_key)
 
 
-@pytest.fixture(autouse=True)
-async def cleanup_lb_keys(redis_client):
-	yield
+async def _scan_delete(redis_client, pattern):
 	cursor = 0
 	while True:
-		cursor, keys = await redis_client.scan(cursor, match="memora:lb:*", count=1000)
+		cursor, keys = await redis_client.scan(cursor, match=pattern, count=1000)
 		if keys:
 			await redis_client.delete(*keys)
 		if cursor == 0:
 			break
+
+
+@pytest.fixture(autouse=True)
+async def cleanup_lb_keys(redis_client):
+	yield
+	for pattern in ("memora:lb:*", "memora:lbmeta:*"):
+		await _scan_delete(redis_client, pattern)
 
 
 # -- Test Classes --------------------------------------------------------------

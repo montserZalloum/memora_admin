@@ -21,26 +21,22 @@ async def lb_svc(redis_client):
 	return LeaderboardService(redis_client)
 
 
+async def _scan_delete(redis_client, pattern):
+	cursor = 0
+	while True:
+		cursor, keys = await redis_client.scan(cursor, match=pattern, count=1000)
+		if keys:
+			await redis_client.delete(*keys)
+		if cursor == 0:
+			break
+
+
 @pytest.fixture(autouse=True)
 async def cleanup_leaderboard_keys(redis_client):
 	"""Auto-cleanup leaderboard keys after each test."""
 	yield
-	# SCAN and delete all memora:lb:* keys
-	cursor = 0
-	while True:
-		cursor, keys = await redis_client.scan(cursor, match="memora:lb:*", count=1000)
-		if keys:
-			await redis_client.delete(*keys)
-		if cursor == 0:
-			break
-	# Also clean daily_xp keys
-	cursor = 0
-	while True:
-		cursor, keys = await redis_client.scan(cursor, match="memora:daily_xp:*", count=1000)
-		if keys:
-			await redis_client.delete(*keys)
-		if cursor == 0:
-			break
+	for pattern in ("memora:lb:*", "memora:lbmeta:*", "memora:daily_xp:*"):
+		await _scan_delete(redis_client, pattern)
 
 
 class TestUpdateLeaderboardsGlobal:

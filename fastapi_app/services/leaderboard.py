@@ -23,6 +23,7 @@ from fastapi_app.core.redis_keys import (
 	lb_daily_plan_key,
 	lb_weekly_key,
 	lb_weekly_plan_key,
+	lbmeta_keys_from_lb_key,
 )
 
 logger = structlog.get_logger()
@@ -32,7 +33,7 @@ logger = structlog.get_logger()
 # where T = distinct tiers above (bounded by XP range, typically ≤300 for daily)
 # and N = total ZSET size. Returns only [count, min_above] instead of
 # transferring potentially 100k (member, score) pairs over the network.
-_RANK_LUA = """
+_LEGACY_RANK_LUA = """
 local key = KEYS[1]
 local player_xp = tonumber(ARGV[1])
 local count = 0
@@ -49,6 +50,84 @@ while true do
 end
 
 return {count, min_above}
+"""
+
+# Atomic tier-aware ZINCRBY: updates leaderboard score AND maintains tier metadata
+# in a single atomic operation. Prevents race conditions between concurrent XP awards.
+#
+# KEYS[1] = leaderboard ZSET (memora:lb:{period}:{date}[:{scope}])
+# KEYS[2] = tier index ZSET  (memora:lbmeta:{period}:{date}[:{scope}]:tieridx)
+# KEYS[3] = tier counts HASH (memora:lbmeta:{period}:{date}[:{scope}]:tiercnt)
+# ARGV[1] = player_id (string)
+# ARGV[2] = xp_amount (integer, always > 0)
+#
+# Returns: {old_score, new_score} where old_score = -1 if player was new
+#
+# Contract: contracts/redis-operations.md — TIER_AWARE_ZINCRBY
+# TTL: NOT set inside Lua — application layer handles EXPIRE after eval (FR-008)
+_TIER_AWARE_ZINCRBY_LUA = """
+local lb_key = KEYS[1]
+local tieridx_key = KEYS[2]
+local tiercnt_key = KEYS[3]
+local player_id = ARGV[1]
+local xp_amount = tonumber(ARGV[2])
+
+-- Step 1: Read old score (nil if new player)
+local old_score_raw = redis.call('ZSCORE', lb_key, player_id)
+
+-- Step 2: Increment leaderboard score
+redis.call('ZINCRBY', lb_key, xp_amount, player_id)
+
+-- Step 3: Decide whether to maintain tier metadata.
+-- Only maintain if:
+--   (a) BOTH tieridx and tiercnt already exist (healthy metadata), OR
+--   (b) This is a brand-new leaderboard (first player, ZCARD=1) — safe to bootstrap.
+-- Skipping prevents trusting or mutating partial metadata when one of the pair
+-- is missing (e.g. rollout before backfill, or single-key loss).
+local tieridx_exists = redis.call('EXISTS', tieridx_key) == 1
+local tiercnt_exists = redis.call('EXISTS', tiercnt_key) == 1
+local should_maintain = tieridx_exists and tiercnt_exists
+if not tieridx_exists and not tiercnt_exists and not old_score_raw then
+    -- New player on potentially new board — bootstrap only if we're the sole member
+    if redis.call('ZCARD', lb_key) == 1 then
+        should_maintain = true
+    end
+end
+
+-- Step 4: Compute scores
+local old_score = -1
+local new_score
+if old_score_raw then
+    old_score = tonumber(old_score_raw)
+    new_score = old_score + xp_amount
+else
+    new_score = xp_amount
+end
+
+-- Step 5: Update tier metadata (only if should_maintain)
+if should_maintain then
+    local old_tier = nil
+    if old_score_raw then
+        old_tier = math.floor(old_score)
+    end
+    local new_tier = math.floor(new_score)
+
+    -- If player changed tiers, decrement old tier count
+    if old_tier ~= nil and old_tier ~= new_tier then
+        local remaining = redis.call('HINCRBY', tiercnt_key, tostring(old_tier), -1)
+        if remaining <= 0 then
+            -- Last player left this tier — remove it entirely
+            redis.call('ZREM', tieridx_key, tostring(old_tier))
+            redis.call('HDEL', tiercnt_key, tostring(old_tier))
+        end
+    end
+
+    -- Increment new tier count and ensure tier exists in index
+    redis.call('HINCRBY', tiercnt_key, tostring(new_tier), 1)
+    redis.call('ZADD', tieridx_key, new_tier, tostring(new_tier))
+end
+
+return {old_score, new_score}
 """
 
 # Asia/Amman timezone for consistent daily/weekly boundaries
@@ -79,6 +158,10 @@ class LeaderboardService:
 			redis_client: Redis async client for ZSET operations
 		"""
 		self.redis = redis_client
+		# Register scripts for EVALSHA auto-caching — after first call, only the
+		# SHA1 hash is sent over the wire instead of the full ~1KB script text.
+		self._tier_script = redis_client.register_script(_TIER_AWARE_ZINCRBY_LUA)
+		self._legacy_script = redis_client.register_script(_LEGACY_RANK_LUA)
 
 	def _get_key(self, lb_type: str, subject_id: str | None = None) -> str:
 		"""Generate Redis key for a global leaderboard (daily/weekly only).
@@ -191,11 +274,13 @@ class LeaderboardService:
 			# Handle bytes response from Redis (unless decode_responses=True)
 			pid = player_id.decode() if isinstance(player_id, bytes) else player_id
 
-			all_entries.append({
-				"rank": current_rank,
-				"player_id": pid,
-				"xp": xp,
-			})
+			all_entries.append(
+				{
+					"rank": current_rank,
+					"player_id": pid,
+					"xp": xp,
+				}
+			)
 			prev_xp = xp
 
 		# Return only the requested window
@@ -275,21 +360,35 @@ class LeaderboardService:
 
 		xp = int(score) if score is not None else 0
 
-		# Stage 2: Bounded dense rank via Lua + neighbor window (1 pipeline RTT)
+		# Stage 2: Dense rank + neighbor window
 		#
-		# The Lua script counts distinct XP tiers above the player server-side,
-		# returning only [count, min_above] — avoids transferring potentially
-		# 100k (member, score) pairs that the old zrangebyscore approach fetched.
+		# Optimistic pipeline: fetch neighbors + tier index queries in 1 RTT.
+		# If tier metadata exists (post-backfill), use O(log T) indexed path.
+		# If missing (pre-backfill), fall back to O(T * log N) legacy Lua (2nd RTT).
 		start = max(0, position - neighbor_count)
 		stop = position + neighbor_count
 
+		tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(key)
+
 		pipe = self.redis.pipeline()
 		pipe.zrange(key, start, stop, desc=True, withscores=True)
-		pipe.eval(_RANK_LUA, 1, key, str(xp))
-		neighbors_raw, rank_result = await pipe.execute()
+		pipe.exists(tieridx_key)
+		pipe.exists(tiercnt_key)
+		pipe.zcount(tieridx_key, f"({xp}", "+inf")
+		pipe.zrangebyscore(tieridx_key, f"({xp}", "+inf", withscores=True, start=0, num=1)
+		neighbors_raw, tieridx_exists, tiercnt_exists, idx_distinct_above, min_above_entries = await pipe.execute()
 
-		distinct_above = rank_result[0]
-		min_above = rank_result[1]
+		if tieridx_exists and tiercnt_exists:
+			# Indexed path: O(log T) via tier index ZSET
+			distinct_above = idx_distinct_above
+			min_above = int(min_above_entries[0][1]) if min_above_entries else -1
+			fallback_used = False
+		else:
+			# Fallback: legacy iterative Lua -- O(T * log N)
+			rank_result = await self._legacy_script(keys=[key], args=[str(xp)])
+			distinct_above = rank_result[0]
+			min_above = rank_result[1]
+			fallback_used = True
 
 		my_rank = distinct_above + 1
 
@@ -322,12 +421,14 @@ class LeaderboardService:
 
 			nid = neighbor_id.decode() if isinstance(neighbor_id, bytes) else neighbor_id
 
-			neighbors.append({
-				"rank": neighbor_rank,
-				"player_id": nid,
-				"xp": neighbor_xp,
-				"is_me": nid == player_id,
-			})
+			neighbors.append(
+				{
+					"rank": neighbor_rank,
+					"player_id": nid,
+					"xp": neighbor_xp,
+					"is_me": nid == player_id,
+				}
+			)
 
 		logger.debug(
 			"leaderboard_rank_fetched",
@@ -337,6 +438,7 @@ class LeaderboardService:
 			xp=xp,
 			xp_to_next=xp_to_next,
 			neighbor_count=len(neighbors),
+			fallback_used=fallback_used,
 		)
 
 		return {
@@ -384,13 +486,23 @@ class LeaderboardService:
 		# Single pipeline for all leaderboard updates (1 RTT)
 		pipe = self.redis.pipeline()
 
-		# Daily: increment + TTL
-		pipe.zincrby(daily_key, xp_amount, player_id)
-		pipe.expire(daily_key, DAILY_KEY_TTL)
+		# Helper: atomic XP award + tier maintenance + TTL for one leaderboard variant.
+		# Replaces plain ZINCRBY with _TIER_AWARE_ZINCRBY_LUA to atomically maintain
+		# tier index and tier counts alongside the leaderboard score update.
+		lua_eval_count = 0
 
-		# Weekly: increment + TTL
-		pipe.zincrby(weekly_key, xp_amount, player_id)
-		pipe.expire(weekly_key, WEEKLY_KEY_TTL)
+		async def _tier_eval(lb_key: str, ttl: int) -> None:
+			nonlocal lua_eval_count
+			tidx, tcnt = lbmeta_keys_from_lb_key(lb_key)
+			await self._tier_script(keys=[lb_key, tidx, tcnt], args=[player_id, str(xp_amount)], client=pipe)
+			pipe.expire(lb_key, ttl)
+			pipe.expire(tidx, ttl)
+			pipe.expire(tcnt, ttl)
+			lua_eval_count += 1
+
+		# Global daily + weekly
+		await _tier_eval(daily_key, DAILY_KEY_TTL)
+		await _tier_eval(weekly_key, WEEKLY_KEY_TTL)
 
 		# Per-player daily XP summary hash (MariaDB-backed durability for activity chart)
 		daily_xp_key = _daily_xp_key_fn(player_id)
@@ -399,36 +511,18 @@ class LeaderboardService:
 
 		# Subject-specific leaderboards (if context available)
 		if subject_id:
-			daily_subj_key = lb_daily_key(date_str, subject_id)
-			weekly_subj_key = lb_weekly_key(friday, subject_id)
-
-			pipe.zincrby(daily_subj_key, xp_amount, player_id)
-			pipe.expire(daily_subj_key, DAILY_KEY_TTL)
-
-			pipe.zincrby(weekly_subj_key, xp_amount, player_id)
-			pipe.expire(weekly_subj_key, WEEKLY_KEY_TTL)
+			await _tier_eval(lb_daily_key(date_str, subject_id), DAILY_KEY_TTL)
+			await _tier_eval(lb_weekly_key(friday, subject_id), WEEKLY_KEY_TTL)
 
 		# Plan-scoped leaderboards (dual-write for plan-scoped rankings)
 		if plan_id:
-			# Plan-scoped daily
-			plan_daily = lb_daily_plan_key(date_str, plan_id)
-			pipe.zincrby(plan_daily, xp_amount, player_id)
-			pipe.expire(plan_daily, PLAN_DAILY_KEY_TTL)
-
-			# Plan-scoped weekly
-			plan_weekly = lb_weekly_plan_key(friday, plan_id)
-			pipe.zincrby(plan_weekly, xp_amount, player_id)
-			pipe.expire(plan_weekly, PLAN_WEEKLY_KEY_TTL)
+			await _tier_eval(lb_daily_plan_key(date_str, plan_id), PLAN_DAILY_KEY_TTL)
+			await _tier_eval(lb_weekly_plan_key(friday, plan_id), PLAN_WEEKLY_KEY_TTL)
 
 			# Plan-scoped subject variants
 			if subject_id:
-				plan_daily_subj = lb_daily_plan_key(date_str, plan_id, subject_id)
-				pipe.zincrby(plan_daily_subj, xp_amount, player_id)
-				pipe.expire(plan_daily_subj, PLAN_DAILY_KEY_TTL)
-
-				plan_weekly_subj = lb_weekly_plan_key(friday, plan_id, subject_id)
-				pipe.zincrby(plan_weekly_subj, xp_amount, player_id)
-				pipe.expire(plan_weekly_subj, PLAN_WEEKLY_KEY_TTL)
+				await _tier_eval(lb_daily_plan_key(date_str, plan_id, subject_id), PLAN_DAILY_KEY_TTL)
+				await _tier_eval(lb_weekly_plan_key(friday, plan_id, subject_id), PLAN_WEEKLY_KEY_TTL)
 
 		await pipe.execute()
 
@@ -438,4 +532,5 @@ class LeaderboardService:
 			xp_amount=xp_amount,
 			subject_id=subject_id,
 			plan_id=plan_id,
+			lua_eval_count=lua_eval_count,
 		)

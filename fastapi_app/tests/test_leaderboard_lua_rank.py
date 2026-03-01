@@ -43,12 +43,15 @@ async def _seed(r, members: dict[str, int | float]) -> str:
 
 async def _cleanup(r):
 	friday = _current_friday()
-	async for key in r.scan_iter(f"memora:lb:*:{friday}:plan:{PLAN}*"):
-		await r.delete(key)
-	async for key in r.scan_iter(f"memora:lb:*:{friday}"):
-		await r.delete(key)
-	async for key in r.scan_iter("memora:daily_xp:LUA-*"):
-		await r.delete(key)
+	for pattern in (
+		f"memora:lb:*:{friday}:plan:{PLAN}*",
+		f"memora:lb:*:{friday}",
+		f"memora:lbmeta:*:{friday}:plan:{PLAN}*",
+		f"memora:lbmeta:*:{friday}",
+		"memora:daily_xp:LUA-*",
+	):
+		async for key in r.scan_iter(pattern):
+			await r.delete(key)
 
 
 # ------------------------------------------------------------------ #

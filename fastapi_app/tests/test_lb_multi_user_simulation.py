@@ -47,20 +47,14 @@ async def lb_svc(redis_client):
 async def cleanup_lb_keys(redis_client):
 	"""Auto-cleanup leaderboard keys after each test."""
 	yield
-	cursor = 0
-	while True:
-		cursor, keys = await redis_client.scan(cursor, match="memora:lb:*", count=1000)
-		if keys:
-			await redis_client.delete(*keys)
-		if cursor == 0:
-			break
-	cursor = 0
-	while True:
-		cursor, keys = await redis_client.scan(cursor, match="memora:daily_xp:*", count=1000)
-		if keys:
-			await redis_client.delete(*keys)
-		if cursor == 0:
-			break
+	for pattern in ("memora:lb:*", "memora:lbmeta:*", "memora:daily_xp:*"):
+		cursor = 0
+		while True:
+			cursor, keys = await redis_client.scan(cursor, match=pattern, count=1000)
+			if keys:
+				await redis_client.delete(*keys)
+			if cursor == 0:
+				break
 
 
 # -- Helpers -------------------------------------------------------------------

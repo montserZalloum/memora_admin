@@ -6,6 +6,8 @@ Retention policy:
 - Weekly keys (memora:lb:weekly:*): 90 days
 - Archive daily keys (memora:lb:archive:daily:*): 90 days
 - Archive weekly keys (memora:lb:archive:weekly:*): 90 days
+- Daily tier metadata (memora:lbmeta:daily:*): 30 days
+- Weekly tier metadata (memora:lbmeta:weekly:*): 90 days
 
 Key date formats (from leaderboard.py):
 - Daily: memora:lb:daily:{YYYY-MM-DD}[:{suffix}]
@@ -19,7 +21,7 @@ from datetime import datetime, timedelta
 
 import frappe
 
-from fastapi_app.core.redis_keys import LB_PREFIX
+from fastapi_app.core.redis_keys import LB_PREFIX, LBMETA_PREFIX
 from memora_admin.utils.redis_connection import get_memora_redis
 
 # Retention thresholds
@@ -132,6 +134,18 @@ def cleanup_old_leaderboards():
 	count = _scan_and_delete(r, f"{LB_PREFIX}:archive:weekly:*", archive_cutoff)
 	if count:
 		frappe.logger().info(f"leaderboard_cleanup: deleted {count} old archive weekly keys")
+	total_deleted += count
+
+	# Daily tier metadata keys — tieridx + tiercnt (>30d)
+	count = _scan_and_delete(r, f"{LBMETA_PREFIX}:daily:*", daily_cutoff)
+	if count:
+		frappe.logger().info(f"leaderboard_cleanup: deleted {count} old daily tier metadata keys")
+	total_deleted += count
+
+	# Weekly tier metadata keys — tieridx + tiercnt (>90d)
+	count = _scan_and_delete(r, f"{LBMETA_PREFIX}:weekly:*", weekly_cutoff)
+	if count:
+		frappe.logger().info(f"leaderboard_cleanup: deleted {count} old weekly tier metadata keys")
 	total_deleted += count
 
 	if total_deleted:
