@@ -1,0 +1,178 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "ANN-.#####.",
+ "creation": "2026-02-28 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "title_ar",
+  "title_en",
+  "column_break_content",
+  "body_ar",
+  "body_en",
+  "section_break_targeting",
+  "target_audience",
+  "target_plans",
+  "section_break_duration",
+  "duration_type",
+  "start_date",
+  "end_date",
+  "duration_days",
+  "column_break_effective",
+  "effective_start_date",
+  "effective_end_date",
+  "section_break_display",
+  "display_frequency",
+  "is_published"
+ ],
+ "fields": [
+  {
+   "fieldname": "title_ar",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title (Arabic)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "title_en",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Title (English)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_content",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "body_ar",
+   "fieldtype": "Text Editor",
+   "label": "Body (Arabic)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "body_en",
+   "fieldtype": "Text Editor",
+   "label": "Body (English)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_targeting",
+   "fieldtype": "Section Break",
+   "label": "Targeting"
+  },
+  {
+   "default": "All Players",
+   "fieldname": "target_audience",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Target Audience",
+   "options": "All Players\nSpecific Plans",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.target_audience=='Specific Plans'",
+   "fieldname": "target_plans",
+   "fieldtype": "Table",
+   "label": "Target Plans",
+   "options": "Memora Announcement Target Plan"
+  },
+  {
+   "fieldname": "section_break_duration",
+   "fieldtype": "Section Break",
+   "label": "Duration"
+  },
+  {
+   "default": "Date Range",
+   "fieldname": "duration_type",
+   "fieldtype": "Select",
+   "label": "Duration Type",
+   "options": "Date Range\nFixed Duration",
+   "reqd": 1
+  },
+  {
+   "depends_on": "eval:doc.duration_type=='Date Range'",
+   "fieldname": "start_date",
+   "fieldtype": "Date",
+   "label": "Start Date"
+  },
+  {
+   "depends_on": "eval:doc.duration_type=='Date Range'",
+   "fieldname": "end_date",
+   "fieldtype": "Date",
+   "label": "End Date"
+  },
+  {
+   "depends_on": "eval:doc.duration_type=='Fixed Duration'",
+   "fieldname": "duration_days",
+   "fieldtype": "Int",
+   "label": "Duration (Days)"
+  },
+  {
+   "fieldname": "column_break_effective",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "effective_start_date",
+   "fieldtype": "Date",
+   "label": "Effective Start Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "effective_end_date",
+   "fieldtype": "Date",
+   "label": "Effective End Date",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_display",
+   "fieldtype": "Section Break",
+   "label": "Display Settings"
+  },
+  {
+   "default": "Always",
+   "fieldname": "display_frequency",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Display Frequency",
+   "options": "Always\nOnce\nOnce Per Day\nOnce Per Session",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "is_published",
+   "fieldtype": "Check",
+   "label": "Is Published"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-02-28 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Announcement",
+ "naming_rule": "Expression (old style)",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "workspace": "Memora"
+}

@@ -166,6 +166,16 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 				"level_config_updated",
 				timestamp=timestamp,
 			)
+		elif msg_type == "announcements":
+			announcement_service = getattr(app_state, "announcement_service", None)
+			if announcement_service:
+				await announcement_service.invalidate()
+				logger.info(
+					"announcements_cache_invalidated",
+					timestamp=timestamp,
+				)
+			else:
+				logger.warning("announcement_service_not_available")
 		elif msg_type == "subscription_changed" and payload.get("player_id"):
 			ws_manager = getattr(app_state, "ws_manager", None)
 			if ws_manager:

@@ -141,7 +141,7 @@ class TestLeaderboardEndpoints:
 
 		lb_svc = LeaderboardService(redis_client)
 		await lb_svc.update_leaderboards(
-			player_id, xp_amount=50, new_total_xp=50, plan_id="PLAN-TEST-001"
+			player_id, xp_amount=50, plan_id="PLAN-TEST-001"
 		)
 
 		resp = await client.get("/api/v1/leaderboard/daily")

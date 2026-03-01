@@ -4,6 +4,7 @@ from fastapi import APIRouter
 
 from fastapi_app.api.v1.endpoints import (
 	access,
+	announcements,
 	auth,
 	catalog,
 	health,
@@ -28,6 +29,7 @@ from fastapi_app.api.v1.endpoints import (
 router = APIRouter(prefix="/api/v1")
 
 router.include_router(health.router)
+router.include_router(announcements.router)
 router.include_router(auth.router)
 router.include_router(catalog.router)
 router.include_router(purchase.router)

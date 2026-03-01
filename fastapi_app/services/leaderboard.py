@@ -1,18 +1,14 @@
 """Leaderboard service for Redis ZSET-backed XP rankings.
 
-Per CONTEXT.md (Phase 10):
-- Three leaderboard types: daily, weekly, all-time
-- Tie-breaking: earlier achiever wins (composite score)
+- Two leaderboard types: daily, weekly
 - Dense ranking: tied players share same rank number
 - Optional subject filtering for class-specific competitions
 
 Key patterns:
-- memora:lb:alltime[:subject:{id}]
 - memora:lb:daily:{YYYY-MM-DD}[:subject:{id}]
 - memora:lb:weekly:{YYYY-MM-DD}[:subject:{id}]  (date = Friday that starts the Islamic week)
 """
 
-import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -20,11 +16,9 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.redis_keys import (
-	LB_PREFIX,
 	PLAN_DAILY_KEY_TTL,
 	PLAN_WEEKLY_KEY_TTL,
 	daily_xp_key as _daily_xp_key_fn,
-	lb_alltime_key,
 	lb_daily_key,
 	lb_daily_plan_key,
 	lb_weekly_key,
@@ -32,6 +26,30 @@ from fastapi_app.core.redis_keys import (
 )
 
 logger = structlog.get_logger()
+
+# Lua script: count distinct XP tiers above a player's score.
+# Uses iterative ZRANGEBYSCORE LIMIT 1 to step through tiers — O(T * log N)
+# where T = distinct tiers above (bounded by XP range, typically ≤300 for daily)
+# and N = total ZSET size. Returns only [count, min_above] instead of
+# transferring potentially 100k (member, score) pairs over the network.
+_RANK_LUA = """
+local key = KEYS[1]
+local player_xp = tonumber(ARGV[1])
+local count = 0
+local min_above = -1
+local current_min = player_xp + 1
+
+while true do
+    local entries = redis.call('ZRANGEBYSCORE', key, current_min, '+inf', 'WITHSCORES', 'LIMIT', 0, 1)
+    if #entries == 0 then break end
+    local score = math.floor(tonumber(entries[2]))
+    count = count + 1
+    if min_above == -1 then min_above = score end
+    current_min = score + 1
+end
+
+return {count, min_above}
+"""
 
 # Asia/Amman timezone for consistent daily/weekly boundaries
 # Per CONTEXT.md: Daily resets at midnight, weekly resets Friday midnight
@@ -42,55 +60,16 @@ DAILY_KEY_TTL = 30 * 86400  # 30 days
 WEEKLY_KEY_TTL = 90 * 86400  # 90 days
 
 
-def compute_composite_score(xp: int, timestamp: float | None = None) -> float:
-	"""Compute composite score for leaderboard ranking with tie-breaking.
-
-	Per CONTEXT.md: "Earlier achiever wins - whoever reached that XP first ranks higher"
-
-	The score encodes:
-	- Integer part: XP value (for primary ranking)
-	- Fractional part: Inverted timestamp (for tie-breaking)
-
-	Since ZREVRANGE/ZRANGE(desc=True) sorts descending, higher scores rank better.
-	For same XP, earlier timestamp = smaller fractional part = ranks higher.
-
-	Formula: xp + (1.0 - (timestamp % 1_000_000_000) / 1_000_000_000)
-
-	Args:
-		xp: XP value to encode
-		timestamp: Unix timestamp (defaults to current time)
-
-	Returns:
-		Composite score as float
-
-	Example:
-		>>> score = compute_composite_score(100)
-		>>> int(score)  # Integer part is the XP
-		100
-	"""
-	if timestamp is None:
-		timestamp = time.time()
-
-	# Use modulo to keep timestamp in manageable range (cycles every ~31 years)
-	# Invert so earlier timestamps produce smaller fractions
-	inverted = 1.0 - (timestamp % 1_000_000_000) / 1_000_000_000
-
-	return float(xp) + inverted
-
-
 class LeaderboardService:
 	"""Manages XP leaderboards via Redis sorted sets (ZSET).
 
-	Per CONTEXT.md:
-	- Three types: daily, weekly, all-time
-	- Optional subject filtering
-	- Tie-breaking: earlier achiever wins (composite score)
-	- Dense ranking: tied players share rank
+	Two types: daily, weekly — with optional subject filtering.
+	Dense ranking: tied players share rank.
 
 	Operations:
 	- get_top: ZRANGE with desc=True for top N players
 	- get_my_rank: ZREVRANK + ZCOUNT for user position with dense rank
-	- update_leaderboards: ZADD for all-time, ZINCRBY for daily/weekly
+	- update_leaderboards: ZINCRBY for daily/weekly
 	"""
 
 	def __init__(self, redis_client: redis.Redis):
@@ -141,11 +120,8 @@ class LeaderboardService:
 			Redis key string
 
 		Raises:
-			ValueError: If lb_type is "alltime" (not supported for plan-scoped)
+			ValueError: If lb_type is invalid
 		"""
-		if lb_type == "alltime":
-			raise ValueError("Plan-scoped leaderboards do not support alltime type")
-
 		now = datetime.now(AMMAN_TZ)
 
 		if lb_type == "daily":
@@ -163,20 +139,21 @@ class LeaderboardService:
 		self,
 		lb_type: str,
 		limit: int = 10,
+		offset: int = 0,
 		subject_id: str | None = None,
 		plan_id: str | None = None,
 	) -> list[dict]:
-		"""Get top N players from a leaderboard.
+		"""Get top N players from a leaderboard with optional offset.
 
 		Uses ZRANGE with desc=True for O(log N + M) where M is returned elements.
 
-		Per CONTEXT.md:
-		- Dense ranking: tied players share same rank number
-		- rank, player_id, xp returned (display_name/avatar from profile service)
+		Dense ranking: tied players share same rank number, next rank increments
+		by 1 (e.g., two #2s → next is #3, not #4).
 
 		Args:
-			lb_type: One of "daily", "weekly", "alltime"
+			lb_type: One of "daily", "weekly"
 			limit: Maximum entries to return (default 10)
+			offset: Number of entries to skip (default 0)
 			subject_id: Optional subject filter
 			plan_id: Optional plan for plan-scoped leaderboard
 
@@ -188,44 +165,48 @@ class LeaderboardService:
 		else:
 			key = self._get_key(lb_type, subject_id)
 
-		# ZRANGE with desc=True returns [(member, score), ...]
-		# Equivalent to deprecated ZREVRANGE
+		# Fetch from position 0 to offset+limit-1 so dense ranks are computed
+		# accurately from the top of the leaderboard
 		results = await self.redis.zrange(
 			key,
 			0,
-			limit - 1,
+			offset + limit - 1,
 			desc=True,
 			withscores=True,
 		)
 
-		entries = []
+		all_entries = []
 		current_rank = 1
 		prev_xp = None
 
-		for idx, (player_id, score) in enumerate(results):
+		for player_id, score in results:
 			# Extract XP from composite score (integer part)
 			xp = int(score)
 
 			# Dense ranking: same XP = same rank
-			# Only increment rank when XP changes
+			# Increment rank only when XP changes (no gap)
 			if prev_xp is not None and xp != prev_xp:
-				current_rank = idx + 1
+				current_rank += 1
 
 			# Handle bytes response from Redis (unless decode_responses=True)
 			pid = player_id.decode() if isinstance(player_id, bytes) else player_id
 
-			entries.append({
+			all_entries.append({
 				"rank": current_rank,
 				"player_id": pid,
 				"xp": xp,
 			})
 			prev_xp = xp
 
+		# Return only the requested window
+		entries = all_entries[offset:]
+
 		logger.debug(
 			"leaderboard_top_fetched",
 			lb_type=lb_type,
 			subject_id=subject_id,
 			limit=limit,
+			offset=offset,
 			returned=len(entries),
 		)
 
@@ -241,15 +222,12 @@ class LeaderboardService:
 	) -> dict | None:
 		"""Get player's rank with surrounding neighbors.
 
-		Per CONTEXT.md:
-		- Include +/-2 neighbors for context around user's position
-		- Include distance to next tier (XP to match player in rank above)
-		- Unranked players get rank: None (plan-scoped) or total + 1 (global)
-		- Competition ranking: tied players share rank, next rank = count of players above + 1
+		Uses dense ranking consistent with get_top(): tied players share rank,
+		next rank increments by 1 (e.g., two #2s → next is #3).
 
 		Args:
 			player_id: Player's user ID
-			lb_type: One of "daily", "weekly", "alltime"
+			lb_type: One of "daily", "weekly"
 			subject_id: Optional subject filter
 			neighbor_count: Players above/below to include (default 2)
 			plan_id: Optional plan for plan-scoped leaderboard
@@ -297,40 +275,50 @@ class LeaderboardService:
 
 		xp = int(score) if score is not None else 0
 
-		# Stage 2: Get rank, neighbors, and next-tier data in one pipeline (1 RTT)
-		# Competition rank uses XP boundary (not exact composite score) so that
-		# alltime composite tie-breaking doesn't split same-XP players into
-		# different ranks. ZCOUNT(xp+1, +inf) counts players with strictly higher XP.
+		# Stage 2: Bounded dense rank via Lua + neighbor window (1 pipeline RTT)
+		#
+		# The Lua script counts distinct XP tiers above the player server-side,
+		# returning only [count, min_above] — avoids transferring potentially
+		# 100k (member, score) pairs that the old zrangebyscore approach fetched.
 		start = max(0, position - neighbor_count)
 		stop = position + neighbor_count
 
 		pipe = self.redis.pipeline()
-		pipe.zcount(key, xp + 1, "+inf")
 		pipe.zrange(key, start, stop, desc=True, withscores=True)
-		pipe.zrangebyscore(key, xp + 1, "+inf", start=0, num=1, withscores=True)
-		higher_count, neighbors_raw, above_entries = await pipe.execute()
+		pipe.eval(_RANK_LUA, 1, key, str(xp))
+		neighbors_raw, rank_result = await pipe.execute()
 
-		my_rank = higher_count + 1
+		distinct_above = rank_result[0]
+		min_above = rank_result[1]
 
-		# xp_to_next: XP needed to match the next higher tier
-		# Matching is sufficient since ties share rank (competition ranking)
+		my_rank = distinct_above + 1
+
+		# xp_to_next: XP needed to reach the closest higher tier
 		xp_to_next = None
-		if above_entries:
-			above_xp = int(above_entries[0][1])
-			xp_to_next = above_xp - xp
+		if min_above > 0:
+			xp_to_next = min_above - xp
 
-		# Stage 3: Compute neighbor ranks via pipeline (1 RTT)
-		# Use XP boundary for consistency with main rank calculation
-		pipe = self.redis.pipeline()
-		for _, neighbor_score in neighbors_raw:
-			neighbor_xp = int(neighbor_score)
-			pipe.zcount(key, neighbor_xp + 1, "+inf")
-		rank_results = await pipe.execute()
+		# Compute neighbor dense ranks relative to my_rank using window tiers.
+		# The neighbor window (ZRANGE) returns contiguous positions, so ALL
+		# distinct tiers between the player and any neighbor in the window are
+		# present — no missing tiers. This lets us derive neighbor ranks from
+		# my_rank without any additional queries.
+		window_tiers = {int(s) for _, s in neighbors_raw}
 
 		neighbors = []
-		for i, (neighbor_id, neighbor_score) in enumerate(neighbors_raw):
+		for neighbor_id, neighbor_score in neighbors_raw:
 			neighbor_xp = int(neighbor_score)
-			neighbor_rank = rank_results[i] + 1
+
+			if neighbor_xp > xp:
+				# Tiers strictly between player and neighbor (inclusive of neighbor)
+				tiers_between = len({t for t in window_tiers if xp < t <= neighbor_xp})
+				neighbor_rank = my_rank - tiers_between
+			elif neighbor_xp < xp:
+				# Tiers strictly between neighbor and player (inclusive of player)
+				tiers_between = len({t for t in window_tiers if neighbor_xp < t <= xp})
+				neighbor_rank = my_rank + tiers_between
+			else:
+				neighbor_rank = my_rank
 
 			nid = neighbor_id.decode() if isinstance(neighbor_id, bytes) else neighbor_id
 
@@ -363,34 +351,38 @@ class LeaderboardService:
 		self,
 		player_id: str,
 		xp_amount: int,
-		new_total_xp: int,
 		subject_id: str | None = None,
 		plan_id: str | None = None,
 	) -> None:
-		"""Update all relevant leaderboards after XP award.
+		"""Update daily/weekly leaderboards after XP award.
 
 		Called after wallet.award_xp() to maintain leaderboard consistency.
 		Writes to both global ZSETs (backup) and plan-scoped ZSETs (primary read source).
 
+		Skips the update entirely when xp_amount <= 0 to avoid creating
+		ghost 0-score ZSET members via ZINCRBY.
+
 		Args:
 			player_id: Player's user ID
-			xp_amount: XP just awarded (for daily/weekly increment)
-			new_total_xp: Total XP after award (for all-time composite score)
+			xp_amount: XP just awarded (must be > 0 to write)
 			subject_id: Optional subject for filtered leaderboards
 			plan_id: Player's plan ID for plan-scoped leaderboards
 		"""
-		timestamp = time.time()
-		composite_score = compute_composite_score(new_total_xp, timestamp)
+		if xp_amount <= 0:
+			return
 
-		alltime_key = lb_alltime_key()
-		daily_key = self._get_key("daily")
-		weekly_key = self._get_key("weekly")
+		# Snapshot time once for all keys to avoid midnight-boundary splits
+		now = datetime.now(AMMAN_TZ)
+		date_str = now.strftime("%Y-%m-%d")
+		weekday = now.isoweekday()
+		days_since_friday = (weekday - 5) % 7
+		friday = (now - timedelta(days=days_since_friday)).strftime("%Y-%m-%d")
 
-		# Single pipeline for all leaderboard updates (1 RTT instead of 3-6)
+		daily_key = lb_daily_key(date_str)
+		weekly_key = lb_weekly_key(friday)
+
+		# Single pipeline for all leaderboard updates (1 RTT)
 		pipe = self.redis.pipeline()
-
-		# All-time: composite score (no TTL — persistent)
-		pipe.zadd(alltime_key, {player_id: composite_score})
 
 		# Daily: increment + TTL
 		pipe.zincrby(daily_key, xp_amount, player_id)
@@ -401,20 +393,14 @@ class LeaderboardService:
 		pipe.expire(weekly_key, WEEKLY_KEY_TTL)
 
 		# Per-player daily XP summary hash (MariaDB-backed durability for activity chart)
-		# Stored separately from the ranked ZSET so it can survive Redis data loss and
-		# be recovered from MariaDB (synced by sync_dirty_wallets every minute).
-		amman_date_str = datetime.now(AMMAN_TZ).strftime("%Y-%m-%d")
 		daily_xp_key = _daily_xp_key_fn(player_id)
-		pipe.hincrby(daily_xp_key, amman_date_str, xp_amount)
+		pipe.hincrby(daily_xp_key, date_str, xp_amount)
 		pipe.expire(daily_xp_key, 8 * 86400)  # 8 days — covers the 7-day window + 1 buffer
 
 		# Subject-specific leaderboards (if context available)
 		if subject_id:
-			alltime_subj_key = lb_alltime_key(subject_id)
-			daily_subj_key = self._get_key("daily", subject_id)
-			weekly_subj_key = self._get_key("weekly", subject_id)
-
-			pipe.zadd(alltime_subj_key, {player_id: composite_score})
+			daily_subj_key = lb_daily_key(date_str, subject_id)
+			weekly_subj_key = lb_weekly_key(friday, subject_id)
 
 			pipe.zincrby(daily_subj_key, xp_amount, player_id)
 			pipe.expire(daily_subj_key, DAILY_KEY_TTL)
@@ -424,12 +410,6 @@ class LeaderboardService:
 
 		# Plan-scoped leaderboards (dual-write for plan-scoped rankings)
 		if plan_id:
-			now = datetime.now(AMMAN_TZ)
-			date_str = now.strftime("%Y-%m-%d")
-			weekday = now.isoweekday()
-			days_since_friday = (weekday - 5) % 7
-			friday = (now - timedelta(days=days_since_friday)).strftime("%Y-%m-%d")
-
 			# Plan-scoped daily
 			plan_daily = lb_daily_plan_key(date_str, plan_id)
 			pipe.zincrby(plan_daily, xp_amount, player_id)
@@ -456,8 +436,6 @@ class LeaderboardService:
 			"leaderboards_updated",
 			player_id=player_id,
 			xp_amount=xp_amount,
-			new_total_xp=new_total_xp,
 			subject_id=subject_id,
 			plan_id=plan_id,
-			composite_score=composite_score,
 		)

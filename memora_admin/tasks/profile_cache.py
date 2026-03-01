@@ -43,7 +43,7 @@ CACHE_TTL = 3600
 def warm_profile_cache(triggered_by: str = "Scheduler"):
 	"""Pre-warm profile cache for active leaderboard players.
 
-	Fetches top 100 players from each active leaderboard (alltime, daily, weekly),
+	Fetches top 100 players from each active leaderboard (daily, weekly),
 	deduplicates, and caches their profiles with 1-hour TTL.
 
 	Per RESEARCH.md:
@@ -107,12 +107,11 @@ def _do_warm_cache(r: redis.Redis) -> int:
 	"""Collect unique player_ids from leaderboards and cache their profiles.
 
 	Strategy:
-	1. Get top 100 from alltime leaderboard
-	2. Get top 100 from today's daily leaderboard
-	3. Get top 100 from current weekly leaderboard
-	4. Deduplicate into a single set
-	5. Batch fetch profiles from Frappe
-	6. Pipeline SET to Redis with TTL
+	1. Get top 100 from today's daily leaderboard
+	2. Get top 100 from current weekly leaderboard
+	3. Deduplicate into a single set
+	4. Batch fetch profiles from Frappe
+	5. Pipeline SET to Redis with TTL
 
 	Returns:
 		Number of profiles cached
@@ -126,11 +125,6 @@ def _do_warm_cache(r: redis.Redis) -> int:
 
 	# Collect unique player_ids from active leaderboards
 	player_ids: set[str] = set()
-
-	# Alltime leaderboard (always active)
-	alltime_players = r.zrange(f"{LB_PREFIX}:alltime", 0, 99, desc=True)
-	for p in alltime_players:
-		player_ids.add(p.decode() if isinstance(p, bytes) else p)
 
 	# Today's daily leaderboard
 	daily_players = r.zrange(f"{LB_PREFIX}:daily:{today_str}", 0, 99, desc=True)

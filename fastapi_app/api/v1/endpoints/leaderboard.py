@@ -31,12 +31,15 @@ async def get_leaderboard(
     leaderboard_service: LeaderboardServiceDep,
     profile_service: ProfileServiceDep,
     subject_id: str | None = Query(None, description="Optional subject filter"),
+    limit: int = Query(20, ge=1, le=100, description="Max entries to return"),
+    offset: int = Query(0, ge=0, le=1000, description="Entries to skip for pagination"),
 ) -> LeaderboardResponse:
     """
-    Get top 20 students in the authenticated player's plan.
+    Get top students in the authenticated player's plan.
 
     Plan-scoped: returns only students within the same academic plan.
     Supports daily and weekly time periods with optional subject filter.
+    Supports pagination via limit and offset.
 
     Args:
         lb_type: Leaderboard type (daily, weekly)
@@ -44,6 +47,8 @@ async def get_leaderboard(
         leaderboard_service: Service for leaderboard operations
         profile_service: Service for profile lookups
         subject_id: Optional subject for filtered leaderboards
+        limit: Max entries to return (1-100, default 20)
+        offset: Entries to skip (0-1000, default 0)
 
     Returns:
         LeaderboardResponse with entries and total_players
@@ -59,8 +64,10 @@ async def get_leaderboard(
             total_players=0,
         )
 
-    # Fetch top 20 players from plan-scoped leaderboard
-    raw_entries = await leaderboard_service.get_top(lb_type, limit=20, subject_id=subject_id, plan_id=plan_id)
+    # Fetch players from plan-scoped leaderboard with pagination
+    raw_entries = await leaderboard_service.get_top(
+        lb_type, limit=limit, offset=offset, subject_id=subject_id, plan_id=plan_id
+    )
 
     # Get total players count (ZCARD) from plan-scoped key
     key = leaderboard_service._get_plan_key(lb_type, plan_id, subject_id)

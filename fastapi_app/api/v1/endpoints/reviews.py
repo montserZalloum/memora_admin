@@ -108,13 +108,12 @@ async def submit_reviews(
 
 	if processed > 0:
 		XP_PER_REVIEW_SESSION = 3
-		new_total_xp = await wallet_service.award_xp(user.sub, XP_PER_REVIEW_SESSION)
+		await wallet_service.award_xp(user.sub, XP_PER_REVIEW_SESSION)
 		xp_awarded = XP_PER_REVIEW_SESSION
 
 		await leaderboard_service.update_leaderboards(
 			player_id=user.sub,
 			xp_amount=xp_awarded,
-			new_total_xp=new_total_xp,
 			subject_id=subject,
 			plan_id=user.plan,
 		)

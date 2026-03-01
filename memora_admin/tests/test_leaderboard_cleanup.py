@@ -4,7 +4,6 @@ Tests for leaderboard cleanup task.
 Tests:
 - Date extraction from daily and weekly key names
 - Retention threshold enforcement (30d daily, 90d weekly)
-- Protection of alltime keys (never deleted)
 - Empty SCAN (no keys to delete) completes without error
 - Archive key cleanup with same retention thresholds
 
@@ -142,25 +141,6 @@ class TestLeaderboardCleanup(FrappeTestCase):
 
 		self.assertFalse(self.r.exists(old_archive_daily))
 		self.assertFalse(self.r.exists(old_archive_weekly))
-
-	# =========================================================================
-	# Alltime protection tests
-	# =========================================================================
-
-	def test_alltime_keys_never_deleted(self):
-		"""alltime keys must never be deleted regardless of age."""
-		from memora_admin.tasks.leaderboard_cleanup import cleanup_old_leaderboards
-
-		alltime_key = self._track(f"{LB_PREFIX}:alltime:test:{self._test_id}")
-		self.r.zadd(alltime_key, {"player1": 100})
-
-		alltime_subj_key = self._track(f"{LB_PREFIX}:alltime:subject:math:test:{self._test_id}")
-		self.r.zadd(alltime_subj_key, {"player1": 200})
-
-		cleanup_old_leaderboards()
-
-		self.assertTrue(self.r.exists(alltime_key), "alltime key must survive cleanup")
-		self.assertTrue(self.r.exists(alltime_subj_key), "alltime subject key must survive cleanup")
 
 	# =========================================================================
 	# Empty SCAN test

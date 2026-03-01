@@ -19,11 +19,19 @@ Usage:
 # =============================================================================
 # TTL policy for keys that self-heal via ensure_hydrated().
 # Keys with TTL are evictable under memory pressure (volatile-ttl policy).
-# Protected keys (dirty sets, buffer, alltime leaderboard) MUST NEVER have TTL.
+# Protected keys (dirty sets, buffer) MUST NEVER have TTL.
 #
 # NOTE: Lua scripts cannot import Python constants, so they use literal values.
 # Cross-references below document which Lua scripts duplicate each constant.
 # If you change a TTL value, update BOTH the constant here AND the Lua literal.
+
+ANNOUNCEMENTS_CACHE_TTL = 300
+"""5 minutes. Applied to announcements:active STRING key.
+
+Short TTL handles date-based expiry naturally without scheduled cleanup.
+Admin actions (create/edit/delete) trigger immediate invalidation via
+two-pronged pattern (DEL + pubsub), so TTL is only a safety net.
+"""
 
 WALLET_KEY_TTL = 172800
 """48 hours. Applied to wallet:{player} hashes.
@@ -276,18 +284,6 @@ PLAN_DAILY_KEY_TTL = 48 * 3600  # 48 hours
 PLAN_WEEKLY_KEY_TTL = 8 * 86400  # 8 days
 
 
-def lb_alltime_key(subject_id: str | None = None) -> str:
-	"""All-time leaderboard sorted set.
-
-	Type: ZSET (player_id -> composite score with tie-breaking)
-	Producers: LeaderboardService.update_leaderboards()
-	Consumers: LeaderboardService.get_top(), get_my_rank()
-	TTL: None (persistent)
-	"""
-	base = f"{LB_PREFIX}:alltime"
-	return f"{base}:subject:{subject_id}" if subject_id else base
-
-
 def lb_daily_key(date_str: str, subject_id: str | None = None) -> str:
 	"""Daily leaderboard sorted set (resets at midnight Asia/Amman).
 
@@ -522,6 +518,23 @@ def mastery_key(player_id: str, subject_id: str | None, season_seq: int) -> str:
 	"""
 	subj = subject_id or "all"
 	return f"memora:mastery:{player_id}:{subj}:s{season_seq}"
+
+
+# =============================================================================
+# Announcements
+# =============================================================================
+
+
+def announcements_active_key() -> str:
+	"""All active announcements JSON cache.
+
+	Type: STRING (JSON array of announcement dicts)
+	Producers: AnnouncementService.get_active_announcements() on cache miss
+	Consumers: AnnouncementService.get_for_player()
+	TTL: 5 minutes (ANNOUNCEMENTS_CACHE_TTL)
+	Invalidation: Frappe hook on Memora Announcement → DEL + pubsub
+	"""
+	return "memora:announcements:active"
 
 
 # =============================================================================

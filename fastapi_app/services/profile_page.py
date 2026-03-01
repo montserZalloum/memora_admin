@@ -16,7 +16,6 @@ from fastapi_app.core.level_config import calculate_level, get_level_config, get
 from fastapi_app.core.redis_keys import (
 	daily_xp_key as _daily_xp_key_fn,
 	items_learned_key as _items_learned_key_fn,
-	lb_alltime_key,
 	lb_archive_daily_key,
 	lb_daily_key,
 	mastery_key as _mastery_key_fn,
@@ -151,12 +150,8 @@ class ProfilePageService:
 		wallet = await wallet_service.get_wallet(player_id)
 		streak = wallet.get("streak", 0)
 
-		# Total XP
-		if subject_id is None:
-			total_xp = wallet.get("xp", 0)
-		else:
-			score = await self.redis.zscore(lb_alltime_key(subject_id), player_id)
-			total_xp = int(score) if score is not None else 0
+		# Total XP (always from wallet — alltime ZSETs removed)
+		total_xp = wallet.get("xp", 0)
 
 		# Items learned: count of Memory State records (SRS items encountered)
 		# Cached in Redis with 5-min TTL. On cache miss, fetches from Frappe API.

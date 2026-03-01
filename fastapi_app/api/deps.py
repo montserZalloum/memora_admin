@@ -17,6 +17,7 @@ from fastapi_app.core.security import decode_token
 from fastapi_app.models.access import ContentAccessRequest, SeasonMeta
 from fastapi_app.models.auth import TokenPayload
 from fastapi_app.services.access import AccessService
+from fastapi_app.services.announcements import AnnouncementService
 from fastapi_app.services.catalog import CatalogService
 from fastapi_app.services.device import DeviceService
 from fastapi_app.services.frappe_client import FrappeClient
@@ -25,6 +26,7 @@ from fastapi_app.services.global_rate_limit import GlobalRateLimiter, RateLimitE
 from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.leaderboard import LeaderboardService
 from fastapi_app.services.plan import PlanService
+from fastapi_app.services.plan_change import PlanChangeService
 from fastapi_app.services.practice import PracticeService
 from fastapi_app.services.profile import ProfileService
 from fastapi_app.services.profile_page import ProfilePageService
@@ -34,7 +36,6 @@ from fastapi_app.services.review import ReviewService
 from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.stats import StatsService
-from fastapi_app.services.plan_change import PlanChangeService
 from fastapi_app.services.voucher import VoucherService
 from fastapi_app.services.wallet import WalletService
 
@@ -182,6 +183,15 @@ RequireAdmin = Annotated[TokenPayload, Depends(require_admin)]
 
 
 # --- Service Dependencies ---
+
+
+async def get_announcement_service(redis_client: RedisClient) -> AnnouncementService:
+	"""Get AnnouncementService with Redis and FrappeClient."""
+	frappe_client = await get_frappe_client()
+	return AnnouncementService(redis_client, frappe_client)
+
+
+AnnouncementServiceDep = Annotated[AnnouncementService, Depends(get_announcement_service)]
 
 
 async def get_season_service(redis_client: RedisClient) -> SeasonService:

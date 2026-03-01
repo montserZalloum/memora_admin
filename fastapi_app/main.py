@@ -8,22 +8,22 @@ import redis.asyncio as redis
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
+from fastapi_app.api.deps import set_frappe_client
 from fastapi_app.api.v1.router import router as v1_router
 from fastapi_app.core.config import get_settings
 from fastapi_app.core.logging import configure_logging
 from fastapi_app.core.pubsub import start_notification_listener, start_pubsub_listener
 from fastapi_app.core.redis import create_redis_pool, verify_redis_connection
 from fastapi_app.core.ws_manager import ConnectionManager
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-
 from fastapi_app.middleware.rate_limit import GlobalRateLimitMiddleware
-from fastapi_app.services.global_rate_limit import RateLimitExceeded
 from fastapi_app.middleware.request_id import RequestIDMiddleware
+from fastapi_app.services.announcements import AnnouncementService
 from fastapi_app.services.catalog import CatalogService
-from fastapi_app.api.deps import set_frappe_client
 from fastapi_app.services.frappe_client import FrappeClient
+from fastapi_app.services.global_rate_limit import RateLimitExceeded
 from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.plan import PlanService
 from fastapi_app.services.profile import ProfileService
@@ -79,6 +79,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         frappe_client=frappe_client,
     )
     app.state.catalog_service = catalog_service
+
+    # Create AnnouncementService instance for pub/sub cache invalidation
+    announcement_service = AnnouncementService(
+        redis_client=redis_client,
+        frappe_client=frappe_client,
+    )
+    app.state.announcement_service = announcement_service
 
     # Create ConnectionManager for WebSocket notifications
     # Note: Per-message deflate compression must be disabled at the ASGI server level

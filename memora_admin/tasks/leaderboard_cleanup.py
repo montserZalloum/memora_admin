@@ -6,7 +6,6 @@ Retention policy:
 - Weekly keys (memora:lb:weekly:*): 90 days
 - Archive daily keys (memora:lb:archive:daily:*): 90 days
 - Archive weekly keys (memora:lb:archive:weekly:*): 90 days
-- Alltime keys (memora:lb:alltime*): NEVER deleted
 
 Key date formats (from leaderboard.py):
 - Daily: memora:lb:daily:{YYYY-MM-DD}[:{suffix}]
@@ -99,7 +98,6 @@ def cleanup_old_leaderboards():
 	"""Delete old leaderboard keys to bound memory growth.
 
 	Scans for daily, weekly, and archive keys older than retention thresholds.
-	Never touches alltime keys.
 
 	Scheduled: daily at 03:00 via hooks.py
 	"""

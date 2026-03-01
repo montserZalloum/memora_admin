@@ -412,7 +412,6 @@ async def end_session(
 	await leaderboard_service.update_leaderboards(
 		player_id=user.sub,
 		xp_amount=xp_awarded,
-		new_total_xp=new_total_xp,
 		subject_id=session.subject_id,
 		plan_id=user.plan,
 	)

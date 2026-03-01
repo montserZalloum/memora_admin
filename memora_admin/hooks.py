@@ -240,6 +240,12 @@ doc_events = {
 		"on_update": "memora_admin.events.build_trigger.on_plan_overrider_changed",
 		"on_trash": "memora_admin.events.build_trigger.on_plan_overrider_changed",
 	},
+	# Announcement cache invalidation
+	"Memora Announcement": {
+		"after_insert": "memora_admin.events.announcement_sync.on_announcement_changed",
+		"on_update": "memora_admin.events.announcement_sync.on_announcement_changed",
+		"on_trash": "memora_admin.events.announcement_sync.on_announcement_changed",
+	},
 }
 
 # Scheduled Tasks

@@ -302,6 +302,7 @@ bench --site your-site set-config redis_memora "redis://127.0.0.1:13001"
 - N/A (test suite only; reads config from Python file) (030-locust-load-tests)
 - Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, Pydantic v2, structlog, asyncio (031-large-data-perf-fixes)
 - Redis at `redis://127.0.0.1:13001` (dedicated Memora instance) — no schema changes (031-large-data-perf-fixes)
+- Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, redis.asyncio, Pydantic v2, structlog (032-admin-announcements)
 
 ## Test Environment Configuration
 
@@ -321,9 +322,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 032-admin-announcements: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, redis.asyncio, Pydantic v2, structlog
 - 031-large-data-perf-fixes: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, Pydantic v2, structlog, asyncio
 - 030-locust-load-tests: Added Python 3.11+ + Locust (load testing framework), httpx or Locust built-in HTTP client
-- 029-concurrency-scaling: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, pydantic-settings, httpx, structlog, asyncio
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

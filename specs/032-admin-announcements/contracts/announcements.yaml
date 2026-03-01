@@ -1,0 +1,158 @@
+openapi: 3.1.0
+info:
+  title: Memora Announcements API
+  version: 1.0.0
+  description: Player-facing announcements endpoint served from Redis cache.
+
+paths:
+  /api/v1/announcements/:
+    get:
+      operationId: getAnnouncements
+      summary: Get active announcements for authenticated player
+      description: |
+        Returns all active announcements visible to the authenticated player,
+        filtered by plan targeting and date range. Content is returned in the
+        requested language only. Sorted by creation date descending (newest first).
+
+        Read-only endpoint — no write operations or state changes.
+        Served from Redis cache with 5-minute TTL. Cache miss triggers
+        transparent hydration from MariaDB via Frappe API.
+      tags:
+        - announcements
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: lang
+          in: query
+          required: true
+          description: Player's preferred language for content localization.
+          schema:
+            type: string
+            enum: [ar, en]
+            default: ar
+      responses:
+        "200":
+          description: List of active announcements for the player.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnnouncementsResponse"
+              examples:
+                with_announcements:
+                  summary: Player has active announcements
+                  value:
+                    announcements:
+                      - id: "ANN-00001"
+                        title: "عيد سعيد!"
+                        body: "نتمنى لكم عيداً مباركاً وسعيداً"
+                        display_frequency: "once_per_day"
+                        created_at: "2026-03-01T10:00:00"
+                      - id: "ANN-00002"
+                        title: "ميزة جديدة"
+                        body: "تم إضافة ميزة المراجعة المتباعدة"
+                        display_frequency: "once"
+                        created_at: "2026-02-28T14:30:00"
+                empty:
+                  summary: No active announcements
+                  value:
+                    announcements: []
+        "401":
+          description: Invalid or expired JWT token.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "TOKEN_EXPIRED"
+        "422":
+          description: Invalid query parameters.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ValidationError"
+        "503":
+          description: Redis unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "Service temporarily unavailable"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AnnouncementsResponse:
+      type: object
+      required:
+        - announcements
+      properties:
+        announcements:
+          type: array
+          items:
+            $ref: "#/components/schemas/Announcement"
+          description: Active announcements sorted by creation date descending.
+
+    Announcement:
+      type: object
+      required:
+        - id
+        - title
+        - body
+        - display_frequency
+        - created_at
+      properties:
+        id:
+          type: string
+          description: Announcement document ID (e.g., "ANN-00001").
+          example: "ANN-00001"
+        title:
+          type: string
+          description: Announcement title in the requested language.
+          example: "عيد سعيد!"
+        body:
+          type: string
+          description: Announcement body text in the requested language.
+          example: "نتمنى لكم عيداً مباركاً وسعيداً"
+        display_frequency:
+          type: string
+          enum: [always, once, once_per_day, once_per_session]
+          description: |
+            How often the client should display this announcement.
+            Client-side enforcement — the backend does not track display state.
+          example: "once_per_day"
+        created_at:
+          type: string
+          format: date-time
+          description: When the announcement was created (for sort order).
+          example: "2026-03-01T10:00:00"
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+
+    ValidationError:
+      type: object
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  type: string
+              msg:
+                type: string
+              type:
+                type: string
