@@ -16,6 +16,8 @@ import frappe
 
 _client: redis.Redis | None = None
 _client_url: str | None = None
+_raw_client: redis.Redis | None = None
+_raw_client_url: str | None = None
 
 
 def get_memora_redis() -> redis.Redis:
@@ -38,3 +40,22 @@ def get_memora_redis() -> redis.Redis:
 		_client = redis.from_url(url, decode_responses=True)
 		_client_url = url
 	return _client
+
+
+def get_memora_redis_raw() -> redis.Redis:
+	"""Return a synchronous Redis client WITHOUT decode_responses.
+
+	Use this for operations on binary data (e.g. bitmap GET) where
+	the raw bytes are not valid UTF-8 and would fail with decode_responses=True.
+
+	The client is cached at module level so all callers share one connection pool.
+
+	Returns:
+		redis.Redis: Connected client that returns bytes, not strings.
+	"""
+	global _raw_client, _raw_client_url
+	url = frappe.conf.get("redis_memora", frappe.conf.redis_cache)
+	if _raw_client is None or _raw_client_url != url:
+		_raw_client = redis.from_url(url, decode_responses=False)
+		_raw_client_url = url
+	return _raw_client

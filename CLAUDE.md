@@ -123,12 +123,12 @@ Content hierarchy: Subject → Track → Unit → Topic → Lesson → Stage
 - **Redis keys**: ALL keys MUST be defined in `fastapi_app/core/redis_keys.py`. Never use inline `f"memora:..."` strings — always import a key builder function. This is the single source of truth for key formats, TTL constants, and documentation.
 - **TTL constants**: Defined in `fastapi_app/core/redis_keys.py` alongside key builders: `WALLET_KEY_TTL` (48h), `PROGRESS_KEY_TTL` (48h), `ACCESS_KEY_TTL` (24h), `PLAN_FREE_SUBJECTS_TTL` (12h). Lua scripts use literal values (cannot import Python constants) — cross-reference comments in `redis_keys.py` document which Lua scripts duplicate each value.
 - **Logging**: Structured via `structlog`
-- **CRITICAL: `decode_responses=True`**: The Redis pool (`core/redis.py`) uses `decode_responses=True`. ALL Redis responses are **strings**, NEVER bytes. Do NOT use `.encode()` on keys when doing lookups against HGETALL/GET results. This caused a recurring bug in `profile_page.py` activity endpoint.
+- **CRITICAL: `decode_responses=True` by default**: The FastAPI Redis pool (`core/redis.py`) and the standard Frappe-side client (`get_memora_redis()`) use `decode_responses=True`. Treat Redis responses as **strings** for normal GET/HGETALL flows, and do NOT use `.encode()` on keys when doing lookups against decoded data. This caused a recurring bug in `profile_page.py` activity endpoint. The only intended exception is binary payload access (for example, progress bitmap `GET` in sync tasks), which must use a dedicated raw client (`get_memora_redis_raw()`) because bitmap bytes are not valid UTF-8.
 - **Sync tasks must MERGE, not REPLACE**: When syncing Redis data to MariaDB (e.g., `daily_xp_json`), always merge with existing DB values. Redis may have sparse data after a flush; replacing would destroy historical data.
 
 ### Frappe Redis Connection
 
-All Frappe-side code (background tasks, API endpoints, event handlers) that accesses Memora's dedicated Redis must use `get_memora_redis()` from `memora_admin.utils.redis_connection`:
+All Frappe-side code (background tasks, API endpoints, event handlers) that accesses Memora's dedicated Redis should use `get_memora_redis()` from `memora_admin.utils.redis_connection` by default:
 
 ```python
 from memora_admin.utils.redis_connection import get_memora_redis
@@ -137,6 +137,7 @@ r = get_memora_redis()  # Returns redis.Redis with decode_responses=True
 
 - Reads `redis_memora` from `frappe.conf` (site_config.json)
 - Falls back to `frappe.conf.redis_cache` if `redis_memora` is not configured (backward compat)
+- Use `get_memora_redis_raw()` only for binary-safe reads where `decode_responses=True` would fail (for example, bitmap `GET`); keep that exception narrow and explicit
 - Do NOT use `frappe.conf.redis_cache` directly for Memora data — that points to Frappe's cache Redis (port 13000)
 - Event handlers using `get_fastapi_redis()` (reads `.env` REDIS_URL) auto-pick up port 13001 — no changes needed
 

@@ -31,7 +31,7 @@ from fastapi_app.core.redis_keys import (
 	subject_total_lessons_key,
 	wallet_key,
 )
-from memora_admin.utils.redis_connection import get_memora_redis
+from memora_admin.utils.redis_connection import get_memora_redis, get_memora_redis_raw
 
 logger = logging.getLogger(__name__)
 
@@ -187,14 +187,21 @@ def _batch_update_wallets(updates):
 # Progress batch helpers
 # ---------------------------------------------------------------------------
 
-def _batch_get_bitmaps(r, bitmap_keys):
+def _batch_get_bitmaps(r_raw, bitmap_keys):
 	"""Pipeline GET + BITCOUNT for multiple bitmap keys.
+
+	Uses a raw (non-decoding) Redis client for GET because bitmap values
+	are raw binary data that cannot be decoded as UTF-8.
+	BITCOUNT returns an integer so it's safe with either client.
 
 	Returns: {bitmap_key: (hex_string, completed_count)}
 	"""
 	if not bitmap_keys:
 		return {}
-	pipe = r.pipeline(transaction=False)
+
+	# Caller provides the raw client explicitly so this helper does not
+	# bypass the active Redis connection context.
+	pipe = r_raw.pipeline(transaction=False)
 	for key in bitmap_keys:
 		pipe.get(key)
 		pipe.bitcount(key)
@@ -365,6 +372,7 @@ def sync_dirty_progress():
 	"""
 	_write_debug_log("=== sync_dirty_progress STARTED ===")
 	r = get_memora_redis()
+	r_raw = get_memora_redis_raw()
 
 	# Get all dirty items
 	dirty_items = r.smembers(DIRTY_PROGRESS_KEY)
@@ -425,7 +433,7 @@ def sync_dirty_progress():
 				_progress_key(uid, sid, ver)
 				for _, uid, sid, ver in chunk
 			]
-			bitmap_data = _batch_get_bitmaps(r, bitmap_keys)
+			bitmap_data = _batch_get_bitmaps(r_raw, bitmap_keys)
 
 			# 2. Batch get subject lesson counts
 			subject_ids = list({sid for _, _, sid, _ in chunk})
