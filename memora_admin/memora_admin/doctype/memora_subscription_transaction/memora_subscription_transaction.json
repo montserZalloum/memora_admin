@@ -31,7 +31,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Payment Method",
-   "options": "Payment Gateway\nManual-Admin\nVoucher",
+   "options": "Payment Gateway\nManual-Admin\nVoucher\nScholarship\nGift",
    "reqd": 1
   },
   {

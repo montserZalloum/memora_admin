@@ -8,6 +8,7 @@
  "engine": "InnoDB",
  "field_order": [
   "batch_name",
+  "batch_purpose",
   "status",
   "column_break_1",
   "quantity",
@@ -35,6 +36,16 @@
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Batch Name",
+   "reqd": 1
+  },
+  {
+   "default": "Sale",
+   "fieldname": "batch_purpose",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Batch Purpose",
+   "options": "Sale\nScholarship\nGift\nPromotion",
    "reqd": 1
   },
   {

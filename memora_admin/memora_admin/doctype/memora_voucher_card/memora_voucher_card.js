@@ -11,46 +11,48 @@ frappe.ui.form.on("Memora Voucher Card", {
 			frm.set_df_property("status", "read_only", 1);
 		}
 
+		// Recipient note: visible only for non-Sale cards (defense-in-depth with JSON depends_on)
+		const is_non_sale = frm.doc.batch_purpose && frm.doc.batch_purpose !== "Sale";
+		frm.toggle_display("section_recipient", is_non_sale);
+		frm.toggle_display("recipient_note", is_non_sale);
+
 		// Void Card button: only on Available or Allocated cards
 		if (["Available", "Allocated"].includes(frm.doc.status) && !frm.is_new()) {
-			frm.add_custom_button(
-				__("Void Card"),
-				function () {
-					frappe.prompt(
-						[
-							{
-								fieldname: "void_reason",
-								fieldtype: "Small Text",
-								label: __("Void Reason"),
-								reqd: 1,
-								description: __(
-									"This will permanently void this card. This cannot be undone."
-								),
-							},
-						],
-						function (values) {
-							frappe.call({
-								method: "memora_admin.memora_admin.api.voucher.void_card",
-								args: {
-									card_name: frm.doc.name,
-									void_reason: values.void_reason,
-								},
-								callback: function (r) {
-									if (r.message) {
-										frappe.show_alert({
-											message: __("Card voided."),
-											indicator: "orange",
-										});
-										frm.reload_doc();
-									}
-								},
-							});
+			frm.add_custom_button(__("Void Card"), function () {
+				frappe.prompt(
+					[
+						{
+							fieldname: "void_reason",
+							fieldtype: "Small Text",
+							label: __("Void Reason"),
+							reqd: 1,
+							description: __(
+								"This will permanently void this card. This cannot be undone."
+							),
 						},
-						__("Void Card"),
-						__("Void")
-					);
-				}
-			);
+					],
+					function (values) {
+						frappe.call({
+							method: "memora_admin.memora_admin.api.voucher.void_card",
+							args: {
+								card_name: frm.doc.name,
+								void_reason: values.void_reason,
+							},
+							callback: function (r) {
+								if (r.message) {
+									frappe.show_alert({
+										message: __("Card voided."),
+										indicator: "orange",
+									});
+									frm.reload_doc();
+								}
+							},
+						});
+					},
+					__("Void Card"),
+					__("Void")
+				);
+			});
 			// Make the Void Card button red
 			frm.change_custom_button_type(__("Void Card"), null, "danger");
 		}

@@ -17,7 +17,6 @@ import frappe
 from frappe.utils import now as frappe_now
 
 from memora_admin.memora_admin.api.products import get_grant_keys
-
 from memora_admin.memora_admin.services.voucher.crypto import decrypt_data
 from memora_admin.memora_admin.services.voucher.generator import (
 	build_export_csv,
@@ -73,8 +72,7 @@ def generate_batch(batch_name: str) -> dict:
 	)
 
 	frappe.msgprint(
-		f"Card generation has been queued for batch {batch_name}. "
-		"You will be notified when it completes.",
+		f"Card generation has been queued for batch {batch_name}. " "You will be notified when it completes.",
 		alert=True,
 		indicator="blue",
 	)
@@ -127,18 +125,21 @@ def generate_cards_job(batch_name: str) -> None:
 			pin = generate_pin(pin_length)
 			pin_hmac = compute_hmac(pin, hmac_secret)
 
-			insert_rows.append((
-				serial,        # name (document PK = serial_no)
-				serial,        # serial_no
-				pin_hmac,      # HMAC-SHA256 hash
-				batch_name,    # batch link
-				"Available",   # status
-				user,          # owner
-				timestamp,     # creation
-				timestamp,     # modified
-				user,          # modified_by
-				0,             # docstatus
-			))
+			insert_rows.append(
+				(
+					serial,  # name (document PK = serial_no)
+					serial,  # serial_no
+					pin_hmac,  # HMAC-SHA256 hash
+					batch_name,  # batch link
+					batch.batch_purpose or "Sale",  # batch_purpose (propagated from batch)
+					"Available",  # status
+					user,  # owner
+					timestamp,  # creation
+					timestamp,  # modified
+					user,  # modified_by
+					0,  # docstatus
+				)
+			)
 
 			export_data.append({"serial_no": serial, "pin": pin})
 
@@ -152,8 +153,17 @@ def generate_cards_job(batch_name: str) -> None:
 
 		# --- 4. Bulk insert all cards ---
 		fields = [
-			"name", "serial_no", "pin_hmac", "batch", "status",
-			"owner", "creation", "modified", "modified_by", "docstatus",
+			"name",
+			"serial_no",
+			"pin_hmac",
+			"batch",
+			"batch_purpose",
+			"status",
+			"owner",
+			"creation",
+			"modified",
+			"modified_by",
+			"docstatus",
 		]
 
 		frappe.db.bulk_insert(
@@ -180,14 +190,16 @@ def generate_cards_job(batch_name: str) -> None:
 		)
 
 		# --- 6. Attach encrypted file to batch ---
-		file_doc = frappe.get_doc({
-			"doctype": "File",
-			"file_name": f"{batch_name}_cards.enc",
-			"attached_to_doctype": "Memora Voucher Batch",
-			"attached_to_name": batch_name,
-			"content": encrypted_bytes,
-			"is_private": 1,
-		})
+		file_doc = frappe.get_doc(
+			{
+				"doctype": "File",
+				"file_name": f"{batch_name}_cards.enc",
+				"attached_to_doctype": "Memora Voucher Batch",
+				"attached_to_name": batch_name,
+				"content": encrypted_bytes,
+				"is_private": 1,
+			}
+		)
 		file_doc.save(ignore_permissions=True)
 
 		# --- 7. Update batch ---
@@ -226,6 +238,75 @@ def generate_cards_job(batch_name: str) -> None:
 			after_commit=True,
 		)
 		raise
+
+
+@frappe.whitelist()
+def direct_activate(batch_name: str) -> dict:
+	"""Directly activate all cards in a non-Sale batch, bypassing library allocation.
+
+	Sets all Available cards to Allocated with library='Admin-Direct',
+	transitions the batch from Generated to Active, and updates counters.
+	Idempotent — calling again returns activated_count=0.
+
+	Args:
+		batch_name: The Voucher Batch document name.
+
+	Returns:
+		Dict with ``status`` ("activated") and ``activated_count``.
+	"""
+	batch = frappe.get_doc("Memora Voucher Batch", batch_name)
+
+	if batch.status not in ("Generated", "Active"):
+		frappe.throw(
+			f"Batch must be in Generated or Active status for Direct Activate. Current status: {batch.status}",
+			frappe.ValidationError,
+		)
+
+	if batch.batch_purpose == "Sale":
+		frappe.throw(
+			"Direct Activate is only available for non-sale batches (Scholarship, Gift, Promotion).",
+			frappe.ValidationError,
+		)
+
+	# Bulk SQL UPDATE — bypasses ORM link validation for sentinel 'Admin-Direct'
+	frappe.db.sql(
+		"""
+		UPDATE `tabMemora Voucher Card`
+		SET status = 'Allocated',
+			library = 'Admin-Direct',
+			modified = NOW(),
+			modified_by = %s
+		WHERE batch = %s
+		  AND status = 'Available'
+	""",
+		(frappe.session.user, batch_name),
+	)
+
+	# ROW_COUNT() returns the number of rows actually changed by the UPDATE
+	activated_count = frappe.db.sql("SELECT ROW_COUNT()")[0][0]
+
+	# Transition batch to Active (idempotent — no-op if already Active)
+	if batch.status == "Generated":
+		total_allocated = frappe.db.sql(
+			"""
+			SELECT COUNT(*) FROM `tabMemora Voucher Card`
+			WHERE batch = %s AND status = 'Allocated'
+		""",
+			(batch_name,),
+		)[0][0]
+		frappe.db.set_value(
+			"Memora Voucher Batch",
+			batch_name,
+			{
+				"status": "Active",
+				"allocated_count": total_allocated,
+			},
+			update_modified=True,
+		)
+
+	frappe.db.commit()
+
+	return {"status": "activated", "activated_count": activated_count}
 
 
 @frappe.whitelist()
@@ -282,11 +363,14 @@ def export_for_print(batch_name: str):
 	csv_bytes = output.getvalue().encode("utf-8")
 
 	# Log the export in the child table
-	batch.append("export_log", {
-		"exported_by": frappe.session.user,
-		"exported_at": frappe.utils.now(),
-		"card_count": len(filtered_rows),
-	})
+	batch.append(
+		"export_log",
+		{
+			"exported_by": frappe.session.user,
+			"exported_at": frappe.utils.now(),
+			"card_count": len(filtered_rows),
+		},
+	)
 	batch.save(ignore_permissions=True)
 	frappe.db.commit()
 
@@ -318,11 +402,14 @@ def void_batch(batch_name: str, void_reason: str) -> dict:
 		frappe.throw("Batch is already Closed.", frappe.ValidationError)
 
 	# Void all non-terminal cards via direct SQL (fast for up to 1000 cards)
-	frappe.db.sql("""
+	frappe.db.sql(
+		"""
 		UPDATE `tabMemora Voucher Card`
 		SET status = 'Void', void_reason = %s, modified = NOW(), modified_by = %s
 		WHERE batch = %s AND status IN ('Available', 'Allocated')
-	""", (void_reason, frappe.session.user, batch_name))
+	""",
+		(void_reason, frappe.session.user, batch_name),
+	)
 
 	voided_count = frappe.db.count("Memora Voucher Card", {"batch": batch_name, "status": "Void"})
 
@@ -374,10 +461,13 @@ def void_card(card_name: str, void_reason: str) -> dict:
 
 	card.status = "Void"
 	card.void_reason = void_reason
+	# Skip link validation: library may be 'Admin-Direct' sentinel (direct-activate cards)
+	card.flags.ignore_links = True
 	card.save(ignore_permissions=True)
 
 	# Update parent batch counters and check auto-close
 	from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close
+
 	recount_and_maybe_close(card.batch)
 	frappe.db.commit()
 
@@ -444,19 +534,21 @@ def _log_attempt(
 		failure_reason: Error code string for failures, empty string for success.
 		ip_address: Client IP address.
 	"""
-	frappe.get_doc({
-		"doctype": "Memora Voucher Redemption Log",
-		"player": player_id,
-		"pin_masked": f"****{pin_masked}",
-		"card": card,
-		"library": library,
-		"batch": batch,
-		"requested_grant": requested_grant,
-		"status": status,
-		"failure_reason": failure_reason,
-		"ip_address": ip_address,
-		"timestamp": frappe.utils.now(),
-	}).insert(ignore_permissions=True)
+	frappe.get_doc(
+		{
+			"doctype": "Memora Voucher Redemption Log",
+			"player": player_id,
+			"pin_masked": f"****{pin_masked}",
+			"card": card,
+			"library": library,
+			"batch": batch,
+			"requested_grant": requested_grant,
+			"status": status,
+			"failure_reason": failure_reason,
+			"ip_address": ip_address,
+			"timestamp": frappe.utils.now(),
+		}
+	).insert(ignore_permissions=True, ignore_links=True)
 
 
 def _check_season_active(player_id):
@@ -552,26 +644,31 @@ def preview_voucher(pin_hmac: str, player_id: str) -> dict:
 		grant_key_map[bg.product_grant] = keys
 		all_keys.extend(keys)
 
-	owned_keys = set(
-		frappe.get_all(
-			"Memora Player Subscription",
-			filters={"player": player_id, "access_key": ["in", all_keys]},
-			pluck="access_key",
+	owned_keys = (
+		set(
+			frappe.get_all(
+				"Memora Player Subscription",
+				filters={"player": player_id, "access_key": ["in", all_keys]},
+				pluck="access_key",
+			)
 		)
-	) if all_keys else set()
+		if all_keys
+		else set()
+	)
 
 	available_grants = []
 	for bg in batch.batch_grants:
 		keys = grant_key_map[bg.product_grant]
 		if not all(k in owned_keys for k in keys):
 			display_name = (
-				frappe.db.get_value("Memora Product Grant", bg.product_grant, "item_code")
-				or bg.product_grant
+				frappe.db.get_value("Memora Product Grant", bg.product_grant, "item_code") or bg.product_grant
 			)
-			available_grants.append({
-				"grant_id": bg.product_grant,
-				"name": display_name,
-			})
+			available_grants.append(
+				{
+					"grant_id": bg.product_grant,
+					"name": display_name,
+				}
+			)
 
 	if not available_grants:
 		return {"error": "ALL_GRANTS_OWNED"}
@@ -617,8 +714,15 @@ def redeem_voucher(
 
 	if not cards:
 		_log_attempt(
-			player_id, pin_hmac[-4:], None, None, None,
-			product_grant_id, "Invalid PIN", "INVALID_PIN", ip_address,
+			player_id,
+			pin_hmac[-4:],
+			None,
+			None,
+			None,
+			product_grant_id,
+			"Invalid PIN",
+			"INVALID_PIN",
+			ip_address,
 		)
 		return {"error": "INVALID_PIN"}
 
@@ -627,8 +731,15 @@ def redeem_voucher(
 	# 2. Timing-safe HMAC verification (REDEEM-09)
 	if not hmac_module.compare_digest(card.pin_hmac, pin_hmac):
 		_log_attempt(
-			player_id, pin_hmac[-4:], None, None, None,
-			product_grant_id, "Invalid PIN", "INVALID_PIN", ip_address,
+			player_id,
+			pin_hmac[-4:],
+			None,
+			None,
+			None,
+			product_grant_id,
+			"Invalid PIN",
+			"INVALID_PIN",
+			ip_address,
 		)
 		return {"error": "INVALID_PIN"}
 
@@ -637,8 +748,15 @@ def redeem_voucher(
 		error_code = _CARD_STATUS_ERRORS.get(card.status, "INVALID_PIN")
 		log_status = _ERROR_TO_LOG_STATUS.get(error_code, "Error")
 		_log_attempt(
-			player_id, pin_hmac[-4:], card.name, None, card.batch,
-			product_grant_id, log_status, error_code, ip_address,
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			None,
+			card.batch,
+			product_grant_id,
+			log_status,
+			error_code,
+			ip_address,
 		)
 		return {"error": error_code}
 
@@ -646,16 +764,30 @@ def redeem_voucher(
 	batch_status = frappe.db.get_value("Memora Voucher Batch", card.batch, "status")
 	if batch_status != "Active":
 		_log_attempt(
-			player_id, pin_hmac[-4:], card.name, None, card.batch,
-			product_grant_id, "Batch Inactive", "BATCH_INACTIVE", ip_address,
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			None,
+			card.batch,
+			product_grant_id,
+			"Batch Inactive",
+			"BATCH_INACTIVE",
+			ip_address,
 		)
 		return {"error": "BATCH_INACTIVE"}
 
 	# 5. Season validation via player's plan
 	if not _check_season_active(player_id):
 		_log_attempt(
-			player_id, pin_hmac[-4:], card.name, None, card.batch,
-			product_grant_id, "Season Inactive", "SEASON_INACTIVE", ip_address,
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			None,
+			card.batch,
+			product_grant_id,
+			"Season Inactive",
+			"SEASON_INACTIVE",
+			ip_address,
 		)
 		return {"error": "SEASON_INACTIVE"}
 
@@ -667,36 +799,58 @@ def redeem_voucher(
 	)
 	if product_grant_id not in valid_grants:
 		_log_attempt(
-			player_id, pin_hmac[-4:], card.name, None, card.batch,
-			product_grant_id, "Grant Not In Batch", "GRANT_NOT_IN_BATCH", ip_address,
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			None,
+			card.batch,
+			product_grant_id,
+			"Grant Not In Batch",
+			"GRANT_NOT_IN_BATCH",
+			ip_address,
 		)
 		return {"error": "GRANT_NOT_IN_BATCH"}
 
 	# 7. Check ALREADY_OWNED (does NOT consume card)
 	# PERF-14: single query instead of N exists() calls
 	grant_keys = get_grant_keys(product_grant_id)
-	owned_keys = set(
-		frappe.get_all(
-			"Memora Player Subscription",
-			filters={"player": player_id, "access_key": ["in", grant_keys]},
-			pluck="access_key",
+	owned_keys = (
+		set(
+			frappe.get_all(
+				"Memora Player Subscription",
+				filters={"player": player_id, "access_key": ["in", grant_keys]},
+				pluck="access_key",
+			)
 		)
-	) if grant_keys else set()
+		if grant_keys
+		else set()
+	)
 	all_owned = len(owned_keys) == len(grant_keys)
 	if all_owned:
 		_log_attempt(
-			player_id, pin_hmac[-4:], card.name, None, card.batch,
-			product_grant_id, "Already Owned", "ALREADY_OWNED", ip_address,
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			None,
+			card.batch,
+			product_grant_id,
+			"Already Owned",
+			"ALREADY_OWNED",
+			ip_address,
 		)
 		return {"error": "ALREADY_OWNED"}
 
 	# 8. Mark card as Redeemed
-	frappe.db.set_value("Memora Voucher Card", card.name, {
-		"status": "Redeemed",
-		"redeemed_by": player_id,
-		"redeemed_at": frappe.utils.now(),
-		"redeemed_grant": product_grant_id,
-	})
+	frappe.db.set_value(
+		"Memora Voucher Card",
+		card.name,
+		{
+			"status": "Redeemed",
+			"redeemed_by": player_id,
+			"redeemed_at": frappe.utils.now(),
+			"redeemed_grant": product_grant_id,
+		},
+	)
 
 	# 9. Get card's library for audit log
 	library = frappe.db.get_value("Memora Voucher Card", card.name, "library")
@@ -707,15 +861,17 @@ def redeem_voucher(
 	try:
 		# 11. Create Subscription Transaction with TWO-STEP SAVE
 		# Step 1: Insert with Pending Approval (triggers after_insert hook)
-		trx = frappe.get_doc({
-			"doctype": "Memora Subscription Transaction",
-			"player": player_id,
-			"payment_method": "Voucher",
-			"status": "Pending Approval",
-			"related_grant": product_grant_id,
-			"amount_paid": face_value,
-			"transaction_id": card.name,
-		})
+		trx = frappe.get_doc(
+			{
+				"doctype": "Memora Subscription Transaction",
+				"player": player_id,
+				"payment_method": "Voucher",
+				"status": "Pending Approval",
+				"related_grant": product_grant_id,
+				"amount_paid": face_value,
+				"transaction_id": card.name,
+			}
+		)
 		trx.insert(ignore_permissions=True)
 
 		# Step 2: Change status to Completed and save
@@ -731,17 +887,28 @@ def redeem_voucher(
 			{"player": player_id, "access_key": ["in", grant_keys]},
 		)
 		if not subs_exist:
-			frappe.db.set_value("Memora Voucher Card", card.name, {
-				"status": "Allocated",
-				"redeemed_by": "",
-				"redeemed_at": None,
-				"redeemed_grant": "",
-			})
+			frappe.db.set_value(
+				"Memora Voucher Card",
+				card.name,
+				{
+					"status": "Allocated",
+					"redeemed_by": "",
+					"redeemed_at": None,
+					"redeemed_grant": "",
+				},
+			)
 			frappe.db.commit()
 		frappe.log_error(title=f"Voucher redemption failed: {card.name}")
 		_log_attempt(
-			player_id, pin_hmac[-4:], card.name, library, card.batch,
-			product_grant_id, "Error", "REDEMPTION_FAILED", ip_address,
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			library,
+			card.batch,
+			product_grant_id,
+			"Error",
+			"REDEMPTION_FAILED",
+			ip_address,
 		)
 		return {"error": "REDEMPTION_FAILED"}
 
@@ -753,12 +920,20 @@ def redeem_voucher(
 
 	# 13. Log success
 	_log_attempt(
-		player_id, pin_hmac[-4:], card.name, library, card.batch,
-		product_grant_id, "Success", "", ip_address,
+		player_id,
+		pin_hmac[-4:],
+		card.name,
+		library,
+		card.batch,
+		product_grant_id,
+		"Success",
+		"",
+		ip_address,
 	)
 
 	# 14. Update batch counters and check auto-close
 	from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close
+
 	recount_and_maybe_close(card.batch)
 
 	frappe.db.commit()

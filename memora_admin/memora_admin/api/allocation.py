@@ -32,6 +32,13 @@ def fill_cards(allocation_name: str, quantity: int = 0) -> dict:
 			frappe.ValidationError,
 		)
 
+	batch_purpose = frappe.db.get_value("Memora Voucher Batch", alloc.batch, "batch_purpose")
+	if batch_purpose and batch_purpose != "Sale":
+		frappe.throw(
+			"Cannot allocate cards from a non-sale batch. Use Direct Activate instead.",
+			frappe.ValidationError,
+		)
+
 	page_length = quantity if quantity > 0 else 0
 
 	if alloc.allocation_type == "Allocate":
@@ -92,6 +99,13 @@ def submit_allocation(allocation_name: str) -> dict:
 	if alloc.status != "Draft":
 		frappe.throw(
 			f"Allocation must be in Draft status to submit. Current status: {alloc.status}",
+			frappe.ValidationError,
+		)
+
+	batch_purpose = frappe.db.get_value("Memora Voucher Batch", alloc.batch, "batch_purpose")
+	if batch_purpose and batch_purpose != "Sale":
+		frappe.throw(
+			"Cannot allocate cards from a non-sale batch. Use Direct Activate instead.",
 			frappe.ValidationError,
 		)
 

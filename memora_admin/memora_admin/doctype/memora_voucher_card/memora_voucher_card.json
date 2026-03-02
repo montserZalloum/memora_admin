@@ -9,6 +9,7 @@
   "serial_no",
   "pin_hmac",
   "batch",
+  "batch_purpose",
   "status",
   "column_break_1",
   "library",
@@ -21,7 +22,9 @@
   "redeemed_grant",
   "subscription_transaction",
   "section_void",
-  "void_reason"
+  "void_reason",
+  "section_recipient",
+  "recipient_note"
  ],
  "fields": [
   {
@@ -50,6 +53,15 @@
    "options": "Memora Voucher Batch",
    "reqd": 1,
    "search_index": 1
+  },
+  {
+   "default": "Sale",
+   "fieldname": "batch_purpose",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Batch Purpose",
+   "options": "Sale\nScholarship\nGift\nPromotion",
+   "read_only": 1
   },
   {
    "default": "Available",
@@ -100,6 +112,7 @@
   {
    "fieldname": "redeemed_by",
    "fieldtype": "Link",
+   "in_list_view": 1,
    "label": "Redeemed By",
    "options": "Memora Player Profile",
    "read_only": 1
@@ -107,6 +120,7 @@
   {
    "fieldname": "redeemed_at",
    "fieldtype": "Datetime",
+   "in_list_view": 1,
    "label": "Redeemed At",
    "read_only": 1
   },
@@ -135,6 +149,20 @@
    "fieldname": "void_reason",
    "fieldtype": "Small Text",
    "label": "Void Reason"
+  },
+  {
+   "collapsible": 1,
+   "depends_on": "eval:doc.batch_purpose && doc.batch_purpose !== 'Sale'",
+   "fieldname": "section_recipient",
+   "fieldtype": "Section Break",
+   "label": "Recipient Information"
+  },
+  {
+   "depends_on": "eval:doc.batch_purpose && doc.batch_purpose !== 'Sale'",
+   "fieldname": "recipient_note",
+   "fieldtype": "Small Text",
+   "in_list_view": 1,
+   "label": "Recipient Note"
   }
  ],
  "index_web_pages_for_search": 0,

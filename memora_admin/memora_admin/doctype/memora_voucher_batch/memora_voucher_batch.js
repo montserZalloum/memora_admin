@@ -9,6 +9,12 @@ frappe.ui.form.on("Memora Voucher Batch", {
 			frm.set_df_property("pin_length", "read_only", 1);
 			frm.set_df_property("face_value", "read_only", 1);
 			frm.set_df_property("batch_grants", "read_only", 1);
+			frm.set_df_property("batch_purpose", "read_only", 1);
+		}
+
+		// Lock face_value for non-Sale batches (mirrors batch_purpose change handler)
+		if (frm.doc.batch_purpose && frm.doc.batch_purpose !== "Sale") {
+			frm.set_df_property("face_value", "read_only", 1);
 		}
 
 		// Export log is always read-only
@@ -108,6 +114,38 @@ frappe.ui.form.on("Memora Voucher Batch", {
 			frm.change_custom_button_type(__("Void Batch"), __("Actions"), "danger");
 		}
 
+		// Direct Activate button: non-Sale batches in Generated status
+		if (frm.doc.batch_purpose && frm.doc.batch_purpose !== "Sale" && frm.doc.status === "Generated") {
+			frm.add_custom_button(
+				__("Direct Activate"),
+				function () {
+					frappe.confirm(
+						__(
+							"Directly activate all {0} cards? This will set them to Allocated with library 'Admin-Direct'. This cannot be undone.",
+							[frm.doc.generated_count || frm.doc.quantity]
+						),
+						function () {
+							frappe.call({
+								method: "memora_admin.memora_admin.api.voucher.direct_activate",
+								args: { batch_name: frm.doc.name },
+								callback: function (r) {
+									if (r.message) {
+										frappe.show_alert({
+											message: __("{0} cards activated.", [r.message.activated_count]),
+											indicator: "green",
+										});
+										frm.reload_doc();
+									}
+								},
+							});
+						}
+					);
+				},
+				__("Actions")
+			);
+			frm.change_custom_button_type(__("Direct Activate"), __("Actions"), "primary");
+		}
+
 		// Real-time event listeners
 		frappe.realtime.on("batch_generation_complete", function (data) {
 			if (data.batch_name === frm.doc.name) {
@@ -128,5 +166,14 @@ frappe.ui.form.on("Memora Voucher Batch", {
 				});
 			}
 		});
+	},
+
+	batch_purpose(frm) {
+		if (frm.doc.batch_purpose && frm.doc.batch_purpose !== "Sale") {
+			frm.set_value("face_value", 0);
+			frm.set_df_property("face_value", "read_only", 1);
+		} else {
+			frm.set_df_property("face_value", "read_only", frm.doc.status !== "Draft" ? 1 : 0);
+		}
 	},
 });
