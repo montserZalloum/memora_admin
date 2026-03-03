@@ -2,6 +2,8 @@
 
 **Complete Documentation for Admins**
 
+This index is voucher-system specific. For the Practice Arena backend flow, see `../PRACTICE_ARENA_BACKEND_GUIDE.md`.
+
 ---
 
 ## 📚 Four Core Documents

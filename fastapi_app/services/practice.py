@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 META_CACHE_TTL = 3600  # 1 hour — same as hierarchy cache
+PRACTICE_SESSION_SCHEMA_VERSION = 2
 
 
 class PracticeAccessDenied(Exception):
@@ -64,6 +65,22 @@ class PreviousBatchNotSubmittedError(Exception):
 	def __init__(self, batch_seq: int):
 		self.batch_seq = batch_seq
 		super().__init__(f"Batch {batch_seq} not yet submitted")
+
+
+class OffBatchItemError(Exception):
+	"""Raised when submitted item_ids were not served in the active batch."""
+
+	def __init__(self, off_batch_ids: list[str]):
+		self.off_batch_ids = off_batch_ids
+		super().__init__(f"Items not in served batch: {off_batch_ids[:5]}")
+
+
+class InvalidSessionStateError(Exception):
+	"""Raised when a current-format session is missing required state."""
+
+	def __init__(self, missing_field: str):
+		self.missing_field = missing_field
+		super().__init__(f"Session missing required field: {missing_field}")
 
 
 def _compute_topic_quotas(counts: dict[str, int], batch_size: int) -> dict[str, int]:
@@ -185,10 +202,12 @@ class PracticeService:
 		for track in hier.tracks:
 			track_id = track.track_id
 
-			# Check access: subject grant OR plan membership OR track grant
-			has_access = await self._check_track_access(player_id, subject_id, track_id, plan_id)
+			# Check full access (grants/plan) OR free content presence
+			has_full_access = await self._check_track_access(player_id, subject_id, track_id, plan_id)
+			has_free = self._track_has_free_content(hier, track_id)
+			has_access = has_full_access or has_free
 
-			# If no access, include track (for UI) but with empty units
+			# If no access at all, include track (for UI) but with empty units
 			if not has_access:
 				# Still compute track-level item count for display
 				track_item_count = self._compute_track_item_count(track, item_counts)
@@ -206,17 +225,41 @@ class PracticeService:
 				)
 				continue
 
-			# Build units and topics for accessible tracks
+			# Build units and topics for accessible tracks.
+			# When the player only has free content access (not full),
+			# restrict to free units/topics so the UI doesn't show paid
+			# nodes the player can't actually select.
+			free_only = has_free and not has_full_access
+			free_units_set = set(hier.free_units) if free_only else set()
+			free_topics_set = set(hier.free_topics) if free_only else set()
+
 			units: list[PracticeUnitInfo] = []
 			track_item_count = 0
 
 			for unit in track.units:
 				unit_id = unit.unit_id
+				unit_is_free = unit.unit_id in free_units_set or unit.is_free
+
+				# In free-only mode, skip units that are neither free
+				# themselves nor contain any free topics
+				if free_only and not unit_is_free:
+					has_free_topic = any(
+						t.topic_id in free_topics_set or t.is_free for t in unit.topics
+					)
+					if not has_free_topic:
+						continue
+
 				topics: list[PracticeTopicInfo] = []
 				unit_item_count = 0
 
 				for topic in unit.topics:
 					topic_id = topic.topic_id
+
+					# In free-only mode, skip paid topics (unless entire unit is free)
+					if free_only and not unit_is_free:
+						if topic_id not in free_topics_set and not topic.is_free:
+							continue
+
 					topic_count = item_counts.get(topic_id, 0)
 
 					# Apply completed filter: skip topics with no completed lessons
@@ -236,7 +279,7 @@ class PracticeService:
 						unit_item_count += topic_count
 
 				# Skip empty units after filtering
-				if not topics and filter_mode == "completed":
+				if not topics and (filter_mode == "completed" or free_only):
 					continue
 
 				if topics:
@@ -324,13 +367,17 @@ class PracticeService:
 		track_id: str,
 		plan_id: str | None,
 	) -> bool:
-		"""Check if player has access to a track.
+		"""Check if player has FULL access to a track (grants/plan only).
+
+		Full access means every lesson in the track is accessible.
+		Does NOT consider free content — that's handled separately by
+		_get_accessible_lessons (for session start) and _track_has_free_content
+		(for hierarchy browsing).
 
 		Access is granted if:
 		1. Subject-level grant (SUB-{subject_id})
 		2. Plan membership (subject free in plan)
 		3. Track-level grant (TRK-{track_id})
-		4. Track has any free content (free units/topics within)
 		"""
 		# Check subject-level access (grant or plan)
 		subject_key = f"SUB-{subject_id}"
@@ -342,6 +389,28 @@ class PracticeService:
 		if await self.access.check_access(player_id, track_key):
 			return True
 
+		return False
+
+	@staticmethod
+	def _track_has_free_content(hier: SubjectHierarchy, track_id: str) -> bool:
+		"""Check if a track contains any free units or topics.
+
+		Used by the hierarchy endpoint to decide whether to show the track
+		as browsable (with units visible) even without an explicit grant.
+		Does NOT grant full access to all lessons — only signals "some
+		content is viewable."
+		"""
+		free_units = set(hier.free_units)
+		free_topics = set(hier.free_topics)
+		for track_obj in hier.tracks:
+			if track_obj.track_id != track_id:
+				continue
+			for unit in track_obj.units:
+				if unit.unit_id in free_units or unit.is_free:
+					return True
+				for topic in unit.topics:
+					if topic.topic_id in free_topics or topic.is_free:
+						return True
 		return False
 
 	async def _get_completed_lesson_ids(self, player_id: str, subject_id: str, hier) -> set[str]:
@@ -449,8 +518,10 @@ class PracticeService:
 			"tracks": json.dumps(tracks),
 			"units": json.dumps(units),
 			"topics": json.dumps(topics),
+			"schema_version": str(PRACTICE_SESSION_SCHEMA_VERSION),
 			"batch_seq": "0",
 			"served_item_ids": json.dumps(served_ids),
+			"batch_0_item_ids": json.dumps(served_ids),
 			"accessible_lessons": json.dumps(lesson_ids),
 			"selected_topics": json.dumps(selected_topic_ids),
 			"created_at": now,
@@ -488,10 +559,17 @@ class PracticeService:
 		"""Submit results for a practice batch.
 
 		Idempotent via submitted_{batch_seq} marker in session hash.
+		The marker stores the original response JSON so duplicate submissions
+		return the exact same result regardless of payload changes.
+
+		Validates that submitted item_ids were actually served in the batch
+		(stored in served_item_ids). Off-batch items are rejected.
 
 		Raises:
 			NoActiveSessionError: If no active session exists
 			BatchSeqMismatchError: If batch_seq is ahead of current
+			OffBatchItemError: If submitted items weren't served in the batch
+			InvalidSessionStateError: If a current-format session is malformed
 		"""
 		log = logger.bind(player_id=player_id, batch_seq=batch_seq)
 		session_key = practice_session_key(player_id)
@@ -507,30 +585,93 @@ class PracticeService:
 		if batch_seq > current_seq:
 			raise BatchSeqMismatchError(expected=current_seq, received=batch_seq)
 
-		# Check for duplicate submission
+		# Check for duplicate submission — return cached original response
 		submitted_marker = f"submitted_{batch_seq}"
-		if session.get(submitted_marker):
-			# Duplicate — return cached result without updating Practice Log
+		cached_result = session.get(submitted_marker)
+		if cached_result:
 			log.info("practice_batch_duplicate")
-			correct = sum(1 for r in results if r.get("is_correct"))
-			total = len(results)
+			try:
+				cached = json.loads(cached_result)
+			except (json.JSONDecodeError, TypeError):
+				cached = None
+
+			# Legacy sessions stored "1" as the marker (not JSON), which
+			# parses as the integer 1 — not a dict.  Treat any non-dict
+			# marker as "already submitted but no cached stats".
+			if isinstance(cached, dict) and "correct_count" in cached:
+				return PracticeSubmitResponse(
+					accepted=True,
+					batch_seq=batch_seq,
+					correct_count=cached["correct_count"],
+					total_count=cached["total_count"],
+					accuracy_percent=cached["accuracy_percent"],
+					is_duplicate=True,
+				)
+
+			# Legacy marker (pre-deploy "1") — no cached stats available.
+			# Recompute from submitted results to preserve API contract.
+			# May differ from original submit if client tampered, but old
+			# code had the same behavior and these sessions expire in ≤1h.
+			legacy_correct = sum(1 for r in results if r.get("is_correct"))
+			legacy_total = len(results)
 			return PracticeSubmitResponse(
 				accepted=True,
 				batch_seq=batch_seq,
-				correct_count=correct,
-				total_count=total,
-				accuracy_percent=round(correct / total * 100, 1) if total > 0 else 0.0,
+				correct_count=legacy_correct,
+				total_count=legacy_total,
+				accuracy_percent=round(legacy_correct / legacy_total * 100, 1) if legacy_total > 0 else 0.0,
 				is_duplicate=True,
 			)
 
+		# Validate submitted items were actually served in THIS specific batch.
+		# Legacy sessions (pre-deploy) lack both schema_version and per-batch
+		# keys. Only those sessions skip validation to preserve rollout safety.
+		# Current-format sessions must fail closed if required state is missing.
+		batch_items_key = f"batch_{batch_seq}_item_ids"
+		raw_batch_ids = session.get(batch_items_key)
+		raw_schema_version = session.get("schema_version")
+		try:
+			schema_version = (
+				int(raw_schema_version)
+				if raw_schema_version is not None
+				else 1
+			)
+		except (TypeError, ValueError):
+			schema_version = 1
+		is_legacy_session = schema_version < PRACTICE_SESSION_SCHEMA_VERSION
+		submitted_ids = [r.get("item_id", "") for r in results]
+		if raw_batch_ids is None:
+			if is_legacy_session:
+				log.info(
+					"practice_legacy_session_skip_validation",
+					batch_seq=batch_seq,
+					reason="no_per_batch_key",
+				)
+			else:
+				log.error(
+					"practice_session_missing_batch_key",
+					batch_seq=batch_seq,
+					missing_field=batch_items_key,
+				)
+				raise InvalidSessionStateError(batch_items_key)
+		else:
+			batch_item_ids = set(json.loads(raw_batch_ids))
+			off_batch = [iid for iid in submitted_ids if iid not in batch_item_ids]
+			if off_batch:
+				log.warning(
+					"practice_off_batch_items",
+					off_batch_count=len(off_batch),
+					off_batch_ids=off_batch[:5],
+				)
+				raise OffBatchItemError(off_batch)
+
 		# UPSERT Practice Log for each result
-		now = datetime.now(timezone.utc).replace(tzinfo=None)  # naive for MariaDB
+		now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()  # ISO string for JSON serialization
 		correct_count = 0
 		total_count = 0
 
 		if self.frappe and results:
 			# Validate item_ids still exist (items may be deleted during active session)
-			submitted_ids = [r.get("item_id", "") for r in results]
 			valid_ids = await self._get_valid_item_ids(submitted_ids)
 			skipped_ids = set(submitted_ids) - valid_ids
 
@@ -571,16 +712,11 @@ class PracticeService:
 						attempt_count = attempt_count + 1,
 						correct_count = correct_count + VALUES(correct_count)
 				"""
-				try:
-					await self.frappe.call(
-						"memora_admin.api.practice.execute_practice_log_upsert",
-						{"sql": sql, "params": params},
-					)
-				except Exception as e:
-					log.error(
-						"practice_log_upsert_failed",
-						error=str(e),
-					)
+				# Let exception propagate — do NOT mark as submitted on DB failure
+				await self.frappe.call(
+					"memora_admin.api.practice.execute_practice_log_upsert",
+					{"sql": sql, "params": params},
+				)
 		else:
 			# Count without DB write (no frappe client)
 			for r in results:
@@ -588,9 +724,18 @@ class PracticeService:
 				if r.get("is_correct"):
 					correct_count += 1
 
+		accuracy = round(correct_count / total_count * 100, 1) if total_count > 0 else 0.0
+
+		# Cache the result in the submitted marker so duplicates return identical response
+		cached_payload = json.dumps({
+			"correct_count": correct_count,
+			"total_count": total_count,
+			"accuracy_percent": accuracy,
+		})
+
 		# Set submitted marker in session hash + reset TTL
 		pipe = self.redis.pipeline()
-		pipe.hset(session_key, submitted_marker, "1")
+		pipe.hset(session_key, submitted_marker, cached_payload)
 		pipe.expire(session_key, self.config.practice_session_ttl)
 		await pipe.execute()
 
@@ -598,7 +743,7 @@ class PracticeService:
 			"practice_batch_submitted",
 			correct_count=correct_count,
 			total_count=total_count,
-			accuracy_percent=round(correct_count / total_count * 100, 1) if total_count > 0 else 0.0,
+			accuracy_percent=accuracy,
 		)
 
 		return PracticeSubmitResponse(
@@ -606,7 +751,7 @@ class PracticeService:
 			batch_seq=batch_seq,
 			correct_count=correct_count,
 			total_count=total_count,
-			accuracy_percent=round(correct_count / total_count * 100, 1) if total_count > 0 else 0.0,
+			accuracy_percent=accuracy,
 			is_duplicate=False,
 		)
 
@@ -670,7 +815,8 @@ class PracticeService:
 			all_seen = True  # Always true when wrapping around
 
 		# Update served_item_ids with new batch
-		new_served_ids = served_item_ids + [q.item_id for q in questions]
+		batch_ids = [q.item_id for q in questions]
+		new_served_ids = served_item_ids + batch_ids
 
 		# Update session in Redis
 		pipe = self.redis.pipeline()
@@ -679,6 +825,7 @@ class PracticeService:
 			mapping={
 				"batch_seq": str(next_seq),
 				"served_item_ids": json.dumps(new_served_ids),
+				f"batch_{next_seq}_item_ids": json.dumps(batch_ids),
 			},
 		)
 		pipe.expire(session_key, self.config.practice_session_ttl)
@@ -745,7 +892,7 @@ class PracticeService:
 			if track.track_id not in track_set:
 				continue
 
-			# Check full access to this track
+			# Check full access to this track (grants/plan only — free content handled below)
 			has_access = await self._check_track_access(player_id, subject_id, track.track_id, plan_id)
 
 			track_lessons: list[str] = []
@@ -840,16 +987,21 @@ class PracticeService:
 		served_item_ids: list[str],
 		batch_size: int,
 	) -> tuple[list[PracticeQuestion], int, bool]:
-		"""Select questions with 3-tier priority and proportional topic distribution.
+		"""Select questions with priority ordering and proportional topic distribution.
 
 		Priority:
 		0 = never seen (no Practice Log entry)
-		1 = seen before, not in this session
-		2 = seen in this session (served_item_ids)
+		1 = seen before (has Practice Log entry)
 
 		Proportional distribution: When multiple topics are selected, questions
 		are distributed across topics proportionally by available item count.
 		Single-topic selections bypass proportional logic.
+
+		Two-pass approach:
+		1. First pass: query each topic for its quota.
+		2. Redistribution pass: if any topic returned fewer items than its quota
+		   (exhausted by served_item_ids exclusion), redistribute the unfilled
+		   slots to topics that still have unseen items.
 
 		Returns:
 			Tuple of (questions, total_available_items, any_repeat).
@@ -873,9 +1025,15 @@ class PracticeService:
 		# Compute per-topic quotas
 		quotas = _compute_topic_quotas(topic_counts, batch_size)
 
-		# Query per topic with priority ordering
+		# First pass: query each topic for its quota
 		all_questions: list[PracticeQuestion] = []
 		any_repeat = False
+		# Track how many each topic returned vs requested (for redistribution)
+		topic_returned: dict[str, int] = {}
+		topic_exhausted: set[str] = set()
+
+		# Accumulate served IDs including newly selected items for exclusion
+		current_served = list(served_item_ids)
 
 		for topic_id, quota in quotas.items():
 			questions, has_repeat = await self._select_for_topic(
@@ -883,11 +1041,40 @@ class PracticeService:
 				subject_id=subject_id,
 				accessible_lessons=accessible_lessons,
 				topic_id=topic_id,
-				served_item_ids=served_item_ids,
+				served_item_ids=current_served,
 				limit=quota,
 			)
 			all_questions.extend(questions)
 			any_repeat = any_repeat or has_repeat
+			topic_returned[topic_id] = len(questions)
+			if len(questions) < quota:
+				topic_exhausted.add(topic_id)
+			# Add newly selected items so redistribution pass excludes them
+			current_served.extend(q.item_id for q in questions)
+
+		# Redistribution pass: fill unfilled slots from non-exhausted topics
+		unfilled = sum(quotas[t] - topic_returned[t] for t in topic_exhausted)
+		if unfilled > 0:
+			# Topics that might still have items (returned full quota)
+			donors = [t for t in quotas if t not in topic_exhausted]
+			if donors:
+				# Distribute unfilled evenly, largest-first
+				donors.sort(key=lambda t: topic_counts.get(t, 0), reverse=True)
+				for donor_id in donors:
+					if unfilled <= 0:
+						break
+					extra_questions, has_repeat = await self._select_for_topic(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=accessible_lessons,
+						topic_id=donor_id,
+						served_item_ids=current_served,
+						limit=unfilled,
+					)
+					all_questions.extend(extra_questions)
+					any_repeat = any_repeat or has_repeat
+					unfilled -= len(extra_questions)
+					current_served.extend(q.item_id for q in extra_questions)
 
 		return all_questions, total_available, any_repeat
 
@@ -902,6 +1089,11 @@ class PracticeService:
 	) -> tuple[list[PracticeQuestion], bool]:
 		"""Select questions for a single topic with priority ordering.
 
+		Served items are EXCLUDED (not just ranked lower) to prevent premature
+		repeats while other topics still have unseen items. The caller
+		(continue_session) handles wrap-around by clearing served_item_ids
+		when all items are exhausted.
+
 		Returns:
 			Tuple of (questions, has_repeat). has_repeat is True if any
 			returned row has priority > 0 (previously seen).
@@ -910,25 +1102,19 @@ class PracticeService:
 		where_clause = f"ri.subject = %s AND ri.lesson IN ({lesson_placeholders}) AND ri.topic = %s"
 		params: list = [subject_id, *accessible_lessons, topic_id]
 
-		# Build served_item_ids CASE expression
+		# Exclude already-served items from this session
+		served_exclude_params: list = []
 		if served_item_ids:
 			served_placeholders = ", ".join(["%s"] * len(served_item_ids))
-			priority_case = f"""
-				CASE
-					WHEN pl.item_id IS NULL THEN 0
-					WHEN ri.item_id NOT IN ({served_placeholders}) THEN 1
-					ELSE 2
-				END
-			"""
-			priority_params = list(served_item_ids)
-		else:
-			priority_case = """
-				CASE
-					WHEN pl.item_id IS NULL THEN 0
-					ELSE 1
-				END
-			"""
-			priority_params = []
+			where_clause += f" AND ri.item_id NOT IN ({served_placeholders})"
+			served_exclude_params = list(served_item_ids)
+
+		priority_case = """
+			CASE
+				WHEN pl.item_id IS NULL THEN 0
+				ELSE 1
+			END
+		"""
 
 		select_sql = f"""
 			SELECT ri.item_id, ri.question_text, ri.choice_1, ri.choice_2,
@@ -944,7 +1130,7 @@ class PracticeService:
 			LIMIT %s
 		"""
 
-		select_params = [*priority_params, player_id, *params, limit]
+		select_params = [player_id, *params, *served_exclude_params, limit]
 
 		try:
 			rows = await self.frappe.call(

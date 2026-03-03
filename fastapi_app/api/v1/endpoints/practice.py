@@ -14,8 +14,10 @@ from fastapi_app.models.practice import (
 )
 from fastapi_app.services.practice import (
 	BatchSeqMismatchError,
+	InvalidSessionStateError,
 	NoActiveSessionError,
 	NoItemsError,
+	OffBatchItemError,
 	PracticeAccessDenied,
 	PreviousBatchNotSubmittedError,
 )
@@ -130,6 +132,16 @@ async def submit_practice(
 		raise HTTPException(
 			status_code=status.HTTP_409_CONFLICT,
 			detail={"code": "BATCH_SEQ_MISMATCH", "expected": e.expected, "received": e.received},
+		)
+	except OffBatchItemError as e:
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			detail={"code": "OFF_BATCH_ITEMS", "items": e.off_batch_ids[:5]},
+		)
+	except InvalidSessionStateError as e:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "INVALID_SESSION_STATE", "missing_field": e.missing_field},
 		)
 
 

@@ -1073,3 +1073,596 @@ class TestAllSeenWarning:
 		resp = await client.post("/api/v1/practice/continue")
 		assert resp.status_code == 200
 		assert resp.json()["all_seen_warning"] is False
+
+
+# ==========================================================================
+# Regression: Write-failure handling (#1)
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+class TestWriteFailureHandling:
+	"""DB write failure must NOT mark batch as submitted — client can retry."""
+
+	async def test_db_failure_does_not_mark_submitted(self, authed_client, redis_client, mock_frappe):
+		"""When Practice Log UPSERT fails, batch stays unsubmitted so client can retry."""
+		client, token, player_id, family_id = authed_client
+		questions = await _start_session(client, redis_client, mock_frappe, player_id)
+
+		# Make the upsert call raise an exception
+		call_count = {"n": 0}
+
+		async def failing_handler(method, params=None):
+			if method == "memora_admin.api.practice.execute_practice_log_upsert":
+				call_count["n"] += 1
+				if call_count["n"] == 1:
+					raise RuntimeError("DB connection lost")
+				return None  # Succeed on retry
+			# Delegate to normal handler for everything else
+			return await _make_frappe_handler(questions)(method, params)
+
+		mock_frappe.call.side_effect = failing_handler
+
+		results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
+
+		# First submit — DB fails, exception propagates (not silently swallowed)
+		with pytest.raises(RuntimeError, match="DB connection lost"):
+			await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+
+		# Session should NOT have submitted_0 marker
+		session = await redis_client.hgetall(practice_session_key(player_id))
+		assert "submitted_0" not in session
+
+		# Retry should succeed
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["accepted"] is True
+		assert data["is_duplicate"] is False
+		assert data["correct_count"] == len(questions)
+
+
+# ==========================================================================
+# Regression: Off-batch item validation (#2)
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+class TestOffBatchItemValidation:
+	"""Submitted item_ids must belong to the served batch."""
+
+	async def test_off_batch_item_rejected(self, authed_client, redis_client, mock_frappe):
+		"""Submitting item_ids not in served batch returns 422 OFF_BATCH_ITEMS."""
+		client, token, player_id, family_id = authed_client
+		questions = await _start_session(client, redis_client, mock_frappe, player_id)
+
+		# Submit with a forged item_id that wasn't served
+		forged_id = str(uuid4())
+		results = [
+			{"item_id": questions[0]["item_id"], "is_correct": True},
+			{"item_id": forged_id, "is_correct": True},
+		]
+
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+
+		assert resp.status_code == 422
+		detail = resp.json()["detail"]
+		assert detail["code"] == "OFF_BATCH_ITEMS"
+		assert forged_id in detail["items"]
+
+	async def test_all_served_items_accepted(self, authed_client, redis_client, mock_frappe):
+		"""Submitting only served item_ids succeeds normally."""
+		client, token, player_id, family_id = authed_client
+		questions = await _start_session(client, redis_client, mock_frappe, player_id)
+
+		results = [{"item_id": q["item_id"], "is_correct": i % 2 == 0} for i, q in enumerate(questions)]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+
+		assert resp.status_code == 200
+		assert resp.json()["accepted"] is True
+
+	async def test_cross_batch_item_rejected(self, authed_client, redis_client, mock_frappe):
+		"""Submitting batch 0's items with batch 1 is rejected (per-batch validation)."""
+		client, token, player_id, family_id = authed_client
+
+		# Create two distinct sets of questions for batch 0 and batch 1
+		batch0_qs = _make_question_rows(3, topic_id=TOPIC_ID)
+		batch1_qs = _make_question_rows(3, topic_id=TOPIC_ID)
+		all_qs = batch0_qs + batch1_qs
+
+		batch_call = {"n": 0}
+
+		async def multi_batch_handler(method, params=None):
+			if method == "memora_admin.api.practice.execute_practice_query":
+				sql = (params or {}).get("sql", "")
+				if "GROUP BY ri.topic" in sql:
+					return [{"topic": TOPIC_ID, "cnt": 6}]
+				elif "SELECT ri.item_id" in sql:
+					batch_call["n"] += 1
+					# First select → batch 0 items, second select → batch 1 items
+					if batch_call["n"] <= 1:
+						return batch0_qs
+					return batch1_qs
+				elif "SELECT item_id" in sql:
+					return [{"item_id": q["item_id"]} for q in all_qs]
+			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
+				return None
+			return None
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = multi_batch_handler
+
+		# Start session → gets batch 0 items
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+		b0_ids = [q["item_id"] for q in resp.json()["questions"]]
+
+		# Submit batch 0
+		results_0 = [{"item_id": iid, "is_correct": True} for iid in b0_ids]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results_0})
+		assert resp.status_code == 200
+
+		# Continue → gets batch 1 items
+		resp = await client.post("/api/v1/practice/continue")
+		assert resp.status_code == 200
+		b1_data = resp.json()
+		assert b1_data["batch_seq"] == 1
+
+		# Try submitting batch 0's item IDs as batch 1 → must be rejected
+		cross_results = [{"item_id": b0_ids[0], "is_correct": True}]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 1, "results": cross_results})
+		assert resp.status_code == 422
+		assert resp.json()["detail"]["code"] == "OFF_BATCH_ITEMS"
+
+
+# ==========================================================================
+# Regression: Duplicate payload tamper (#3)
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+class TestDuplicatePayloadTamper:
+	"""Duplicate submission returns cached original result, not recomputed from payload."""
+
+	async def test_tampered_duplicate_returns_original(self, authed_client, redis_client, mock_frappe):
+		"""Second submit with altered is_correct values still returns original counts."""
+		client, token, player_id, family_id = authed_client
+		questions = await _start_session(client, redis_client, mock_frappe, player_id)
+
+		# Original: 2 correct, 1 wrong
+		original_results = [
+			{"item_id": questions[0]["item_id"], "is_correct": True},
+			{"item_id": questions[1]["item_id"], "is_correct": True},
+			{"item_id": questions[2]["item_id"], "is_correct": False},
+		]
+		resp1 = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": original_results})
+		assert resp1.status_code == 200
+		d1 = resp1.json()
+		assert d1["correct_count"] == 2
+		assert d1["total_count"] == 3
+		assert d1["is_duplicate"] is False
+
+		# Tampered: flip all to correct
+		tampered_results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
+		resp2 = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": tampered_results})
+		assert resp2.status_code == 200
+		d2 = resp2.json()
+		assert d2["is_duplicate"] is True
+		# Must return ORIGINAL counts, not tampered
+		assert d2["correct_count"] == 2
+		assert d2["total_count"] == 3
+		assert d2["accuracy_percent"] == d1["accuracy_percent"]
+
+
+# ==========================================================================
+# Regression: Legacy session backward compatibility (#5-deploy-safety)
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+class TestLegacySessionCompat:
+	"""Sessions created before the per-batch schema change must not crash."""
+
+	async def test_legacy_submitted_marker_returns_computed_stats(self, authed_client, redis_client, mock_frappe):
+		"""Old sessions stored submitted_0='1' (not JSON). Should recompute stats from payload."""
+		client, token, player_id, family_id = authed_client
+		questions = _make_question_rows(4, topic_id=TOPIC_ID)
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(questions)
+
+		# Start session normally
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+		served_ids = [q["item_id"] for q in resp.json()["questions"]]
+
+		# Simulate legacy marker: overwrite submitted_0 with "1" (old format)
+		session_key = practice_session_key(player_id)
+		await redis_client.hset(session_key, "submitted_0", "1")
+
+		# Submit with mixed results — should detect duplicate but return
+		# stats recomputed from the submitted payload (matching old behavior)
+		results = [
+			{"item_id": served_ids[0], "is_correct": True},
+			{"item_id": served_ids[1], "is_correct": True},
+			{"item_id": served_ids[2], "is_correct": False},
+			{"item_id": served_ids[3], "is_correct": False},
+		]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["is_duplicate"] is True
+		assert data["accepted"] is True
+		# Stats should be computed from the submitted payload, not zeros
+		assert data["correct_count"] == 2
+		assert data["total_count"] == 4
+		assert data["accuracy_percent"] == 50.0
+
+	async def test_legacy_session_no_batch_key_skips_validation(self, authed_client, redis_client, mock_frappe):
+		"""Old sessions without schema_version + batch_0_item_ids skip validation."""
+		client, token, player_id, family_id = authed_client
+		questions = _make_question_rows(3, topic_id=TOPIC_ID)
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(questions)
+
+		# Start session normally
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+		served_ids = [q["item_id"] for q in resp.json()["questions"]]
+
+		# Simulate legacy session: old schema had neither schema_version nor batch_0_item_ids
+		session_key = practice_session_key(player_id)
+		await redis_client.hdel(session_key, "schema_version", "batch_0_item_ids")
+
+		# Submit should still succeed (validation skipped for legacy)
+		results = [{"item_id": iid, "is_correct": True} for iid in served_ids]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["accepted"] is True
+		assert data["is_duplicate"] is False
+
+	async def test_legacy_session_batch1_cross_batch_accepted(self, authed_client, redis_client, mock_frappe):
+		"""Legacy sessions on batch 1+ accept cross-batch items (matches old behavior).
+
+		Old code had no per-batch validation at all. Legacy sessions lack
+		batch_{n}_item_ids, so validation is skipped entirely. This test
+		confirms the temporary rollout behavior: cross-batch items are
+		accepted for in-flight legacy sessions (max 1h TTL).
+		"""
+		client, token, player_id, family_id = authed_client
+
+		batch0_qs = _make_question_rows(3, topic_id=TOPIC_ID)
+		batch1_qs = _make_question_rows(3, topic_id=TOPIC_ID)
+		all_qs = batch0_qs + batch1_qs
+		batch_call = {"n": 0}
+
+		async def multi_batch_handler(method, params=None):
+			if method == "memora_admin.api.practice.execute_practice_query":
+				sql = (params or {}).get("sql", "")
+				if "GROUP BY ri.topic" in sql:
+					return [{"topic": TOPIC_ID, "cnt": 6}]
+				elif "SELECT ri.item_id" in sql:
+					batch_call["n"] += 1
+					return batch0_qs if batch_call["n"] <= 1 else batch1_qs
+				elif "SELECT item_id" in sql:
+					return [{"item_id": q["item_id"]} for q in all_qs]
+			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
+				return None
+			return None
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = multi_batch_handler
+
+		# Start session → batch 0
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+		b0_ids = [q["item_id"] for q in resp.json()["questions"]]
+
+		# Submit batch 0, continue to batch 1
+		results_0 = [{"item_id": iid, "is_correct": True} for iid in b0_ids]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results_0})
+		assert resp.status_code == 200
+
+		resp = await client.post("/api/v1/practice/continue")
+		assert resp.status_code == 200
+		assert resp.json()["batch_seq"] == 1
+
+		# Simulate legacy: old sessions don't have schema_version or per-batch keys
+		session_key = practice_session_key(player_id)
+		await redis_client.hdel(session_key, "schema_version", "batch_0_item_ids", "batch_1_item_ids")
+
+		# Submit batch 0's items as batch 1 — legacy sessions accept this
+		# (old code had no per-batch validation; skipping matches old behavior)
+		cross_results = [{"item_id": b0_ids[0], "is_correct": True}]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 1, "results": cross_results})
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["accepted"] is True
+
+	async def test_current_session_missing_batch_key_rejected(self, authed_client, redis_client, mock_frappe):
+		"""Current-format sessions fail closed if a required batch key is missing."""
+		client, token, player_id, family_id = authed_client
+		questions = _make_question_rows(3, topic_id=TOPIC_ID)
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(questions)
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+		served_ids = [q["item_id"] for q in resp.json()["questions"]]
+
+		# Corrupt a current-format session: schema_version remains, batch key disappears
+		session_key = practice_session_key(player_id)
+		await redis_client.hdel(session_key, "batch_0_item_ids")
+
+		results = [{"item_id": iid, "is_correct": True} for iid in served_ids]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+
+		assert resp.status_code == 409
+		detail = resp.json()["detail"]
+		assert detail["code"] == "INVALID_SESSION_STATE"
+		assert detail["missing_field"] == "batch_0_item_ids"
+
+
+# ==========================================================================
+# Regression: Free content visibility in hierarchy (#4)
+# ==========================================================================
+
+
+PAID_TOPIC = "TOPIC-PAID-001"
+FREE_TOPIC = "TOPIC-FREE-001"
+
+
+def _make_mixed_free_paid_hierarchy(subject_id=SUBJECT_ID):
+	"""Build hierarchy with one paid topic and one free topic in the same track."""
+	return {
+		"subject_id": subject_id,
+		"version": 1,
+		"is_linear": False,
+		"bit_range": 4,
+		"excluded_bits": [],
+		"free_units": [],
+		"free_topics": [FREE_TOPIC],  # Only FREE_TOPIC is free
+		"tracks": [
+			{
+				"track_id": TRACK_ID,
+				"is_linear": False,
+				"units": [
+					{
+						"unit_id": UNIT_ID,
+						"is_linear": False,
+						"is_free": False,
+						"topics": [
+							{
+								"topic_id": PAID_TOPIC,
+								"is_linear": False,
+								"is_free": False,
+								"lessons": [
+									{"lesson_id": "LESSON-PAID-001", "bit_index": 0, "xp": 10, "max_hearts": 3, "is_reviewable": True},
+									{"lesson_id": "LESSON-PAID-002", "bit_index": 1, "xp": 10, "max_hearts": 3, "is_reviewable": True},
+								],
+							},
+							{
+								"topic_id": FREE_TOPIC,
+								"is_linear": False,
+								"is_free": True,
+								"lessons": [
+									{"lesson_id": "LESSON-FREE-001", "bit_index": 2, "xp": 10, "max_hearts": 3, "is_reviewable": True},
+									{"lesson_id": "LESSON-FREE-002", "bit_index": 3, "xp": 10, "max_hearts": 3, "is_reviewable": True},
+								],
+							},
+						],
+					}
+				],
+			}
+		],
+	}
+
+
+@pytest.mark.asyncio
+class TestFreeContentHierarchyVisibility:
+	"""Tracks with free content should show has_access=true even without grants."""
+
+	async def test_free_content_track_shows_accessible(self, authed_client, redis_client, mock_frappe):
+		"""Track with free units/topics shows has_access=true and populated units."""
+		client, token, player_id, family_id = authed_client
+
+		# Hierarchy with free content (free_units or free_topics set)
+		await seed_hierarchy(redis_client, SUBJECT_ID, has_free_content=True)
+		await _seed_practice_meta(redis_client)
+		# No access grants — but content is free
+
+		resp = await client.get(f"/api/v1/practice/hierarchy?subject_id={SUBJECT_ID}")
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert len(data["tracks"]) == 1
+		track = data["tracks"][0]
+		# Free content means the track IS accessible (shows units)
+		assert track["has_access"] is True
+		assert len(track["units"]) > 0
+
+	async def test_mixed_track_hierarchy_only_shows_free_topics(self, authed_client, redis_client, mock_frappe):
+		"""In a mixed paid/free track, hierarchy only exposes the free topic."""
+		client, token, player_id, family_id = authed_client
+
+		hier = _make_mixed_free_paid_hierarchy()
+		await seed_hierarchy(redis_client, SUBJECT_ID, hierarchy_json=hier)
+		# Seed meta with both topics so we can verify filtering
+		meta = {
+			"subject_title": "Test Subject",
+			"tracks": {TRACK_ID: {"title": "Test Track"}},
+			"units": {UNIT_ID: {"title": "Test Unit", "track": TRACK_ID}},
+			"topics": {
+				PAID_TOPIC: {"title": "Paid Topic"},
+				FREE_TOPIC: {"title": "Free Topic"},
+			},
+			"item_counts": {PAID_TOPIC: 5, FREE_TOPIC: 3},
+		}
+		await _seed_practice_meta(redis_client, meta=meta)
+		# No access grants — only free content
+
+		resp = await client.get(f"/api/v1/practice/hierarchy?subject_id={SUBJECT_ID}")
+
+		assert resp.status_code == 200
+		data = resp.json()
+		track = data["tracks"][0]
+		assert track["has_access"] is True
+		# Only the free topic should be visible, not the paid one
+		topic_ids = [t["topic_id"] for u in track["units"] for t in u["topics"]]
+		assert FREE_TOPIC in topic_ids
+		assert PAID_TOPIC not in topic_ids
+
+	async def test_mixed_track_start_only_includes_free_lessons(self, authed_client, redis_client, mock_frappe):
+		"""In a mixed paid/free track, start_session only includes free topic lessons."""
+		client, token, player_id, family_id = authed_client
+
+		hier = _make_mixed_free_paid_hierarchy()
+		await seed_hierarchy(redis_client, SUBJECT_ID, hierarchy_json=hier)
+		# No access grants — only free content should be accessible
+
+		# Questions only for the free topic
+		free_questions = _make_question_rows(2, topic_id=FREE_TOPIC)
+		mock_frappe.call.side_effect = _make_frappe_handler(
+			free_questions,
+			topic_counts={FREE_TOPIC: 2},
+		)
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["session_active"] is True
+		# Should only get free topic questions, not paid
+		assert data["total_available"] == 2
+
+		# Verify session stores only free lessons
+		session = await redis_client.hgetall(practice_session_key(player_id))
+		accessible = json.loads(session["accessible_lessons"])
+		# Must be ONLY the free lessons, not the paid ones
+		assert set(accessible) == {"LESSON-FREE-001", "LESSON-FREE-002"}
+		assert "LESSON-PAID-001" not in accessible
+		assert "LESSON-PAID-002" not in accessible
+
+
+# ==========================================================================
+# Regression: Quota redistribution on topic exhaustion (#3-underfill)
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+class TestQuotaRedistribution:
+	"""When one topic is exhausted mid-session, unused quota goes to other topics."""
+
+	async def test_exhausted_topic_quota_redistributed(self, authed_client, redis_client, mock_frappe):
+		"""Batch 1: Topic A is exhausted, its unfilled quota goes to Topic B.
+
+		Setup: A=1 item, B=40 items. Batch size = 20.
+		Quotas: {A: 1, B: 19} (proportional with min-1 guarantee).
+
+		Batch 0: A serves 1 (all of it), B serves 19. Total = 20.
+		Batch 1: A has 0 left → returns 0 → EXHAUSTED. B has 21 left → returns 19.
+		  Without redistribution: batch 1 = 19 (B's quota only).
+		  With redistribution: A's unfilled 1 → B gets 1 extra → batch 1 = 20.
+
+		Definitive assertion: b1_count == 20 (fails at 19 without redistribution).
+		"""
+		client, token, player_id, family_id = authed_client
+
+		topic_a_qs = _make_question_rows(1, topic_id=TOPIC_ID_A)
+		topic_b_qs = _make_question_rows(40, topic_id=TOPIC_ID_B)
+		all_qs = topic_a_qs + topic_b_qs
+
+		# Track items served so far (simulates SQL NOT IN exclusion)
+		served_so_far: list[str] = []
+
+		async def redistrib_handler(method, params=None):
+			if method == "memora_admin.api.practice.execute_practice_query":
+				sql = (params or {}).get("sql", "")
+				sql_params = (params or {}).get("params", [])
+				if "GROUP BY ri.topic" in sql:
+					return [
+						{"topic": TOPIC_ID_A, "cnt": 1},
+						{"topic": TOPIC_ID_B, "cnt": 40},
+					]
+				elif "SELECT ri.item_id" in sql:
+					limit = sql_params[-1] if sql_params else 20
+					topic = None
+					for p in sql_params:
+						if isinstance(p, str) and p.startswith("TOPIC-"):
+							topic = p
+					if not topic:
+						return []
+
+					pool = topic_a_qs if topic == TOPIC_ID_A else topic_b_qs
+					remaining = [q for q in pool if q["item_id"] not in served_so_far]
+					selected = remaining[:limit]
+					served_so_far.extend(q["item_id"] for q in selected)
+					return selected
+				elif "SELECT item_id" in sql:
+					return [{"item_id": q["item_id"]} for q in all_qs]
+			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
+				return None
+			return None
+
+		hier = _make_multi_topic_hierarchy(
+			topics=[(TOPIC_ID_A, 1), (TOPIC_ID_B, 10)],
+		)
+		await seed_hierarchy(redis_client, SUBJECT_ID, hierarchy_json=hier)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = redistrib_handler
+
+		# Start session — batch 0
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+		b0 = resp.json()
+		b0_count = len(b0["questions"])
+		assert b0_count == 20, f"batch 0 should be full batch_size, got {b0_count}"
+
+		# Submit batch 0
+		results_0 = [{"item_id": q["item_id"], "is_correct": True} for q in b0["questions"]]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results_0})
+		assert resp.status_code == 200
+
+		# Continue — batch 1 (topic A exhausted: 1 item, all served in batch 0)
+		resp = await client.post("/api/v1/practice/continue")
+		assert resp.status_code == 200
+		b1 = resp.json()
+		b1_count = len(b1["questions"])
+
+		# Definitive redistribution proof:
+		# Quotas = {A: 1, B: 19}. A returns 0 (exhausted). B returns 19.
+		# WITHOUT redistribution: b1_count = 19 (B's quota only).
+		# WITH redistribution: A's unfilled 1 → B gets 20th item → b1_count = 20.
+		assert b1_count == 20, (
+			f"batch 1 should be full batch_size=20 (redistribution fills "
+			f"A's exhausted quota from B), got {b1_count}"
+		)

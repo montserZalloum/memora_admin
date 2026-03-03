@@ -72,41 +72,50 @@ def extract_items_from_stage(stage) -> list[dict]:
 
 
 def _extract_question(config: dict, stage_type: str) -> list[dict]:
-	"""Extract items from a QUESTION stage.
+	"""Extract ONE item from a QUESTION stage.
 
-	Each answer has its own item_id. All items share the same question text
-	and full choices list.
+	A QUESTION is a single reviewable unit — the student sees one question
+	with all choices. We use the correct answer's item_id as the
+	representative ID. Falls back to the first answer's item_id if none
+	is marked correct.
 	"""
 	question_text = config.get("question", "")
 	answers = config.get("answers", [])
 	if not answers:
 		return []
 
-	# Build choices list and find correct index
+	# Build choices list and find correct index + representative item_id
 	choices = [a.get("text", "") for a in answers]
 	correct_idx = None
+	representative_item_id = None
+
 	for i, a in enumerate(answers):
 		if a.get("is_correct"):
 			correct_idx = i + 1  # 1-based
+			representative_item_id = a.get("item_id")
 			break
 
-	items = []
-	for a in answers:
-		item_id = a.get("item_id")
-		if not item_id:
-			continue
-		items.append({
-			"item_id": item_id,
-			"stage_type": stage_type,
-			"question_text": question_text,
-			"choice_1": choices[0] if len(choices) > 0 else None,
-			"choice_2": choices[1] if len(choices) > 1 else None,
-			"choice_3": choices[2] if len(choices) > 2 else None,
-			"choice_4": choices[3] if len(choices) > 3 else None,
-			"correct_choice": correct_idx,
-			"content_json": None,
-		})
-	return items
+	# Fallback: use first answer's item_id
+	if not representative_item_id:
+		for a in answers:
+			if a.get("item_id"):
+				representative_item_id = a["item_id"]
+				break
+
+	if not representative_item_id:
+		return []
+
+	return [{
+		"item_id": representative_item_id,
+		"stage_type": stage_type,
+		"question_text": question_text,
+		"choice_1": choices[0] if len(choices) > 0 else None,
+		"choice_2": choices[1] if len(choices) > 1 else None,
+		"choice_3": choices[2] if len(choices) > 2 else None,
+		"choice_4": choices[3] if len(choices) > 3 else None,
+		"correct_choice": correct_idx,
+		"content_json": None,
+	}]
 
 
 def _extract_fill_blank(config: dict, stage_type: str) -> list[dict]:
@@ -473,3 +482,36 @@ def _delete_review_items_and_memory_state(item_ids: list[str]):
 	# Delete Review Item records
 	for item_id in item_ids:
 		frappe.delete_doc("Memora Review Item", item_id, force=True, ignore_permissions=True)
+
+
+def resync_all_review_items():
+	"""One-time cleanup: re-sync all reviewable lessons to remove duplicates.
+
+	Resets content_hash to force re-extraction with the fixed logic
+	(one item per QUESTION stage instead of one per answer choice).
+	The sync's orphan deletion cleans up Practice Log and Memory State.
+
+	Run via: bench --site <site> execute memora_admin.api.review_items.resync_all_review_items
+	"""
+	global _skippable_cache
+	_skippable_cache = None  # Reset cache
+
+	# Reset content_hash on all reviewable lessons to bypass debounce
+	frappe.db.sql("UPDATE `tabMemora Lesson` SET content_hash = NULL WHERE is_reviewable = 1")
+	frappe.db.commit()
+
+	lessons = frappe.get_all("Memora Lesson", filters={"is_reviewable": 1}, pluck="name")
+	total_created = 0
+	total_deleted = 0
+
+	for lesson_name in lessons:
+		doc = frappe.get_doc("Memora Lesson", lesson_name)
+		result = sync_review_items(doc)
+		total_created += result["created"]
+		total_deleted += result["deleted"]
+		if result["deleted"]:
+			print(f"  {lesson_name}: deleted={result['deleted']}")
+
+	frappe.db.commit()
+	print(f"\nResync complete: {len(lessons)} lessons processed, "
+		  f"{total_created} created, {total_deleted} duplicates removed")

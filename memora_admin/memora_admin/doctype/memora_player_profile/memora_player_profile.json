@@ -1,6 +1,5 @@
 {
  "actions": [],
- "allow_rename": 0,
  "autoname": "PLAYER-.#####.",
  "creation": "2026-02-01 11:08:51.024486",
  "doctype": "DocType",
@@ -51,10 +50,10 @@
    "reqd": 1
   },
   {
+   "default": "pre",
    "fieldname": "avatar",
-   "fieldtype": "Select",
+   "fieldtype": "Data",
    "label": "Avatar",
-   "options": "pre\nblonde\nCaleb\nJad\nSadie\nValentina",
    "reqd": 1
   },
   {
@@ -109,8 +108,8 @@
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-02-12 10:36:03.697370",
- "modified_by": "Administrator",
+ "modified": "2026-03-03 12:05:48.190828",
+ "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Player Profile",
  "owner": "Administrator",

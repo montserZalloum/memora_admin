@@ -28,8 +28,8 @@ def _make_stage(stage_type, config_json, name="test-stage-001", is_skippable=0):
 class TestItemExtraction(FrappeTestCase):
 	"""T014: Unit tests for item extraction functions."""
 
-	def test_question_stage_extracts_mcq_fields(self):
-		"""QUESTION stage → MCQ fields populated, content_json is None."""
+	def test_question_stage_extracts_one_item(self):
+		"""QUESTION stage → ONE item using correct answer's item_id."""
 		stage = _make_stage(
 			"QUESTION",
 			{
@@ -45,20 +45,18 @@ class TestItemExtraction(FrappeTestCase):
 
 		items = extract_items_from_stage(stage)
 
-		self.assertEqual(len(items), 3)
-		for item in items:
-			self.assertEqual(item["stage_type"], "QUESTION")
-			self.assertEqual(item["question_text"], "كم عظمة في جسم الانسان")
-			self.assertEqual(item["choice_1"], "10")
-			self.assertEqual(item["choice_2"], "12")
-			self.assertEqual(item["choice_3"], "14")
-			self.assertIsNone(item["choice_4"])
-			self.assertEqual(item["correct_choice"], 1)
-			self.assertIsNone(item["content_json"])
-
-		# Each answer has its own item_id
-		ids = {i["item_id"] for i in items}
-		self.assertEqual(len(ids), 3)
+		self.assertEqual(len(items), 1)
+		item = items[0]
+		# Uses the correct answer's item_id
+		self.assertEqual(item["item_id"], "aaaa0000-0000-0000-0000-000000000001")
+		self.assertEqual(item["stage_type"], "QUESTION")
+		self.assertEqual(item["question_text"], "كم عظمة في جسم الانسان")
+		self.assertEqual(item["choice_1"], "10")
+		self.assertEqual(item["choice_2"], "12")
+		self.assertEqual(item["choice_3"], "14")
+		self.assertIsNone(item["choice_4"])
+		self.assertEqual(item["correct_choice"], 1)
+		self.assertIsNone(item["content_json"])
 
 	def test_fill_blank_stage_extracts_content_json(self):
 		"""FILL_BLANK stage → content_json with blank data, MCQ fields are None."""
@@ -160,7 +158,7 @@ class TestItemExtraction(FrappeTestCase):
 		self.assertEqual(extract_items_from_stage(stage), [])
 
 	def test_question_with_four_choices(self):
-		"""QUESTION with 4 answers → all 4 choice fields populated."""
+		"""QUESTION with 4 answers → ONE item with all 4 choice fields populated."""
 		stage = _make_stage(
 			"QUESTION",
 			{
@@ -175,9 +173,12 @@ class TestItemExtraction(FrappeTestCase):
 		)
 
 		items = extract_items_from_stage(stage)
-		self.assertEqual(len(items), 4)
-		self.assertEqual(items[0]["choice_4"], "D")
-		self.assertEqual(items[0]["correct_choice"], 2)
+		self.assertEqual(len(items), 1)
+		item = items[0]
+		# Uses correct answer's item_id (B)
+		self.assertEqual(item["item_id"], "eeee0000-0000-0000-0000-000000000002")
+		self.assertEqual(item["choice_4"], "D")
+		self.assertEqual(item["correct_choice"], 2)
 
 
 class TestSyncReviewItems(FrappeTestCase):
@@ -243,11 +244,10 @@ class TestSyncReviewItems(FrappeTestCase):
 
 		doc = self._make_lesson_doc(stages)
 
-		# Track for cleanup
+		# Track for cleanup (QUESTION produces 1 item using correct answer's id)
 		self._cleanup_items.extend(
 			[
 				"11110000-0000-0000-0000-000000000001",
-				"11110000-0000-0000-0000-000000000002",
 				"11110000-0000-0000-0000-000000000003",
 			]
 		)
@@ -255,7 +255,8 @@ class TestSyncReviewItems(FrappeTestCase):
 		result = sync_review_items(doc)
 		frappe.db.commit()
 
-		self.assertEqual(result["created"], 3)
+		# 1 from QUESTION (correct answer's id) + 1 from FILL_BLANK = 2
+		self.assertEqual(result["created"], 2)
 		self.assertEqual(result["updated"], 0)
 		self.assertEqual(result["deleted"], 0)
 
@@ -275,55 +276,53 @@ class TestSyncReviewItems(FrappeTestCase):
 
 	@patch("memora_admin.api.review_items._get_globally_skippable_types")
 	def test_resync_deletes_orphans(self, mock_skip):
-		"""Re-save with item removed → orphan deleted."""
+		"""Re-save with stage removed → orphan deleted."""
 		mock_skip.return_value = {"INFORMATION", "MINDMAP", "SENTENCE_BUILDER"}
 
-		# First sync: 2 items
+		# First sync: 2 stages = 2 items
 		stages = [
 			_make_stage(
 				"QUESTION",
 				{
-					"question": "Q?",
+					"question": "Q1?",
 					"answers": [
 						{"text": "A", "is_correct": True, "item_id": "22220000-0000-0000-0000-000000000001"},
 						{"text": "B", "is_correct": False, "item_id": "22220000-0000-0000-0000-000000000002"},
 					],
 				},
-				name="stage-q2",
+				name="stage-q2a",
+			),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Q2?",
+					"answers": [
+						{"text": "C", "is_correct": True, "item_id": "22220000-0000-0000-0000-000000000003"},
+					],
+				},
+				name="stage-q2b",
 			),
 		]
 		doc = self._make_lesson_doc(stages)
 		self._cleanup_items.extend(
 			[
 				"22220000-0000-0000-0000-000000000001",
-				"22220000-0000-0000-0000-000000000002",
+				"22220000-0000-0000-0000-000000000003",
 			]
 		)
 
 		sync_review_items(doc)
 		frappe.db.commit()
 
-		# Second sync: only 1 answer (removed the second)
-		stages2 = [
-			_make_stage(
-				"QUESTION",
-				{
-					"question": "Q?",
-					"answers": [
-						{"text": "A", "is_correct": True, "item_id": "22220000-0000-0000-0000-000000000001"},
-					],
-				},
-				name="stage-q2",
-			),
-		]
-		doc.stages = stages2
+		# Second sync: removed the second stage
+		doc.stages = [stages[0]]
 
 		result = sync_review_items(doc)
 		frappe.db.commit()
 
 		self.assertEqual(result["deleted"], 1)
 		# Orphan should be gone
-		self.assertFalse(frappe.db.exists("Memora Review Item", "22220000-0000-0000-0000-000000000002"))
+		self.assertFalse(frappe.db.exists("Memora Review Item", "22220000-0000-0000-0000-000000000003"))
 		# Remaining item still exists
 		self.assertTrue(frappe.db.exists("Memora Review Item", "22220000-0000-0000-0000-000000000001"))
 
@@ -397,7 +396,7 @@ class TestDeleteReviewItems(FrappeTestCase):
 
 		mock_skip.return_value = {"INFORMATION", "MINDMAP", "SENTENCE_BUILDER"}
 
-		# Create items via sync
+		# Create items via sync (2 stages → 2 items)
 		stages = [
 			_make_stage(
 				"QUESTION",
@@ -418,21 +417,30 @@ class TestDeleteReviewItems(FrappeTestCase):
 				},
 				name="stage-del1",
 			),
+			_make_stage(
+				"FILL_BLANK",
+				{
+					"text": "Hello World",
+					"blanks": [{"from": 6, "to": 11, "item_id": "44440000-0000-0000-0000-000000000003"}],
+					"distractors": ["Earth"],
+				},
+				name="stage-del2",
+			),
 		]
 		doc = self._make_lesson_doc(stages)
 		self._cleanup_items.extend(
 			[
 				"44440000-0000-0000-0000-000000000001",
-				"44440000-0000-0000-0000-000000000002",
+				"44440000-0000-0000-0000-000000000003",
 			]
 		)
 
 		sync_review_items(doc)
 		frappe.db.commit()
 
-		# Verify items exist
+		# Verify items exist (1 QUESTION + 1 FILL_BLANK)
 		self.assertTrue(frappe.db.exists("Memora Review Item", "44440000-0000-0000-0000-000000000001"))
-		self.assertTrue(frappe.db.exists("Memora Review Item", "44440000-0000-0000-0000-000000000002"))
+		self.assertTrue(frappe.db.exists("Memora Review Item", "44440000-0000-0000-0000-000000000003"))
 
 		# Delete all items for this lesson
 		count = delete_review_items_for_lesson(doc.name)
@@ -440,7 +448,7 @@ class TestDeleteReviewItems(FrappeTestCase):
 
 		self.assertEqual(count, 2)
 		self.assertFalse(frappe.db.exists("Memora Review Item", "44440000-0000-0000-0000-000000000001"))
-		self.assertFalse(frappe.db.exists("Memora Review Item", "44440000-0000-0000-0000-000000000002"))
+		self.assertFalse(frappe.db.exists("Memora Review Item", "44440000-0000-0000-0000-000000000003"))
 
 	@patch("memora_admin.api.review_items._get_globally_skippable_types")
 	def test_on_lesson_trash_calls_delete(self, mock_skip):
@@ -641,17 +649,13 @@ class TestIsReviewableFiltering(FrappeTestCase):
 			),
 		]
 		doc = self._make_lesson_doc(stages, is_reviewable=1)
-		self._cleanup_items.extend(
-			[
-				"a0310000-0000-0000-0000-000000000003",
-				"a0310000-0000-0000-0000-000000000004",
-			]
-		)
+		# Only the correct answer's item_id is created
+		self._cleanup_items.append("a0310000-0000-0000-0000-000000000003")
 
-		# First sync: items created
+		# First sync: 1 item created (correct answer's id)
 		result1 = sync_review_items(doc)
 		frappe.db.commit()
-		self.assertEqual(result1["created"], 2)
+		self.assertEqual(result1["created"], 1)
 
 		# Toggle to non-reviewable
 		doc.is_reviewable = 0
@@ -659,9 +663,8 @@ class TestIsReviewableFiltering(FrappeTestCase):
 		frappe.db.commit()
 
 		self.assertEqual(result2["created"], 0)
-		self.assertEqual(result2["deleted"], 2)
+		self.assertEqual(result2["deleted"], 1)
 		self.assertFalse(frappe.db.exists("Memora Review Item", "a0310000-0000-0000-0000-000000000003"))
-		self.assertFalse(frappe.db.exists("Memora Review Item", "a0310000-0000-0000-0000-000000000004"))
 
 
 class TestContentHashDebounce(FrappeTestCase):
@@ -996,6 +999,15 @@ class TestPracticeLogCascade(FrappeTestCase):
 				},
 				name="stage-034a",
 			),
+			_make_stage(
+				"FILL_BLANK",
+				{
+					"text": "Hello World",
+					"blanks": [{"from": 6, "to": 11, "item_id": "a0340000-0000-0000-0000-000000000005"}],
+					"distractors": ["Earth"],
+				},
+				name="stage-034a2",
+			),
 		]
 		doc = SimpleNamespace(
 			name=real.name,
@@ -1010,15 +1022,15 @@ class TestPracticeLogCascade(FrappeTestCase):
 		self._cleanup_items.extend(
 			[
 				"a0340000-0000-0000-0000-000000000001",
-				"a0340000-0000-0000-0000-000000000002",
+				"a0340000-0000-0000-0000-000000000005",
 			]
 		)
 
-		# Create Review Items
+		# Create Review Items (1 QUESTION + 1 FILL_BLANK = 2)
 		sync_review_items(doc)
 		frappe.db.commit()
 		self.assertTrue(frappe.db.exists("Memora Review Item", "a0340000-0000-0000-0000-000000000001"))
-		self.assertTrue(frappe.db.exists("Memora Review Item", "a0340000-0000-0000-0000-000000000002"))
+		self.assertTrue(frappe.db.exists("Memora Review Item", "a0340000-0000-0000-0000-000000000005"))
 
 		# Insert Practice Log rows for these items
 		frappe.db.sql("""
@@ -1026,13 +1038,13 @@ class TestPracticeLogCascade(FrappeTestCase):
 				(player_id, item_id, first_seen_at, last_seen_at, last_result, attempt_count, correct_count)
 			VALUES
 				('PLAYER-TEST-034', 'a0340000-0000-0000-0000-000000000001', NOW(), NOW(), 'Correct', 1, 1),
-				('PLAYER-TEST-034', 'a0340000-0000-0000-0000-000000000002', NOW(), NOW(), 'Incorrect', 2, 0)
+				('PLAYER-TEST-034', 'a0340000-0000-0000-0000-000000000005', NOW(), NOW(), 'Incorrect', 2, 0)
 		""")
 		frappe.db.commit()
 
 		# Verify Practice Log rows exist
 		pl_count = frappe.db.sql(
-			"SELECT COUNT(*) FROM `tabMemora Practice Log` WHERE item_id IN ('a0340000-0000-0000-0000-000000000001', 'a0340000-0000-0000-0000-000000000002')"
+			"SELECT COUNT(*) FROM `tabMemora Practice Log` WHERE item_id IN ('a0340000-0000-0000-0000-000000000001', 'a0340000-0000-0000-0000-000000000005')"
 		)[0][0]
 		self.assertEqual(pl_count, 2)
 
@@ -1046,13 +1058,13 @@ class TestPracticeLogCascade(FrappeTestCase):
 
 		# Verify Practice Log rows are also deleted
 		pl_count_after = frappe.db.sql(
-			"SELECT COUNT(*) FROM `tabMemora Practice Log` WHERE item_id IN ('a0340000-0000-0000-0000-000000000001', 'a0340000-0000-0000-0000-000000000002')"
+			"SELECT COUNT(*) FROM `tabMemora Practice Log` WHERE item_id IN ('a0340000-0000-0000-0000-000000000001', 'a0340000-0000-0000-0000-000000000005')"
 		)[0][0]
 		self.assertEqual(pl_count_after, 0)
 
 	@patch("memora_admin.api.review_items._get_globally_skippable_types")
 	def test_orphan_removal_cascades_to_practice_log(self, mock_skip):
-		"""Removing an item via re-sync (orphan deletion) also cascades to Practice Log."""
+		"""Removing a stage via re-sync (orphan deletion) also cascades to Practice Log."""
 		mock_skip.return_value = set()
 
 		real = frappe.db.get_value(
@@ -1062,21 +1074,25 @@ class TestPracticeLogCascade(FrappeTestCase):
 			_make_stage(
 				"QUESTION",
 				{
-					"question": "Orphan cascade?",
+					"question": "Keep this?",
 					"answers": [
 						{
 							"text": "Keep",
 							"is_correct": True,
 							"item_id": "a0340000-0000-0000-0000-000000000003",
 						},
-						{
-							"text": "Remove",
-							"is_correct": False,
-							"item_id": "a0340000-0000-0000-0000-000000000004",
-						},
 					],
 				},
-				name="stage-034b",
+				name="stage-034b-keep",
+			),
+			_make_stage(
+				"FILL_BLANK",
+				{
+					"text": "Remove this blank",
+					"blanks": [{"from": 12, "to": 17, "item_id": "a0340000-0000-0000-0000-000000000004"}],
+					"distractors": ["other"],
+				},
+				name="stage-034b-remove",
 			),
 		]
 		doc = SimpleNamespace(
@@ -1096,7 +1112,7 @@ class TestPracticeLogCascade(FrappeTestCase):
 			]
 		)
 
-		# Create both Review Items
+		# Create both Review Items (1 QUESTION + 1 FILL_BLANK)
 		sync_review_items(doc)
 		frappe.db.commit()
 
@@ -1109,24 +1125,8 @@ class TestPracticeLogCascade(FrappeTestCase):
 		""")
 		frappe.db.commit()
 
-		# Re-sync with only the first answer (second becomes orphan)
-		stages_v2 = [
-			_make_stage(
-				"QUESTION",
-				{
-					"question": "Orphan cascade?",
-					"answers": [
-						{
-							"text": "Keep",
-							"is_correct": True,
-							"item_id": "a0340000-0000-0000-0000-000000000003",
-						},
-					],
-				},
-				name="stage-034b",
-			),
-		]
-		doc.stages = stages_v2
+		# Re-sync with only the first stage (second becomes orphan)
+		doc.stages = [stages[0]]
 		doc.content_hash = None  # force re-extraction
 
 		result = sync_review_items(doc)
