@@ -66,6 +66,54 @@ class PreviousBatchNotSubmittedError(Exception):
 		super().__init__(f"Batch {batch_seq} not yet submitted")
 
 
+def _compute_topic_quotas(counts: dict[str, int], batch_size: int) -> dict[str, int]:
+	"""Distribute batch_size across topics proportionally by item count.
+
+	Each topic gets at least 1 question (if it has items). Remainder goes
+	to the largest topics. Quotas are capped at the topic's available count.
+
+	Args:
+		counts: Mapping of topic_id → available item count (must be > 0 for each).
+		batch_size: Total number of questions to distribute.
+
+	Returns:
+		Mapping of topic_id → quota (number of questions to draw from that topic).
+	"""
+	if not counts:
+		return {}
+
+	total = sum(counts.values())
+	if total == 0:
+		return {}
+
+	# Single topic — skip proportional logic
+	if len(counts) == 1:
+		topic_id = next(iter(counts))
+		return {topic_id: min(batch_size, counts[topic_id])}
+
+	quotas: dict[str, int] = {}
+	remaining = batch_size
+
+	# First pass: proportional allocation (round down), min 1 each, capped at available
+	for topic_id, count in counts.items():
+		quota = max(1, int(batch_size * count / total))
+		quota = min(quota, count)  # Don't exceed available
+		quotas[topic_id] = quota
+		remaining -= quota
+
+	# Second pass: distribute remainder to largest topics (that still have room)
+	if remaining > 0:
+		sorted_topics = sorted(counts.keys(), key=lambda t: counts[t], reverse=True)
+		for topic_id in sorted_topics:
+			if remaining <= 0:
+				break
+			extra = min(remaining, counts[topic_id] - quotas[topic_id])
+			quotas[topic_id] += extra
+			remaining -= extra
+
+	return quotas
+
+
 class PracticeService:
 	"""Practice Arena business logic.
 
@@ -379,7 +427,7 @@ class PracticeService:
 
 		# Select first batch of questions
 		batch_size = self.config.practice_session_size
-		questions, total_available = await self._select_questions(
+		questions, total_available, any_repeat = await self._select_questions(
 			player_id=player_id,
 			subject_id=subject_id,
 			accessible_lessons=lesson_ids,
@@ -388,7 +436,7 @@ class PracticeService:
 			batch_size=batch_size,
 		)
 
-		all_seen = total_available > 0 and len(questions) == 0
+		all_seen = any_repeat
 		served_ids = [q.item_id for q in questions]
 
 		# Create Redis session (overwrites any existing session)
@@ -598,7 +646,7 @@ class PracticeService:
 
 		# Select next batch of questions
 		batch_size = self.config.practice_session_size
-		questions, total_available = await self._select_questions(
+		questions, total_available, any_repeat = await self._select_questions(
 			player_id=player_id,
 			subject_id=subject_id,
 			accessible_lessons=accessible_lessons,
@@ -607,11 +655,11 @@ class PracticeService:
 			batch_size=batch_size,
 		)
 
-		all_seen = total_available > 0 and len(questions) == 0
+		all_seen = any_repeat
 
-		# If all items seen, re-serve from the full pool (wrap around)
-		if all_seen and total_available > 0:
-			questions, _ = await self._select_questions(
+		# If all items exhausted, re-serve from the full pool (wrap around)
+		if not questions and total_available > 0:
+			questions, _, _ = await self._select_questions(
 				player_id=player_id,
 				subject_id=subject_id,
 				accessible_lessons=accessible_lessons,
@@ -619,6 +667,7 @@ class PracticeService:
 				served_item_ids=[],  # Clear dedup to allow re-serve
 				batch_size=batch_size,
 			)
+			all_seen = True  # Always true when wrapping around
 
 		# Update served_item_ids with new batch
 		new_served_ids = served_item_ids + [q.item_id for q in questions]
@@ -738,6 +787,50 @@ class PracticeService:
 
 		return lesson_ids, denied_tracks
 
+	async def _count_items_per_topic(
+		self,
+		subject_id: str,
+		accessible_lessons: list[str],
+		selected_topics: list[str],
+	) -> dict[str, int]:
+		"""Count available Review Items per topic via SQL COUNT grouped by topic.
+
+		Returns:
+			Mapping of topic_id → item count (topics with 0 items omitted).
+		"""
+		if not accessible_lessons or not self.frappe:
+			return {}
+
+		lesson_placeholders = ", ".join(["%s"] * len(accessible_lessons))
+		where_clause = f"ri.subject = %s AND ri.lesson IN ({lesson_placeholders})"
+		params: list = [subject_id, *accessible_lessons]
+
+		if selected_topics:
+			topic_placeholders = ", ".join(["%s"] * len(selected_topics))
+			where_clause += f" AND ri.topic IN ({topic_placeholders})"
+			params.extend(selected_topics)
+
+		sql = f"""
+			SELECT ri.topic, COUNT(*) as cnt
+			FROM `tabMemora Review Item` ri
+			WHERE {where_clause}
+			GROUP BY ri.topic
+		"""
+
+		try:
+			rows = await self.frappe.call(
+				"memora_admin.api.practice.execute_practice_query",
+				{"sql": sql, "params": params},
+			)
+		except Exception as e:
+			logger.error("practice_count_per_topic_failed", error=str(e))
+			return {}
+
+		if not rows:
+			return {}
+
+		return {row["topic"]: row["cnt"] for row in rows}
+
 	async def _select_questions(
 		self,
 		player_id: str,
@@ -746,7 +839,7 @@ class PracticeService:
 		selected_topics: list[str],
 		served_item_ids: list[str],
 		batch_size: int,
-	) -> tuple[list[PracticeQuestion], int]:
+	) -> tuple[list[PracticeQuestion], int, bool]:
 		"""Select questions with 3-tier priority and proportional topic distribution.
 
 		Priority:
@@ -754,24 +847,68 @@ class PracticeService:
 		1 = seen before, not in this session
 		2 = seen in this session (served_item_ids)
 
+		Proportional distribution: When multiple topics are selected, questions
+		are distributed across topics proportionally by available item count.
+		Single-topic selections bypass proportional logic.
+
 		Returns:
-			Tuple of (questions, total_available_items)
+			Tuple of (questions, total_available_items, any_repeat).
+			any_repeat is True if ANY returned question has priority > 0
+			(i.e., has been seen before by this student).
 		"""
 		if not accessible_lessons or not self.frappe:
-			return [], 0
+			return [], 0, False
 
-		# Build the query with parameterized placeholders
+		# Get per-topic counts for proportional distribution
+		topic_counts = await self._count_items_per_topic(
+			subject_id,
+			accessible_lessons,
+			selected_topics,
+		)
+		total_available = sum(topic_counts.values())
+
+		if total_available == 0:
+			return [], 0, False
+
+		# Compute per-topic quotas
+		quotas = _compute_topic_quotas(topic_counts, batch_size)
+
+		# Query per topic with priority ordering
+		all_questions: list[PracticeQuestion] = []
+		any_repeat = False
+
+		for topic_id, quota in quotas.items():
+			questions, has_repeat = await self._select_for_topic(
+				player_id=player_id,
+				subject_id=subject_id,
+				accessible_lessons=accessible_lessons,
+				topic_id=topic_id,
+				served_item_ids=served_item_ids,
+				limit=quota,
+			)
+			all_questions.extend(questions)
+			any_repeat = any_repeat or has_repeat
+
+		return all_questions, total_available, any_repeat
+
+	async def _select_for_topic(
+		self,
+		player_id: str,
+		subject_id: str,
+		accessible_lessons: list[str],
+		topic_id: str,
+		served_item_ids: list[str],
+		limit: int,
+	) -> tuple[list[PracticeQuestion], bool]:
+		"""Select questions for a single topic with priority ordering.
+
+		Returns:
+			Tuple of (questions, has_repeat). has_repeat is True if any
+			returned row has priority > 0 (previously seen).
+		"""
 		lesson_placeholders = ", ".join(["%s"] * len(accessible_lessons))
-
-		# Base WHERE clause
-		where_clause = f"ri.subject = %s AND ri.lesson IN ({lesson_placeholders})"
-		params: list = [subject_id, *accessible_lessons]
-
-		# Add topic filter if specified
-		if selected_topics:
-			topic_placeholders = ", ".join(["%s"] * len(selected_topics))
-			where_clause += f" AND ri.topic IN ({topic_placeholders})"
-			params.extend(selected_topics)
+		where_clause = f"ri.subject = %s AND ri.lesson IN ({lesson_placeholders}) AND ri.topic = %s"
+		params: list = [subject_id, *accessible_lessons, topic_id]
 
 		# Build served_item_ids CASE expression
 		if served_item_ids:
@@ -793,14 +930,6 @@ class PracticeService:
 			"""
 			priority_params = []
 
-		# First, get total count of available items
-		count_sql = f"""
-			SELECT COUNT(*) as cnt
-			FROM `tabMemora Review Item` ri
-			WHERE {where_clause}
-		"""
-
-		# Then get the actual questions with priority ordering
 		select_sql = f"""
 			SELECT ri.item_id, ri.question_text, ri.choice_1, ri.choice_2,
 				   ri.choice_3, ri.choice_4, ri.correct_choice, ri.content_json,
@@ -815,35 +944,33 @@ class PracticeService:
 			LIMIT %s
 		"""
 
-		try:
-			# Get total count
-			count_result = await self.frappe.call(
-				"memora_admin.api.practice.execute_practice_query",
-				{"sql": count_sql, "params": list(params)},
-			)
-			total_available = count_result[0]["cnt"] if count_result else 0
+		select_params = [*priority_params, player_id, *params, limit]
 
-			# Get questions
-			select_params = [*priority_params, player_id, *params, batch_size]
+		try:
 			rows = await self.frappe.call(
 				"memora_admin.api.practice.execute_practice_query",
 				{"sql": select_sql, "params": select_params},
 			)
 		except Exception as e:
 			logger.error(
-				"practice_question_select_failed",
+				"practice_topic_select_failed",
 				player_id=player_id,
-				subject_id=subject_id,
+				topic_id=topic_id,
 				error=str(e),
 			)
-			return [], 0
+			return [], False
 
 		if not rows:
-			return [], total_available
+			return [], False
 
-		# Convert rows to PracticeQuestion models
-		questions = []
+		# Convert rows to PracticeQuestion models and detect repeats
+		questions: list[PracticeQuestion] = []
+		has_repeat = False
+
 		for row in rows:
+			if row.get("priority", 0) > 0:
+				has_repeat = True
+
 			choices = []
 			for i in range(1, 5):
 				c = row.get(f"choice_{i}")
@@ -869,7 +996,7 @@ class PracticeService:
 				)
 			)
 
-		return questions, total_available
+		return questions, has_repeat
 
 	async def _get_valid_item_ids(self, item_ids: list[str]) -> set[str]:
 		"""Check which item_ids still exist in the Review Item table.

@@ -90,13 +90,15 @@ def _make_question_rows(count=3, topic_id=TOPIC_ID):
 	]
 
 
-def _make_frappe_handler(questions=None, valid_item_ids=None):
+def _make_frappe_handler(questions=None, valid_item_ids=None, topic_counts=None):
 	"""Create mock frappe.call handler for practice tests.
 
 	Args:
 		questions: List of question row dicts to return from SELECT queries.
 		valid_item_ids: Set of item_ids that still exist (for deleted-item tests).
 			If None, all question item_ids are considered valid.
+		topic_counts: Optional dict of topic_id → count for GROUP BY queries.
+			If None, counts are inferred from questions by topic.
 	"""
 	if questions is None:
 		questions = _make_question_rows()
@@ -104,13 +106,28 @@ def _make_frappe_handler(questions=None, valid_item_ids=None):
 	all_item_ids = {q["item_id"] for q in questions}
 	valid = valid_item_ids if valid_item_ids is not None else all_item_ids
 
+	# Build per-topic question lists and counts
+	by_topic: dict[str, list[dict]] = {}
+	for q in questions:
+		t = q.get("topic", TOPIC_ID)
+		by_topic.setdefault(t, []).append(q)
+
+	inferred_counts = topic_counts or {t: len(qs) for t, qs in by_topic.items()}
+
 	async def handler(method, params=None):
 		if method == "memora_admin.api.practice.execute_practice_query":
 			sql = (params or {}).get("sql", "")
-			if "COUNT(*)" in sql:
-				return [{"cnt": len(questions)}]
+			sql_params = (params or {}).get("params", [])
+			if "GROUP BY ri.topic" in sql:
+				# _count_items_per_topic query
+				return [{"topic": t, "cnt": c} for t, c in inferred_counts.items()]
 			elif "SELECT ri.item_id" in sql:
-				return questions
+				# _select_for_topic query — extract topic_id and limit from params
+				# Topic is second-to-last param, limit is last param
+				limit = sql_params[-1] if sql_params else 20
+				topic = sql_params[-2] if len(sql_params) >= 2 else None
+				topic_qs = by_topic.get(topic, questions)
+				return topic_qs[:limit]
 			elif "SELECT item_id" in sql:
 				# _get_valid_item_ids check
 				return [{"item_id": iid} for iid in valid]
@@ -702,3 +719,357 @@ class TestPracticeSuccessCriteria:
 
 		assert resp.status_code == 403
 		assert resp.json()["detail"]["code"] == "NO_ACCESS"
+
+
+# ==========================================================================
+# Multi-topic helpers for T009/T010
+# ==========================================================================
+
+TOPIC_ID_A = "TOPIC-TEST-A"
+TOPIC_ID_B = "TOPIC-TEST-B"
+TOPIC_ID_C = "TOPIC-TEST-C"
+
+
+def _make_multi_topic_hierarchy(
+	subject_id=SUBJECT_ID,
+	topics=None,
+):
+	"""Build hierarchy JSON with multiple topics under a single track/unit.
+
+	Args:
+		topics: List of (topic_id, lesson_count) tuples.
+			Defaults to 3 topics with varied sizes.
+	"""
+	if topics is None:
+		topics = [(TOPIC_ID_A, 5), (TOPIC_ID_B, 3), (TOPIC_ID_C, 2)]
+
+	topic_entries = []
+	bit = 0
+	for topic_id, lesson_count in topics:
+		lessons = [
+			{
+				"lesson_id": f"LESSON-{topic_id}-{i:03d}",
+				"bit_index": bit + i,
+				"xp": 10,
+				"max_hearts": 3,
+				"is_reviewable": True,
+			}
+			for i in range(lesson_count)
+		]
+		bit += lesson_count
+		topic_entries.append(
+			{
+				"topic_id": topic_id,
+				"is_linear": False,
+				"is_free": False,
+				"lessons": lessons,
+			}
+		)
+
+	return {
+		"subject_id": subject_id,
+		"version": 1,
+		"is_linear": False,
+		"bit_range": bit,
+		"excluded_bits": [],
+		"free_units": [],
+		"free_topics": [],
+		"tracks": [
+			{
+				"track_id": TRACK_ID,
+				"is_linear": False,
+				"units": [
+					{
+						"unit_id": UNIT_ID,
+						"is_linear": False,
+						"is_free": False,
+						"topics": topic_entries,
+					}
+				],
+			}
+		],
+	}
+
+
+def _make_multi_topic_questions(topic_counts):
+	"""Build question rows for multiple topics.
+
+	Args:
+		topic_counts: Dict of topic_id → question count.
+
+	Returns:
+		List of question row dicts with correct topic assignments.
+	"""
+	all_qs = []
+	for topic_id, count in topic_counts.items():
+		all_qs.extend(_make_question_rows(count, topic_id=topic_id))
+	return all_qs
+
+
+# ==========================================================================
+# T009: Proportional Topic Distribution
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+class TestProportionalDistribution:
+	"""T009: Verify questions are distributed proportionally across topics."""
+
+	async def test_multi_topic_proportional(self, authed_client, redis_client, mock_frappe):
+		"""Multi-topic batch distributes proportionally by item count.
+
+		3 topics with 100, 50, 10 items. Batch size 20.
+		Expected: ~12, ~6, ~2 items (proportional with min 1 each).
+		"""
+		client, token, player_id, family_id = authed_client
+
+		topic_counts = {TOPIC_ID_A: 100, TOPIC_ID_B: 50, TOPIC_ID_C: 10}
+		# Create enough questions per topic (we'll cap at quota via LIMIT)
+		questions = _make_multi_topic_questions(
+			{
+				TOPIC_ID_A: 20,
+				TOPIC_ID_B: 10,
+				TOPIC_ID_C: 5,
+			}
+		)
+
+		hier = _make_multi_topic_hierarchy(
+			topics=[(TOPIC_ID_A, 5), (TOPIC_ID_B, 3), (TOPIC_ID_C, 2)],
+		)
+		await seed_hierarchy(redis_client, SUBJECT_ID, hierarchy_json=hier)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(
+			questions,
+			topic_counts=topic_counts,
+		)
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["session_active"] is True
+		# Should have questions from all 3 topics
+		assert len(data["questions"]) > 0
+		assert data["total_available"] == 160  # 100 + 50 + 10
+
+	async def test_single_topic_bypasses_proportional(self, authed_client, redis_client, mock_frappe):
+		"""Single-topic selection skips proportional logic entirely."""
+		client, token, player_id, family_id = authed_client
+
+		questions = _make_question_rows(5, topic_id=TOPIC_ID)
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(questions)
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert len(data["questions"]) == 5
+
+	async def test_small_topic_capped_at_available(self, authed_client, redis_client, mock_frappe):
+		"""Topics with fewer items than quota get capped at their count."""
+		client, token, player_id, family_id = authed_client
+
+		# Topic A has lots, Topic C has only 1
+		topic_counts = {TOPIC_ID_A: 100, TOPIC_ID_C: 1}
+		questions = _make_multi_topic_questions(
+			{
+				TOPIC_ID_A: 20,
+				TOPIC_ID_C: 1,
+			}
+		)
+
+		hier = _make_multi_topic_hierarchy(
+			topics=[(TOPIC_ID_A, 5), (TOPIC_ID_C, 1)],
+		)
+		await seed_hierarchy(redis_client, SUBJECT_ID, hierarchy_json=hier)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(
+			questions,
+			topic_counts=topic_counts,
+		)
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["total_available"] == 101  # 100 + 1
+
+	async def test_compute_topic_quotas_remainder_to_largest(self):
+		"""Pure function test: remainder questions go to largest topics."""
+		from fastapi_app.services.practice import _compute_topic_quotas
+
+		counts = {"A": 100, "B": 50, "C": 10}
+		quotas = _compute_topic_quotas(counts, 20)
+
+		# All topics should be represented
+		assert set(quotas.keys()) == {"A", "B", "C"}
+		# Total should equal batch_size
+		assert sum(quotas.values()) == 20
+		# Largest topic gets the most
+		assert quotas["A"] > quotas["B"] > quotas["C"]
+		# Each topic gets at least 1
+		assert all(v >= 1 for v in quotas.values())
+
+	async def test_compute_topic_quotas_single_topic(self):
+		"""Pure function test: single topic gets full batch (capped at available)."""
+		from fastapi_app.services.practice import _compute_topic_quotas
+
+		quotas = _compute_topic_quotas({"A": 5}, 20)
+		assert quotas == {"A": 5}  # Capped at available
+
+		quotas2 = _compute_topic_quotas({"A": 100}, 20)
+		assert quotas2 == {"A": 20}  # Capped at batch_size
+
+	async def test_compute_topic_quotas_empty(self):
+		"""Pure function test: empty counts returns empty quotas."""
+		from fastapi_app.services.practice import _compute_topic_quotas
+
+		assert _compute_topic_quotas({}, 20) == {}
+
+
+# ==========================================================================
+# T010: all_seen_warning Semantics
+# ==========================================================================
+
+
+@pytest.mark.asyncio
+class TestAllSeenWarning:
+	"""T010: Verify all_seen_warning fires on ANY repeat, not just total exhaustion."""
+
+	async def test_all_new_questions_warning_false(self, authed_client, redis_client, mock_frappe):
+		"""Batch with all-new questions returns all_seen_warning=false."""
+		client, token, player_id, family_id = authed_client
+
+		# All priority=0 (never seen)
+		questions = _make_question_rows(5)
+		for q in questions:
+			q["priority"] = 0
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(questions)
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+
+		assert resp.status_code == 200
+		assert resp.json()["all_seen_warning"] is False
+
+	async def test_any_repeat_warning_true(self, authed_client, redis_client, mock_frappe):
+		"""Batch with ANY repeat question returns all_seen_warning=true."""
+		client, token, player_id, family_id = authed_client
+
+		# 4 new (priority=0) + 1 repeat (priority=1)
+		questions = _make_question_rows(5)
+		for i, q in enumerate(questions):
+			q["priority"] = 1 if i == 4 else 0
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(questions)
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+
+		assert resp.status_code == 200
+		assert resp.json()["all_seen_warning"] is True
+
+	async def test_wrap_around_warning_true(self, authed_client, redis_client, mock_frappe):
+		"""Wrap-around (all items exhausted, re-serving) returns all_seen_warning=true."""
+		client, token, player_id, family_id = authed_client
+
+		questions = _make_question_rows(3)
+		for q in questions:
+			q["priority"] = 0
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+
+		# Phase 1: start session normally
+		mock_frappe.call.side_effect = _make_frappe_handler(questions)
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+
+		# Submit batch 0
+		results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+		assert resp.status_code == 200
+
+		# Phase 2: continue — mock returns empty for first select (all served)
+		# but count still returns 3 so wrap-around triggers
+		select_call_count = {"n": 0}
+
+		async def wrap_handler(method, params=None):
+			if method == "memora_admin.api.practice.execute_practice_query":
+				sql = (params or {}).get("sql", "")
+				if "GROUP BY ri.topic" in sql:
+					return [{"topic": TOPIC_ID, "cnt": 3}]
+				elif "SELECT ri.item_id" in sql:
+					select_call_count["n"] += 1
+					if select_call_count["n"] == 1:
+						# First per-topic select: empty (simulates all items served)
+						return []
+					# Wrap-around retry: return questions
+					return questions
+			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
+				return None
+			return None
+
+		mock_frappe.call.side_effect = wrap_handler
+
+		# Continue — should wrap around
+		resp = await client.post("/api/v1/practice/continue")
+		assert resp.status_code == 200
+		data = resp.json()
+		# Wrap-around should set all_seen_warning=true
+		assert data["all_seen_warning"] is True
+
+	async def test_continue_uses_same_semantics(self, authed_client, redis_client, mock_frappe):
+		"""continue_session uses same all_seen_warning semantics as start_session."""
+		client, token, player_id, family_id = authed_client
+
+		# All new questions — no repeats
+		questions = _make_question_rows(5)
+		for q in questions:
+			q["priority"] = 0
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = _make_frappe_handler(questions)
+
+		# Start
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+		assert resp.json()["all_seen_warning"] is False
+
+		# Submit
+		results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+		assert resp.status_code == 200
+
+		# Continue — all new questions, should be false
+		resp = await client.post("/api/v1/practice/continue")
+		assert resp.status_code == 200
+		assert resp.json()["all_seen_warning"] is False

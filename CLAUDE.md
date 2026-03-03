@@ -326,9 +326,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 035-practice-arena: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log)
 - 034-scholarship-gift-vouchers: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, DocTypes, hooks, Script Reports), ERPNext (Sales Invoice — unaffected)
-- 033-dense-rank-tier-index: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, structlog, Frappe Framework (for backfill command)
-- 032-admin-announcements: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocType, hooks), FastAPI, redis.asyncio, Pydantic v2, structlog
+- 034-scholarship-gift-vouchers: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, DocTypes, hooks, Script Reports), ERPNext (Sales Invoice — unaffected)
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

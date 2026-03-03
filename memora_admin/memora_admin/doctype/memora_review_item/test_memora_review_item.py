@@ -30,15 +30,18 @@ class TestItemExtraction(FrappeTestCase):
 
 	def test_question_stage_extracts_mcq_fields(self):
 		"""QUESTION stage → MCQ fields populated, content_json is None."""
-		stage = _make_stage("QUESTION", {
-			"instruction": "اختر الإجابة الصحيحة",
-			"question": "كم عظمة في جسم الانسان",
-			"answers": [
-				{"text": "10", "is_correct": True, "item_id": "aaaa0000-0000-0000-0000-000000000001"},
-				{"text": "12", "is_correct": False, "item_id": "aaaa0000-0000-0000-0000-000000000002"},
-				{"text": "14", "is_correct": False, "item_id": "aaaa0000-0000-0000-0000-000000000003"},
-			],
-		})
+		stage = _make_stage(
+			"QUESTION",
+			{
+				"instruction": "اختر الإجابة الصحيحة",
+				"question": "كم عظمة في جسم الانسان",
+				"answers": [
+					{"text": "10", "is_correct": True, "item_id": "aaaa0000-0000-0000-0000-000000000001"},
+					{"text": "12", "is_correct": False, "item_id": "aaaa0000-0000-0000-0000-000000000002"},
+					{"text": "14", "is_correct": False, "item_id": "aaaa0000-0000-0000-0000-000000000003"},
+				],
+			},
+		)
 
 		items = extract_items_from_stage(stage)
 
@@ -59,14 +62,17 @@ class TestItemExtraction(FrappeTestCase):
 
 	def test_fill_blank_stage_extracts_content_json(self):
 		"""FILL_BLANK stage → content_json with blank data, MCQ fields are None."""
-		stage = _make_stage("FILL_BLANK", {
-			"instruction": "أكمل الفراغات التالية",
-			"text": "مرحب كيفك",
-			"blanks": [
-				{"from": 5, "to": 9, "item_id": "bbbb0000-0000-0000-0000-000000000001"},
-			],
-			"distractors": ["طيب"],
-		})
+		stage = _make_stage(
+			"FILL_BLANK",
+			{
+				"instruction": "أكمل الفراغات التالية",
+				"text": "مرحب كيفك",
+				"blanks": [
+					{"from": 5, "to": 9, "item_id": "bbbb0000-0000-0000-0000-000000000001"},
+				],
+				"distractors": ["طيب"],
+			},
+		)
 
 		items = extract_items_from_stage(stage)
 
@@ -86,13 +92,26 @@ class TestItemExtraction(FrappeTestCase):
 
 	def test_matching_stage_extracts_content_json(self):
 		"""MATCHING stage → content_json with pair data."""
-		stage = _make_stage("MATCHING", {
-			"instruction": "طابق العناصر",
-			"pairs": [
-				{"id": "1", "left": "cat", "right": "قطة", "item_id": "cccc0000-0000-0000-0000-000000000001"},
-				{"id": "2", "left": "dog", "right": "كلب", "item_id": "cccc0000-0000-0000-0000-000000000002"},
-			],
-		})
+		stage = _make_stage(
+			"MATCHING",
+			{
+				"instruction": "طابق العناصر",
+				"pairs": [
+					{
+						"id": "1",
+						"left": "cat",
+						"right": "قطة",
+						"item_id": "cccc0000-0000-0000-0000-000000000001",
+					},
+					{
+						"id": "2",
+						"left": "dog",
+						"right": "كلب",
+						"item_id": "cccc0000-0000-0000-0000-000000000002",
+					},
+				],
+			},
+		)
 
 		items = extract_items_from_stage(stage)
 
@@ -107,12 +126,15 @@ class TestItemExtraction(FrappeTestCase):
 
 	def test_unknown_stage_type_uses_content_json_fallback(self):
 		"""Unknown stage type with item_ids → content_json fallback."""
-		stage = _make_stage("REVEAL", {
-			"text": "Some reveal content",
-			"items": [
-				{"item_id": "dddd0000-0000-0000-0000-000000000001", "data": "reveal1"},
-			],
-		})
+		stage = _make_stage(
+			"REVEAL",
+			{
+				"text": "Some reveal content",
+				"items": [
+					{"item_id": "dddd0000-0000-0000-0000-000000000001", "data": "reveal1"},
+				],
+			},
+		)
 
 		items = extract_items_from_stage(stage)
 
@@ -139,15 +161,18 @@ class TestItemExtraction(FrappeTestCase):
 
 	def test_question_with_four_choices(self):
 		"""QUESTION with 4 answers → all 4 choice fields populated."""
-		stage = _make_stage("QUESTION", {
-			"question": "Test?",
-			"answers": [
-				{"text": "A", "is_correct": False, "item_id": "eeee0000-0000-0000-0000-000000000001"},
-				{"text": "B", "is_correct": True, "item_id": "eeee0000-0000-0000-0000-000000000002"},
-				{"text": "C", "is_correct": False, "item_id": "eeee0000-0000-0000-0000-000000000003"},
-				{"text": "D", "is_correct": False, "item_id": "eeee0000-0000-0000-0000-000000000004"},
-			],
-		})
+		stage = _make_stage(
+			"QUESTION",
+			{
+				"question": "Test?",
+				"answers": [
+					{"text": "A", "is_correct": False, "item_id": "eeee0000-0000-0000-0000-000000000001"},
+					{"text": "B", "is_correct": True, "item_id": "eeee0000-0000-0000-0000-000000000002"},
+					{"text": "C", "is_correct": False, "item_id": "eeee0000-0000-0000-0000-000000000003"},
+					{"text": "D", "is_correct": False, "item_id": "eeee0000-0000-0000-0000-000000000004"},
+				],
+			},
+		)
 
 		items = extract_items_from_stage(stage)
 		self.assertEqual(len(items), 4)
@@ -194,28 +219,38 @@ class TestSyncReviewItems(FrappeTestCase):
 		mock_skip.return_value = {"INFORMATION", "MINDMAP", "SENTENCE_BUILDER"}
 
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Test Q?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "11110000-0000-0000-0000-000000000001"},
-					{"text": "B", "is_correct": False, "item_id": "11110000-0000-0000-0000-000000000002"},
-				],
-			}, name="stage-q1"),
-			_make_stage("FILL_BLANK", {
-				"text": "Hello World",
-				"blanks": [{"from": 6, "to": 11, "item_id": "11110000-0000-0000-0000-000000000003"}],
-				"distractors": ["Earth"],
-			}, name="stage-fb1"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Test Q?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "11110000-0000-0000-0000-000000000001"},
+						{"text": "B", "is_correct": False, "item_id": "11110000-0000-0000-0000-000000000002"},
+					],
+				},
+				name="stage-q1",
+			),
+			_make_stage(
+				"FILL_BLANK",
+				{
+					"text": "Hello World",
+					"blanks": [{"from": 6, "to": 11, "item_id": "11110000-0000-0000-0000-000000000003"}],
+					"distractors": ["Earth"],
+				},
+				name="stage-fb1",
+			),
 		]
 
 		doc = self._make_lesson_doc(stages)
 
 		# Track for cleanup
-		self._cleanup_items.extend([
-			"11110000-0000-0000-0000-000000000001",
-			"11110000-0000-0000-0000-000000000002",
-			"11110000-0000-0000-0000-000000000003",
-		])
+		self._cleanup_items.extend(
+			[
+				"11110000-0000-0000-0000-000000000001",
+				"11110000-0000-0000-0000-000000000002",
+				"11110000-0000-0000-0000-000000000003",
+			]
+		)
 
 		result = sync_review_items(doc)
 		frappe.db.commit()
@@ -245,31 +280,41 @@ class TestSyncReviewItems(FrappeTestCase):
 
 		# First sync: 2 items
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Q?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "22220000-0000-0000-0000-000000000001"},
-					{"text": "B", "is_correct": False, "item_id": "22220000-0000-0000-0000-000000000002"},
-				],
-			}, name="stage-q2"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Q?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "22220000-0000-0000-0000-000000000001"},
+						{"text": "B", "is_correct": False, "item_id": "22220000-0000-0000-0000-000000000002"},
+					],
+				},
+				name="stage-q2",
+			),
 		]
 		doc = self._make_lesson_doc(stages)
-		self._cleanup_items.extend([
-			"22220000-0000-0000-0000-000000000001",
-			"22220000-0000-0000-0000-000000000002",
-		])
+		self._cleanup_items.extend(
+			[
+				"22220000-0000-0000-0000-000000000001",
+				"22220000-0000-0000-0000-000000000002",
+			]
+		)
 
 		sync_review_items(doc)
 		frappe.db.commit()
 
 		# Second sync: only 1 answer (removed the second)
 		stages2 = [
-			_make_stage("QUESTION", {
-				"question": "Q?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "22220000-0000-0000-0000-000000000001"},
-				],
-			}, name="stage-q2"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Q?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "22220000-0000-0000-0000-000000000001"},
+					],
+				},
+				name="stage-q2",
+			),
 		]
 		doc.stages = stages2
 
@@ -289,10 +334,15 @@ class TestSyncReviewItems(FrappeTestCase):
 
 		# First sync: create items from a non-skippable stage
 		stages = [
-			_make_stage("MATCHING", {
-				"instruction": "Match",
-				"pairs": [{"left": "a", "right": "b", "item_id": "33330000-0000-0000-0000-000000000001"}],
-			}, name="stage-m1", is_skippable=0),
+			_make_stage(
+				"MATCHING",
+				{
+					"instruction": "Match",
+					"pairs": [{"left": "a", "right": "b", "item_id": "33330000-0000-0000-0000-000000000001"}],
+				},
+				name="stage-m1",
+				is_skippable=0,
+			),
 		]
 		doc = self._make_lesson_doc(stages)
 		self._cleanup_items.append("33330000-0000-0000-0000-000000000001")
@@ -349,19 +399,33 @@ class TestDeleteReviewItems(FrappeTestCase):
 
 		# Create items via sync
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Delete test?",
-				"answers": [
-					{"text": "Yes", "is_correct": True, "item_id": "44440000-0000-0000-0000-000000000001"},
-					{"text": "No", "is_correct": False, "item_id": "44440000-0000-0000-0000-000000000002"},
-				],
-			}, name="stage-del1"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Delete test?",
+					"answers": [
+						{
+							"text": "Yes",
+							"is_correct": True,
+							"item_id": "44440000-0000-0000-0000-000000000001",
+						},
+						{
+							"text": "No",
+							"is_correct": False,
+							"item_id": "44440000-0000-0000-0000-000000000002",
+						},
+					],
+				},
+				name="stage-del1",
+			),
 		]
 		doc = self._make_lesson_doc(stages)
-		self._cleanup_items.extend([
-			"44440000-0000-0000-0000-000000000001",
-			"44440000-0000-0000-0000-000000000002",
-		])
+		self._cleanup_items.extend(
+			[
+				"44440000-0000-0000-0000-000000000001",
+				"44440000-0000-0000-0000-000000000002",
+			]
+		)
 
 		sync_review_items(doc)
 		frappe.db.commit()
@@ -386,12 +450,16 @@ class TestDeleteReviewItems(FrappeTestCase):
 		mock_skip.return_value = {"INFORMATION", "MINDMAP", "SENTENCE_BUILDER"}
 
 		stages = [
-			_make_stage("MATCHING", {
-				"instruction": "Match pairs",
-				"pairs": [
-					{"left": "x", "right": "y", "item_id": "55550000-0000-0000-0000-000000000001"},
-				],
-			}, name="stage-trash1"),
+			_make_stage(
+				"MATCHING",
+				{
+					"instruction": "Match pairs",
+					"pairs": [
+						{"left": "x", "right": "y", "item_id": "55550000-0000-0000-0000-000000000001"},
+					],
+				},
+				name="stage-trash1",
+			),
 		]
 		doc = self._make_lesson_doc(stages)
 		self._cleanup_items.append("55550000-0000-0000-0000-000000000001")
@@ -421,23 +489,33 @@ class TestDeleteReviewItems(FrappeTestCase):
 
 		# Sync with 2 stages
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Keep?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "66660000-0000-0000-0000-000000000001"},
-				],
-			}, name="stage-keep"),
-			_make_stage("FILL_BLANK", {
-				"text": "Remove this",
-				"blanks": [{"from": 7, "to": 11, "item_id": "66660000-0000-0000-0000-000000000002"}],
-				"distractors": [],
-			}, name="stage-remove"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Keep?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "66660000-0000-0000-0000-000000000001"},
+					],
+				},
+				name="stage-keep",
+			),
+			_make_stage(
+				"FILL_BLANK",
+				{
+					"text": "Remove this",
+					"blanks": [{"from": 7, "to": 11, "item_id": "66660000-0000-0000-0000-000000000002"}],
+					"distractors": [],
+				},
+				name="stage-remove",
+			),
 		]
 		doc = self._make_lesson_doc(stages)
-		self._cleanup_items.extend([
-			"66660000-0000-0000-0000-000000000001",
-			"66660000-0000-0000-0000-000000000002",
-		])
+		self._cleanup_items.extend(
+			[
+				"66660000-0000-0000-0000-000000000001",
+				"66660000-0000-0000-0000-000000000002",
+			]
+		)
 
 		sync_review_items(doc)
 		frappe.db.commit()
@@ -494,12 +572,16 @@ class TestIsReviewableFiltering(FrappeTestCase):
 		mock_skip.return_value = set()
 
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Should not appear?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "a0310000-0000-0000-0000-000000000001"},
-				],
-			}, name="stage-031a"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Should not appear?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "a0310000-0000-0000-0000-000000000001"},
+					],
+				},
+				name="stage-031a",
+			),
 		]
 		doc = self._make_lesson_doc(stages, is_reviewable=0)
 		self._cleanup_items.append("a0310000-0000-0000-0000-000000000001")
@@ -516,12 +598,20 @@ class TestIsReviewableFiltering(FrappeTestCase):
 		mock_skip.return_value = set()
 
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Should appear?",
-				"answers": [
-					{"text": "Yes", "is_correct": True, "item_id": "a0310000-0000-0000-0000-000000000002"},
-				],
-			}, name="stage-031b"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Should appear?",
+					"answers": [
+						{
+							"text": "Yes",
+							"is_correct": True,
+							"item_id": "a0310000-0000-0000-0000-000000000002",
+						},
+					],
+				},
+				name="stage-031b",
+			),
 		]
 		doc = self._make_lesson_doc(stages, is_reviewable=1)
 		self._cleanup_items.append("a0310000-0000-0000-0000-000000000002")
@@ -538,19 +628,25 @@ class TestIsReviewableFiltering(FrappeTestCase):
 		mock_skip.return_value = set()
 
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Toggle test?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "a0310000-0000-0000-0000-000000000003"},
-					{"text": "B", "is_correct": False, "item_id": "a0310000-0000-0000-0000-000000000004"},
-				],
-			}, name="stage-031c"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Toggle test?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "a0310000-0000-0000-0000-000000000003"},
+						{"text": "B", "is_correct": False, "item_id": "a0310000-0000-0000-0000-000000000004"},
+					],
+				},
+				name="stage-031c",
+			),
 		]
 		doc = self._make_lesson_doc(stages, is_reviewable=1)
-		self._cleanup_items.extend([
-			"a0310000-0000-0000-0000-000000000003",
-			"a0310000-0000-0000-0000-000000000004",
-		])
+		self._cleanup_items.extend(
+			[
+				"a0310000-0000-0000-0000-000000000003",
+				"a0310000-0000-0000-0000-000000000004",
+			]
+		)
 
 		# First sync: items created
 		result1 = sync_review_items(doc)
@@ -608,12 +704,16 @@ class TestContentHashDebounce(FrappeTestCase):
 		mock_skip.return_value = set()
 
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Debounce test?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "a0320000-0000-0000-0000-000000000001"},
-				],
-			}, name="stage-032a"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Debounce test?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "a0320000-0000-0000-0000-000000000001"},
+					],
+				},
+				name="stage-032a",
+			),
 		]
 		doc = self._make_lesson_doc(stages, content_hash=None)
 		self._cleanup_items.append("a0320000-0000-0000-0000-000000000001")
@@ -630,12 +730,16 @@ class TestContentHashDebounce(FrappeTestCase):
 		mock_skip.return_value = set()
 
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Debounce test?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "a0320000-0000-0000-0000-000000000002"},
-				],
-			}, name="stage-032b"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Debounce test?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "a0320000-0000-0000-0000-000000000002"},
+					],
+				},
+				name="stage-032b",
+			),
 		]
 
 		# First sync: content_hash=None → runs extraction
@@ -661,20 +765,26 @@ class TestContentHashDebounce(FrappeTestCase):
 		mock_skip.return_value = set()
 
 		stages_v1 = [
-			_make_stage("QUESTION", {
-				"question": "Version 1?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "a0320000-0000-0000-0000-000000000003"},
-				],
-			}, name="stage-032c"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Version 1?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "a0320000-0000-0000-0000-000000000003"},
+					],
+				},
+				name="stage-032c",
+			),
 		]
 
 		# First sync
 		doc = self._make_lesson_doc(stages_v1, content_hash=None)
-		self._cleanup_items.extend([
-			"a0320000-0000-0000-0000-000000000003",
-			"a0320000-0000-0000-0000-000000000004",
-		])
+		self._cleanup_items.extend(
+			[
+				"a0320000-0000-0000-0000-000000000003",
+				"a0320000-0000-0000-0000-000000000004",
+			]
+		)
 		sync_review_items(doc)
 		frappe.db.commit()
 
@@ -682,12 +792,16 @@ class TestContentHashDebounce(FrappeTestCase):
 
 		# Change stages (different question + item_id)
 		stages_v2 = [
-			_make_stage("QUESTION", {
-				"question": "Version 2?",
-				"answers": [
-					{"text": "B", "is_correct": True, "item_id": "a0320000-0000-0000-0000-000000000004"},
-				],
-			}, name="stage-032c"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Version 2?",
+					"answers": [
+						{"text": "B", "is_correct": True, "item_id": "a0320000-0000-0000-0000-000000000004"},
+					],
+				},
+				name="stage-032c",
+			),
 		]
 		doc.stages = stages_v2
 		doc.content_hash = old_hash  # stale hash from v1
@@ -719,43 +833,49 @@ class TestMindmapExtraction(FrappeTestCase):
 
 	def test_mindmap_unit_extraction_nested_children(self):
 		"""MINDMAP with 3 levels of nesting → all item_ids extracted."""
-		stage = _make_stage("MINDMAP", {
-			"instruction": "أكمل خريطة المفاهيم",
-			"central": "الموضوع",
-			"children": [
-				{
-					"text": "فرع1",
-					"item_id": "a0330000-0000-0000-0000-000000000001",
-					"children": [
-						{
-							"text": "فرع1.1",
-							"item_id": "a0330000-0000-0000-0000-000000000002",
-							"children": [
-								{
-									"text": "فرع1.1.1",
-									"item_id": "a0330000-0000-0000-0000-000000000003",
-								}
-							],
-						}
-					],
-				},
-				{
-					"text": "فرع2",
-					"item_id": "a0330000-0000-0000-0000-000000000004",
-				},
-			],
-		})
+		stage = _make_stage(
+			"MINDMAP",
+			{
+				"instruction": "أكمل خريطة المفاهيم",
+				"central": "الموضوع",
+				"children": [
+					{
+						"text": "فرع1",
+						"item_id": "a0330000-0000-0000-0000-000000000001",
+						"children": [
+							{
+								"text": "فرع1.1",
+								"item_id": "a0330000-0000-0000-0000-000000000002",
+								"children": [
+									{
+										"text": "فرع1.1.1",
+										"item_id": "a0330000-0000-0000-0000-000000000003",
+									}
+								],
+							}
+						],
+					},
+					{
+						"text": "فرع2",
+						"item_id": "a0330000-0000-0000-0000-000000000004",
+					},
+				],
+			},
+		)
 
 		items = extract_items_from_stage(stage)
 
 		self.assertEqual(len(items), 4)
 		extracted_ids = {i["item_id"] for i in items}
-		self.assertEqual(extracted_ids, {
-			"a0330000-0000-0000-0000-000000000001",
-			"a0330000-0000-0000-0000-000000000002",
-			"a0330000-0000-0000-0000-000000000003",
-			"a0330000-0000-0000-0000-000000000004",
-		})
+		self.assertEqual(
+			extracted_ids,
+			{
+				"a0330000-0000-0000-0000-000000000001",
+				"a0330000-0000-0000-0000-000000000002",
+				"a0330000-0000-0000-0000-000000000003",
+				"a0330000-0000-0000-0000-000000000004",
+			},
+		)
 
 		# All items should have the instruction as question_text
 		for item in items:
@@ -765,17 +885,20 @@ class TestMindmapExtraction(FrappeTestCase):
 
 	def test_mindmap_nodes_without_item_id_skipped(self):
 		"""Nodes without item_id are traversed but not extracted."""
-		stage = _make_stage("MINDMAP", {
-			"central": "Root",
-			"children": [
-				{
-					"text": "No ID node",
-					"children": [
-						{"text": "Leaf with ID", "item_id": "a0330000-0000-0000-0000-000000000005"},
-					],
-				},
-			],
-		})
+		stage = _make_stage(
+			"MINDMAP",
+			{
+				"central": "Root",
+				"children": [
+					{
+						"text": "No ID node",
+						"children": [
+							{"text": "Leaf with ID", "item_id": "a0330000-0000-0000-0000-000000000005"},
+						],
+					},
+				],
+			},
+		)
 
 		items = extract_items_from_stage(stage)
 
@@ -791,18 +914,22 @@ class TestMindmapExtraction(FrappeTestCase):
 			"Memora Lesson", {}, ["name", "subject", "track", "unit", "topic"], as_dict=True
 		)
 		stages = [
-			_make_stage("MINDMAP", {
-				"instruction": "خريطة ذهنية",
-				"children": [
-					{
-						"text": "A",
-						"item_id": "a0330000-0000-0000-0000-000000000006",
-						"children": [
-							{"text": "A1", "item_id": "a0330000-0000-0000-0000-000000000007"},
-						],
-					},
-				],
-			}, name="stage-033mm"),
+			_make_stage(
+				"MINDMAP",
+				{
+					"instruction": "خريطة ذهنية",
+					"children": [
+						{
+							"text": "A",
+							"item_id": "a0330000-0000-0000-0000-000000000006",
+							"children": [
+								{"text": "A1", "item_id": "a0330000-0000-0000-0000-000000000007"},
+							],
+						},
+					],
+				},
+				name="stage-033mm",
+			),
 		]
 		doc = SimpleNamespace(
 			name=real.name,
@@ -814,10 +941,12 @@ class TestMindmapExtraction(FrappeTestCase):
 			is_reviewable=1,
 			content_hash=None,
 		)
-		self._cleanup_items.extend([
-			"a0330000-0000-0000-0000-000000000006",
-			"a0330000-0000-0000-0000-000000000007",
-		])
+		self._cleanup_items.extend(
+			[
+				"a0330000-0000-0000-0000-000000000006",
+				"a0330000-0000-0000-0000-000000000007",
+			]
+		)
 
 		result = sync_review_items(doc)
 		frappe.db.commit()
@@ -856,13 +985,17 @@ class TestPracticeLogCascade(FrappeTestCase):
 			"Memora Lesson", {}, ["name", "subject", "track", "unit", "topic"], as_dict=True
 		)
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Cascade test?",
-				"answers": [
-					{"text": "A", "is_correct": True, "item_id": "a0340000-0000-0000-0000-000000000001"},
-					{"text": "B", "is_correct": False, "item_id": "a0340000-0000-0000-0000-000000000002"},
-				],
-			}, name="stage-034a"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Cascade test?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "a0340000-0000-0000-0000-000000000001"},
+						{"text": "B", "is_correct": False, "item_id": "a0340000-0000-0000-0000-000000000002"},
+					],
+				},
+				name="stage-034a",
+			),
 		]
 		doc = SimpleNamespace(
 			name=real.name,
@@ -874,10 +1007,12 @@ class TestPracticeLogCascade(FrappeTestCase):
 			is_reviewable=1,
 			content_hash=None,
 		)
-		self._cleanup_items.extend([
-			"a0340000-0000-0000-0000-000000000001",
-			"a0340000-0000-0000-0000-000000000002",
-		])
+		self._cleanup_items.extend(
+			[
+				"a0340000-0000-0000-0000-000000000001",
+				"a0340000-0000-0000-0000-000000000002",
+			]
+		)
 
 		# Create Review Items
 		sync_review_items(doc)
@@ -924,13 +1059,25 @@ class TestPracticeLogCascade(FrappeTestCase):
 			"Memora Lesson", {}, ["name", "subject", "track", "unit", "topic"], as_dict=True
 		)
 		stages = [
-			_make_stage("QUESTION", {
-				"question": "Orphan cascade?",
-				"answers": [
-					{"text": "Keep", "is_correct": True, "item_id": "a0340000-0000-0000-0000-000000000003"},
-					{"text": "Remove", "is_correct": False, "item_id": "a0340000-0000-0000-0000-000000000004"},
-				],
-			}, name="stage-034b"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Orphan cascade?",
+					"answers": [
+						{
+							"text": "Keep",
+							"is_correct": True,
+							"item_id": "a0340000-0000-0000-0000-000000000003",
+						},
+						{
+							"text": "Remove",
+							"is_correct": False,
+							"item_id": "a0340000-0000-0000-0000-000000000004",
+						},
+					],
+				},
+				name="stage-034b",
+			),
 		]
 		doc = SimpleNamespace(
 			name=real.name,
@@ -942,10 +1089,12 @@ class TestPracticeLogCascade(FrappeTestCase):
 			is_reviewable=1,
 			content_hash=None,
 		)
-		self._cleanup_items.extend([
-			"a0340000-0000-0000-0000-000000000003",
-			"a0340000-0000-0000-0000-000000000004",
-		])
+		self._cleanup_items.extend(
+			[
+				"a0340000-0000-0000-0000-000000000003",
+				"a0340000-0000-0000-0000-000000000004",
+			]
+		)
 
 		# Create both Review Items
 		sync_review_items(doc)
@@ -962,12 +1111,20 @@ class TestPracticeLogCascade(FrappeTestCase):
 
 		# Re-sync with only the first answer (second becomes orphan)
 		stages_v2 = [
-			_make_stage("QUESTION", {
-				"question": "Orphan cascade?",
-				"answers": [
-					{"text": "Keep", "is_correct": True, "item_id": "a0340000-0000-0000-0000-000000000003"},
-				],
-			}, name="stage-034b"),
+			_make_stage(
+				"QUESTION",
+				{
+					"question": "Orphan cascade?",
+					"answers": [
+						{
+							"text": "Keep",
+							"is_correct": True,
+							"item_id": "a0340000-0000-0000-0000-000000000003",
+						},
+					],
+				},
+				name="stage-034b",
+			),
 		]
 		doc.stages = stages_v2
 		doc.content_hash = None  # force re-extraction
@@ -988,3 +1145,204 @@ class TestPracticeLogCascade(FrappeTestCase):
 
 		# Kept item still exists
 		self.assertTrue(frappe.db.exists("Memora Review Item", "a0340000-0000-0000-0000-000000000003"))
+
+
+# ---------------------------------------------------------------------------
+# Phase 035: Dirty-Set Pattern Tests (T002-T004)
+# ---------------------------------------------------------------------------
+
+
+class TestDirtySetProducer(FrappeTestCase):
+	"""T002-T003: on_lesson_save enqueues to dirty set instead of sync."""
+
+	DIRTY_KEY = "memora:dirty:review_items"
+
+	def setUp(self):
+		super().setUp()
+		from memora_admin.utils.redis_connection import get_memora_redis
+
+		self.r = get_memora_redis()
+		# Clean the dirty set before each test
+		self.r.delete(self.DIRTY_KEY)
+
+	def tearDown(self):
+		self.r.delete(self.DIRTY_KEY)
+		super().tearDown()
+
+	def _make_lesson_doc(self, is_reviewable=1):
+		"""Create a minimal mock lesson doc."""
+		real = frappe.db.get_value(
+			"Memora Lesson", {}, ["name", "subject", "track", "unit", "topic"], as_dict=True
+		)
+		return SimpleNamespace(
+			name=real.name,
+			subject=real.subject,
+			track=real.track,
+			unit=real.unit,
+			topic=real.topic,
+			stages=[],
+			is_reviewable=is_reviewable,
+			content_hash=None,
+		)
+
+	def test_on_lesson_save_enqueues_to_dirty_set(self):
+		"""T002: on_lesson_save adds lesson name to dirty set (not synchronous sync)."""
+		from memora_admin.events.review_item_sync import on_lesson_save
+
+		doc = self._make_lesson_doc(is_reviewable=1)
+		on_lesson_save(doc, "on_update")
+
+		members = self.r.smembers(self.DIRTY_KEY)
+		self.assertIn(doc.name, members)
+
+	def test_on_lesson_save_does_not_call_sync_synchronously(self):
+		"""T002: on_lesson_save must NOT call sync_review_items directly."""
+		from memora_admin.events.review_item_sync import on_lesson_save
+
+		doc = self._make_lesson_doc(is_reviewable=1)
+
+		with patch("memora_admin.api.review_items.sync_review_items") as mock_sync:
+			on_lesson_save(doc, "on_update")
+			mock_sync.assert_not_called()
+
+	def test_non_reviewable_adds_to_dirty_set_and_deletes_immediately(self):
+		"""T003: is_reviewable=0 still adds to dirty set AND performs immediate delete."""
+		from memora_admin.events.review_item_sync import on_lesson_save
+
+		doc = self._make_lesson_doc(is_reviewable=0)
+
+		with patch(
+			"memora_admin.api.review_items.delete_review_items_for_lesson", return_value=0
+		) as mock_del:
+			on_lesson_save(doc, "on_update")
+
+		# Dirty set should still contain the lesson name
+		members = self.r.smembers(self.DIRTY_KEY)
+		self.assertIn(doc.name, members)
+		# Immediate delete should have been called
+		mock_del.assert_called_once_with(doc.name)
+
+
+class TestDirtySetOnTrash(FrappeTestCase):
+	"""T006: on_lesson_trash SREMs from dirty set before deleting items."""
+
+	DIRTY_KEY = "memora:dirty:review_items"
+
+	def setUp(self):
+		super().setUp()
+		from memora_admin.utils.redis_connection import get_memora_redis
+
+		self.r = get_memora_redis()
+		self.r.delete(self.DIRTY_KEY)
+
+	def tearDown(self):
+		self.r.delete(self.DIRTY_KEY)
+		super().tearDown()
+
+	def test_on_lesson_trash_removes_from_dirty_set(self):
+		"""on_lesson_trash SREMs the lesson name from dirty set."""
+		from memora_admin.events.review_item_sync import on_lesson_trash
+
+		real = frappe.db.get_value(
+			"Memora Lesson", {}, ["name", "subject", "track", "unit", "topic"], as_dict=True
+		)
+		doc = SimpleNamespace(
+			name=real.name,
+			subject=real.subject,
+			track=real.track,
+			unit=real.unit,
+			topic=real.topic,
+		)
+
+		# Pre-populate dirty set
+		self.r.sadd(self.DIRTY_KEY, doc.name)
+		self.assertIn(doc.name, self.r.smembers(self.DIRTY_KEY))
+
+		on_lesson_trash(doc, "on_trash")
+
+		# Should be removed from dirty set
+		self.assertNotIn(doc.name, self.r.smembers(self.DIRTY_KEY))
+
+
+class TestSyncDirtyReviewItems(FrappeTestCase):
+	"""T004: sync_dirty_review_items() consumer function tests."""
+
+	DIRTY_KEY = "memora:dirty:review_items"
+
+	def setUp(self):
+		super().setUp()
+		from memora_admin.utils.redis_connection import get_memora_redis
+
+		self.r = get_memora_redis()
+		self.r.delete(self.DIRTY_KEY)
+		self._cleanup_items = []
+
+	def tearDown(self):
+		self.r.delete(self.DIRTY_KEY)
+		for item_id in self._cleanup_items:
+			if frappe.db.exists("Memora Review Item", item_id):
+				frappe.delete_doc("Memora Review Item", item_id, force=True, ignore_permissions=True)
+		frappe.db.commit()
+		super().tearDown()
+
+	@patch("memora_admin.api.review_items._get_globally_skippable_types")
+	def test_consumer_processes_and_srems_on_success(self, mock_skip):
+		"""T004a: Consumer processes dirty set members and SREMs on success."""
+		mock_skip.return_value = set()
+		from memora_admin.tasks.sync import sync_dirty_review_items
+
+		# Get a real lesson that has stages
+		real = frappe.db.get_value(
+			"Memora Lesson",
+			{"is_reviewable": 1},
+			["name"],
+			as_dict=True,
+		)
+		if not real:
+			self.skipTest("No reviewable lesson found in DB")
+
+		# Add lesson to dirty set
+		self.r.sadd(self.DIRTY_KEY, real.name)
+		self.assertEqual(self.r.scard(self.DIRTY_KEY), 1)
+
+		# Run consumer
+		sync_dirty_review_items()
+
+		# Dirty set should be empty (SREMed on success)
+		self.assertEqual(self.r.scard(self.DIRTY_KEY), 0)
+
+	def test_consumer_srems_deleted_lessons(self):
+		"""T004c: Consumer SREMs lessons that no longer exist (DoesNotExistError)."""
+		from memora_admin.tasks.sync import sync_dirty_review_items
+
+		# Add a nonexistent lesson to dirty set
+		self.r.sadd(self.DIRTY_KEY, "NONEXISTENT-LES-99999")
+		self.assertEqual(self.r.scard(self.DIRTY_KEY), 1)
+
+		# Run consumer — should handle DoesNotExistError gracefully
+		sync_dirty_review_items()
+
+		# Dirty set should be empty (SREMed because lesson doesn't exist)
+		self.assertEqual(self.r.scard(self.DIRTY_KEY), 0)
+
+	@patch("memora_admin.api.review_items.sync_review_items")
+	def test_consumer_retains_on_failure(self, mock_sync):
+		"""T004b: Consumer retains entry in dirty set on processing failure."""
+		from memora_admin.tasks.sync import sync_dirty_review_items
+
+		# Get a real lesson
+		real = frappe.db.get_value("Memora Lesson", {}, "name")
+		if not real:
+			self.skipTest("No lesson found in DB")
+
+		# Add to dirty set
+		self.r.sadd(self.DIRTY_KEY, real)
+
+		# Make sync_review_items raise an exception
+		mock_sync.side_effect = Exception("Simulated failure")
+
+		# Run consumer
+		sync_dirty_review_items()
+
+		# Entry should STILL be in dirty set (retained for retry)
+		self.assertIn(real, self.r.smembers(self.DIRTY_KEY))

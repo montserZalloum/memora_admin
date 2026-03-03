@@ -261,6 +261,10 @@ scheduler_events = {
 			"memora_admin.tasks.fsrs_processor.process_fsrs_reviews",
 			"memora_admin.tasks.build_worker.process_pending_builds",
 		],
+		# Every 2 minutes: Sync dirty Review Item extraction from Redis to MariaDB
+		"*/2 * * * *": [
+			"memora_admin.tasks.sync.sync_dirty_review_items",
+		],
 		# Daily at 00:05: Streak reset (after midnight Asia/Amman)
 		"5 0 * * *": ["memora_admin.tasks.streak_reset.reset_broken_streaks"],
 		# Hourly at :15: Session cleanup (safety net for orphaned keys)

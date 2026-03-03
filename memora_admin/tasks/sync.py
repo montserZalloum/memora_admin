@@ -13,23 +13,26 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 import os
+import uuid
 from datetime import datetime
 
 import frappe
 
 from fastapi_app.core.constants import (
 	DIRTY_PROGRESS_KEY,
+	DIRTY_REVIEW_ITEMS_KEY,
 	DIRTY_WALLETS_KEY,
 	INTERACTION_BUFFER_KEY,
 )
 from fastapi_app.core.redis_keys import (
 	daily_xp_key,
 	freeze_key,
-	progress_key as _progress_key,
 	subject_total_lessons_key,
 	wallet_key,
+)
+from fastapi_app.core.redis_keys import (
+	progress_key as _progress_key,
 )
 from memora_admin.utils.redis_connection import get_memora_redis, get_memora_redis_raw
 
@@ -41,10 +44,11 @@ DEBUG_LOG_FILE = "/tmp/memora_sync_debug.log"
 # Maximum items to process per DB transaction (chunk)
 SYNC_CHUNK_SIZE = 500
 
+
 def _write_debug_log(message: str):
 	"""Write to debug log file for troubleshooting"""
 	try:
-		with open(DEBUG_LOG_FILE, 'a') as f:
+		with open(DEBUG_LOG_FILE, "a") as f:
 			f.write(f"{datetime.now().isoformat()} - {message}\n")
 	except Exception:
 		pass  # Silent fail - don't break sync on log failures
@@ -61,11 +65,11 @@ def _parse_timestamp(timestamp_str: str) -> str:
 
 	try:
 		# Remove Z suffix if present
-		if timestamp_str.endswith('Z'):
+		if timestamp_str.endswith("Z"):
 			timestamp_str = timestamp_str[:-1]
 
 		# Parse the ISO format timestamp
-		if '.' in timestamp_str:
+		if "." in timestamp_str:
 			# Has milliseconds: 2026-02-07T10:53:59.380
 			dt = datetime.fromisoformat(timestamp_str)
 		else:
@@ -78,14 +82,16 @@ def _parse_timestamp(timestamp_str: str) -> str:
 		logger.warning(f"Failed to parse timestamp {timestamp_str}: {e}")
 		return frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
+
 # ---------------------------------------------------------------------------
 # Shared batch helpers
 # ---------------------------------------------------------------------------
 
+
 def _chunks(lst, size):
 	"""Split list into chunks of given size."""
 	for i in range(0, len(lst), size):
-		yield lst[i:i + size]
+		yield lst[i : i + size]
 
 
 def _batch_srem(r, set_key, members):
@@ -101,6 +107,7 @@ def _batch_srem(r, set_key, members):
 # ---------------------------------------------------------------------------
 # Wallet batch helpers
 # ---------------------------------------------------------------------------
+
 
 def _batch_hgetall_wallets(r, player_ids):
 	"""Pipeline HGETALL for multiple wallet keys. Returns {player_id: hash_dict}."""
@@ -186,6 +193,7 @@ def _batch_update_wallets(updates):
 # ---------------------------------------------------------------------------
 # Progress batch helpers
 # ---------------------------------------------------------------------------
+
 
 def _batch_get_bitmaps(r_raw, bitmap_keys):
 	"""Pipeline GET + BITCOUNT for multiple bitmap keys.
@@ -333,15 +341,22 @@ def _batch_insert_progress(inserts):
 	flat_values = []
 	for i, (user_id, subject_id, hex_string, percentage) in enumerate(inserts):
 		name = f"PROG-{start + i + 1:05d}"
-		flat_values.extend([
-			name, user_id, subject_id, hex_string, percentage,
-			0,  # docstatus
-			now_str, now_str, "Administrator", "Administrator",
-		])
+		flat_values.extend(
+			[
+				name,
+				user_id,
+				subject_id,
+				hex_string,
+				percentage,
+				0,  # docstatus
+				now_str,
+				now_str,
+				"Administrator",
+				"Administrator",
+			]
+		)
 
-	placeholders = ", ".join(
-		[f"({', '.join(['%s'] * 10)})"] * n
-	)
+	placeholders = ", ".join([f"({', '.join(['%s'] * 10)})"] * n)
 
 	frappe.db.sql(
 		f"""
@@ -357,6 +372,7 @@ def _batch_insert_progress(inserts):
 # ---------------------------------------------------------------------------
 # Main sync functions
 # ---------------------------------------------------------------------------
+
 
 def sync_dirty_progress():
 	"""
@@ -429,10 +445,7 @@ def sync_dirty_progress():
 			chunk = active_chunk
 
 			# 1. Pipeline GET + BITCOUNT for all bitmap keys
-			bitmap_keys = [
-				_progress_key(uid, sid, ver)
-				for _, uid, sid, ver in chunk
-			]
+			bitmap_keys = [_progress_key(uid, sid, ver) for _, uid, sid, ver in chunk]
 			bitmap_data = _batch_get_bitmaps(r_raw, bitmap_keys)
 
 			# 2. Batch get subject lesson counts
@@ -505,10 +518,7 @@ def sync_dirty_wallets():
 		return
 
 	# Decode all player IDs upfront
-	player_ids = [
-		pid.decode() if isinstance(pid, bytes) else pid
-		for pid in dirty_players
-	]
+	player_ids = [pid.decode() if isinstance(pid, bytes) else pid for pid in dirty_players]
 
 	synced = 0
 	errors = []
@@ -576,13 +586,10 @@ def sync_dirty_wallets():
 				raw_daily_xp = daily_xp_data.get(pid, {})
 				if raw_daily_xp:
 					redis_daily_xp = {
-						(k.decode() if isinstance(k, bytes) else k): int(v)
-						for k, v in raw_daily_xp.items()
+						(k.decode() if isinstance(k, bytes) else k): int(v) for k, v in raw_daily_xp.items()
 					}
 					# Read existing DB value and merge (Redis wins on conflicts)
-					existing_json = frappe.db.get_value(
-						"Memora Player Wallet", wallet_name, "daily_xp_json"
-					)
+					existing_json = frappe.db.get_value("Memora Player Wallet", wallet_name, "daily_xp_json")
 					if existing_json:
 						try:
 							existing = json.loads(existing_json)
@@ -617,6 +624,56 @@ def sync_dirty_wallets():
 	_log_sync("Wallet", synced, status)
 
 	logger.info(f"Wallet sync: {synced} synced, {len(errors)} errors")
+
+
+def sync_dirty_review_items():
+	"""Process dirty set of lessons pending Review Item extraction.
+
+	Reads SMEMBERS, processes each lesson via sync_review_items(),
+	SREMs on success. On failure, entry remains for auto-retry on next run.
+	Handles DoesNotExistError by SREMing deleted lessons.
+
+	Scheduled: every 2 minutes via hooks.py (*/2 * * * *)
+	"""
+	from memora_admin.api.review_items import sync_review_items
+
+	r = get_memora_redis()
+	dirty_lessons = r.smembers(DIRTY_REVIEW_ITEMS_KEY)
+	if not dirty_lessons:
+		return
+
+	processed = 0
+	failed = 0
+
+	for lesson_name in dirty_lessons:
+		# Normalize bytes to str (decode_responses=True should handle this,
+		# but be defensive)
+		if isinstance(lesson_name, bytes):
+			lesson_name = lesson_name.decode()
+
+		try:
+			lesson_doc = frappe.get_doc("Memora Lesson", lesson_name)
+			result = sync_review_items(lesson_doc)
+			r.srem(DIRTY_REVIEW_ITEMS_KEY, lesson_name)
+			processed += 1
+			if result["created"] or result["updated"] or result["deleted"]:
+				logger.info(
+					f"Review Item sync for {lesson_name}: "
+					f"created={result['created']}, updated={result['updated']}, deleted={result['deleted']}"
+				)
+		except frappe.DoesNotExistError:
+			# Lesson was deleted — remove from dirty set
+			r.srem(DIRTY_REVIEW_ITEMS_KEY, lesson_name)
+			logger.info(f"Review Item sync: lesson {lesson_name} no longer exists, removed from dirty set")
+		except Exception as e:
+			# Leave in dirty set for retry on next run
+			failed += 1
+			logger.error(f"Review Item sync failed for {lesson_name}: {e}")
+
+	if processed or failed:
+		logger.info(f"Review Item dirty sync: processed={processed}, failed={failed}")
+
+	frappe.db.commit()
 
 
 def _reserve_name_block(prefix: str, count: int) -> int:
@@ -690,21 +747,23 @@ def flush_interaction_buffer():
 				logger.warning(f"Missing player or lesson in item: {str(item)[:100]}")
 				continue
 
-			valid_rows.append((
-				item["player"],
-				item["lesson"],
-				str(item.get("stage_id", "")),
-				item.get("item_id", ""),
-				item.get("event_type", "Completed"),
-				int(item.get("time_spent", 0)),
-				int(item.get("errors_count", 0)),
-				_parse_timestamp(item.get("timestamp", "")),
-				json.dumps(item.get("metadata", {})),
-				now_str,  # creation
-				now_str,  # modified
-				"Administrator",  # modified_by
-				"Administrator",  # owner
-			))
+			valid_rows.append(
+				(
+					item["player"],
+					item["lesson"],
+					str(item.get("stage_id", "")),
+					item.get("item_id", ""),
+					item.get("event_type", "Completed"),
+					int(item.get("time_spent", 0)),
+					int(item.get("errors_count", 0)),
+					_parse_timestamp(item.get("timestamp", "")),
+					json.dumps(item.get("metadata", {})),
+					now_str,  # creation
+					now_str,  # modified
+					"Administrator",  # modified_by
+					"Administrator",  # owner
+				)
+			)
 
 		inserted = 0
 
@@ -720,9 +779,7 @@ def flush_interaction_buffer():
 				flat_values.append(name)
 				flat_values.extend(row)
 
-			placeholders = ", ".join(
-				[f"({', '.join(['%s'] * 14)})"] * n
-			)
+			placeholders = ", ".join([f"({', '.join(['%s'] * 14)})"] * n)
 
 			frappe.db.sql(
 				f"""
@@ -784,13 +841,15 @@ def _log_sync(sync_type: str, count: int, status: str):
 	Creates audit trail for monitoring sync health.
 	"""
 	try:
-		frappe.get_doc({
-			"doctype": "Memora Sync Log",
-			"job_id": f"{sync_type.lower()}-{uuid.uuid4().hex[:8]}",
-			"sync_type": sync_type,
-			"records_processed": count,
-			"status": status
-		}).insert(ignore_permissions=True)
+		frappe.get_doc(
+			{
+				"doctype": "Memora Sync Log",
+				"job_id": f"{sync_type.lower()}-{uuid.uuid4().hex[:8]}",
+				"sync_type": sync_type,
+				"records_processed": count,
+				"status": status,
+			}
+		).insert(ignore_permissions=True)
 		frappe.db.commit()
 	except Exception as e:
 		logger.error(f"Failed to log sync: {e}")

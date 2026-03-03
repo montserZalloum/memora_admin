@@ -249,6 +249,18 @@ def devices_key(user_id: str) -> str:
 # =============================================================================
 
 
+def dirty_review_items_key() -> str:
+	"""Dirty set of lesson IDs pending Review Item extraction.
+
+	Type: SET of lesson names (e.g., "LES-00001")
+	Producers: review_item_sync.on_lesson_save() (SADD)
+	Consumers: sync.py sync_dirty_review_items() (SMEMBERS + SREM)
+	TTL: None (protected — never evicted)
+	Schedule: Every 2 minutes (*/2 * * * *)
+	"""
+	return "memora:dirty:review_items"
+
+
 def practice_session_key(player_id: str) -> str:
 	"""Active practice session for a player.
 
