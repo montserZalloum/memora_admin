@@ -101,6 +101,17 @@ after_migrate = "memora_admin.memora_admin.setup.after_migrate"
 # To set up dependencies/integrations with other apps
 # Name of the app being installed is passed as an argument
 
+fixtures = [
+	{
+		"dt": "Workspace",
+		"filters": [["name", "in", ["Memora", "Memora Library"]]],
+	},
+	{
+		"dt": "Default Workspace Sidebar",
+		"filters": [["name", "in", ["Memora", "Memora Library"]]],
+	}
+]
+
 # before_app_install = "memora_admin.utils.before_app_install"
 # after_app_install = "memora_admin.utils.after_app_install"
 
