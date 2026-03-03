@@ -19,10 +19,9 @@ async def get_gamification_settings(
 	"""
 	Get current gamification settings for game client.
 
-	Per Phase 20:
-	- Cached in Redis with 5 minute TTL
-	- Includes base_xp, replay_xp, max_hearts, xp_per_heart, and streak multiplier cap
-	- Manual invalidation via Frappe hook when Memora Settings updated
+	- Cached in Redis with no TTL (persistent)
+	- Invalidated by Frappe hook when admin saves Memora Settings
+	- Cold start hydrates from Frappe with thundering herd protection
 
 	Returns:
 		GamificationSettings with all gamification configuration

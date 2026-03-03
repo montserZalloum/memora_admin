@@ -1,6 +1,6 @@
 # Memora Load Test Suite
 
-Locust-based load testing suite for the Memora FastAPI sidecar. Simulates 4 player behavior profiles with realistic traffic distribution to validate performance under load up to 100k concurrent users.
+Locust-based load testing suite for the Memora FastAPI sidecar. Simulates multiple player and optional admin/provider profiles with realistic traffic distribution to validate performance under load up to 100k concurrent users.
 
 ## Prerequisites
 
@@ -31,9 +31,9 @@ Edit `config.py` with your environment's test data:
 ```python
 # Pre-created player accounts
 TEST_PLAYERS = [
-    {"mobile": "+201000000001", "password": "your_password"},
-    {"mobile": "+201000000002", "password": "your_password"},
-    {"mobile": "+201000000003", "password": "your_password"},
+    {"mobile": "+201000000001", "password": "your_password", "player_id": "PLAYER-00001"},
+    {"mobile": "+201000000002", "password": "your_password", "player_id": "PLAYER-00002"},
+    {"mobile": "+201000000003", "password": "your_password", "player_id": "PLAYER-00003"},
     # Add more for larger tests
 ]
 
@@ -52,6 +52,26 @@ TEST_LESSONS = [
         ],
     },
 ]
+
+# Optional fixtures used by added endpoint coverage
+TEST_REVIEW_SUBJECTS = ["SUBJ-00001"]
+TEST_AVATARS = ["avatar_01", "avatar_02"]
+TEST_PLAN_MANIFEST_IDS = ["PLAN-00001"]
+
+# Dangerous/state-changing flows are disabled unless explicitly enabled
+ENABLE_MUTATION_ENDPOINTS = False
+TEST_PLAN_CHANGE_IDS = ["PLAN-00002"]
+TEST_PRODUCT_GRANTS = ["GRNT-00001"]
+TEST_VOUCHERS = [{"pin": "VALID123", "grant_id": "GRNT-00001"}]
+
+# Admin-only flows are also opt-in
+ENABLE_ADMIN_ENDPOINTS = False
+ADMIN_CREDENTIALS = {"email": "admin@example.com", "password": "CHANGE_ME"}
+TEST_ACCESS_CONTENT_KEYS = ["SUB-MATH"]
+
+# External provider webhook simulation is opt-in too
+ENABLE_WEBHOOK_ENDPOINTS = False
+TEST_WEBHOOK_EVENTS = [{"player_id": "PLAYER-00001", "product_grant_id": "GRNT-00001"}]
 ```
 
 ## Running Tests
@@ -63,7 +83,7 @@ cd apps/memora_admin/load_tests
 locust --headless -u 10 -r 5 --run-time 30s --host http://127.0.0.1:8002
 ```
 
-All 4 user profiles should appear in the stats output.
+All always-on user profiles should appear in the stats output. The optional mutation/admin profiles only produce requests when enabled in `config.py`.
 
 ### Web UI Mode (Interactive)
 
@@ -173,10 +193,17 @@ Each worker process can handle roughly 2,000-5,000 users depending on the comple
 
 | Profile | Weight | Endpoints | Behavior |
 |---------|--------|-----------|----------|
-| DashboardUser | 40% | profile, stats, activity, mastery, wallet, progress | Polls dashboard stats with weighted frequency |
-| LessonPlayer | 35% | topic lessons, session start/end, wallet | Full lesson lifecycle with 3-10s think time |
+| DashboardUser | 40% | profile, stats, activity, mastery, wallet, progress, catalog, subscriptions, settings, announcements, plans | Polls dashboard and discovery APIs with weighted frequency |
+| LessonPlayer | 35% | topic lessons, session current/start/end, wallet | Full lesson lifecycle with 3-10s think time |
 | BrowserUser | 15% | progress, tracks, units (hierarchy drill-down) | Drills down subject → tracks → units |
 | LeaderboardChecker | 10% | daily/weekly leaderboard, my rank | Checks rankings with weighted frequency |
+| ReviewUser | 10% | reviews overview, due items, review submit | Runs review batches for a subject |
+| PracticeUser | 12% | practice hierarchy/start/submit/continue | Runs practice session batches |
+| MutationUser | 2% | avatar, voucher, purchase, reports, plan change | State-changing player flows, only when enabled |
+| AdminAccessUser | 1% | access grants CRUD | Admin-only grant coverage, only when enabled |
+| WebhookUser | 1% | payment webhook | External provider webhook simulation, only when enabled |
+
+`MutationUser`, `AdminAccessUser`, and `WebhookUser` are opt-in. They are no-ops unless the related config flags and fixtures are populated.
 
 ### Endpoint Coverage
 
@@ -186,17 +213,43 @@ Each worker process can handle roughly 2,000-5,000 users depending on the comple
 | `GET /api/v1/profile/stats` | DashboardUser | `/api/v1/profile/stats` |
 | `GET /api/v1/profile/activity` | DashboardUser | `/api/v1/profile/activity` |
 | `GET /api/v1/profile/mastery` | DashboardUser | `/api/v1/profile/mastery` |
+| `PUT /api/v1/profile/avatar` | MutationUser | `/api/v1/profile/avatar` |
 | `GET /api/v1/wallet` | DashboardUser, LessonPlayer | `/api/v1/wallet` |
+| `GET /api/v1/subscriptions` | DashboardUser | `/api/v1/subscriptions` |
+| `GET /api/v1/catalog/` | DashboardUser | `/api/v1/catalog/` |
+| `GET /api/v1/settings/gamification` | DashboardUser | `/api/v1/settings/gamification` |
+| `GET /api/v1/announcements/` | DashboardUser | `/api/v1/announcements/` |
+| `GET /api/v1/plans/available` | DashboardUser | `/api/v1/plans/available` |
+| `GET /api/v1/plans/{plan}/manifest` | DashboardUser | `/api/v1/plans/[plan]/manifest` |
 | `GET /api/v1/progress` | DashboardUser, BrowserUser | `/api/v1/progress` |
 | `GET /api/v1/progress/{subject}/topics/{topic}/lessons` | LessonPlayer | `/api/v1/progress/[subject]/topics/[topic]/lessons` |
+| `GET /api/v1/sessions/current` | LessonPlayer | `/api/v1/sessions/current` |
 | `POST /api/v1/sessions/start` | LessonPlayer | `/api/v1/sessions/start` |
 | `POST /api/v1/sessions/end` | LessonPlayer | `/api/v1/sessions/end` |
 | `GET /api/v1/progress/{subject}/tracks` | BrowserUser | `/api/v1/progress/[subject]/tracks` |
 | `GET /api/v1/progress/{subject}/tracks/{track}` | BrowserUser | `/api/v1/progress/[subject]/tracks/[track]` |
 | `GET /api/v1/progress/{subject}/tracks/{track}/units/{unit}` | BrowserUser | `/api/v1/progress/[subject]/tracks/[track]/units/[unit]` |
+| `GET /api/v1/reviews` | ReviewUser | `/api/v1/reviews` |
+| `GET /api/v1/reviews/{subject}` | ReviewUser | `/api/v1/reviews/[subject]` |
+| `POST /api/v1/reviews/{subject}/submit` | ReviewUser | `/api/v1/reviews/[subject]/submit` |
+| `GET /api/v1/practice/hierarchy` | PracticeUser | `/api/v1/practice/hierarchy` |
+| `POST /api/v1/practice/start` | PracticeUser | `/api/v1/practice/start` |
+| `POST /api/v1/practice/submit` | PracticeUser | `/api/v1/practice/submit` |
+| `POST /api/v1/practice/continue` | PracticeUser | `/api/v1/practice/continue` |
 | `GET /api/v1/leaderboard/daily` | LeaderboardChecker | `/api/v1/leaderboard/[type]` |
 | `GET /api/v1/leaderboard/weekly` | LeaderboardChecker | `/api/v1/leaderboard/[type]` |
 | `GET /api/v1/leaderboard/{type}/me` | LeaderboardChecker | `/api/v1/leaderboard/[type]/me` |
+| `POST /api/v1/voucher/preview` | MutationUser | `/api/v1/voucher/preview` |
+| `POST /api/v1/voucher/redeem` | MutationUser | `/api/v1/voucher/redeem` |
+| `POST /api/v1/purchase/` | MutationUser | `/api/v1/purchase/` |
+| `POST /api/v1/reports` | MutationUser | `/api/v1/reports` |
+| `POST /api/v1/plans/change` | MutationUser | `/api/v1/plans/change` |
+| `POST /api/v1/access/grants` | AdminAccessUser | `/api/v1/access/grants` |
+| `GET /api/v1/access/grants/{player}` | AdminAccessUser | `/api/v1/access/grants/[player]` |
+| `DELETE /api/v1/access/grants` | AdminAccessUser | `/api/v1/access/grants` |
+| `POST /api/v1/webhooks/payment` | WebhookUser | `/api/v1/webhooks/payment` |
+
+`WS /api/v1/notifications/ws` is not covered by this `HttpUser` suite. Test it separately with a websocket-capable client.
 
 ## Troubleshooting
 

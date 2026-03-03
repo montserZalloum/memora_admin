@@ -662,9 +662,10 @@ def gamification_settings_key() -> str:
 	"""Cached gamification settings (XP rewards, etc.).
 
 	Type: STRING (JSON GamificationSettings)
-	Producers: SettingsService.get_gamification_settings() on cache miss
+	Producers: settings_sync.on_settings_updated() (eager write on save),
+	           SettingsService._hydrate_from_frappe() (cold start fallback)
 	Consumers: SettingsService.get_gamification_settings()
-	TTL: 5 minutes
+	TTL: None (persistent — invalidated by Frappe hook on Memora Settings save)
 	"""
 	return "memora:settings:gamification"
 

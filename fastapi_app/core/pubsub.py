@@ -176,6 +176,13 @@ async def _handle_invalidation(data: bytes | str, app_state: Any) -> None:
 				)
 			else:
 				logger.warning("announcement_service_not_available")
+		elif msg_type == "gamification_settings":
+			# Frappe hook already wrote fresh data to Redis via SET.
+			# No in-process cache to invalidate — next read picks up new value.
+			logger.info(
+				"gamification_settings_updated",
+				timestamp=timestamp,
+			)
 		elif msg_type == "subscription_changed" and payload.get("player_id"):
 			ws_manager = getattr(app_state, "ws_manager", None)
 			if ws_manager:

@@ -6,6 +6,7 @@ import structlog
 from fastapi_app.core.redis_keys import gamification_settings_key
 from fastapi_app.models.settings import GamificationSettings
 from fastapi_app.services.frappe_client import FrappeClient
+from fastapi_app.services.hydration import guarded_hydrate
 
 logger = structlog.get_logger()
 
@@ -13,13 +14,10 @@ logger = structlog.get_logger()
 class SettingsService:
 	"""Cache gamification settings from Frappe for fast access.
 
-	Per RESEARCH.md:
-	- Cache with 5 minute TTL
-	- Single cache key for all gamification settings
-	- Invalidation via manual call (Phase 6 hook)
+	- Cached indefinitely (no TTL) — invalidated only on Memora Settings save
+	- Frappe hook writes eagerly on save; cache miss = cold start fallback
+	- Hydration guard prevents thundering herd on cache miss
 	"""
-
-	CACHE_TTL = 300  # 5 minutes
 
 	def __init__(
 		self,
@@ -31,41 +29,67 @@ class SettingsService:
 
 	async def get_gamification_settings(self) -> GamificationSettings:
 		"""
-		Get gamification settings from cache or Frappe.
-
-		1. Check Redis cache
-		2. If miss, fetch from Frappe API
-		3. Cache result with TTL
+		Get gamification settings from cache, or hydrate from Frappe on miss.
 
 		Returns:
-			GamificationSettings with XP values and streak multiplier cap
+			GamificationSettings with XP values and streak multiplier cap.
+			Falls back to defaults if Frappe is unreachable.
 		"""
 		# Try cache first
 		cached = await self.redis.get(gamification_settings_key())
 		if cached:
 			data = cached.decode() if isinstance(cached, bytes) else cached
-			logger.debug("settings_cache_hit")
+			try:
+				logger.debug("settings_cache_hit")
+				return GamificationSettings.model_validate_json(data)
+			except Exception:
+				logger.warning("settings_cache_corrupt", action="deleting_and_rehydrating")
+				await self.redis.delete(gamification_settings_key())
+
+		# Cache miss — hydrate with guard (prevents thundering herd)
+		logger.info("settings_cache_miss", action="hydrating_from_frappe")
+
+		try:
+			await guarded_hydrate(
+				self.redis,
+				gamification_settings_key(),
+				self._hydrate_from_frappe,
+				lock_ttl=10,
+				wait_timeout=3.0,
+			)
+		except Exception:
+			logger.exception("settings_hydration_failed", action="using_defaults")
+			return GamificationSettings()
+
+		# Re-read after hydration
+		cached = await self.redis.get(gamification_settings_key())
+		if cached:
+			data = cached.decode() if isinstance(cached, bytes) else cached
 			return GamificationSettings.model_validate_json(data)
 
-		# Cache miss - fetch from Frappe
-		logger.info("settings_cache_miss", action="fetching_from_frappe")
+		# Hydration wrote nothing (Frappe returned empty) — use defaults
+		logger.warning("settings_frappe_empty", action="using_defaults")
+		return GamificationSettings()
 
-		result = await self.frappe.call(
-			"memora_admin.api.settings.get_gamification_settings"
-		)
+	async def _hydrate_from_frappe(self) -> None:
+		"""Fetch settings from Frappe and write to Redis (no TTL)."""
+		try:
+			result = await self.frappe.call(
+				"memora_admin.api.settings.get_gamification_settings"
+			)
+		except Exception:
+			logger.exception("settings_frappe_call_failed")
+			return
 
 		if not result:
-			# Fallback to defaults if Frappe unavailable
-			logger.warning("settings_frappe_unavailable", action="using_defaults")
-			return GamificationSettings()
+			return
 
 		settings = GamificationSettings.model_validate(result)
 
-		# Cache with TTL
+		# Cache indefinitely — invalidated by Frappe hook on save
 		await self.redis.set(
 			gamification_settings_key(),
 			settings.model_dump_json(),
-			ex=self.CACHE_TTL,
 		)
 
 		logger.info(
@@ -75,15 +99,11 @@ class SettingsService:
 			max_streak=settings.max_streak_multiplier_percent,
 		)
 
-		return settings
-
 	async def invalidate(self) -> None:
 		"""
-		Invalidate settings cache for manual refresh.
+		Invalidate settings cache.
 
-		Called when:
-		- Admin updates Memora Settings (Phase 6 hook)
-		- Manual cache clear
+		Called via pubsub when admin saves Memora Settings.
 		"""
 		await self.redis.delete(gamification_settings_key())
 		logger.info("settings_cache_invalidated")

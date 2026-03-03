@@ -73,9 +73,9 @@ class TestCacheMiss:
 		cached_obj = GamificationSettings.model_validate_json(cached)
 		assert cached_obj.base_lesson_xp == 150
 
-		# Assert: TTL set (5 minutes = 300s)
+		# Assert: no TTL (persistent — invalidated by Frappe hook on save)
 		ttl = await redis_client.ttl(SETTINGS_CACHE_KEY)
-		assert ttl > 0 and ttl <= 300
+		assert ttl == -1
 
 
 class TestFrappeUnavailable:

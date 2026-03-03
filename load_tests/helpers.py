@@ -152,3 +152,68 @@ def api_post(user, path, json=None, name=None, **kwargs):
 			return None
 		resp.success()
 		return resp
+
+
+def api_put(user, path, json=None, name=None, **kwargs):
+	"""PUT request with Bearer auth, 429/401 tolerance, and aggregated naming."""
+	if not user.token:
+		return None
+
+	headers = kwargs.pop("headers", {})
+	headers["Authorization"] = f"Bearer {user.token}"
+	headers["X-Forwarded-For"] = user.fake_ip
+	headers["X-Device-ID"] = user.device_id
+
+	with user.client.put(
+		path,
+		json=json,
+		name=name or path,
+		headers=headers,
+		catch_response=True,
+		**kwargs,
+	) as resp:
+		if resp.status_code == 429:
+			resp.success()
+			return None
+		elif resp.status_code == 401:
+			resp.success()
+			user.token = None
+			return None
+		elif resp.status_code >= 400:
+			resp.failure(f"{resp.status_code}: {resp.text[:200]}")
+			return None
+		resp.success()
+		return resp
+
+
+def api_delete(user, path, json=None, name=None, **kwargs):
+	"""DELETE request with Bearer auth, 429/401 tolerance, and aggregated naming."""
+	if not user.token:
+		return None
+
+	headers = kwargs.pop("headers", {})
+	headers["Authorization"] = f"Bearer {user.token}"
+	headers["X-Forwarded-For"] = user.fake_ip
+	headers["X-Device-ID"] = user.device_id
+
+	with user.client.request(
+		"DELETE",
+		path,
+		json=json,
+		name=name or path,
+		headers=headers,
+		catch_response=True,
+		**kwargs,
+	) as resp:
+		if resp.status_code == 429:
+			resp.success()
+			return None
+		elif resp.status_code == 401:
+			resp.success()
+			user.token = None
+			return None
+		elif resp.status_code >= 400:
+			resp.failure(f"{resp.status_code}: {resp.text[:200]}")
+			return None
+		resp.success()
+		return resp
