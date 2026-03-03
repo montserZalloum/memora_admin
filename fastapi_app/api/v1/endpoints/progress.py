@@ -33,6 +33,8 @@ from fastapi_app.models.progress import (
 
 logger = structlog.get_logger()
 
+PROGRESS_SUMMARY_CONCURRENCY = 6
+
 router = APIRouter(prefix="/progress", tags=["progress"])
 
 
@@ -97,6 +99,101 @@ def _is_topic_complete(topic: TopicInfo, completed_bits: set[int]) -> bool:
 		if lesson.bit_index not in completed_bits:
 			return False
 	return True
+
+
+def _is_entity_complete_from_stats(entity_id: str, stats: dict[str, str]) -> bool:
+	"""Check if an entity (track/unit/topic) is complete using stats dict.
+
+	Uses pre-computed completed/total counts from the stats hash instead of
+	iterating over bitmap bits. Equivalent to _is_track_complete / _is_unit_complete /
+	_is_topic_complete but O(1) dict lookups instead of O(L) bitmap iteration.
+	"""
+	total_raw = stats.get(f"{entity_id}:total")
+	if total_raw is None:
+		return False
+	total = int(total_raw)
+	if total == 0:
+		# Empty containers are considered complete, matching the bitmap helpers.
+		return True
+	completed_raw = stats.get(f"{entity_id}:completed")
+	if completed_raw is None:
+		return False
+	completed = int(completed_raw)
+	return completed >= total
+
+
+def _is_unit_unlocked_from_stats(
+	track_idx: int,
+	unit_idx: int,
+	hierarchy: SubjectHierarchy,
+	stats: dict[str, str],
+) -> bool:
+	"""Check if unit is unlocked using stats-derived completion checks.
+
+	Mirror of _is_unit_unlocked but reads completed/total from stats dict
+	instead of iterating bitmap bits.
+	"""
+	# Track must be unlocked
+	if track_idx > 0 and hierarchy.is_linear:
+		prev_track = hierarchy.tracks[track_idx - 1]
+		if not _is_entity_complete_from_stats(prev_track.track_id, stats):
+			return False
+
+	# First unit in track is always unlocked
+	if unit_idx == 0:
+		return True
+
+	# Check if previous unit is complete (if track is linear)
+	track = hierarchy.tracks[track_idx]
+	if track.is_linear:
+		prev_unit = track.units[unit_idx - 1]
+		return _is_entity_complete_from_stats(prev_unit.unit_id, stats)
+
+	return True
+
+
+def _is_topic_unlocked_from_stats(
+	track_idx: int,
+	unit_idx: int,
+	topic_idx: int,
+	hierarchy: SubjectHierarchy,
+	stats: dict[str, str],
+) -> bool:
+	"""Check if topic is unlocked using stats-derived completion checks.
+
+	Mirror of _is_topic_unlocked but reads completed/total from stats dict
+	instead of iterating bitmap bits.
+	"""
+	# Unit must be unlocked
+	if not _is_unit_unlocked_from_stats(track_idx, unit_idx, hierarchy, stats):
+		return False
+
+	# First topic in unit is always unlocked
+	if topic_idx == 0:
+		return True
+
+	# Check if previous topic is complete (if unit is linear)
+	unit = hierarchy.tracks[track_idx].units[unit_idx]
+	if unit.is_linear:
+		prev_topic = unit.topics[topic_idx - 1]
+		return _is_entity_complete_from_stats(prev_topic.topic_id, stats)
+
+	return True
+
+
+def _stats_are_valid(stats: dict[str, str] | None, content_hash: str) -> bool:
+	"""Check if stats dict is valid and fresh enough to use for stats-first path.
+
+	Returns True only if stats is present, has the "total" key (indicating a
+	fully-computed hash), and its _content_hash matches the current hierarchy's
+	content_hash. A mismatch means the hierarchy structure changed and stats
+	are stale — caller should fall back to bitmap path.
+	"""
+	if stats is None:
+		return False
+	if "total" not in stats:
+		return False
+	return stats.get("_content_hash") == content_hash
 
 
 def _is_unit_unlocked(
@@ -180,6 +277,7 @@ async def get_progress_summary(
 	progress_service: ProgressServiceDep,
 	access_service: AccessServiceDep,
 	hierarchy_service: HierarchyServiceDep,
+	stats_service: StatsServiceDep,
 ) -> list[SubjectSummary]:
 	"""
 	Get progress summary for all player's subjects.
@@ -212,14 +310,23 @@ async def get_progress_summary(
 		if not hierarchy:
 			return None
 
-		total = hierarchy.bit_range - len(hierarchy.excluded_bits)
-		completed = await progress_service.get_completed_count(
-			user_id=user.sub,
-			subject_id=subject_id,
-			version=hierarchy.version,
-		)
-		# Clamp completed to total (BITCOUNT may exceed total if bitmap has stale bits)
-		completed = min(completed, total)
+		# Stats-first: try reading completed/total from stats cache
+		stats = await stats_service.get_stats(user.sub, subject_id, hierarchy.version)
+		if _stats_are_valid(stats, hierarchy.content_hash):
+			total = int(stats.get("total", "0"))
+			completed = int(stats.get("completed", "0"))
+			completed = min(completed, total)
+		else:
+			# Fallback: BITCOUNT path
+			total = hierarchy.bit_range - len(hierarchy.excluded_bits)
+			completed = await progress_service.get_completed_count(
+				user_id=user.sub,
+				subject_id=subject_id,
+				version=hierarchy.version,
+			)
+			# Clamp completed to total (BITCOUNT may exceed total if bitmap has stale bits)
+			completed = min(completed, total)
+
 		percentage = round(completed / total * 100, 1) if total > 0 else 0.0
 
 		return SubjectSummary(
@@ -230,8 +337,19 @@ async def get_progress_summary(
 			total=total,
 		)
 
+	sem = asyncio.Semaphore(PROGRESS_SUMMARY_CONCURRENCY)
+
+	async def _bounded_fetch(subject_id: str) -> SubjectSummary | None:
+		async with sem:
+			return await _fetch_subject_summary(subject_id)
+
+	logger.debug(
+		"progress_summary_bounded",
+		subject_count=len(all_accessible),
+		concurrency=PROGRESS_SUMMARY_CONCURRENCY,
+	)
 	results = await asyncio.gather(
-		*(_fetch_subject_summary(sid) for sid in all_accessible),
+		*(_bounded_fetch(sid) for sid in all_accessible),
 		return_exceptions=True,
 	)
 
@@ -285,26 +403,47 @@ async def get_subject_tracks(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get completed bits once (used for both stats recompute and unlock calculation)
-	completed_bits = await progress_service.get_completed_bits(
-		user.sub, subject, hierarchy.bit_range, hierarchy.version
+	# Stats-first partial read: only track-level fields via HMGET
+	fields = ["_content_hash"]
+	for t in hierarchy.tracks:
+		fields.append(f"{t.track_id}:completed")
+		fields.append(f"{t.track_id}:total")
+
+	partial_stats = await stats_service.get_partial_stats(
+		user.sub, subject, hierarchy.version, fields
+	)
+	# For partial reads, _content_hash match alone validates (no "total" key in partial)
+	use_stats_path = (
+		partial_stats is not None and partial_stats.get("_content_hash") == hierarchy.content_hash
 	)
 
-	# Get or recompute stats (semaphore-throttled on content hash mismatch)
-	stats = await stats_service.get_or_recompute(
-		user_id=user.sub, subject_id=subject, version=hierarchy.version,
-		content_hash=hierarchy.content_hash, completed_bits=completed_bits,
-		hierarchy=hierarchy,
-	)
+	if use_stats_path:
+		logger.debug("stats_partial_read", endpoint="get_subject_tracks", subject=subject, fields=len(fields))
+		stats = partial_stats
+	else:
+		# Fallback: bitmap decode + full recompute
+		completed_bits = await progress_service.get_completed_bits(
+			user.sub, subject, hierarchy.bit_range, hierarchy.version
+		)
+		stats = await stats_service.get_or_recompute(
+			user_id=user.sub, subject_id=subject, version=hierarchy.version,
+			content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+			hierarchy=hierarchy,
+		)
 
 	# Build track summaries
 	tracks_summary = []
 	for track_idx, track in enumerate(hierarchy.tracks):
-		# Check unlock state (reuse existing helper)
-		track_unlocked = track_idx == 0 or not hierarchy.is_linear
-		if track_idx > 0 and hierarchy.is_linear:
-			prev_track = hierarchy.tracks[track_idx - 1]
-			track_unlocked = _is_track_complete(prev_track, completed_bits)
+		if use_stats_path:
+			track_unlocked = track_idx == 0 or not hierarchy.is_linear
+			if track_idx > 0 and hierarchy.is_linear:
+				prev_track = hierarchy.tracks[track_idx - 1]
+				track_unlocked = _is_entity_complete_from_stats(prev_track.track_id, stats)
+		else:
+			track_unlocked = track_idx == 0 or not hierarchy.is_linear
+			if track_idx > 0 and hierarchy.is_linear:
+				prev_track = hierarchy.tracks[track_idx - 1]
+				track_unlocked = _is_track_complete(prev_track, completed_bits)
 
 		# Read from cached stats
 		track_completed = int(stats.get(f"{track.track_id}:completed", "0"))
@@ -373,23 +512,48 @@ async def get_track_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get completed bits once (used for both stats recompute and unlock calculation)
-	completed_bits = await progress_service.get_completed_bits(
-		user.sub, subject, hierarchy.bit_range, hierarchy.version
-	)
-
-	# Get or recompute stats (semaphore-throttled on content hash mismatch)
-	stats = await stats_service.get_or_recompute(
-		user_id=user.sub, subject_id=subject, version=hierarchy.version,
-		content_hash=hierarchy.content_hash, completed_bits=completed_bits,
-		hierarchy=hierarchy,
-	)
-
-	# Check track unlock state
-	track_unlocked = track_idx == 0 or not hierarchy.is_linear
+	# Stats-first partial read: track fields + prev track (for unlock) + all units in track
+	fields = ["_content_hash", f"{track_id}:completed", f"{track_id}:total"]
 	if track_idx > 0 and hierarchy.is_linear:
 		prev_track = hierarchy.tracks[track_idx - 1]
-		track_unlocked = _is_track_complete(prev_track, completed_bits)
+		fields.extend([f"{prev_track.track_id}:completed", f"{prev_track.track_id}:total"])
+	for u in track_info.units:
+		fields.append(f"{u.unit_id}:completed")
+		fields.append(f"{u.unit_id}:total")
+
+	partial_stats = await stats_service.get_partial_stats(
+		user.sub, subject, hierarchy.version, fields
+	)
+	# For partial reads, _content_hash match alone validates (no "total" key in partial)
+	use_stats_path = (
+		partial_stats is not None and partial_stats.get("_content_hash") == hierarchy.content_hash
+	)
+
+	if use_stats_path:
+		logger.debug("stats_partial_read", endpoint="get_track_detail", subject=subject, fields=len(fields))
+		stats = partial_stats
+	else:
+		# Fallback: bitmap decode + full recompute
+		completed_bits = await progress_service.get_completed_bits(
+			user.sub, subject, hierarchy.bit_range, hierarchy.version
+		)
+		stats = await stats_service.get_or_recompute(
+			user_id=user.sub, subject_id=subject, version=hierarchy.version,
+			content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+			hierarchy=hierarchy,
+		)
+
+	# Check track unlock state
+	if use_stats_path:
+		track_unlocked = track_idx == 0 or not hierarchy.is_linear
+		if track_idx > 0 and hierarchy.is_linear:
+			prev_track = hierarchy.tracks[track_idx - 1]
+			track_unlocked = _is_entity_complete_from_stats(prev_track.track_id, stats)
+	else:
+		track_unlocked = track_idx == 0 or not hierarchy.is_linear
+		if track_idx > 0 and hierarchy.is_linear:
+			prev_track = hierarchy.tracks[track_idx - 1]
+			track_unlocked = _is_track_complete(prev_track, completed_bits)
 
 	# Read track stats
 	track_completed = int(stats.get(f"{track_id}:completed", "0"))
@@ -398,7 +562,10 @@ async def get_track_detail(
 	# Build unit summaries
 	units_summary = []
 	for unit_idx, unit in enumerate(track_info.units):
-		unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
+		if use_stats_path:
+			unit_unlocked = _is_unit_unlocked_from_stats(track_idx, unit_idx, hierarchy, stats)
+		else:
+			unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
 
 		unit_completed = int(stats.get(f"{unit.unit_id}:completed", "0"))
 		unit_total = int(stats.get(f"{unit.unit_id}:total", "0"))
@@ -480,20 +647,50 @@ async def get_unit_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Get completed bits once (used for both stats recompute and unlock calculation)
-	completed_bits = await progress_service.get_completed_bits(
-		user.sub, subject, hierarchy.bit_range, hierarchy.version
+	# Stats-first partial read: unit fields + prev unit (for unlock) + prev track + all topics
+	fields = ["_content_hash", f"{unit_id}:completed", f"{unit_id}:total"]
+	# Previous unit (for linear unlock check)
+	if unit_idx > 0 and track_info.is_linear:
+		prev_unit = track_info.units[unit_idx - 1]
+		fields.extend([f"{prev_unit.unit_id}:completed", f"{prev_unit.unit_id}:total"])
+	# Previous track (for cross-track unlock chain)
+	if track_idx > 0 and hierarchy.is_linear:
+		prev_track = hierarchy.tracks[track_idx - 1]
+		fields.extend([f"{prev_track.track_id}:completed", f"{prev_track.track_id}:total"])
+	# All topics in unit
+	for topic in unit_info.topics:
+		fields.append(f"{topic.topic_id}:completed")
+		fields.append(f"{topic.topic_id}:total")
+	# Previous topic fields (for linear unlock within unit)
+	# Already included since we add all topics above
+
+	partial_stats = await stats_service.get_partial_stats(
+		user.sub, subject, hierarchy.version, fields
+	)
+	# For partial reads, _content_hash match alone validates (no "total" key in partial)
+	use_stats_path = (
+		partial_stats is not None and partial_stats.get("_content_hash") == hierarchy.content_hash
 	)
 
-	# Get or recompute stats (semaphore-throttled on content hash mismatch)
-	stats = await stats_service.get_or_recompute(
-		user_id=user.sub, subject_id=subject, version=hierarchy.version,
-		content_hash=hierarchy.content_hash, completed_bits=completed_bits,
-		hierarchy=hierarchy,
-	)
+	if use_stats_path:
+		logger.debug("stats_partial_read", endpoint="get_unit_detail", subject=subject, fields=len(fields))
+		stats = partial_stats
+	else:
+		# Fallback: bitmap decode + full recompute
+		completed_bits = await progress_service.get_completed_bits(
+			user.sub, subject, hierarchy.bit_range, hierarchy.version
+		)
+		stats = await stats_service.get_or_recompute(
+			user_id=user.sub, subject_id=subject, version=hierarchy.version,
+			content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+			hierarchy=hierarchy,
+		)
 
 	# Check unit unlock state
-	unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
+	if use_stats_path:
+		unit_unlocked = _is_unit_unlocked_from_stats(track_idx, unit_idx, hierarchy, stats)
+	else:
+		unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
 
 	# Read unit stats
 	unit_completed = int(stats.get(f"{unit_id}:completed", "0"))
@@ -502,7 +699,12 @@ async def get_unit_detail(
 	# Build topic progress (reuse existing TopicProgress model)
 	topics_progress = []
 	for topic_idx, topic in enumerate(unit_info.topics):
-		topic_unlocked = _is_topic_unlocked(track_idx, unit_idx, topic_idx, hierarchy, completed_bits)
+		if use_stats_path:
+			topic_unlocked = _is_topic_unlocked_from_stats(
+				track_idx, unit_idx, topic_idx, hierarchy, stats
+			)
+		else:
+			topic_unlocked = _is_topic_unlocked(track_idx, unit_idx, topic_idx, hierarchy, completed_bits)
 
 		topic_completed = int(stats.get(f"{topic.topic_id}:completed", "0"))
 		topic_total = int(stats.get(f"{topic.topic_id}:total", "0"))
@@ -664,38 +866,59 @@ async def get_subject_progress(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Always need completed_bits for unlock state calculation
-	completed_bits = await progress_service.get_completed_bits(
-		user_id=user.sub,
-		subject_id=subject,
-		bit_range=hierarchy.bit_range,
-		version=hierarchy.version,
-	)
+	# Stats-first fast path: try cached stats before bitmap decode
+	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
+	use_stats_path = _stats_are_valid(stats, hierarchy.content_hash)
 
-	# Get or recompute stats (semaphore-throttled on content hash mismatch)
-	stats = await stats_service.get_or_recompute(
-		user_id=user.sub, subject_id=subject, version=hierarchy.version,
-		content_hash=hierarchy.content_hash, completed_bits=completed_bits,
-		hierarchy=hierarchy,
-	)
+	if use_stats_path:
+		logger.debug("stats_cache_hit", endpoint="get_subject_progress", subject=subject)
+	else:
+		logger.debug("stats_cache_miss", endpoint="get_subject_progress", subject=subject)
+		# Fallback: decode bitmap and recompute stats
+		completed_bits = await progress_service.get_completed_bits(
+			user_id=user.sub,
+			subject_id=subject,
+			bit_range=hierarchy.bit_range,
+			version=hierarchy.version,
+		)
+		stats = await stats_service.get_or_recompute(
+			user_id=user.sub, subject_id=subject, version=hierarchy.version,
+			content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+			hierarchy=hierarchy,
+		)
 
 	# Build response with nested progress using cached stats
 	tracks_progress = []
 
 	for track_idx, track in enumerate(hierarchy.tracks):
-		# Check track unlock state (still uses completed_bits)
-		track_unlocked = track_idx == 0 or not hierarchy.is_linear
-		if track_idx > 0 and hierarchy.is_linear:
-			prev_track = hierarchy.tracks[track_idx - 1]
-			track_unlocked = _is_track_complete(prev_track, completed_bits)
+		if use_stats_path:
+			track_unlocked = track_idx == 0 or not hierarchy.is_linear
+			if track_idx > 0 and hierarchy.is_linear:
+				prev_track = hierarchy.tracks[track_idx - 1]
+				track_unlocked = _is_entity_complete_from_stats(prev_track.track_id, stats)
+		else:
+			track_unlocked = track_idx == 0 or not hierarchy.is_linear
+			if track_idx > 0 and hierarchy.is_linear:
+				prev_track = hierarchy.tracks[track_idx - 1]
+				track_unlocked = _is_track_complete(prev_track, completed_bits)
 
 		units_progress = []
 		for unit_idx, unit in enumerate(track.units):
-			unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
+			if use_stats_path:
+				unit_unlocked = _is_unit_unlocked_from_stats(track_idx, unit_idx, hierarchy, stats)
+			else:
+				unit_unlocked = _is_unit_unlocked(track_idx, unit_idx, hierarchy, completed_bits)
 
 			topics_progress = []
 			for topic_idx, topic in enumerate(unit.topics):
-				topic_unlocked = _is_topic_unlocked(track_idx, unit_idx, topic_idx, hierarchy, completed_bits)
+				if use_stats_path:
+					topic_unlocked = _is_topic_unlocked_from_stats(
+						track_idx, unit_idx, topic_idx, hierarchy, stats
+					)
+				else:
+					topic_unlocked = _is_topic_unlocked(
+						track_idx, unit_idx, topic_idx, hierarchy, completed_bits
+					)
 
 				# Read counts from cached stats (O(1) dict access)
 				topic_completed = int(stats.get(f"{topic.topic_id}:completed", "0"))

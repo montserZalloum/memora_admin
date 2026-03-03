@@ -1,11 +1,13 @@
 """Tests for progress tracking endpoints."""
 
 import json
+from unittest.mock import AsyncMock, patch
+
 import pytest
 import redis.asyncio as redis
 from httpx import AsyncClient
 
-from fastapi_app.core.redis_keys import hierarchy_key, progress_key as _progress_key_fn
+from fastapi_app.core.redis_keys import hierarchy_key, progress_key as _progress_key_fn, stats_key
 from fastapi_app.tests.conftest import (
 	make_hierarchy_json,
 	seed_hierarchy,
@@ -325,3 +327,275 @@ class TestLessonCompletion:
 		await cleanup_player_keys(redis_client, player_id)
 		await redis_client.delete(hierarchy_key(subject_id))
 		await redis_client.delete(progress_key)
+
+
+# --- Stats-first activation tests (T008) ---
+
+
+def _make_hierarchy_with_hash(subject_id: str, content_hash: str, lesson_count: int = 5) -> dict:
+	"""Build hierarchy JSON with a specific content_hash for stats-first testing."""
+	data = make_hierarchy_json(subject_id, lesson_count=lesson_count)
+	data["content_hash"] = content_hash
+	return data
+
+
+async def _seed_stats_for_subject(
+	redis_client: redis.Redis,
+	player_id: str,
+	subject_id: str,
+	content_hash: str,
+	completed: int = 3,
+	total: int = 5,
+) -> None:
+	"""Seed a valid stats hash in Redis with matching content_hash."""
+	key = stats_key(player_id, subject_id, version=1)
+	stats_data = {
+		"completed": str(completed),
+		"total": str(total),
+		"_content_hash": content_hash,
+		"TRK-TEST-001:completed": str(completed),
+		"TRK-TEST-001:total": str(total),
+		"UNIT-TEST-001:completed": str(completed),
+		"UNIT-TEST-001:total": str(total),
+		"TOPIC-TEST-001:completed": str(completed),
+		"TOPIC-TEST-001:total": str(total),
+	}
+	await redis_client.hset(key, mapping=stats_data)
+	await redis_client.expire(key, 3600)
+
+
+class TestPartialStatsActivation:
+	"""T014: Verify partial stats path is activated for tracks/track_detail/unit_detail."""
+
+	async def test_tracks_skips_bitmap_on_partial_stats_hit(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""
+		When valid partial stats exist (matching _content_hash), get_subject_tracks
+		should use get_partial_stats and NOT call get_completed_bits().
+		"""
+		client, token, player_id, family_id = authed_client
+		subject_id = "SUB-TEST-PARTIAL-TRACKS"
+		content_hash = "ptrk1234"
+
+		hierarchy_json = _make_hierarchy_with_hash(subject_id, content_hash, lesson_count=5)
+		await seed_hierarchy(redis_client, subject_id, hierarchy_json=hierarchy_json)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{subject_id}"])
+		await _seed_stats_for_subject(redis_client, player_id, subject_id, content_hash)
+
+		with patch(
+			"fastapi_app.services.progress.ProgressService.get_completed_bits",
+			new_callable=AsyncMock,
+		) as mock_get_bits:
+			response = await client.get(f"/api/v1/progress/{subject_id}/tracks")
+
+			assert response.status_code == 200
+			mock_get_bits.assert_not_called()
+
+		# Cleanup
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
+
+	async def test_tracks_falls_back_to_bitmap_on_partial_stats_miss(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""
+		When partial stats are missing, get_subject_tracks falls back to
+		get_completed_bits() (bitmap path).
+		"""
+		client, token, player_id, family_id = authed_client
+		subject_id = "SUB-TEST-PARTIAL-MISS"
+
+		await seed_hierarchy(redis_client, subject_id, lesson_count=5)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{subject_id}"])
+		# Do NOT seed stats
+
+		with patch(
+			"fastapi_app.services.progress.ProgressService.get_completed_bits",
+			new_callable=AsyncMock,
+			return_value=set(),
+		) as mock_get_bits:
+			response = await client.get(f"/api/v1/progress/{subject_id}/tracks")
+
+			assert response.status_code == 200
+			mock_get_bits.assert_called_once()
+
+		# Cleanup
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
+
+	async def test_track_detail_skips_bitmap_on_partial_stats_hit(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""
+		When valid partial stats exist, get_track_detail should NOT call
+		get_completed_bits().
+		"""
+		client, token, player_id, family_id = authed_client
+		subject_id = "SUB-TEST-PARTIAL-TD"
+		content_hash = "ptd12345"
+
+		hierarchy_json = _make_hierarchy_with_hash(subject_id, content_hash, lesson_count=5)
+		await seed_hierarchy(redis_client, subject_id, hierarchy_json=hierarchy_json)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{subject_id}"])
+		await _seed_stats_for_subject(redis_client, player_id, subject_id, content_hash)
+
+		track_id = "TRK-TEST-001"
+		with patch(
+			"fastapi_app.services.progress.ProgressService.get_completed_bits",
+			new_callable=AsyncMock,
+		) as mock_get_bits:
+			response = await client.get(f"/api/v1/progress/{subject_id}/tracks/{track_id}")
+
+			assert response.status_code == 200
+			mock_get_bits.assert_not_called()
+
+		# Cleanup
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
+
+	async def test_unit_detail_skips_bitmap_on_partial_stats_hit(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""
+		When valid partial stats exist, get_unit_detail should NOT call
+		get_completed_bits().
+		"""
+		client, token, player_id, family_id = authed_client
+		subject_id = "SUB-TEST-PARTIAL-UD"
+		content_hash = "pud12345"
+
+		hierarchy_json = _make_hierarchy_with_hash(subject_id, content_hash, lesson_count=5)
+		await seed_hierarchy(redis_client, subject_id, hierarchy_json=hierarchy_json)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{subject_id}"])
+		await _seed_stats_for_subject(redis_client, player_id, subject_id, content_hash)
+
+		track_id = "TRK-TEST-001"
+		unit_id = "UNIT-TEST-001"
+		with patch(
+			"fastapi_app.services.progress.ProgressService.get_completed_bits",
+			new_callable=AsyncMock,
+		) as mock_get_bits:
+			response = await client.get(
+				f"/api/v1/progress/{subject_id}/tracks/{track_id}/units/{unit_id}"
+			)
+
+			assert response.status_code == 200
+			mock_get_bits.assert_not_called()
+
+		# Cleanup
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
+
+
+class TestStatsFirstActivation:
+	"""T008: Verify stats-first path is activated when valid stats exist."""
+
+	async def test_subject_progress_skips_bitmap_on_stats_hit(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""
+		When valid stats exist (matching _content_hash), get_subject_progress
+		should NOT call progress_service.get_completed_bits().
+		"""
+		client, token, player_id, family_id = authed_client
+		subject_id = "SUB-TEST-STATS-HIT"
+		content_hash = "abc12345"
+
+		# Seed hierarchy with content_hash
+		hierarchy_json = _make_hierarchy_with_hash(subject_id, content_hash, lesson_count=5)
+		await seed_hierarchy(redis_client, subject_id, hierarchy_json=hierarchy_json)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{subject_id}"])
+
+		# Seed valid stats matching the content_hash
+		await _seed_stats_for_subject(redis_client, player_id, subject_id, content_hash)
+
+		with patch(
+			"fastapi_app.services.progress.ProgressService.get_completed_bits",
+			new_callable=AsyncMock,
+		) as mock_get_bits:
+			response = await client.get(f"/api/v1/progress/{subject_id}")
+
+			assert response.status_code == 200
+			mock_get_bits.assert_not_called()
+
+		# Cleanup
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
+
+	async def test_subject_progress_falls_back_to_bitmap_on_stats_miss(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""
+		When stats are missing, get_subject_progress should call
+		progress_service.get_completed_bits() (bitmap fallback).
+		"""
+		client, token, player_id, family_id = authed_client
+		subject_id = "SUB-TEST-STATS-MISS"
+
+		# Seed hierarchy (no content_hash → default "")
+		await seed_hierarchy(redis_client, subject_id, lesson_count=5)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{subject_id}"])
+		# Do NOT seed stats → cache miss → fallback path
+
+		with patch(
+			"fastapi_app.services.progress.ProgressService.get_completed_bits",
+			new_callable=AsyncMock,
+			return_value=set(),
+		) as mock_get_bits:
+			response = await client.get(f"/api/v1/progress/{subject_id}")
+
+			assert response.status_code == 200
+			mock_get_bits.assert_called_once()
+
+		# Cleanup
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
+
+	async def test_subject_progress_falls_back_on_stale_hash(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""
+		When stats exist but _content_hash doesn't match hierarchy, should fall back
+		to bitmap path.
+		"""
+		client, token, player_id, family_id = authed_client
+		subject_id = "SUB-TEST-STATS-STALE"
+		hierarchy_hash = "newhash1"
+		stale_hash = "oldhash1"
+
+		# Seed hierarchy with new hash
+		hierarchy_json = _make_hierarchy_with_hash(subject_id, hierarchy_hash, lesson_count=5)
+		await seed_hierarchy(redis_client, subject_id, hierarchy_json=hierarchy_json)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{subject_id}"])
+
+		# Seed stats with STALE hash (different from hierarchy)
+		await _seed_stats_for_subject(redis_client, player_id, subject_id, stale_hash)
+
+		with patch(
+			"fastapi_app.services.progress.ProgressService.get_completed_bits",
+			new_callable=AsyncMock,
+			return_value=set(),
+		) as mock_get_bits:
+			response = await client.get(f"/api/v1/progress/{subject_id}")
+
+			assert response.status_code == 200
+			mock_get_bits.assert_called_once()
+
+		# Cleanup
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))

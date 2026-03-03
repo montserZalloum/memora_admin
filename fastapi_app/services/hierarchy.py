@@ -1,18 +1,46 @@
 """Hierarchy caching service for fast unlock calculations."""
 
+import asyncio
 import time
 
 import redis.asyncio as redis
+import structlog
 
 from fastapi_app.core.redis_keys import hierarchy_key as _hierarchy_key_fn
 from fastapi_app.core.redis_keys import subjects_with_free_content_key
 from fastapi_app.models.progress import SubjectHierarchy
 from fastapi_app.services.frappe_client import FrappeClient
 
+logger = structlog.get_logger()
+
 # Process-local in-memory cache for parsed SubjectHierarchy objects.
 # Each uvicorn worker gets its own copy. Keyed by subject_id -> (hierarchy, expires_at_monotonic).
 # Expired entries are swept on every cache write to prevent unbounded growth from one-off subjects.
 _local_hierarchy_cache: dict[str, tuple[SubjectHierarchy, float]] = {}
+
+# Process-local per-key locks for hierarchy cache-fill coalescing.
+# Prevents thundering herd when multiple concurrent requests miss the same hierarchy key.
+# Same pattern as _compute_locks in stats.py.
+_hierarchy_fill_locks: dict[str, asyncio.Lock] = {}
+_MAX_FILL_LOCKS = 5_000
+
+
+def _get_hierarchy_fill_lock(key: str) -> asyncio.Lock:
+	"""Get or create a per-key asyncio.Lock for hierarchy fill coalescing.
+
+	Uses setdefault for atomicity: concurrent callers for the same key
+	always get the same Lock instance. Pruning of unlocked entries runs
+	after insertion to keep the dict near _MAX_FILL_LOCKS.
+	"""
+	lock = _hierarchy_fill_locks.get(key)
+	if lock is not None:
+		return lock
+	lock = _hierarchy_fill_locks.setdefault(key, asyncio.Lock())
+	if len(_hierarchy_fill_locks) > _MAX_FILL_LOCKS:
+		to_remove = [k for k, v in _hierarchy_fill_locks.items() if k != key and not v.locked()]
+		for k in to_remove:
+			_hierarchy_fill_locks.pop(k, None)
+	return lock
 
 
 def _sweep_expired_local_cache() -> None:
@@ -83,32 +111,56 @@ class HierarchyService:
             _local_hierarchy_cache[subject_id] = (hierarchy, time.monotonic() + self.LOCAL_TTL)
             return hierarchy
 
-        # Cache miss - fetch from Frappe
-        result = await self.frappe.call(
-            "memora_admin.api.hierarchy.get_subject_hierarchy",
-            {"subject_id": subject_id},
-        )
+        # Cache miss — coalesce concurrent fills via per-key lock
+        fill_lock = _get_hierarchy_fill_lock(subject_id)
+        acquired = False
+        try:
+            await asyncio.wait_for(fill_lock.acquire(), timeout=5.0)
+            acquired = True
+        except (asyncio.TimeoutError, TimeoutError):
+            logger.warning("hierarchy_fill_timeout", subject_id=subject_id)
 
-        if not result:
-            return None
+        try:
+            if acquired:
+                # Double-check: another request may have filled while we waited
+                cached = await self.redis.get(key)
+                if cached:
+                    data = cached.decode() if isinstance(cached, bytes) else cached
+                    hierarchy = SubjectHierarchy.model_validate_json(data)
+                    _sweep_expired_local_cache()
+                    _local_hierarchy_cache[subject_id] = (hierarchy, time.monotonic() + self.LOCAL_TTL)
+                    logger.debug("hierarchy_fill_coalesced", subject_id=subject_id)
+                    return hierarchy
 
-        # Parse into model
-        hierarchy = SubjectHierarchy.model_validate(result)
+            # Fetch from Frappe (lock holder does the real work; timeout fallback also fetches)
+            result = await self.frappe.call(
+                "memora_admin.api.hierarchy.get_subject_hierarchy",
+                {"subject_id": subject_id},
+            )
 
-        # Cache with TTL (both Redis and local)
-        await self.redis.set(
-            key,
-            hierarchy.model_dump_json(),
-            ex=self.CACHE_TTL,
-        )
-        _sweep_expired_local_cache()
-        _local_hierarchy_cache[subject_id] = (hierarchy, time.monotonic() + self.LOCAL_TTL)
+            if not result:
+                return None
 
-        # Auto-repair subjects_with_free_content set on cache miss
-        if hierarchy.has_any_free_content():
-            await self.redis.sadd(self._free_content_subjects_key(), subject_id)
+            # Parse into model
+            hierarchy = SubjectHierarchy.model_validate(result)
 
-        return hierarchy
+            # Cache with TTL (both Redis and local)
+            await self.redis.set(
+                key,
+                hierarchy.model_dump_json(),
+                ex=self.CACHE_TTL,
+            )
+            _sweep_expired_local_cache()
+            _local_hierarchy_cache[subject_id] = (hierarchy, time.monotonic() + self.LOCAL_TTL)
+
+            # Auto-repair subjects_with_free_content set on cache miss
+            if hierarchy.has_any_free_content():
+                await self.redis.sadd(self._free_content_subjects_key(), subject_id)
+
+            return hierarchy
+        finally:
+            if acquired:
+                fill_lock.release()
 
     async def invalidate(self, subject_id: str) -> None:
         """

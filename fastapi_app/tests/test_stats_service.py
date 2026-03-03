@@ -168,6 +168,75 @@ class TestComputeStats:
 		assert stats["TOPIC-001:total"] == "2"
 
 
+class TestPartialStats:
+	"""get_partial_stats reads specific fields via HMGET."""
+
+	async def test_partial_stats_returns_requested_fields(self, stats_svc, redis_client, test_prefix):
+		"""Partial read returns only the requested fields."""
+		key = stats_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
+		stats_data = {
+			"completed": "5",
+			"total": "10",
+			"_content_hash": "abc123",
+			"TRACK-001:completed": "2",
+			"TRACK-001:total": "5",
+			"TRACK-002:completed": "3",
+			"TRACK-002:total": "5",
+		}
+		await redis_client.hset(key, mapping=stats_data)
+		await redis_client.expire(key, 3600)
+
+		result = await stats_svc.get_partial_stats(
+			TEST_USER, TEST_SUBJECT, TEST_VERSION,
+			fields=["_content_hash", "TRACK-001:completed", "TRACK-001:total"],
+		)
+
+		assert result is not None
+		assert result == {
+			"_content_hash": "abc123",
+			"TRACK-001:completed": "2",
+			"TRACK-001:total": "5",
+		}
+		# Fields NOT requested should be absent
+		assert "TRACK-002:completed" not in result
+		assert "completed" not in result
+
+	async def test_partial_stats_returns_none_when_key_missing(self, stats_svc):
+		"""Returns None when the stats key doesn't exist."""
+		result = await stats_svc.get_partial_stats(
+			"NONEXIST-USER", TEST_SUBJECT, TEST_VERSION,
+			fields=["completed", "total"],
+		)
+		assert result is None
+
+	async def test_partial_stats_mixed_present_absent_fields(self, stats_svc, redis_client, test_prefix):
+		"""Mixed present/absent fields: only present fields returned."""
+		key = stats_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
+		await redis_client.hset(key, mapping={"completed": "5", "total": "10"})
+		await redis_client.expire(key, 3600)
+
+		result = await stats_svc.get_partial_stats(
+			TEST_USER, TEST_SUBJECT, TEST_VERSION,
+			fields=["completed", "NONEXIST-FIELD", "total"],
+		)
+
+		assert result is not None
+		assert result == {"completed": "5", "total": "10"}
+		assert "NONEXIST-FIELD" not in result
+
+	async def test_partial_stats_all_fields_absent(self, stats_svc, redis_client, test_prefix):
+		"""When requested fields don't exist in hash, returns None."""
+		key = stats_key(TEST_USER, TEST_SUBJECT, TEST_VERSION)
+		await redis_client.hset(key, mapping={"completed": "5"})
+		await redis_client.expire(key, 3600)
+
+		result = await stats_svc.get_partial_stats(
+			TEST_USER, TEST_SUBJECT, TEST_VERSION,
+			fields=["NONEXIST-A", "NONEXIST-B"],
+		)
+		assert result is None
+
+
 class TestEdgeCases:
 	"""Edge cases and boundary conditions."""
 

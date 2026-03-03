@@ -34,7 +34,10 @@ FINDINGS:
 └─────────────────────────────────────────────────────────────────────────┘
 """
 
+import asyncio
+
 import pytest
+from redis.asyncio.client import Pipeline
 
 from fastapi_app.core.redis_keys import (
 	lb_daily_key,
@@ -335,8 +338,8 @@ class TestPartialMetadataRollout:
 
 	Scenario: A leaderboard exists from before the tier-index deploy (no metadata).
 	The first post-deploy write must NOT create a partial tieridx, because the
-	read path would then treat it as authoritative and skip the legacy fallback,
-	returning incorrect dense ranks for all members not yet represented.
+	read path now repairs metadata on demand instead of treating missing metadata
+	as a steady-state fallback condition.
 	"""
 
 	PLAN = "PLAN-TEST-ROLLOUT"
@@ -344,11 +347,7 @@ class TestPartialMetadataRollout:
 	async def test_write_to_existing_board_does_not_create_partial_index(
 		self, lb_svc, redis_client
 	):
-		"""QA reproduction: seed board via ZADD (pre-deploy), then write via service.
-
-		Expected: tieridx must NOT exist after the write, so the read path
-		continues using the legacy fallback for correct dense ranks.
-		"""
+		"""Write path stays conservative; first read repairs the missing metadata."""
 		# Simulate pre-deploy board: 3 players seeded directly (no tier metadata)
 		key = lb_svc._get_plan_key("daily", self.PLAN)
 		await redis_client.zadd(key, {"REVIEW-A": 100, "REVIEW-B": 50, "REVIEW-C": 10})
@@ -359,36 +358,31 @@ class TestPartialMetadataRollout:
 		assert await redis_client.exists(tieridx_key) == 0
 		assert await redis_client.exists(tiercnt_key) == 0
 
-		# Pre-deploy read: REVIEW-B should be rank 2 via fallback
-		result_before = await lb_svc.get_my_rank("REVIEW-B", "daily", plan_id=self.PLAN)
-		assert result_before["rank"] == 2
-		assert result_before["xp"] == 50
-
 		# Post-deploy write: award XP to REVIEW-C (existing member)
 		await lb_svc.update_leaderboards("REVIEW-C", xp_amount=5, plan_id=self.PLAN)
 
-		# Critical assertion: tieridx must NOT have been created (partial index)
+		# Critical assertion: write path still does NOT create a partial index.
 		assert await redis_client.exists(tieridx_key) == 0, (
 			"tieridx was created on write to pre-existing board — partial index bug!"
 		)
+		assert await redis_client.exists(tiercnt_key) == 0
 
-		# REVIEW-B should still get rank 2 via fallback (not rank 1 from partial index)
+		# First read should repair metadata and still return the correct rank.
 		result_after = await lb_svc.get_my_rank("REVIEW-B", "daily", plan_id=self.PLAN)
-		assert result_after["rank"] == 2, (
-			f"Expected rank 2 via fallback, got rank {result_after['rank']} — "
-			"read path used partial tieridx"
-		)
+		assert result_after["rank"] == 2
 		assert result_after["xp"] == 50
+		assert await redis_client.exists(tieridx_key) == 1
+		assert await redis_client.exists(tiercnt_key) == 1
 
 	async def test_new_player_on_existing_board_no_partial_index(
 		self, lb_svc, redis_client
 	):
-		"""A brand-new player joining an existing unindexed board must not bootstrap metadata."""
+		"""A new member on an unindexed board still repairs on read, not write."""
 		key = lb_svc._get_plan_key("daily", self.PLAN)
 		await redis_client.zadd(key, {"EXISTING-A": 200, "EXISTING-B": 100})
 		await redis_client.expire(key, 3600)
 
-		tieridx_key, _ = lbmeta_keys_from_lb_key(key)
+		tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(key)
 
 		# New player joins via service
 		await lb_svc.update_leaderboards("NEW-PLAYER", xp_amount=50, plan_id=self.PLAN)
@@ -396,9 +390,11 @@ class TestPartialMetadataRollout:
 		# Should NOT create metadata (board had pre-existing members)
 		assert await redis_client.exists(tieridx_key) == 0
 
-		# Ranks should be correct via fallback
+		# First read repairs metadata and returns the correct rank.
 		result = await lb_svc.get_my_rank("NEW-PLAYER", "daily", plan_id=self.PLAN)
 		assert result["rank"] == 3  # Below 200 and 100
+		assert await redis_client.exists(tieridx_key) == 1
+		assert await redis_client.exists(tiercnt_key) == 1
 
 	async def test_brand_new_board_bootstraps_metadata(self, lb_svc, redis_client):
 		"""First player on a brand-new board SHOULD create metadata (not partial)."""
@@ -453,10 +449,10 @@ class TestPartialMetadataRollout:
 		assert r_b["rank"] == 2  # 50 XP
 		assert r_c["rank"] == 3  # 15 XP
 
-	async def test_tiercnt_loss_forces_fallback_and_preserves_tieridx(
+	async def test_tiercnt_loss_repairs_on_read(
 		self, lb_svc, redis_client
 	):
-		"""Single-key loss: missing tiercnt must disable indexed mode until repaired."""
+		"""Single-key loss leaves writes conservative and repairs the pair on read."""
 		await lb_svc.update_leaderboards("CNT-A", xp_amount=100, plan_id=self.PLAN)
 		await lb_svc.update_leaderboards("CNT-B", xp_amount=50, plan_id=self.PLAN)
 		await lb_svc.update_leaderboards("CNT-C", xp_amount=50, plan_id=self.PLAN)
@@ -476,7 +472,91 @@ class TestPartialMetadataRollout:
 		tiers_after = await redis_client.zrange(tieridx_key, 0, -1, withscores=True)
 		assert tiers_after == tiers_before
 
-		# Read path must ignore stale tieridx and fall back to exact legacy rank.
+		# Read path should rebuild the metadata pair from the authoritative ZSET.
 		result = await lb_svc.get_my_rank("CNT-D", "daily", plan_id=self.PLAN)
 		assert result["rank"] == 4  # 100, 55, 50 are all above 10
 		assert result["xp_to_next"] == 40
+		assert await redis_client.exists(tiercnt_key) == 1
+
+		tiers_repaired = await redis_client.zrange(tieridx_key, 0, -1, withscores=True)
+		tier_scores = {int(score) for _, score in tiers_repaired}
+		assert tier_scores == {10, 50, 55, 100}
+
+	async def test_concurrent_readers_share_single_repair(self, lb_svc, redis_client, monkeypatch):
+		"""One reader repairs; the second waits and uses the repaired metadata."""
+		key = lb_svc._get_plan_key("daily", self.PLAN)
+		await redis_client.zadd(key, {"CON-A": 100, "CON-B": 50, "CON-C": 10})
+		await redis_client.expire(key, 3600)
+
+		tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(key)
+		rebuild_started = asyncio.Event()
+		allow_rebuild = asyncio.Event()
+		original_rebuild = lb_svc._rebuild_tier_metadata_locked
+
+		async def delayed_rebuild(lb_key, idx_key, cnt_key):
+			rebuild_started.set()
+			await allow_rebuild.wait()
+			return await original_rebuild(lb_key, idx_key, cnt_key)
+
+		async def fail_legacy(*args, **kwargs):
+			raise AssertionError("legacy fallback should not run when repair succeeds")
+
+		monkeypatch.setattr(lb_svc, "_rebuild_tier_metadata_locked", delayed_rebuild)
+		monkeypatch.setattr(lb_svc, "_legacy_script", fail_legacy)
+
+		first = asyncio.create_task(lb_svc.get_my_rank("CON-A", "daily", plan_id=self.PLAN))
+		await rebuild_started.wait()
+		second = asyncio.create_task(lb_svc.get_my_rank("CON-B", "daily", plan_id=self.PLAN))
+		await asyncio.sleep(0.01)
+		allow_rebuild.set()
+
+		result_a, result_b = await asyncio.gather(first, second)
+		assert result_a["rank"] == 1
+		assert result_b["rank"] == 2
+		assert await redis_client.exists(tieridx_key) == 1
+		assert await redis_client.exists(tiercnt_key) == 1
+
+	async def test_repair_retries_when_write_lands_before_publish(
+		self, lb_svc, redis_client, monkeypatch
+	):
+		"""A write during repair must not let stale metadata overwrite the board."""
+		key = lb_svc._get_plan_key("daily", self.PLAN)
+		await redis_client.zadd(key, {"RACE-A": 100, "RACE-B": 50, "RACE-C": 10})
+		await redis_client.expire(key, 3600)
+
+		tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(key)
+		rebuild_ready = asyncio.Event()
+		allow_publish = asyncio.Event()
+		original_execute = Pipeline.execute
+		delayed = {"done": False}
+
+		async def delayed_execute(self, *args, **kwargs):
+			stack_repr = str(self.command_stack).upper()
+			if (
+				not delayed["done"]
+				and ":TIERIDX" in stack_repr
+				and ":TIERCNT" in stack_repr
+				and ("DEL" in stack_repr or "DELETE" in stack_repr)
+			):
+				delayed["done"] = True
+				rebuild_ready.set()
+				await allow_publish.wait()
+			return await original_execute(self, *args, **kwargs)
+
+		monkeypatch.setattr(Pipeline, "execute", delayed_execute)
+
+		reader = asyncio.create_task(lb_svc.get_my_rank("RACE-A", "daily", plan_id=self.PLAN))
+		await asyncio.wait_for(rebuild_ready.wait(), timeout=1.0)
+
+		await lb_svc.update_leaderboards("RACE-D", xp_amount=55, plan_id=self.PLAN)
+		allow_publish.set()
+
+		result_a = await reader
+		assert result_a["rank"] == 1
+
+		result_b = await lb_svc.get_my_rank("RACE-B", "daily", plan_id=self.PLAN)
+		assert result_b["rank"] == 3
+
+		tiers = await redis_client.zrange(tieridx_key, 0, -1, withscores=True)
+		tier_scores = {int(score) for _, score in tiers}
+		assert tier_scores == {10, 50, 55, 100}

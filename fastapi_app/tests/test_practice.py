@@ -10,6 +10,7 @@ Reference: specs/025-practice-arena/contracts/practice-api.md
 """
 
 import json
+from unittest.mock import AsyncMock
 
 import pytest
 from uuid import uuid4
@@ -90,6 +91,31 @@ def _make_question_rows(count=3, topic_id=TOPIC_ID):
 	]
 
 
+def _is_select_query(sql: str) -> bool:
+	"""Detect either the legacy per-topic selector or the new batched selector."""
+	return "ROW_NUMBER() OVER" in sql or "SELECT ri.item_id" in sql
+
+
+def _mock_select_rows(sql: str, sql_params: list, by_topic: dict[str, list[dict]], all_item_ids: set[str], default_questions: list[dict]) -> list[dict]:
+	"""Return mock selection rows for either SQL shape."""
+	limit = sql_params[-1] if sql_params else 20
+	selected_topics = [p for p in sql_params if isinstance(p, str) and p in by_topic]
+	served_ids = {p for p in sql_params if isinstance(p, str) and p in all_item_ids}
+
+	if "ROW_NUMBER() OVER" in sql:
+		if not selected_topics:
+			selected_topics = list(by_topic.keys())
+		rows = []
+		for topic_id in selected_topics:
+			pool = by_topic.get(topic_id, default_questions)
+			rows.extend([q for q in pool if q["item_id"] not in served_ids][:limit])
+		return rows
+
+	topic_id = selected_topics[0] if selected_topics else None
+	pool = by_topic.get(topic_id, default_questions)
+	return [q for q in pool if q["item_id"] not in served_ids][:limit]
+
+
 def _make_frappe_handler(questions=None, valid_item_ids=None, topic_counts=None):
 	"""Create mock frappe.call handler for practice tests.
 
@@ -121,16 +147,13 @@ def _make_frappe_handler(questions=None, valid_item_ids=None, topic_counts=None)
 			if "GROUP BY ri.topic" in sql:
 				# _count_items_per_topic query
 				return [{"topic": t, "cnt": c} for t, c in inferred_counts.items()]
-			elif "SELECT ri.item_id" in sql:
-				# _select_for_topic query — extract topic_id and limit from params
-				# Topic is second-to-last param, limit is last param
-				limit = sql_params[-1] if sql_params else 20
-				topic = sql_params[-2] if len(sql_params) >= 2 else None
-				topic_qs = by_topic.get(topic, questions)
-				return topic_qs[:limit]
+			elif _is_select_query(sql):
+				return _mock_select_rows(sql, sql_params, by_topic, all_item_ids, questions)
 			elif "SELECT item_id" in sql:
 				# _get_valid_item_ids check
-				return [{"item_id": iid} for iid in valid]
+				requested_ids = set(sql_params or [])
+				existing_ids = [iid for iid in valid if not requested_ids or iid in requested_ids]
+				return [{"item_id": iid} for iid in existing_ids]
 			return []
 		elif method == "memora_admin.api.practice.execute_practice_log_upsert":
 			return None
@@ -938,6 +961,102 @@ class TestProportionalDistribution:
 		assert _compute_topic_quotas({}, 20) == {}
 
 
+@pytest.mark.asyncio
+class TestBatchedTopicSelection:
+	"""Characterization and performance checks for the batched selector."""
+
+	async def test_batched_selection_matches_legacy_for_redistribution_case(self, redis_client, mock_frappe):
+		"""Batched path preserves the legacy questions/total/warning outputs."""
+		from fastapi_app.core.config import get_settings
+		from fastapi_app.services.practice import PracticeService
+
+		config = get_settings().model_copy(deep=True)
+		config.practice_session_size = 4
+
+		svc = PracticeService(
+			redis_client,
+			mock_frappe,
+			config,
+			AsyncMock(),
+			AsyncMock(),
+			AsyncMock(),
+		)
+
+		topic_a_qs = _make_question_rows(1, topic_id=TOPIC_ID_A)
+		topic_b_qs = _make_question_rows(6, topic_id=TOPIC_ID_B)
+		topic_b_qs[3]["priority"] = 1  # Redistribution slot should still preserve repeat semantics
+		all_qs = topic_a_qs + topic_b_qs
+
+		mock_frappe.call.side_effect = _make_frappe_handler(
+			all_qs,
+			topic_counts={TOPIC_ID_A: 1, TOPIC_ID_B: 6},
+		)
+
+		params = {
+			"player_id": "PLAYER-TEST-BATCHED",
+			"subject_id": SUBJECT_ID,
+			"accessible_lessons": ["LESSON-A", "LESSON-B"],
+			"selected_topics": [TOPIC_ID_A, TOPIC_ID_B],
+			"served_item_ids": [topic_a_qs[0]["item_id"]],
+			"batch_size": 4,
+		}
+
+		svc.config.practice_batched_topic_select_enabled = False
+		legacy_questions, legacy_total, legacy_repeat = await svc._select_questions(**params)
+
+		svc.config.practice_batched_topic_select_enabled = True
+		batched_questions, batched_total, batched_repeat = await svc._select_questions(**params)
+
+		assert [q.item_id for q in batched_questions] == [q.item_id for q in legacy_questions]
+		assert batched_total == legacy_total == 7
+		assert batched_repeat is legacy_repeat is True
+
+	async def test_batched_selection_uses_two_queries_for_many_topics(self, redis_client, mock_frappe):
+		"""The hot path is reduced to count + batched select, not per-topic selects."""
+		from fastapi_app.core.config import get_settings
+		from fastapi_app.services.practice import PracticeService
+
+		config = get_settings().model_copy(deep=True)
+		config.practice_session_size = 20
+		config.practice_batched_topic_select_enabled = True
+
+		svc = PracticeService(
+			redis_client,
+			mock_frappe,
+			config,
+			AsyncMock(),
+			AsyncMock(),
+			AsyncMock(),
+		)
+
+		topic_ids = [f"TOPIC-LOAD-{i:02d}" for i in range(8)]
+		topic_counts = {topic_id: 12 for topic_id in topic_ids}
+		questions = _make_multi_topic_questions({topic_id: 6 for topic_id in topic_ids})
+
+		query_calls = {"n": 0}
+		base_handler = _make_frappe_handler(questions, topic_counts=topic_counts)
+
+		async def counted_handler(method, params=None):
+			if method == "memora_admin.api.practice.execute_practice_query":
+				query_calls["n"] += 1
+			return await base_handler(method, params)
+
+		mock_frappe.call.side_effect = counted_handler
+
+		selected_questions, total_available, _ = await svc._select_questions(
+			player_id="PLAYER-TEST-PERF",
+			subject_id=SUBJECT_ID,
+			accessible_lessons=[f"LESSON-{i:02d}" for i in range(8)],
+			selected_topics=topic_ids,
+			served_item_ids=[],
+			batch_size=20,
+		)
+
+		assert len(selected_questions) == 20
+		assert total_available == 96
+		assert query_calls["n"] == 2
+
+
 # ==========================================================================
 # T010: all_seen_warning Semantics
 # ==========================================================================
@@ -1021,15 +1140,25 @@ class TestAllSeenWarning:
 		async def wrap_handler(method, params=None):
 			if method == "memora_admin.api.practice.execute_practice_query":
 				sql = (params or {}).get("sql", "")
+				sql_params = (params or {}).get("params", [])
 				if "GROUP BY ri.topic" in sql:
 					return [{"topic": TOPIC_ID, "cnt": 3}]
-				elif "SELECT ri.item_id" in sql:
+				elif _is_select_query(sql):
 					select_call_count["n"] += 1
-					if select_call_count["n"] == 1:
-						# First per-topic select: empty (simulates all items served)
-						return []
-					# Wrap-around retry: return questions
-					return questions
+					return _mock_select_rows(
+						sql,
+						sql_params,
+						{TOPIC_ID: questions},
+						{q["item_id"] for q in questions},
+						questions,
+					)
+				elif "SELECT item_id" in sql:
+					requested_ids = set(sql_params or [])
+					return [
+						{"item_id": q["item_id"]}
+						for q in questions
+						if q["item_id"] in requested_ids
+					]
 			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
 				return None
 			return None
@@ -1042,13 +1171,15 @@ class TestAllSeenWarning:
 		data = resp.json()
 		# Wrap-around should set all_seen_warning=true
 		assert data["all_seen_warning"] is True
+		assert select_call_count["n"] == 1
 
 	async def test_continue_uses_same_semantics(self, authed_client, redis_client, mock_frappe):
 		"""continue_session uses same all_seen_warning semantics as start_session."""
 		client, token, player_id, family_id = authed_client
 
-		# All new questions — no repeats
-		questions = _make_question_rows(5)
+		# More than one batch worth of new questions — continue should still
+		# return unseen items without raising the warning.
+		questions = _make_question_rows(25)
 		for q in questions:
 			q["priority"] = 0
 
@@ -1062,10 +1193,11 @@ class TestAllSeenWarning:
 			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
 		)
 		assert resp.status_code == 200
-		assert resp.json()["all_seen_warning"] is False
+		start_data = resp.json()
+		assert start_data["all_seen_warning"] is False
 
 		# Submit
-		results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
+		results = [{"item_id": q["item_id"], "is_correct": True} for q in start_data["questions"]]
 		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
 		assert resp.status_code == 200
 
@@ -1073,6 +1205,55 @@ class TestAllSeenWarning:
 		resp = await client.post("/api/v1/practice/continue")
 		assert resp.status_code == 200
 		assert resp.json()["all_seen_warning"] is False
+
+	async def test_continue_ignores_deleted_items_before_wrap_shortcut(self, redis_client, mock_frappe):
+		"""Stale deleted IDs in served history must not force an early wrap-around."""
+		from fastapi_app.core.config import get_settings
+		from fastapi_app.services.practice import PracticeService
+
+		config = get_settings().model_copy(deep=True)
+		config.practice_session_size = 2
+		config.practice_batched_topic_select_enabled = True
+
+		svc = PracticeService(
+			redis_client,
+			mock_frappe,
+			config,
+			AsyncMock(),
+			AsyncMock(),
+			AsyncMock(),
+		)
+
+		current_questions = _make_question_rows(3)
+		stale_deleted_id = "ITEM-DELETED-OLD"
+
+		mock_frappe.call.side_effect = _make_frappe_handler(
+			current_questions,
+			valid_item_ids=[q["item_id"] for q in current_questions],
+			topic_counts={TOPIC_ID: 3},
+		)
+
+		session_key = practice_session_key("PLAYER-TEST-DELETED")
+		await redis_client.hset(
+			session_key,
+			mapping={
+				"batch_seq": "0",
+				"submitted_0": "1",
+				"accessible_lessons": json.dumps(["LESSON-A"]),
+				"selected_topics": json.dumps([TOPIC_ID]),
+				"served_item_ids": json.dumps([
+					current_questions[0]["item_id"],
+					current_questions[1]["item_id"],
+					stale_deleted_id,
+				]),
+				"subject_id": SUBJECT_ID,
+			},
+		)
+
+		response = await svc.continue_session("PLAYER-TEST-DELETED")
+
+		assert response.all_seen_warning is False
+		assert [q.item_id for q in response.questions] == [current_questions[2]["item_id"]]
 
 
 # ==========================================================================
@@ -1175,14 +1356,27 @@ class TestOffBatchItemValidation:
 		async def multi_batch_handler(method, params=None):
 			if method == "memora_admin.api.practice.execute_practice_query":
 				sql = (params or {}).get("sql", "")
+				sql_params = (params or {}).get("params", [])
 				if "GROUP BY ri.topic" in sql:
 					return [{"topic": TOPIC_ID, "cnt": 6}]
-				elif "SELECT ri.item_id" in sql:
+				elif _is_select_query(sql):
 					batch_call["n"] += 1
 					# First select → batch 0 items, second select → batch 1 items
 					if batch_call["n"] <= 1:
-						return batch0_qs
-					return batch1_qs
+						return _mock_select_rows(
+							sql,
+							sql_params,
+							{TOPIC_ID: batch0_qs},
+							{q["item_id"] for q in batch0_qs},
+							batch0_qs,
+						)
+					return _mock_select_rows(
+						sql,
+						sql_params,
+						{TOPIC_ID: batch1_qs},
+						{q["item_id"] for q in batch1_qs},
+						batch1_qs,
+					)
 				elif "SELECT item_id" in sql:
 					return [{"item_id": q["item_id"]} for q in all_qs]
 			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
@@ -1353,11 +1547,19 @@ class TestLegacySessionCompat:
 		async def multi_batch_handler(method, params=None):
 			if method == "memora_admin.api.practice.execute_practice_query":
 				sql = (params or {}).get("sql", "")
+				sql_params = (params or {}).get("params", [])
 				if "GROUP BY ri.topic" in sql:
 					return [{"topic": TOPIC_ID, "cnt": 6}]
-				elif "SELECT ri.item_id" in sql:
+				elif _is_select_query(sql):
 					batch_call["n"] += 1
-					return batch0_qs if batch_call["n"] <= 1 else batch1_qs
+					pool = batch0_qs if batch_call["n"] <= 1 else batch1_qs
+					return _mock_select_rows(
+						sql,
+						sql_params,
+						{TOPIC_ID: pool},
+						{q["item_id"] for q in pool},
+						pool,
+					)
 				elif "SELECT item_id" in sql:
 					return [{"item_id": q["item_id"]} for q in all_qs]
 			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
@@ -1598,9 +1800,6 @@ class TestQuotaRedistribution:
 		topic_b_qs = _make_question_rows(40, topic_id=TOPIC_ID_B)
 		all_qs = topic_a_qs + topic_b_qs
 
-		# Track items served so far (simulates SQL NOT IN exclusion)
-		served_so_far: list[str] = []
-
 		async def redistrib_handler(method, params=None):
 			if method == "memora_admin.api.practice.execute_practice_query":
 				sql = (params or {}).get("sql", "")
@@ -1610,20 +1809,17 @@ class TestQuotaRedistribution:
 						{"topic": TOPIC_ID_A, "cnt": 1},
 						{"topic": TOPIC_ID_B, "cnt": 40},
 					]
-				elif "SELECT ri.item_id" in sql:
-					limit = sql_params[-1] if sql_params else 20
-					topic = None
-					for p in sql_params:
-						if isinstance(p, str) and p.startswith("TOPIC-"):
-							topic = p
-					if not topic:
-						return []
-
-					pool = topic_a_qs if topic == TOPIC_ID_A else topic_b_qs
-					remaining = [q for q in pool if q["item_id"] not in served_so_far]
-					selected = remaining[:limit]
-					served_so_far.extend(q["item_id"] for q in selected)
-					return selected
+				elif _is_select_query(sql):
+					return _mock_select_rows(
+						sql,
+						sql_params,
+						{
+							TOPIC_ID_A: topic_a_qs,
+							TOPIC_ID_B: topic_b_qs,
+						},
+						{q["item_id"] for q in all_qs},
+						all_qs,
+					)
 				elif "SELECT item_id" in sql:
 					return [{"item_id": q["item_id"]} for q in all_qs]
 			elif method == "memora_admin.api.practice.execute_practice_log_upsert":

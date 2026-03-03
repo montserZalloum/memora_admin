@@ -42,6 +42,8 @@ pip install -r apps/memora_admin/requirements.txt
 
 **IMPORTANT**: The FastAPI server is managed by a process supervisor and does NOT auto-reload on code changes.
 
+**CRITICAL — Always restart after code changes**: The server loads code once at startup. If you modify files without restarting, the running server uses stale code, which can cause subtle bugs (e.g., wrong unlock states, stale logic paths). The in-memory hierarchy cache (`_local_hierarchy_cache`, 5-min TTL) also survives across file edits — only a restart clears it. **Always restart after ANY code change and before testing.**
+
 **When to restart**:
 - After adding new endpoints or routes
 - After modifying endpoint logic, dependencies, or middleware
@@ -307,6 +309,7 @@ bench --site your-site set-config redis_memora "redis://127.0.0.1:13001"
 - Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, structlog, Frappe Framework (for backfill command) (033-dense-rank-tier-index)
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, DocTypes, hooks, Script Reports), ERPNext (Sales Invoice — unaffected) (034-scholarship-gift-vouchers)
 - MariaDB via Frappe ORM (existing tables extended with new fields) (034-scholarship-gift-vouchers)
+- Redis at `redis://127.0.0.1:13001` (stats hash, hierarchy JSON, practice metadata, progress bitmap) (036-read-path-perf)
 
 ## Test Environment Configuration
 
@@ -326,8 +329,8 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 036-read-path-perf: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, Pydantic v2, structlog, asyncio
 - 035-practice-arena: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log)
-- 034-scholarship-gift-vouchers: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, DocTypes, hooks, Script Reports), ERPNext (Sales Invoice — unaffected)
 - 034-scholarship-gift-vouchers: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, DocTypes, hooks, Script Reports), ERPNext (Sales Invoice — unaffected)
 
 ## Important Notes for dev

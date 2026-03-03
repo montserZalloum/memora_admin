@@ -9,6 +9,8 @@ Key patterns:
 - memora:lb:weekly:{YYYY-MM-DD}[:subject:{id}]  (date = Friday that starts the Islamic week)
 """
 
+import asyncio
+import math
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -16,6 +18,8 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.redis_keys import (
+	LB_PREFIX,
+	LBMETA_LOCK_TTL,
 	PLAN_DAILY_KEY_TTL,
 	PLAN_WEEKLY_KEY_TTL,
 	daily_xp_key as _daily_xp_key_fn,
@@ -24,6 +28,7 @@ from fastapi_app.core.redis_keys import (
 	lb_weekly_key,
 	lb_weekly_plan_key,
 	lbmeta_keys_from_lb_key,
+	lbmeta_lock_key,
 )
 
 logger = structlog.get_logger()
@@ -58,6 +63,7 @@ return {count, min_above}
 # KEYS[1] = leaderboard ZSET (memora:lb:{period}:{date}[:{scope}])
 # KEYS[2] = tier index ZSET  (memora:lbmeta:{period}:{date}[:{scope}]:tieridx)
 # KEYS[3] = tier counts HASH (memora:lbmeta:{period}:{date}[:{scope}]:tiercnt)
+# KEYS[4] = leaderboard mutation counter (memora:lbmeta:{...}:tiercnt:ver)
 # ARGV[1] = player_id (string)
 # ARGV[2] = xp_amount (integer, always > 0)
 #
@@ -69,6 +75,7 @@ _TIER_AWARE_ZINCRBY_LUA = """
 local lb_key = KEYS[1]
 local tieridx_key = KEYS[2]
 local tiercnt_key = KEYS[3]
+local version_key = KEYS[4]
 local player_id = ARGV[1]
 local xp_amount = tonumber(ARGV[2])
 
@@ -77,6 +84,7 @@ local old_score_raw = redis.call('ZSCORE', lb_key, player_id)
 
 -- Step 2: Increment leaderboard score
 redis.call('ZINCRBY', lb_key, xp_amount, player_id)
+redis.call('INCR', version_key)
 
 -- Step 3: Decide whether to maintain tier metadata.
 -- Only maintain if:
@@ -217,6 +225,108 @@ class LeaderboardService:
 			return lb_weekly_plan_key(friday, plan_id, subject_id)
 		else:
 			raise ValueError(f"Invalid leaderboard type: {lb_type}")
+
+	@staticmethod
+	def _tiermeta_version_key(tiercnt_key: str) -> str:
+		"""Mutation counter key for one leaderboard's authoritative ZSET."""
+		return f"{tiercnt_key}:ver"
+
+	async def _repair_tier_metadata_for_key(self, lb_key: str) -> bool:
+		"""Rebuild missing tier metadata for one leaderboard under a short-lived lock."""
+		tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(lb_key)
+		suffix = lb_key.replace(f"{LB_PREFIX}:", "", 1)
+		lock_key = lbmeta_lock_key(suffix)
+		lock_value = f"repair:{datetime.utcnow().timestamp()}"
+		acquired = await self.redis.set(lock_key, lock_value, nx=True, ex=LBMETA_LOCK_TTL)
+		if not acquired:
+			return False
+
+		try:
+			for attempt in range(3):
+				rebuilt = await self._rebuild_tier_metadata_locked(lb_key, tieridx_key, tiercnt_key)
+				if rebuilt:
+					return True
+				logger.debug(
+					"leaderboard_repair_retry",
+					lb_key=lb_key,
+					attempt=attempt + 1,
+				)
+			logger.warning("leaderboard_repair_failed", lb_key=lb_key)
+			return False
+		finally:
+			if await self.redis.get(lock_key) == lock_value:
+				await self.redis.delete(lock_key)
+
+	async def _rebuild_tier_metadata_locked(
+		self,
+		lb_key: str,
+		tieridx_key: str,
+		tiercnt_key: str,
+	) -> bool:
+		"""Rebuild tier metadata from a stable leaderboard snapshot.
+
+		Returns False if the authoritative ZSET changed while we were rebuilding.
+		The caller may retry under the same repair lock.
+		"""
+		version_key = self._tiermeta_version_key(tiercnt_key)
+		raw_expected_version = await self.redis.get(version_key)
+		expected_version = int(raw_expected_version or 0)
+
+		tier_counts: dict[int, int] = {}
+		scan_cursor = 0
+		while True:
+			scan_cursor, entries = await self.redis.zscan(lb_key, scan_cursor, count=1000)
+			for _member, score in entries:
+				tier = math.floor(score)
+				tier_counts[tier] = tier_counts.get(tier, 0) + 1
+			if scan_cursor == 0:
+				break
+
+		lb_ttl = await self.redis.ttl(lb_key)
+
+		pipe = self.redis.pipeline(transaction=True)
+		try:
+			await pipe.watch(version_key)
+			raw_current_version = await pipe.get(version_key)
+			current_version = int(raw_current_version or 0)
+			if current_version != expected_version:
+				return False
+
+			pipe.multi()
+			pipe.delete(tieridx_key, tiercnt_key)
+
+			if tier_counts:
+				zadd_mapping = {str(tier): tier for tier in tier_counts}
+				hset_mapping = {str(tier): count for tier, count in tier_counts.items()}
+				pipe.zadd(tieridx_key, zadd_mapping)
+				pipe.hset(tiercnt_key, mapping=hset_mapping)
+
+				if lb_ttl > 0:
+					pipe.expire(tieridx_key, lb_ttl)
+					pipe.expire(tiercnt_key, lb_ttl)
+
+			await pipe.execute()
+			return True
+		except redis.WatchError:
+			return False
+		finally:
+			await pipe.reset()
+
+	async def _wait_for_tier_metadata(
+		self,
+		tieridx_key: str,
+		tiercnt_key: str,
+	) -> bool:
+		"""Poll briefly for another request's repair to complete."""
+		for _ in range(5):
+			await asyncio.sleep(0.02)
+			pipe = self.redis.pipeline()
+			pipe.exists(tieridx_key)
+			pipe.exists(tiercnt_key)
+			tieridx_exists, tiercnt_exists = await pipe.execute()
+			if tieridx_exists and tiercnt_exists:
+				return True
+		return False
 
 	async def get_top(
 		self,
@@ -362,9 +472,9 @@ class LeaderboardService:
 
 		# Stage 2: Dense rank + neighbor window
 		#
-		# Optimistic pipeline: fetch neighbors + tier index queries in 1 RTT.
-		# If tier metadata exists (post-backfill), use O(log T) indexed path.
-		# If missing (pre-backfill), fall back to O(T * log N) legacy Lua (2nd RTT).
+		# Optimistic pipeline: fetch neighbors + tier index probes in 1 RTT.
+		# If metadata is missing, attempt a per-key self-heal before using the
+		# legacy dense-rank fallback.
 		start = max(0, position - neighbor_count)
 		stop = position + neighbor_count
 
@@ -379,16 +489,29 @@ class LeaderboardService:
 		neighbors_raw, tieridx_exists, tiercnt_exists, idx_distinct_above, min_above_entries = await pipe.execute()
 
 		if tieridx_exists and tiercnt_exists:
-			# Indexed path: O(log T) via tier index ZSET
+			# Indexed path: O(log T) via tier index ZSET.
 			distinct_above = idx_distinct_above
 			min_above = int(min_above_entries[0][1]) if min_above_entries else -1
 			fallback_used = False
+			repair_used = False
 		else:
-			# Fallback: legacy iterative Lua -- O(T * log N)
-			rank_result = await self._legacy_script(keys=[key], args=[str(xp)])
-			distinct_above = rank_result[0]
-			min_above = rank_result[1]
-			fallback_used = True
+			repair_used = await self._repair_tier_metadata_for_key(key)
+			if not repair_used:
+				repair_used = await self._wait_for_tier_metadata(tieridx_key, tiercnt_key)
+
+			if repair_used:
+				pipe = self.redis.pipeline()
+				pipe.zcount(tieridx_key, f"({xp}", "+inf")
+				pipe.zrangebyscore(tieridx_key, f"({xp}", "+inf", withscores=True, start=0, num=1)
+				distinct_above, min_above_entries = await pipe.execute()
+				min_above = int(min_above_entries[0][1]) if min_above_entries else -1
+				fallback_used = False
+			else:
+				# Emergency-only fallback when repair could not complete in time.
+				rank_result = await self._legacy_script(keys=[key], args=[str(xp)])
+				distinct_above = rank_result[0]
+				min_above = rank_result[1]
+				fallback_used = True
 
 		my_rank = distinct_above + 1
 
@@ -438,6 +561,7 @@ class LeaderboardService:
 			xp=xp,
 			xp_to_next=xp_to_next,
 			neighbor_count=len(neighbors),
+			repair_used=repair_used,
 			fallback_used=fallback_used,
 		)
 
@@ -494,10 +618,16 @@ class LeaderboardService:
 		async def _tier_eval(lb_key: str, ttl: int) -> None:
 			nonlocal lua_eval_count
 			tidx, tcnt = lbmeta_keys_from_lb_key(lb_key)
-			await self._tier_script(keys=[lb_key, tidx, tcnt], args=[player_id, str(xp_amount)], client=pipe)
+			version_key = self._tiermeta_version_key(tcnt)
+			await self._tier_script(
+				keys=[lb_key, tidx, tcnt, version_key],
+				args=[player_id, str(xp_amount)],
+				client=pipe,
+			)
 			pipe.expire(lb_key, ttl)
 			pipe.expire(tidx, ttl)
 			pipe.expire(tcnt, ttl)
+			pipe.expire(version_key, ttl)
 			lua_eval_count += 1
 
 		# Global daily + weekly

@@ -174,6 +174,38 @@ class StatsService:
 
 		return decoded
 
+	async def get_partial_stats(
+		self,
+		user_id: str,
+		subject_id: str,
+		version: int,
+		fields: list[str],
+	) -> dict[str, str] | None:
+		"""Read specific fields from stats hash via HMGET.
+
+		More efficient than HGETALL when only a subset of fields is needed
+		(e.g., track-level endpoint needs ~21 fields vs ~500 total).
+
+		Args:
+			user_id: Player's user ID
+			subject_id: Subject identifier
+			version: Bitmap version
+			fields: List of hash field names to retrieve
+
+		Returns:
+			Dict of field->value for requested fields, or None if key doesn't exist.
+			Fields not found in hash are excluded from the result dict.
+		"""
+		key = self._stats_key(user_id, subject_id, version)
+		values = await self.redis.hmget(key, fields)
+
+		result: dict[str, str] = {}
+		for field, value in zip(fields, values):
+			if value is not None:
+				result[field] = value.decode() if isinstance(value, bytes) else value
+
+		return result if result else None
+
 	async def set_stats(
 		self,
 		user_id: str,

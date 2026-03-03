@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -32,6 +33,30 @@ logger = structlog.get_logger()
 
 META_CACHE_TTL = 3600  # 1 hour — same as hierarchy cache
 PRACTICE_SESSION_SCHEMA_VERSION = 2
+
+# Process-local per-key locks for practice metadata cache-fill coalescing.
+# Prevents thundering herd when multiple concurrent requests miss the same meta key.
+# Same pattern as _compute_locks in stats.py and _hierarchy_fill_locks in hierarchy.py.
+_meta_fill_locks: dict[str, asyncio.Lock] = {}
+_MAX_META_FILL_LOCKS = 5_000
+
+
+def _get_meta_fill_lock(key: str) -> asyncio.Lock:
+	"""Get or create a per-key asyncio.Lock for meta fill coalescing.
+
+	Uses setdefault for atomicity: concurrent callers for the same key
+	always get the same Lock instance. Pruning of unlocked entries runs
+	after insertion to keep the dict near _MAX_META_FILL_LOCKS.
+	"""
+	lock = _meta_fill_locks.get(key)
+	if lock is not None:
+		return lock
+	lock = _meta_fill_locks.setdefault(key, asyncio.Lock())
+	if len(_meta_fill_locks) > _MAX_META_FILL_LOCKS:
+		to_remove = [k for k, v in _meta_fill_locks.items() if k != key and not v.locked()]
+		for k in to_remove:
+			_meta_fill_locks.pop(k, None)
+	return lock
 
 
 class PracticeAccessDenied(Exception):
@@ -199,11 +224,21 @@ class PracticeService:
 		# Step 4: Build response with access checks
 		tracks: list[PracticeTrackInfo] = []
 
+		# Hoist subject-level access check out of the per-track loop.
+		# This is invariant (same player, subject, plan for every track)
+		# and saves N-1 redundant Redis lookups.
+		subject_key = f"SUB-{subject_id}"
+		has_subject_access = await self.access.check_access_with_plan(player_id, subject_key, plan_id)
+
 		for track in hier.tracks:
 			track_id = track.track_id
 
-			# Check full access (grants/plan) OR free content presence
-			has_full_access = await self._check_track_access(player_id, subject_id, track_id, plan_id)
+			# Check full access: subject-level (already computed) or track-level grant
+			if has_subject_access:
+				has_full_access = True
+			else:
+				track_key = f"TRK-{track_id}"
+				has_full_access = await self.access.check_access(player_id, track_key)
 			has_free = self._track_has_free_content(hier, track_id)
 			has_access = has_full_access or has_free
 
@@ -321,7 +356,8 @@ class PracticeService:
 		"""Load practice hierarchy metadata from cache or Frappe.
 
 		Caches titles + Review Item counts with 1h TTL.
-		On miss, calls Frappe API to fetch from MariaDB.
+		On miss, coalesces concurrent fills via per-key lock so only one
+		Frappe call fires per subject per worker process.
 		"""
 		cache_key = practice_hierarchy_meta_key(subject_id)
 
@@ -330,7 +366,7 @@ class PracticeService:
 		if cached:
 			return json.loads(cached)
 
-		# Cache miss — fetch from Frappe
+		# Cache miss — no Frappe client means we can't fill
 		if not self.frappe:
 			logger.warning(
 				"practice_meta_fetch_skipped",
@@ -339,26 +375,47 @@ class PracticeService:
 			)
 			return None
 
+		# Coalesce concurrent fills via per-key lock
+		fill_lock = _get_meta_fill_lock(subject_id)
+		acquired = False
 		try:
-			result = await self.frappe.call(
-				"memora_admin.api.practice.get_practice_hierarchy_meta",
-				{"subject_id": subject_id},
-			)
-		except Exception as e:
-			logger.error(
-				"practice_meta_fetch_failed",
-				subject_id=subject_id,
-				error=str(e),
-			)
-			return None
+			await asyncio.wait_for(fill_lock.acquire(), timeout=5.0)
+			acquired = True
+		except (asyncio.TimeoutError, TimeoutError):
+			logger.warning("meta_fill_timeout", subject_id=subject_id)
 
-		if not result:
-			return None
+		try:
+			if acquired:
+				# Double-check: another request may have filled while we waited
+				cached = await self.redis.get(cache_key)
+				if cached:
+					logger.debug("meta_fill_coalesced", subject_id=subject_id)
+					return json.loads(cached)
 
-		# Cache with TTL
-		await self.redis.set(cache_key, json.dumps(result), ex=META_CACHE_TTL)
+			# Fetch from Frappe
+			try:
+				result = await self.frappe.call(
+					"memora_admin.api.practice.get_practice_hierarchy_meta",
+					{"subject_id": subject_id},
+				)
+			except Exception as e:
+				logger.error(
+					"practice_meta_fetch_failed",
+					subject_id=subject_id,
+					error=str(e),
+				)
+				return None
 
-		return result
+			if not result:
+				return None
+
+			# Cache with TTL
+			await self.redis.set(cache_key, json.dumps(result), ex=META_CACHE_TTL)
+
+			return result
+		finally:
+			if acquired:
+				fill_lock.release()
 
 	async def _check_track_access(
 		self,
@@ -789,21 +846,27 @@ class PracticeService:
 		served_item_ids = json.loads(session.get("served_item_ids", "[]"))
 		subject_id = session.get("subject_id", "")
 
+		# Count once up front so we can short-circuit the guaranteed-empty
+		# pre-wrap query when this session has already seen the full pool.
+		topic_counts = await self._count_items_per_topic(
+			subject_id,
+			accessible_lessons,
+			selected_topics,
+		)
+		total_available = sum(topic_counts.values())
+
 		# Select next batch of questions
 		batch_size = self.config.practice_session_size
-		questions, total_available, any_repeat = await self._select_questions(
-			player_id=player_id,
-			subject_id=subject_id,
-			accessible_lessons=accessible_lessons,
-			selected_topics=selected_topics,
-			served_item_ids=served_item_ids,
-			batch_size=batch_size,
-		)
+		served_unique_ids = set(served_item_ids)
+		should_wrap = total_available > 0 and len(served_unique_ids) >= total_available
+		if should_wrap and served_unique_ids:
+			# Deleted Review Items can leave stale IDs in session history.
+			# Re-check only when we are about to short-circuit into wrap-around,
+			# so deleted items do not force premature repeats.
+			valid_served_ids = await self._get_valid_item_ids(list(served_unique_ids))
+			should_wrap = len(valid_served_ids) >= total_available
 
-		all_seen = any_repeat
-
-		# If all items exhausted, re-serve from the full pool (wrap around)
-		if not questions and total_available > 0:
+		if should_wrap:
 			questions, _, _ = await self._select_questions(
 				player_id=player_id,
 				subject_id=subject_id,
@@ -811,8 +874,34 @@ class PracticeService:
 				selected_topics=selected_topics,
 				served_item_ids=[],  # Clear dedup to allow re-serve
 				batch_size=batch_size,
+				topic_counts=topic_counts,
 			)
 			all_seen = True  # Always true when wrapping around
+		else:
+			questions, _, any_repeat = await self._select_questions(
+				player_id=player_id,
+				subject_id=subject_id,
+				accessible_lessons=accessible_lessons,
+				selected_topics=selected_topics,
+				served_item_ids=served_item_ids,
+				batch_size=batch_size,
+				topic_counts=topic_counts,
+			)
+
+			all_seen = any_repeat
+
+			# If all items exhausted, re-serve from the full pool (wrap around)
+			if not questions and total_available > 0:
+				questions, _, _ = await self._select_questions(
+					player_id=player_id,
+					subject_id=subject_id,
+					accessible_lessons=accessible_lessons,
+					selected_topics=selected_topics,
+					served_item_ids=[],  # Clear dedup to allow re-serve
+					batch_size=batch_size,
+					topic_counts=topic_counts,
+				)
+				all_seen = True  # Always true when wrapping around
 
 		# Update served_item_ids with new batch
 		batch_ids = [q.item_id for q in questions]
@@ -986,6 +1075,7 @@ class PracticeService:
 		selected_topics: list[str],
 		served_item_ids: list[str],
 		batch_size: int,
+		topic_counts: dict[str, int] | None = None,
 	) -> tuple[list[PracticeQuestion], int, bool]:
 		"""Select questions with priority ordering and proportional topic distribution.
 
@@ -993,15 +1083,15 @@ class PracticeService:
 		0 = never seen (no Practice Log entry)
 		1 = seen before (has Practice Log entry)
 
-		Proportional distribution: When multiple topics are selected, questions
-		are distributed across topics proportionally by available item count.
-		Single-topic selections bypass proportional logic.
+		Proportional distribution: Questions are distributed across topics
+		proportionally by available item count. A single-topic selection
+		collapses to a single quota automatically.
 
 		Two-pass approach:
-		1. First pass: query each topic for its quota.
-		2. Redistribution pass: if any topic returned fewer items than its quota
-		   (exhausted by served_item_ids exclusion), redistribute the unfilled
-		   slots to topics that still have unseen items.
+		1. Fetch a per-topic candidate pool (batched by default, legacy per-topic
+		   loop still available behind a config fallback).
+		2. Fill each topic's quota from that pool.
+		3. Redistribute any unfilled slots from leftover in-memory candidates.
 
 		Returns:
 			Tuple of (questions, total_available_items, any_repeat).
@@ -1012,11 +1102,13 @@ class PracticeService:
 			return [], 0, False
 
 		# Get per-topic counts for proportional distribution
-		topic_counts = await self._count_items_per_topic(
-			subject_id,
-			accessible_lessons,
-			selected_topics,
-		)
+		if topic_counts is None:
+			topic_counts = await self._count_items_per_topic(
+				subject_id,
+				accessible_lessons,
+				selected_topics,
+			)
+
 		total_available = sum(topic_counts.values())
 
 		if total_available == 0:
@@ -1024,11 +1116,83 @@ class PracticeService:
 
 		# Compute per-topic quotas
 		quotas = _compute_topic_quotas(topic_counts, batch_size)
+		if not quotas:
+			return [], total_available, False
 
-		# First pass: query each topic for its quota
+		if not self.config.practice_batched_topic_select_enabled:
+			questions, any_repeat = await self._select_questions_legacy(
+				player_id=player_id,
+				subject_id=subject_id,
+				accessible_lessons=accessible_lessons,
+				served_item_ids=served_item_ids,
+				topic_counts=topic_counts,
+				quotas=quotas,
+			)
+			return questions, total_available, any_repeat
+
+		batched_result = await self._select_questions_batched(
+			player_id=player_id,
+			subject_id=subject_id,
+			accessible_lessons=accessible_lessons,
+			served_item_ids=served_item_ids,
+			topic_counts=topic_counts,
+			quotas=quotas,
+			batch_size=batch_size,
+		)
+		if batched_result is not None:
+			questions, any_repeat = batched_result
+			return questions, total_available, any_repeat
+
+		questions, any_repeat = await self._select_questions_legacy(
+			player_id=player_id,
+			subject_id=subject_id,
+			accessible_lessons=accessible_lessons,
+			served_item_ids=served_item_ids,
+			topic_counts=topic_counts,
+			quotas=quotas,
+		)
+		return questions, total_available, any_repeat
+
+	async def _select_questions_batched(
+		self,
+		player_id: str,
+		subject_id: str,
+		accessible_lessons: list[str],
+		served_item_ids: list[str],
+		topic_counts: dict[str, int],
+		quotas: dict[str, int],
+		batch_size: int,
+	) -> tuple[list[PracticeQuestion], bool] | None:
+		"""Fetch per-topic candidates in one query, then preserve allocation in Python."""
+		candidate_rows = await self._select_candidates_for_topics(
+			player_id=player_id,
+			subject_id=subject_id,
+			accessible_lessons=accessible_lessons,
+			topic_ids=list(quotas.keys()),
+			served_item_ids=served_item_ids,
+			per_topic_limit=batch_size,
+		)
+		if candidate_rows is None:
+			return None
+
+		return self._allocate_questions_from_candidates(
+			candidate_rows=candidate_rows,
+			quotas=quotas,
+			topic_counts=topic_counts,
+		)
+
+	async def _select_questions_legacy(
+		self,
+		player_id: str,
+		subject_id: str,
+		accessible_lessons: list[str],
+		served_item_ids: list[str],
+		topic_counts: dict[str, int],
+		quotas: dict[str, int],
+	) -> tuple[list[PracticeQuestion], bool]:
+		"""Legacy per-topic selection loop kept as a rollout fallback."""
 		all_questions: list[PracticeQuestion] = []
 		any_repeat = False
-		# Track how many each topic returned vs requested (for redistribution)
 		topic_returned: dict[str, int] = {}
 		topic_exhausted: set[str] = set()
 
@@ -1049,16 +1213,13 @@ class PracticeService:
 			topic_returned[topic_id] = len(questions)
 			if len(questions) < quota:
 				topic_exhausted.add(topic_id)
-			# Add newly selected items so redistribution pass excludes them
 			current_served.extend(q.item_id for q in questions)
 
 		# Redistribution pass: fill unfilled slots from non-exhausted topics
 		unfilled = sum(quotas[t] - topic_returned[t] for t in topic_exhausted)
 		if unfilled > 0:
-			# Topics that might still have items (returned full quota)
 			donors = [t for t in quotas if t not in topic_exhausted]
 			if donors:
-				# Distribute unfilled evenly, largest-first
 				donors.sort(key=lambda t: topic_counts.get(t, 0), reverse=True)
 				for donor_id in donors:
 					if unfilled <= 0:
@@ -1076,7 +1237,157 @@ class PracticeService:
 					unfilled -= len(extra_questions)
 					current_served.extend(q.item_id for q in extra_questions)
 
-		return all_questions, total_available, any_repeat
+		return all_questions, any_repeat
+
+	async def _select_candidates_for_topics(
+		self,
+		player_id: str,
+		subject_id: str,
+		accessible_lessons: list[str],
+		topic_ids: list[str],
+		served_item_ids: list[str],
+		per_topic_limit: int,
+	) -> list[dict] | None:
+		"""Fetch the top N candidate rows per topic in a single SQL round-trip."""
+		if not topic_ids:
+			return []
+
+		lesson_placeholders = ", ".join(["%s"] * len(accessible_lessons))
+		topic_placeholders = ", ".join(["%s"] * len(topic_ids))
+		where_clause = (
+			f"ri.subject = %s AND ri.lesson IN ({lesson_placeholders}) "
+			f"AND ri.topic IN ({topic_placeholders})"
+		)
+		params: list = [subject_id, *accessible_lessons, *topic_ids]
+
+		if served_item_ids:
+			served_placeholders = ", ".join(["%s"] * len(served_item_ids))
+			where_clause += f" AND ri.item_id NOT IN ({served_placeholders})"
+			params.extend(served_item_ids)
+
+		priority_case = """
+			CASE
+				WHEN pl.item_id IS NULL THEN 0
+				ELSE 1
+			END
+		"""
+		sort_seen_expr = "COALESCE(pl.last_seen_at, '1970-01-01')"
+
+		select_sql = f"""
+			SELECT candidates.item_id, candidates.question_text, candidates.choice_1, candidates.choice_2,
+				   candidates.choice_3, candidates.choice_4, candidates.correct_choice, candidates.content_json,
+				   candidates.stage_type, candidates.topic, candidates.priority, candidates.sort_seen
+			FROM (
+				SELECT ri.item_id, ri.question_text, ri.choice_1, ri.choice_2,
+					   ri.choice_3, ri.choice_4, ri.correct_choice, ri.content_json,
+					   ri.stage_type, ri.topic,
+					   {priority_case} AS priority,
+					   {sort_seen_expr} AS sort_seen,
+					   ROW_NUMBER() OVER (
+						   PARTITION BY ri.topic
+						   ORDER BY {priority_case} ASC, {sort_seen_expr} ASC, ri.item_id ASC
+					   ) AS topic_rank
+				FROM `tabMemora Review Item` ri
+				LEFT JOIN `tabMemora Practice Log` pl
+					ON pl.item_id = ri.item_id AND pl.player_id = %s
+				WHERE {where_clause}
+			) candidates
+			WHERE candidates.topic_rank <= %s
+			ORDER BY candidates.topic, candidates.topic_rank
+		"""
+
+		select_params = [player_id, *params, per_topic_limit]
+
+		try:
+			return await self.frappe.call(
+				"memora_admin.api.practice.execute_practice_query",
+				{"sql": select_sql, "params": select_params},
+			)
+		except Exception as e:
+			logger.error(
+				"practice_batched_select_failed",
+				player_id=player_id,
+				topic_count=len(topic_ids),
+				error=str(e),
+			)
+			return None
+
+	def _allocate_questions_from_candidates(
+		self,
+		candidate_rows: list[dict],
+		quotas: dict[str, int],
+		topic_counts: dict[str, int],
+	) -> tuple[list[PracticeQuestion], bool]:
+		"""Apply the existing quota-first then redistribution logic in memory."""
+		if not candidate_rows:
+			return [], False
+
+		candidates_by_topic: dict[str, list[dict]] = {topic_id: [] for topic_id in quotas}
+		for row in candidate_rows:
+			topic_id = row.get("topic")
+			if topic_id in candidates_by_topic:
+				candidates_by_topic[topic_id].append(row)
+
+		selected_rows: list[dict] = []
+		topic_offsets: dict[str, int] = {}
+		topic_exhausted: set[str] = set()
+
+		for topic_id, quota in quotas.items():
+			topic_rows = candidates_by_topic.get(topic_id, [])
+			chosen = topic_rows[:quota]
+			selected_rows.extend(chosen)
+			topic_offsets[topic_id] = len(chosen)
+			if len(chosen) < quota:
+				topic_exhausted.add(topic_id)
+
+		unfilled = sum(quotas[t] - topic_offsets[t] for t in topic_exhausted)
+		if unfilled > 0:
+			donors = [t for t in quotas if t not in topic_exhausted]
+			donors.sort(key=lambda t: topic_counts.get(t, 0), reverse=True)
+
+			for donor_id in donors:
+				if unfilled <= 0:
+					break
+				topic_rows = candidates_by_topic.get(donor_id, [])
+				start = topic_offsets.get(donor_id, 0)
+				extra_rows = topic_rows[start : start + unfilled]
+				selected_rows.extend(extra_rows)
+				topic_offsets[donor_id] = start + len(extra_rows)
+				unfilled -= len(extra_rows)
+
+		questions: list[PracticeQuestion] = []
+		any_repeat = False
+		for row in selected_rows:
+			if row.get("priority", 0) > 0:
+				any_repeat = True
+			questions.append(self._build_practice_question(row))
+
+		return questions, any_repeat
+
+	def _build_practice_question(self, row: dict) -> PracticeQuestion:
+		"""Convert a SQL row into the PracticeQuestion response model."""
+		choices = []
+		for i in range(1, 5):
+			c = row.get(f"choice_{i}")
+			if c:
+				choices.append(c)
+
+		content_json = None
+		raw_content = row.get("content_json")
+		if raw_content:
+			try:
+				content_json = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
+			except (json.JSONDecodeError, TypeError):
+				content_json = None
+
+		return PracticeQuestion(
+			item_id=row["item_id"],
+			stage_type=row.get("stage_type", ""),
+			question_text=row.get("question_text"),
+			choices=choices,
+			correct_choice=row.get("correct_choice"),
+			content_json=content_json,
+		)
 
 	async def _select_for_topic(
 		self,
@@ -1149,39 +1460,8 @@ class PracticeService:
 		if not rows:
 			return [], False
 
-		# Convert rows to PracticeQuestion models and detect repeats
-		questions: list[PracticeQuestion] = []
-		has_repeat = False
-
-		for row in rows:
-			if row.get("priority", 0) > 0:
-				has_repeat = True
-
-			choices = []
-			for i in range(1, 5):
-				c = row.get(f"choice_{i}")
-				if c:
-					choices.append(c)
-
-			content_json = None
-			raw_content = row.get("content_json")
-			if raw_content:
-				try:
-					content_json = json.loads(raw_content) if isinstance(raw_content, str) else raw_content
-				except (json.JSONDecodeError, TypeError):
-					content_json = None
-
-			questions.append(
-				PracticeQuestion(
-					item_id=row["item_id"],
-					stage_type=row.get("stage_type", ""),
-					question_text=row.get("question_text"),
-					choices=choices,
-					correct_choice=row.get("correct_choice"),
-					content_json=content_json,
-				)
-			)
-
+		has_repeat = any(row.get("priority", 0) > 0 for row in rows)
+		questions = [self._build_practice_question(row) for row in rows]
 		return questions, has_repeat
 
 	async def _get_valid_item_ids(self, item_ids: list[str]) -> set[str]:

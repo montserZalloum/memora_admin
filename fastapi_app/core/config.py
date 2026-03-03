@@ -65,6 +65,7 @@ class Settings(BaseSettings):
 	# Practice Arena Session Settings
 	practice_session_size: int = 20
 	practice_session_ttl: int = 3600
+	practice_batched_topic_select_enabled: bool = True
 
 	# Scaling: Redis Connection Pool
 	redis_max_connections: int = 20  # Pool size per uvicorn worker
