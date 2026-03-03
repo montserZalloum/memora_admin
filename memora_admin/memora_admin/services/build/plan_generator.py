@@ -280,6 +280,7 @@ def _generate_manifest(
 				"title": subject_doc.subject_title,
 				"alias_title": ps_meta.get("alias_title"),
 				"image": _relative_path(subject_doc.image),
+				"language": getattr(subject_doc, "language", None) or "ar",
 				"total_lessons": stats["total_lessons"],
 				"total_tracks": stats["total_tracks"],
 				"is_premium": ps_meta.get("is_premium", True),

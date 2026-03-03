@@ -13,6 +13,7 @@ class PlanSubject(BaseModel):
 	title: str = Field(..., description="Subject title")
 	alias_title: Optional[str] = Field(None, description="Alternative title")
 	image: Optional[str] = Field(None, description="Subject image URL")
+	language: str = Field("ar", description="Subject language code (ar, en)")
 	total_lessons: int = Field(0, description="Total lesson count")
 	total_tracks: int = Field(0, description="Total track count")
 	is_premium: bool = Field(False, description="Requires subscription")

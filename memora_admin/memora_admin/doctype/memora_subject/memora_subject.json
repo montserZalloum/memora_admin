@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "subject_title",
+  "language",
   "image",
   "description",
   "in_linear",
@@ -30,6 +31,13 @@
    "in_list_view": 1,
    "label": "Subject Title",
    "reqd": 1
+  },
+  {
+   "default": "ar",
+   "fieldname": "language",
+   "fieldtype": "Select",
+   "label": "Language",
+   "options": "ar\nen"
   },
   {
    "fieldname": "image",
