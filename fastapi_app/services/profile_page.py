@@ -4,6 +4,7 @@ Composes existing services into profile-page-shaped responses.
 Does NOT duplicate business logic from underlying services.
 """
 
+import asyncio
 import json
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -104,16 +105,18 @@ class ProfilePageService:
 			xp_in_level, xp_for_next_level, xp_level_start, xp_level_end.
 		"""
 		wallet_service = WalletService(self.redis, frappe_client=self.frappe)
-		wallet = await wallet_service.get_wallet(player_id)
-		total_xp = wallet.get("xp", 0)
-
 		profile_service = ProfileService(self.redis, self.frappe)
-		profiles = await profile_service.get_profiles_batch([player_id])
+
+		# Parallel: all three are independent reads (3 RTT → 1)
+		wallet, profiles, config = await asyncio.gather(
+			wallet_service.get_wallet(player_id),
+			profile_service.get_profiles_batch([player_id]),
+			get_level_config(self.redis),
+		)
+		total_xp = wallet.get("xp", 0)
 		profile = profiles.get(player_id)
 		display_name = profile.display_name if profile else "Anonymous"
 		avatar = profile.avatar if profile else "default_avatar"
-
-		config = await get_level_config(self.redis)
 		level, level_title, xp_in_level, xp_for_next_level = calculate_level(total_xp, config)
 
 		# XP boundaries for the current level
@@ -145,9 +148,14 @@ class ProfilePageService:
 		Returns:
 			Dict with subject, streak, items_learned, total_xp.
 		"""
-		# Streak: always global
+		# Parallel: wallet + items_learned cache check are independent (2 RTT → 1)
 		wallet_service = WalletService(self.redis, frappe_client=self.frappe)
-		wallet = await wallet_service.get_wallet(player_id)
+		items_cache_key = _items_learned_key_fn(player_id, subject_id)
+
+		wallet, cached_items = await asyncio.gather(
+			wallet_service.get_wallet(player_id),
+			self.redis.get(items_cache_key),
+		)
 		streak = wallet.get("streak", 0)
 
 		# Total XP (always from wallet — alltime ZSETs removed)
@@ -155,8 +163,6 @@ class ProfilePageService:
 
 		# Items learned: count of Memory State records (SRS items encountered)
 		# Cached in Redis with 5-min TTL. On cache miss, fetches from Frappe API.
-		items_cache_key = _items_learned_key_fn(player_id, subject_id)
-		cached_items = await self.redis.get(items_cache_key)
 		if cached_items is not None:
 			items_str = cached_items.decode() if isinstance(cached_items, bytes) else cached_items
 			items_learned = int(items_str)
@@ -199,29 +205,23 @@ class ProfilePageService:
 		# Calculate the start of the 7-day period (6 days ago)
 		week_start = today - timedelta(days=6)
 
-		# Build 7 Redis keys for the last 7 days (ending today)
+		# Phase 1: fetch 7 primary daily scores in one round-trip.
+		today_str = today.strftime("%Y-%m-%d")
 		days = []
 		pipe = self.redis.pipeline()
 		for i in range(7):
 			day = week_start + timedelta(days=i)
 			date_str = day.strftime("%Y-%m-%d")
-			key = lb_daily_key(date_str, subject_id)
-			pipe.zscore(key, player_id)
+			pipe.zscore(lb_daily_key(date_str, subject_id), player_id)
 			days.append(
 				{
 					"date": date_str,
 					"day_name": day.strftime("%a"),
 				}
 			)
-
-		# Single round-trip for all 7 ZSCORE calls
 		scores = await pipe.execute()
 
-		# Phase 2: Check archive keys for past days that returned None.
-		# The archive task (leaderboard_reset.py) copies yesterday's data to
-		# memora:lb:archive:daily:{date} at 00:10 AM daily. After Redis data loss,
-		# today's key is recreated on lesson completion, but past days are lost.
-		today_str = today.strftime("%Y-%m-%d")
+		# Phase 2: only check archive keys for past days still missing from primary.
 		archive_indices = []
 		for i, score in enumerate(scores):
 			if score is None and days[i]["date"] != today_str:
@@ -230,17 +230,18 @@ class ProfilePageService:
 		if archive_indices:
 			archive_pipe = self.redis.pipeline()
 			for i in archive_indices:
-				date_str = days[i]["date"]
-				archive_key = lb_archive_daily_key(date_str, subject_id)
-				archive_pipe.zscore(archive_key, player_id)
+				archive_pipe.zscore(lb_archive_daily_key(days[i]["date"], subject_id), player_id)
 			archive_scores = await archive_pipe.execute()
 			for j, i in enumerate(archive_indices):
 				if archive_scores[j] is not None:
 					scores[i] = archive_scores[j]
 
 		# Phase 3: Per-player daily XP summary hash (Redis, MariaDB-backed).
-		# Covers days still missing after Phase 1 + Phase 2 (e.g. after Redis data loss).
-		still_missing = [i for i in archive_indices if scores[i] is None]
+		# Covers past days still missing after Phase 1 + Phase 2 (e.g. after Redis data loss).
+		# Never backfill today from daily_xp: that hash is per-player, not subject-scoped.
+		still_missing = [
+			i for i, score in enumerate(scores) if score is None and days[i]["date"] != today_str
+		]
 		if still_missing:
 			daily_xp_key = _daily_xp_key_fn(player_id)
 			daily_xp_data = await self.redis.hgetall(daily_xp_key)

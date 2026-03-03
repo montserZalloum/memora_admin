@@ -5,6 +5,7 @@ Per CONTEXT.md (Phase 10):
 - GET /leaderboard/{type}/me - User's rank with neighbors
 """
 
+import asyncio
 from typing import Literal
 
 import structlog
@@ -64,14 +65,14 @@ async def get_leaderboard(
             total_players=0,
         )
 
-    # Fetch players from plan-scoped leaderboard with pagination
-    raw_entries = await leaderboard_service.get_top(
-        lb_type, limit=limit, offset=offset, subject_id=subject_id, plan_id=plan_id
-    )
-
-    # Get total players count (ZCARD) from plan-scoped key
+    # Parallel: get_top + ZCARD are independent reads on same key (3 RTT → 2)
     key = leaderboard_service._get_plan_key(lb_type, plan_id, subject_id)
-    total_players = await leaderboard_service.redis.zcard(key)
+    raw_entries, total_players = await asyncio.gather(
+        leaderboard_service.get_top(
+            lb_type, limit=limit, offset=offset, subject_id=subject_id, plan_id=plan_id
+        ),
+        leaderboard_service.redis.zcard(key),
+    )
 
     # Batch fetch profiles for all entries (single round-trip)
     player_ids = [entry["player_id"] for entry in raw_entries]

@@ -1,5 +1,6 @@
 """Product catalog caching service with per-player filtering."""
 
+import asyncio
 import json
 
 import redis.asyncio as redis
@@ -94,15 +95,19 @@ class CatalogService:
 		Returns:
 			Filtered list of CatalogProduct
 		"""
-		products = await self.get_catalog(plan_id)
+		# Parallel: catalog fetch + player access/pending sets are independent (2 RTT → 1)
+		async def _get_player_sets():
+			pipe = self.redis.pipeline()
+			pipe.smembers(_access_key_fn(player_id))
+			pipe.smembers(_pending_key_fn(player_id))
+			return await pipe.execute()
+
+		products, (access_raw, pending_raw) = await asyncio.gather(
+			self.get_catalog(plan_id),
+			_get_player_sets(),
+		)
 		if not products:
 			return []
-
-		# Pipeline: fetch player's access set and pending set in one round-trip
-		pipe = self.redis.pipeline()
-		pipe.smembers(_access_key_fn(player_id))
-		pipe.smembers(_pending_key_fn(player_id))
-		access_raw, pending_raw = await pipe.execute()
 
 		# Decode bytes to strings
 		access_set = {m.decode() if isinstance(m, bytes) else m for m in access_raw}

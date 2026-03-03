@@ -118,7 +118,7 @@ async def start_session(
 		404: Subject or lesson not found
 		403: No content access
 	"""
-	# Check if player is frozen (plan change in progress)
+	# Freeze must short-circuit before any downstream hierarchy/Frappe work.
 	if await redis_client.exists(freeze_key(user.sub)):
 		raise HTTPException(
 			status_code=status.HTTP_409_CONFLICT,

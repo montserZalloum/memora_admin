@@ -7,6 +7,7 @@ from httpx import AsyncClient
 
 from fastapi_app.core.redis_keys import (
 	dirty_wallets_key,
+	freeze_key,
 	gamification_settings_key,
 	hierarchy_key,
 	progress_key as _progress_key_fn,
@@ -255,6 +256,35 @@ class TestStartSession:
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
 		await redis_client.delete(hierarchy_key(subject_id))
+
+	async def test_start_frozen_short_circuits_before_hierarchy_lookup(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+		mock_frappe,
+	) -> None:
+		"""
+		Frozen players should get 409 even if hierarchy lookup would fail.
+
+		Seed only the freeze key and force Frappe hierarchy lookup to error.
+		The endpoint must return PLAN_CHANGE_IN_PROGRESS without surfacing the
+		downstream hierarchy failure.
+		"""
+		client, token, player_id, family_id = authed_client
+		await redis_client.set(freeze_key(player_id), "1", ex=30)
+		mock_frappe.call.side_effect = RuntimeError("hierarchy lookup should not run")
+
+		response = await client.post(
+			"/api/v1/sessions/start",
+			json={"lesson_id": "LESSON-TEST-001", "subject_id": "SUB-NONEXIST"},
+			headers={"X-Device-ID": "test-device-001"},
+		)
+
+		assert response.status_code == 409
+		assert response.json()["detail"]["code"] == "PLAN_CHANGE_IN_PROGRESS"
+
+		# Cleanup
+		await cleanup_player_keys(redis_client, player_id)
 
 
 class TestEndSession:
