@@ -1,5 +1,7 @@
 """Settings service for cached Frappe gamification configuration."""
 
+import time
+
 import redis.asyncio as redis
 import structlog
 
@@ -9,6 +11,11 @@ from fastapi_app.services.frappe_client import FrappeClient
 from fastapi_app.services.hydration import guarded_hydrate
 
 logger = structlog.get_logger()
+
+# Process-local cache for gamification settings (same pattern as _local_hierarchy_cache).
+# Settings change very rarely (admin action); 5-minute TTL with pubsub early invalidation.
+_local_settings_cache: tuple[GamificationSettings, float] | None = None
+_LOCAL_TTL = 300  # 5 minutes
 
 
 class SettingsService:
@@ -29,24 +36,34 @@ class SettingsService:
 
 	async def get_gamification_settings(self) -> GamificationSettings:
 		"""
-		Get gamification settings from cache, or hydrate from Frappe on miss.
+		Get gamification settings from local cache, Redis, or Frappe on miss.
 
 		Returns:
 			GamificationSettings with XP values and streak multiplier cap.
 			Falls back to defaults if Frappe is unreachable.
 		"""
-		# Try cache first
+		global _local_settings_cache
+
+		# 1. Local in-process cache (sub-microsecond)
+		if _local_settings_cache is not None:
+			settings, exp = _local_settings_cache
+			if time.monotonic() < exp:
+				return settings
+
+		# 2. Redis cache
 		cached = await self.redis.get(gamification_settings_key())
 		if cached:
 			data = cached.decode() if isinstance(cached, bytes) else cached
 			try:
 				logger.debug("settings_cache_hit")
-				return GamificationSettings.model_validate_json(data)
+				settings = GamificationSettings.model_validate_json(data)
+				_local_settings_cache = (settings, time.monotonic() + _LOCAL_TTL)
+				return settings
 			except Exception:
 				logger.warning("settings_cache_corrupt", action="deleting_and_rehydrating")
 				await self.redis.delete(gamification_settings_key())
 
-		# Cache miss — hydrate with guard (prevents thundering herd)
+		# 3. Cache miss — hydrate with guard (prevents thundering herd)
 		logger.info("settings_cache_miss", action="hydrating_from_frappe")
 
 		try:
@@ -65,7 +82,9 @@ class SettingsService:
 		cached = await self.redis.get(gamification_settings_key())
 		if cached:
 			data = cached.decode() if isinstance(cached, bytes) else cached
-			return GamificationSettings.model_validate_json(data)
+			settings = GamificationSettings.model_validate_json(data)
+			_local_settings_cache = (settings, time.monotonic() + _LOCAL_TTL)
+			return settings
 
 		# Hydration wrote nothing (Frappe returned empty) — use defaults
 		logger.warning("settings_frappe_empty", action="using_defaults")
@@ -100,9 +119,11 @@ class SettingsService:
 
 	async def invalidate(self) -> None:
 		"""
-		Invalidate settings cache.
+		Invalidate settings cache (Redis + local).
 
 		Called via pubsub when admin saves Memora Settings.
 		"""
+		global _local_settings_cache
+		_local_settings_cache = None
 		await self.redis.delete(gamification_settings_key())
 		logger.info("settings_cache_invalidated")

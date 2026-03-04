@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import time
 
 import redis.asyncio as redis
 import structlog
@@ -13,6 +14,11 @@ from fastapi_app.models.catalog import CatalogProduct
 from fastapi_app.services.frappe_client import FrappeClient
 
 logger = structlog.get_logger(__name__)
+
+# Process-local cache keyed by plan_id (same pattern as _local_hierarchy_cache).
+# Catalog data changes rarely; 5-minute TTL with pubsub early invalidation.
+_local_catalog_cache: dict[str, tuple[list, float]] = {}
+_LOCAL_TTL = 300  # 5 minutes
 
 
 class CatalogService:
@@ -37,7 +43,7 @@ class CatalogService:
 		return _catalog_key_fn(plan_id)
 
 	async def get_catalog(self, plan_id: str) -> list[CatalogProduct]:
-		"""Get plan catalog from cache or Frappe. No TTL -- infinite cache.
+		"""Get plan catalog from local cache, Redis, or Frappe. No TTL -- infinite cache.
 
 		Args:
 			plan_id: Memora Plan document name
@@ -45,19 +51,28 @@ class CatalogService:
 		Returns:
 			List of CatalogProduct for the plan (empty if none found)
 		"""
+		# 1. Local in-process cache (sub-microsecond)
+		entry = _local_catalog_cache.get(plan_id)
+		if entry is not None:
+			products, exp = entry
+			if time.monotonic() < exp:
+				return products
+
 		key = self._cache_key(plan_id)
 
-		# Try cache first
+		# 2. Redis cache
 		cached = await self.redis.get(key)
 		if cached is not None:
 			data = cached.decode() if isinstance(cached, bytes) else cached
 			logger.debug("catalog_cache_hit", plan_id=plan_id)
 			raw_list = json.loads(data)
-			return [CatalogProduct.model_validate(p) for p in raw_list]
+			products = [CatalogProduct.model_validate(p) for p in raw_list]
+			_local_catalog_cache[plan_id] = (products, time.monotonic() + _LOCAL_TTL)
+			return products
 
 		logger.debug("catalog_cache_miss", plan_id=plan_id)
 
-		# Cache miss: fetch from Frappe whitelisted API
+		# 3. Cache miss: fetch from Frappe whitelisted API
 		result = await self.frappe.call(
 			"memora_admin.memora_admin.api.catalog.get_plan_catalog",
 			{"plan_id": plan_id},
@@ -67,14 +82,16 @@ class CatalogService:
 			logger.info("catalog_empty", plan_id=plan_id)
 			# Cache empty result to avoid repeated Frappe calls
 			await self.redis.set(key, "[]")
+			_local_catalog_cache[plan_id] = ([], time.monotonic() + _LOCAL_TTL)
 			return []
 
 		# Parse into models
 		products = [CatalogProduct.model_validate(p) for p in result]
 
-		# Cache with NO TTL (infinite -- invalidated by events only)
+		# Cache with NO TTL in Redis (infinite -- invalidated by events only)
 		json_str = json.dumps([p.model_dump() for p in products])
 		await self.redis.set(key, json_str)
+		_local_catalog_cache[plan_id] = (products, time.monotonic() + _LOCAL_TTL)
 
 		logger.info("catalog_cached", plan_id=plan_id, product_count=len(products))
 		return products
@@ -148,6 +165,7 @@ class CatalogService:
 		Args:
 			plan_id: Memora Plan document name
 		"""
+		_local_catalog_cache.pop(plan_id, None)
 		key = self._cache_key(plan_id)
 		await self.redis.delete(key)
 		logger.info("catalog_cache_invalidated", plan_id=plan_id)

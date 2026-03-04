@@ -172,6 +172,7 @@ class TestFailOpen:
 REVIEW_BODY = {"items": [{"item_id": "ITEM-TEST-001", "fail_count": 0}]}
 SESSION_START_BODY = {"lesson_id": "LESSON-TEST-001", "subject_id": "SUB-TEST-001"}
 SESSION_END_BODY = {
+	"session_id": "SESSION-RATE-LIMIT-001",
 	"stages": [{"stage_id": "STG-001", "time_spent": 1000, "completed_at": "2026-02-22T00:00:00"}]
 }
 
@@ -253,7 +254,7 @@ class TestSessionEndPerPlayerRateLimit:
 		"""Send session_rate_limit+1 (4) requests, 4th returns 429."""
 		client, token, player_id, family_id = authed_client
 
-		# Requests will fail at endpoint level (403 - no active session) but rate limit counter still increments
+		# Requests will fail at endpoint level (409 - no active session) but rate limit counter still increments
 		for i in range(3):
 			resp = await client.post("/api/v1/sessions/end", json=SESSION_END_BODY)
 			assert resp.status_code != 429, f"Request {i+1} was prematurely rate limited"

@@ -56,6 +56,14 @@ class NoItemsError(Exception):
 	"""Raised when filters produce zero reviewable items."""
 
 
+class PracticeSubjectNotFoundError(Exception):
+	"""Raised when the requested subject does not exist."""
+
+
+class PracticeHierarchyMetaUnavailableError(Exception):
+	"""Raised when practice metadata cannot be loaded for a valid subject."""
+
+
 class NoActiveSessionError(Exception):
 	"""Raised when no active practice session exists for the player."""
 
@@ -174,7 +182,7 @@ class PracticeService:
 		subject_id: str,
 		plan_id: str | None,
 		filter_mode: str = "all",
-	) -> PracticeHierarchyResponse | None:
+	) -> PracticeHierarchyResponse:
 		"""Build practice hierarchy with titles, item counts, and access flags.
 
 		Flow:
@@ -184,17 +192,19 @@ class PracticeService:
 		4. If filter=completed, prune to nodes with completed lessons
 		5. Return PracticeHierarchyResponse
 
-		Returns None if subject not found.
+		Raises:
+			PracticeSubjectNotFoundError: If the subject does not exist
+			PracticeHierarchyMetaUnavailableError: If metadata cannot be loaded
 		"""
 		# Step 1: Load hierarchy structure
 		hier = await self.hierarchy.get_hierarchy(subject_id)
 		if not hier:
-			return None
+			raise PracticeSubjectNotFoundError(subject_id)
 
 		# Step 2: Load practice metadata (titles + item counts)
 		meta = await self._load_hierarchy_meta(subject_id)
 		if not meta:
-			return None
+			raise PracticeHierarchyMetaUnavailableError(subject_id)
 
 		item_counts: dict[str, int] = meta.get("item_counts", {})
 		track_titles: dict[str, dict] = meta.get("tracks", {})

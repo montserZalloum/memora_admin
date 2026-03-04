@@ -1,6 +1,7 @@
 # Copyright (c) 2026, corex and contributors
 """Game session service with atomic session lifecycle via Lua script."""
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -8,12 +9,21 @@ from typing import Any
 import redis.asyncio as redis
 import structlog
 
-from fastapi_app.core.constants import DIRTY_PROGRESS_KEY, GAME_SESSION_TTL, INTERACTION_BUFFER_KEY
+from fastapi_app.core.constants import (
+	DIRTY_PROGRESS_KEY,
+	DIRTY_WALLETS_KEY,
+	GAME_SESSION_TTL,
+	INTERACTION_BUFFER_KEY,
+)
+from fastapi_app.core.redis_keys import game_session_completion_key as _game_session_completion_key_fn
 from fastapi_app.core.redis_keys import game_session_key as _game_session_key_fn
 from fastapi_app.core.redis_keys import progress_key as _progress_key_fn
+from fastapi_app.core.redis_keys import wallet_key as _wallet_key_fn
 from fastapi_app.models.game_session import GameSession
 
 logger = structlog.get_logger()
+
+SESSION_END_RESPONSE_TTL = 300
 
 # Lua script for atomic session start that force-closes any existing
 # KEYS[1] = memora:gamesession:{user_id}
@@ -53,20 +63,49 @@ return {1, session_id}
 # KEYS[2] = memora:progress:{user_id}:{subject_id}:v{version}  -- progress bitmap
 # KEYS[3] = memora:dirty:progress                  -- dirty progress set
 # KEYS[4] = memora:buffer:interactions             -- interaction buffer list
+# KEYS[5] = memora:wallet:{user_id}                -- wallet hash
+# KEYS[6] = memora:dirty:wallets                   -- dirty wallets set
+# KEYS[7] = memora:gamesession:complete:{user_id}:{session_id}  -- response cache
 #
 # ARGV[1] = bit_index (int)
-# ARGV[2] = dirty_member string (e.g. "user_id:subject_id:v1")
-# ARGV[3..N] = JSON interaction strings (one per stage)
+# ARGV[2] = dirty_progress_member string (e.g. "user_id:subject_id:v1")
+# ARGV[3] = expected_session_id
+# ARGV[4] = base_xp
+# ARGV[5] = lesson_xp
+# ARGV[6] = replay_xp
+# ARGV[7] = max_multiplier_percent
+# ARGV[8] = hearts_remaining
+# ARGV[9] = xp_per_heart
+# ARGV[10] = today (Asia/Amman)
+# ARGV[11] = yesterday (Asia/Amman)
+# ARGV[12] = dirty_wallet_member (player_id)
+# ARGV[13] = completion cache ttl (seconds)
+# ARGV[14..N] = JSON interaction strings (one per stage)
 #
-# Returns: {status, is_replay, session_field1, session_field2, ...}
-#   - status=0: no active session (error)
+# Returns: {status, ...}
+#   - status=0: no active session and no cached completion response
 #   - status=1: success
-#   - is_replay: 0 if first completion, 1 if replay (from SETBIT return value)
+#   - status=2: duplicate completion (cached response exists)
+#   - status=3: stale request (different active session_id)
 SESSION_COMPLETE_SCRIPT = """
+local cached = redis.call('GET', KEYS[7])
+if cached then
+    return {2, cached}
+end
+
 -- Read session
 local session = redis.call('HGETALL', KEYS[1])
 if #session == 0 then
     return {0}
+end
+
+local current_session_id = redis.call('HGET', KEYS[1], 'session_id')
+if not current_session_id then
+    return {0}
+end
+
+if current_session_id ~= ARGV[3] then
+    return {3, current_session_id}
 end
 
 -- Delete session atomically
@@ -82,16 +121,74 @@ redis.call('EXPIRE', KEYS[2], 172800)
 redis.call('SADD', KEYS[3], ARGV[2])
 
 -- Batch RPUSH all interactions (single call, not N calls)
-if #ARGV > 2 then
+if #ARGV > 13 then
     local interactions = {}
-    for i = 3, #ARGV do
+    for i = 14, #ARGV do
         interactions[#interactions + 1] = ARGV[i]
     end
     redis.call('RPUSH', KEYS[4], unpack(interactions))
 end
 
--- Return status + is_replay + session fields
-return {1, prev, unpack(session)}
+-- Update streak in the same atomic flow
+local raw_streak = redis.call('HGET', KEYS[5], 'streak')
+local current_streak = (raw_streak and tonumber(raw_streak)) or 0
+local raw_date = redis.call('HGET', KEYS[5], 'streak_date')
+local streak_date = raw_date or ''
+
+if prev == 0 then
+    if streak_date == ARGV[10] then
+        -- Same day: no streak change
+    elseif streak_date == ARGV[11] then
+        current_streak = current_streak + 1
+        redis.call('HSET', KEYS[5], 'streak', current_streak)
+        redis.call('HSET', KEYS[5], 'streak_date', ARGV[10])
+    else
+        current_streak = 1
+        redis.call('HSET', KEYS[5], 'streak', current_streak)
+        redis.call('HSET', KEYS[5], 'streak_date', ARGV[10])
+    end
+end
+
+local base_xp = tonumber(ARGV[4])
+local lesson_xp = tonumber(ARGV[5])
+local replay_xp = tonumber(ARGV[6])
+local max_multiplier_percent = tonumber(ARGV[7])
+local hearts_remaining = tonumber(ARGV[8])
+local xp_per_heart = tonumber(ARGV[9])
+
+local base_amount
+if prev == 1 then
+    base_amount = replay_xp
+else
+    if lesson_xp > 0 then
+        base_amount = lesson_xp
+    else
+        base_amount = base_xp
+    end
+    base_amount = base_amount + (hearts_remaining * xp_per_heart)
+end
+
+local capped_streak = math.min(current_streak, max_multiplier_percent)
+local multiplier = 1.0 + (capped_streak * 0.01)
+local xp_awarded = math.floor(base_amount * multiplier)
+local new_total_xp = redis.call('HINCRBY', KEYS[5], 'xp', xp_awarded)
+
+-- Refresh TTL on wallet key (literal 172800 = WALLET_KEY_TTL, cross-ref redis_keys.py)
+redis.call('EXPIRE', KEYS[5], 172800)
+redis.call('SADD', KEYS[6], ARGV[12])
+
+local response = '{"success":true,"xp_awarded":' .. xp_awarded ..
+    ',"is_replay":' .. (prev == 1 and 'true' or 'false') ..
+    ',"streak":' .. current_streak ..
+    ',"is_duplicate":false' ..
+    ',"session_id":"' .. current_session_id .. '"' ..
+    ',"hearts_remaining":' .. hearts_remaining ..
+    ',"new_total_xp":' .. new_total_xp ..
+    '}'
+
+redis.call('SET', KEYS[7], response, 'EX', tonumber(ARGV[13]))
+
+return {1, response}
 """
 
 
@@ -111,7 +208,7 @@ class GameSessionService:
 	- get_active_session: HGETALL O(N) - get current session
 	- end_session: GET+DEL O(1) - end session and return data
 	- has_active_session: EXISTS O(1) - check if session exists
-	- complete_session: Lua script O(1) - atomic DEL + SETBIT + SADD + RPUSH
+	- complete_session: Lua script O(1) - atomic completion + wallet update + cached response
 	"""
 
 	def __init__(self, redis_client: redis.Redis):
@@ -134,6 +231,14 @@ class GameSessionService:
 			Redis key string
 		"""
 		return _game_session_key_fn(user_id)
+
+	def _completion_key(self, user_id: str, session_id: str) -> str:
+		"""Get Redis key for a recently completed session response."""
+		return _game_session_completion_key_fn(user_id, session_id)
+
+	def _wallet_key(self, user_id: str) -> str:
+		"""Get Redis key for the player's wallet hash."""
+		return _wallet_key_fn(user_id)
 
 	async def _get_start_script(self) -> Any:
 		"""Get or create the start session Lua script (lazy-loaded and cached).
@@ -158,72 +263,98 @@ class GameSessionService:
 	async def complete_session(
 		self,
 		user_id: str,
+		session_id: str,
 		bit_index: int,
 		subject_id: str,
 		version: int,
+		base_xp: int,
+		lesson_xp: int,
+		replay_xp: int,
+		max_multiplier_percent: int,
+		hearts_remaining: int,
+		xp_per_heart: int,
+		today: str,
+		yesterday: str,
 		interaction_jsons: list[str],
-	) -> tuple[bool, bool, GameSession | None]:
+	) -> tuple[str, str | None, str | None]:
 		"""Atomically complete session: delete session, set progress bit, push interactions.
 
 		Single Lua script execution = 1 Redis round-trip.
 
 		Args:
 			user_id: Player's user ID
+			session_id: Expected active session identifier from the client
 			bit_index: Lesson's position in progress bitmap
 			subject_id: Subject identifier
 			version: Bitmap version
+			base_xp: Default lesson XP from settings
+			lesson_xp: Lesson-specific XP
+			replay_xp: Fixed replay XP from settings
+			max_multiplier_percent: Streak multiplier cap
+			hearts_remaining: Hearts remaining after the completion
+			xp_per_heart: Bonus XP per remaining heart
+			today: Current Asia/Amman date
+			yesterday: Previous Asia/Amman date
 			interaction_jsons: List of JSON-encoded interaction strings
 
 		Returns:
-			Tuple of (success, is_replay, session_data)
-			- success: True if session existed and was completed
-			- is_replay: True if lesson was already completed (bit was 1)
-			- session_data: GameSession that was ended, or None if no session
+			Tuple of (status, payload, extra)
+			- status: "completed", "missing", "duplicate", or "mismatch"
+			- payload: Cached/finalized response JSON for completed/duplicate cases
+			- extra: active session_id for mismatch cases
 		"""
 		script = await self._get_complete_script()
 
 		session_key = self._session_key(user_id)
+		completion_key = self._completion_key(user_id, session_id)
 		progress_key = _progress_key_fn(user_id, subject_id, version)
+		wallet_key = self._wallet_key(user_id)
 		dirty_member = f"{user_id}:{subject_id}:v{version}"
 
-		keys = [session_key, progress_key, DIRTY_PROGRESS_KEY, INTERACTION_BUFFER_KEY]
-		args = [str(bit_index), dirty_member, *interaction_jsons]
+		keys = [
+			session_key,
+			progress_key,
+			DIRTY_PROGRESS_KEY,
+			INTERACTION_BUFFER_KEY,
+			wallet_key,
+			DIRTY_WALLETS_KEY,
+			completion_key,
+		]
+		args = [
+			str(bit_index),
+			dirty_member,
+			session_id,
+			str(base_xp),
+			str(lesson_xp),
+			str(replay_xp),
+			str(max_multiplier_percent),
+			str(hearts_remaining),
+			str(xp_per_heart),
+			today,
+			yesterday,
+			user_id,
+			str(SESSION_END_RESPONSE_TTL),
+			*interaction_jsons,
+		]
 
 		result = await script(keys=keys, args=args)
 
-		# result[0] == 0 means no active session
 		if result[0] == 0:
-			return (False, False, None)
-
-		# result[0] == 1: success
-		# result[1]: is_replay (0=first completion, 1=replay)
-		is_replay = bool(result[1])
-
-		# result[2:] is flat HGETALL output: [key1, val1, key2, val2, ...]
-		session_fields = result[2:]
-		session_dict: dict[str, str] = {}
-		for i in range(0, len(session_fields), 2):
-			key = session_fields[i].decode() if isinstance(session_fields[i], bytes) else session_fields[i]
-			val = (
-				session_fields[i + 1].decode()
-				if isinstance(session_fields[i + 1], bytes)
-				else session_fields[i + 1]
-			)
-			session_dict[key] = val
-
-		session = GameSession(**session_dict)
+			return ("missing", None, None)
+		if result[0] == 2:
+			return ("duplicate", self._decode_result_value(result[1]), None)
+		if result[0] == 3:
+			return ("mismatch", None, self._decode_result_value(result[1]))
 
 		logger.info(
 			"session_completed_atomic",
 			user_id=user_id,
-			session_id=session.session_id,
-			lesson_id=session.lesson_id,
+			session_id=session_id,
 			subject_id=subject_id,
-			is_replay=is_replay,
 			interactions_count=len(interaction_jsons),
 		)
 
-		return (True, is_replay, session)
+		return ("completed", self._decode_result_value(result[1]), None)
 
 	async def start_session(
 		self,
@@ -332,3 +463,28 @@ class GameSessionService:
 		"""
 		key = self._session_key(user_id)
 		return await self.redis.exists(key) > 0
+
+	@staticmethod
+	def _decode_result_value(value: bytes | str | None) -> str | None:
+		"""Normalize Redis script return values to strings."""
+		if value is None:
+			return None
+		if isinstance(value, bytes):
+			return value.decode("utf-8")
+		return value
+
+	async def get_end_response_state(
+		self,
+		user_id: str,
+		session_id: str,
+	) -> tuple[str, dict[str, Any] | None]:
+		"""Return whether a cached end-session response is missing or ready."""
+		raw = await self.redis.get(self._completion_key(user_id, session_id))
+		if raw is None:
+			return ("missing", None)
+
+		value = self._decode_result_value(raw)
+		if value is None:
+			return ("missing", None)
+
+		return ("ready", json.loads(value))

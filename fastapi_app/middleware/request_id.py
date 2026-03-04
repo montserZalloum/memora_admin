@@ -1,22 +1,34 @@
-"""Request ID middleware for correlation."""
+"""Request ID middleware for correlation (pure ASGI — no BaseHTTPMiddleware)."""
 
 import uuid
 
 import structlog
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
+from starlette.datastructures import MutableHeaders
 
 
-class RequestIDMiddleware(BaseHTTPMiddleware):
-	"""Middleware to add request ID for correlation."""
+class RequestIDMiddleware:
+	"""Middleware to add request ID for correlation.
 
-	async def dispatch(self, request: Request, call_next) -> Response:
-		"""Add request ID to context and response headers."""
+	Pure ASGI implementation: wraps the send callable to inject X-Request-ID
+	into the response start message. No extra task creation per request.
+	"""
+
+	def __init__(self, app):
+		self.app = app
+
+	async def __call__(self, scope, receive, send):
+		if scope["type"] != "http":
+			await self.app(scope, receive, send)
+			return
+
 		request_id = str(uuid.uuid4())[:8]
 		structlog.contextvars.clear_contextvars()
 		structlog.contextvars.bind_contextvars(request_id=request_id)
 
-		response = await call_next(request)
-		response.headers["X-Request-ID"] = request_id
-		return response
+		async def send_with_id(message):
+			if message["type"] == "http.response.start":
+				headers = MutableHeaders(scope=message)
+				headers.append("X-Request-ID", request_id)
+			await send(message)
+
+		await self.app(scope, receive, send_with_id)

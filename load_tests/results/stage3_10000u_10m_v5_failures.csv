@@ -1,0 +1,5 @@
+Method,Name,Error,Occurrences
+GET,/api/v1/practice/hierarchy,"CatchResponseError('503: {""detail"":{""code"":""PRACTICE_META_UNAVAILABLE"",""message"":""Practice metadata is temporarily unavailable""}}')",8
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",25
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,"CatchResponseError('403: {""detail"":{""code"":""NO_ACCESS"",""message"":""Content access required""}}')",15
+GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",11

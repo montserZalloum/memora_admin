@@ -14,6 +14,8 @@ from fastapi_app.services.frappe_client import FrappeClient
 
 logger = structlog.get_logger()
 
+_MISSING_HIERARCHY_SENTINEL = "__MISSING__"
+
 # Process-local cache for free content subjects list. Single global value (all users see same set).
 # TTL=60s. Tuple of (result_list, expires_at_monotonic).
 _free_content_subjects_cache: tuple[list[str], float] | None = None
@@ -51,6 +53,7 @@ class HierarchyService:
 
 	CACHE_TTL = 3600  # 1 hour
 	LOCAL_TTL = 7200  # 2 hours — pubsub invalidation handles content changes immediately
+	NEGATIVE_CACHE_TTL = 60  # 1 minute for repeated invalid subject probes
 
 	def __init__(
 		self,
@@ -92,6 +95,10 @@ class HierarchyService:
 		# Try Redis cache
 		cached = await self.redis.get(key)
 		if cached:
+			if cached == _MISSING_HIERARCHY_SENTINEL or cached == _MISSING_HIERARCHY_SENTINEL.encode(
+				"utf-8"
+			):
+				return None
 			hierarchy = SubjectHierarchy.model_validate_json(cached)
 			# Sweep expired entries then store in local cache
 			_sweep_expired_local_cache()
@@ -112,6 +119,10 @@ class HierarchyService:
 				# Double-check: another request may have filled while we waited
 				cached = await self.redis.get(key)
 				if cached:
+					if cached == _MISSING_HIERARCHY_SENTINEL or cached == _MISSING_HIERARCHY_SENTINEL.encode(
+						"utf-8"
+					):
+						return None
 					hierarchy = SubjectHierarchy.model_validate_json(cached)
 					_sweep_expired_local_cache()
 					_local_hierarchy_cache[subject_id] = (hierarchy, time.monotonic() + self.LOCAL_TTL)
@@ -125,6 +136,7 @@ class HierarchyService:
 			)
 
 			if not result:
+				await self.redis.set(key, _MISSING_HIERARCHY_SENTINEL, ex=self.NEGATIVE_CACHE_TTL)
 				return None
 
 			# Parse into model

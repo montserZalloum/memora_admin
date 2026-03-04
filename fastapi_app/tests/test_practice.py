@@ -263,7 +263,19 @@ class TestPracticeHierarchy:
 		resp = await client.get("/api/v1/practice/hierarchy?subject_id=NONEXISTENT")
 
 		assert resp.status_code == 404
-		assert resp.json()["detail"] == "SUBJECT_NOT_FOUND"
+		assert resp.json()["detail"]["code"] == "SUBJECT_NOT_FOUND"
+
+	async def test_hierarchy_503_when_meta_unavailable(self, authed_client, redis_client, mock_frappe):
+		"""Valid subjects with unavailable practice metadata should return 503."""
+		client, token, player_id, family_id = authed_client
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		mock_frappe.call.side_effect = RuntimeError("practice meta unavailable")
+
+		resp = await client.get(f"/api/v1/practice/hierarchy?subject_id={SUBJECT_ID}")
+
+		assert resp.status_code == 503
+		assert resp.json()["detail"]["code"] == "PRACTICE_META_UNAVAILABLE"
 
 	async def test_hierarchy_completed_filter_empty(self, authed_client, redis_client, mock_frappe):
 		"""filter=completed with no progress returns empty tracks."""

@@ -105,6 +105,7 @@ class StartSessionResponse(BaseModel):
 class EndSessionRequest(BaseModel):
 	"""Request body for POST /sessions/end."""
 
+	session_id: str
 	stages: list[StageResult]
 
 
@@ -118,13 +119,24 @@ class EndSessionResponse(BaseModel):
 	xp_awarded: int = 0
 	is_replay: bool = False
 	streak: int = 0
+	is_duplicate: bool = False
+	session_id: str | None = None
+	hearts_remaining: int = 0
+	new_total_xp: int = 0
 
 
-class CurrentSessionResponse(BaseModel):
-	"""Response for GET /sessions/current."""
+class ActiveSessionInfo(BaseModel):
+	"""Active session details returned when a lesson session exists."""
 
 	session_id: str
 	lesson_id: str
 	subject_id: str
 	device_id: str | None = None
 	started_at: str
+
+
+class CurrentSessionResponse(BaseModel):
+	"""Response for GET /sessions/current."""
+
+	active: bool
+	session: ActiveSessionInfo | None = None

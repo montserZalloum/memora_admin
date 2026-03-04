@@ -1,15 +1,13 @@
-"""Global per-IP rate limiting middleware."""
+"""Global per-IP rate limiting middleware (pure ASGI — no BaseHTTPMiddleware)."""
 
 import time
 
 import redis.asyncio as aioredis
 import structlog
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.datastructures import MutableHeaders
+from starlette.responses import JSONResponse
 
 from fastapi_app.core.redis_keys import global_ratelimit_key
-from fastapi_app.core.request_meta import get_client_ip
 from fastapi_app.services.global_rate_limit import GlobalRateLimiter
 
 logger = structlog.get_logger()
@@ -29,9 +27,9 @@ def _is_exempt(path: str) -> bool:
 	return False
 
 
-class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
+class GlobalRateLimitMiddleware:
 	"""
-	Middleware that enforces global per-IP rate limits.
+	Middleware that enforces global per-IP rate limits (pure ASGI).
 
 	Applied to all requests except exempt paths (health checks, webhooks).
 	Adds X-RateLimit-* headers to all non-exempt responses.
@@ -40,45 +38,58 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 	- fail_open=True (default): request passes through with warning log
 	- fail_open=False: returns 503 Service Unavailable with Retry-After header
 
-	Redis pool is retrieved from request.app.state.redis_pool (set during lifespan).
+	Redis pool is retrieved from scope["app"].state.redis_pool (set during lifespan).
 	"""
 
 	def __init__(self, app, limit: int, window: int, fail_open: bool = True):
-		super().__init__(app)
+		self.app = app
 		self.limit = limit
 		self.window = window
 		self.fail_open = fail_open
 		self._redis_client: aioredis.Redis | None = None
 		self._limiter: GlobalRateLimiter | None = None
 
-	def _get_limiter(self, request: Request) -> GlobalRateLimiter:
+	def _get_limiter(self, app_state) -> GlobalRateLimiter:
 		"""Lazily initialize and reuse the shared Redis-backed limiter."""
 		if self._limiter is None:
-			pool = request.app.state.redis_pool
-			self._redis_client = aioredis.Redis(connection_pool=pool)
+			self._redis_client = aioredis.Redis(connection_pool=app_state.redis_pool)
 			self._limiter = GlobalRateLimiter(self._redis_client)
 		return self._limiter
 
-	async def dispatch(self, request: Request, call_next) -> Response:
+	async def __call__(self, scope, receive, send):
 		"""Check rate limit before passing request through."""
-		path = request.url.path
+		if scope["type"] != "http":
+			await self.app(scope, receive, send)
+			return
+
+		path = scope["path"]
 
 		# Skip exempt paths entirely
 		if _is_exempt(path):
-			return await call_next(request)
+			await self.app(scope, receive, send)
+			return
 
-		# Extract client IP
-		client_ip = get_client_ip(request)
+		# Extract client IP directly from ASGI scope headers (no Request object)
+		client_ip = "unknown"
+		for name, value in scope.get("headers", []):
+			if name == b"x-forwarded-for":
+				client_ip = value.decode("latin-1").split(",")[0].strip()
+				break
+		if client_ip == "unknown":
+			client = scope.get("client")
+			if client:
+				client_ip = client[0]
 
 		# Check rate limit (fail-open: any error lets request through)
 		try:
-			limiter = self._get_limiter(request)
+			limiter = self._get_limiter(scope["app"].state)
 			key = global_ratelimit_key(client_ip)
 			allowed, count, ttl = await limiter.check(key, self.limit, self.window)
 		except Exception:
 			if self.fail_open:
 				logger.warning("rate_limit_redis_unavailable", path=path, ip=client_ip, fail_open=True)
-				return await call_next(request)
+				await self.app(scope, receive, send)
+				return
 			else:
 				logger.warning(
 					"rate_limit_redis_unavailable_closed", path=path, ip=client_ip, fail_open=False
@@ -92,7 +103,8 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 					},
 				)
 				response.headers["Retry-After"] = "5"
-				return response
+				await response(scope, receive, send)
+				return
 
 		if not allowed:
 			# 429 Too Many Requests
@@ -105,13 +117,22 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 			response.headers["X-RateLimit-Limit"] = str(self.limit)
 			response.headers["X-RateLimit-Remaining"] = "0"
 			response.headers["X-RateLimit-Reset"] = str(int(time.time()) + retry_after)
-			return response
+			await response(scope, receive, send)
+			return
 
-		# Request allowed — pass through and add headers to response
-		response = await call_next(request)
+		# Request allowed — pass through and inject rate-limit headers into response
 		remaining = max(0, self.limit - count)
 		reset_time = int(time.time()) + ttl if ttl > 0 else int(time.time()) + self.window
-		response.headers["X-RateLimit-Limit"] = str(self.limit)
-		response.headers["X-RateLimit-Remaining"] = str(remaining)
-		response.headers["X-RateLimit-Reset"] = str(reset_time)
-		return response
+		limit_str = str(self.limit)
+		remaining_str = str(remaining)
+		reset_str = str(reset_time)
+
+		async def send_with_headers(message):
+			if message["type"] == "http.response.start":
+				headers = MutableHeaders(scope=message)
+				headers.append("X-RateLimit-Limit", limit_str)
+				headers.append("X-RateLimit-Remaining", remaining_str)
+				headers.append("X-RateLimit-Reset", reset_str)
+			await send(message)
+
+		await self.app(scope, receive, send_with_headers)

@@ -22,9 +22,9 @@ from fastapi_app.api.deps import (
 	WalletServiceDep,
 	require_rate_limit,
 )
-from fastapi_app.core.constants import DIRTY_WALLETS_KEY
-from fastapi_app.core.redis_keys import WALLET_KEY_TTL, freeze_key, stats_key, wallet_key
+from fastapi_app.core.redis_keys import freeze_key, stats_key
 from fastapi_app.models.game_session import (
+	ActiveSessionInfo,
 	CurrentSessionResponse,
 	EndSessionRequest,
 	EndSessionResponse,
@@ -36,11 +36,26 @@ from fastapi_app.services.stats import (
 	compute_stats_from_hierarchy,
 	get_stats_recompute_semaphore,
 )
-from fastapi_app.services.wallet import calculate_xp_award
+from fastapi_app.services.wallet import get_amman_today, get_amman_yesterday
 
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+
+
+async def _get_cached_end_response(
+	game_session_service: GameSessionServiceDep,
+	user_id: str,
+	session_id: str,
+) -> EndSessionResponse | None:
+	"""Fetch and reuse a cached completion response for duplicate retries."""
+	state, payload = await game_session_service.get_end_response_state(user_id, session_id)
+	if state != "ready" or payload is None:
+		return None
+
+	payload = dict(payload)
+	payload["is_duplicate"] = True
+	return EndSessionResponse(**payload)
 
 
 @router.get("/current", response_model=CurrentSessionResponse)
@@ -54,7 +69,7 @@ async def get_current_session(
 	Per VERIFICATION gap closure:
 	- Enables session recovery after app crash
 	- Client can check if session exists before restarting lesson
-	- Returns 404 if no active session
+	- Returns active=false when no session exists
 
 	Args:
 		user: Current authenticated user
@@ -63,23 +78,21 @@ async def get_current_session(
 	Returns:
 		CurrentSessionResponse with session details
 
-	Raises:
-		404: No active session
 	"""
 	session = await game_session_service.get_active_session(user.sub)
 
 	if not session:
-		raise HTTPException(
-			status_code=status.HTTP_404_NOT_FOUND,
-			detail={"code": "NO_ACTIVE_SESSION", "message": "No active session"},
-		)
+		return CurrentSessionResponse(active=False, session=None)
 
 	return CurrentSessionResponse(
-		session_id=session.session_id,
-		lesson_id=session.lesson_id,
-		subject_id=session.subject_id,
-		device_id=session.device_id,
-		started_at=session.started_at,
+		active=True,
+		session=ActiveSessionInfo(
+			session_id=session.session_id,
+			lesson_id=session.lesson_id,
+			subject_id=session.subject_id,
+			device_id=session.device_id,
+			started_at=session.started_at,
+		),
 	)
 
 
@@ -201,30 +214,28 @@ async def end_session(
 ) -> EndSessionResponse:
 	"""End lesson session and trigger completion flow.
 
-	Optimized hot path (~6-7 Redis round-trips, down from 17+N):
+	Optimized hot path (~5-6 Redis round-trips, down from 17+N):
 	RT1: HGETALL session
 	RT2: GET hierarchy (cache hit)
-	RT3: Lua complete_session (DEL + SETBIT + SADD + batch RPUSH)
-	RT4: GET settings (cache hit)
-	RT5: Lua streak update
-	RT6: Pipeline (XP + dirty + stats)
-	RT7: Leaderboard updates
+	RT3: GET settings + ensure wallet hydrated
+	RT4: Lua complete_session (DEL + SETBIT + interactions + streak + XP + cached response)
+	RT5: Stats update (best effort)
+	RT6: Leaderboard updates (best effort)
 
 	Args:
 		request: EndSessionRequest with stage results
 		user: Current authenticated user
 		game_session_service: Session management service
 		hierarchy_service: For lesson info
-		wallet_service: For XP and streak
+		wallet_service: For wallet hydration
 		leaderboard_service: For leaderboard updates
 		settings_service: For gamification settings
-		redis_client: For pipeline operations
+		redis_client: For stats pipeline operations
 
 	Returns:
 		EndSessionResponse with xp_awarded, is_replay, streak
 
 	Raises:
-		403: No active session
 		404: Subject or lesson not found
 	"""
 	# Check if player is frozen (plan change in progress)
@@ -240,9 +251,24 @@ async def end_session(
 	# RT1: Get active session
 	session = await game_session_service.get_active_session(user.sub)
 	if not session:
+		cached_response = await _get_cached_end_response(game_session_service, user.sub, request.session_id)
+		if cached_response:
+			return cached_response
 		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
+			status_code=status.HTTP_409_CONFLICT,
 			detail={"code": "NO_ACTIVE_SESSION", "message": "No active lesson session"},
+		)
+	if session.session_id != request.session_id:
+		cached_response = await _get_cached_end_response(game_session_service, user.sub, request.session_id)
+		if cached_response:
+			return cached_response
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={
+				"code": "SESSION_MISMATCH",
+				"message": "Requested session is no longer active",
+				"active_session_id": session.session_id,
+			},
 		)
 
 	# RT2: Get hierarchy (cache hit)
@@ -294,132 +320,153 @@ async def end_session(
 			}
 			interaction_jsons.append(json.dumps(interaction))
 
-	# RT3: Lua script -- atomic session delete + SETBIT + SADD + batch RPUSH
-	lua_success, is_replay, _ = await game_session_service.complete_session(
-		user_id=user.sub,
-		bit_index=lesson_info.bit_index,
-		subject_id=session.subject_id,
-		version=hierarchy.version,
-		interaction_jsons=interaction_jsons,
-	)
-	if not lua_success:
-		raise HTTPException(
-			status_code=status.HTTP_403_FORBIDDEN,
-			detail={"code": "NO_ACTIVE_SESSION", "message": "Session already ended"},
-		)
-
-	# RT4: Get settings (cache hit)
+	# RT3: Get settings + hydrate wallet before the atomic completion.
 	settings = await settings_service.get_gamification_settings()
+	await wallet_service.ensure_hydrated(user.sub)
 
-	# RT5: Streak update (Lua script)
-	streak, streak_updated = await wallet_service.update_streak(
-		player_id=user.sub,
-		is_replay=is_replay,
-	)
-
-	# Calculate hearts remaining
+	# Calculate hearts remaining before completion so the script can compute XP atomically.
 	total_fails = sum(stage.fail_count for stage in request.stages)
 	hearts_remaining = max(0, lesson_info.max_hearts - total_fails)
 
-	# Calculate XP with hearts bonus
-	xp_awarded = calculate_xp_award(
+	today = get_amman_today()
+	yesterday = get_amman_yesterday()
+
+	# RT4: Atomic session completion + wallet update + cached response.
+	completion_status, completion_payload, active_session_id = await game_session_service.complete_session(
+		user_id=user.sub,
+		session_id=request.session_id,
+		bit_index=lesson_info.bit_index,
+		subject_id=session.subject_id,
+		version=hierarchy.version,
 		base_xp=settings.base_lesson_xp,
 		lesson_xp=lesson_info.xp,
-		current_streak=streak,
-		max_multiplier_percent=settings.max_streak_multiplier_percent,
-		is_replay=is_replay,
 		replay_xp=settings.replay_xp,
+		max_multiplier_percent=settings.max_streak_multiplier_percent,
 		hearts_remaining=hearts_remaining,
 		xp_per_heart=settings.xp_per_heart,
+		today=today,
+		yesterday=yesterday,
+		interaction_jsons=interaction_jsons,
 	)
+	if completion_status == "duplicate":
+		if completion_payload:
+			duplicate_payload = dict(json.loads(completion_payload))
+			duplicate_payload["is_duplicate"] = True
+			return EndSessionResponse(**duplicate_payload)
+		cached_response = await _get_cached_end_response(game_session_service, user.sub, request.session_id)
+		if cached_response:
+			return cached_response
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "NO_ACTIVE_SESSION", "message": "Session is no longer active"},
+		)
+	if completion_status == "mismatch":
+		cached_response = await _get_cached_end_response(game_session_service, user.sub, request.session_id)
+		if cached_response:
+			return cached_response
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={
+				"code": "SESSION_MISMATCH",
+				"message": "Requested session is no longer active",
+				"active_session_id": active_session_id,
+			},
+		)
+	if completion_status != "completed":
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "NO_ACTIVE_SESSION", "message": "Session is no longer active"},
+		)
+	if not completion_payload:
+		raise HTTPException(
+			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+			detail={"code": "SESSION_END_RESPONSE_MISSING", "message": "Session completion response missing"},
+		)
 
-	# Ensure wallet is hydrated from MariaDB before pipeline HINCRBY.
-	# Without this, a Redis flush causes HINCRBY to start from 0, resetting XP.
-	await wallet_service.ensure_hydrated(user.sub)
+	response = EndSessionResponse(**json.loads(completion_payload))
 
-	# RT6: Pipeline for XP + dirty + stats
-	pipe = redis_client.pipeline()
-
-	# XP award
-	wk = wallet_key(user.sub)
-	pipe.hincrby(wk, "xp", xp_awarded)
-	pipe.expire(wk, WALLET_KEY_TTL)
-
-	# Dirty wallet
-	pipe.sadd(DIRTY_WALLETS_KEY, user.sub)
-
-	# Stats (non-replay only)
+	# RT5: Stats (best effort, derived from persisted progress state)
 	stats_updated = False
 	stats_cache_needs_evict = False
-	if not is_replay:
-		lesson_path = hierarchy.find_lesson_path(session.lesson_id)
-		if lesson_path:
-			sk = stats_key(user.sub, session.subject_id, hierarchy.version)
+	try:
+		if not response.is_replay:
+			lesson_path = hierarchy.find_lesson_path(session.lesson_id)
+			if lesson_path:
+				sk = stats_key(user.sub, session.subject_id, hierarchy.version)
 
-			# Check if stats hash exists before deciding how to update.
-			# Two paths:
-			# 1) Stats hash MISSING (cold start): Compute from bitmap which already
-			#    includes the just-completed lesson (SETBIT happened in Lua script above).
-			#    Do NOT also HINCRBY -- that would double-count the completion.
-			# 2) Stats hash EXISTS: Increment completed counters via HINCRBY.
-			stats_exists = await redis_client.exists(sk)
-			if not stats_exists:
-				# Cold start: bitmap already has the new bit set, so
-				# compute_stats_from_hierarchy will include this lesson.
-				# No HINCRBY needed -- stats are already accurate.
-				# Wrap in semaphore to throttle concurrent recomputes.
-				sem = get_stats_recompute_semaphore()
-				acquired = False
-				try:
-					await asyncio.wait_for(sem.acquire(), timeout=StatsService.RECOMPUTE_TIMEOUT)
-					acquired = True
-				except asyncio.TimeoutError:
-					logger.warning(
-						"stats_recompute_semaphore_timeout",
-						user_id=user.sub,
-						subject_id=session.subject_id,
-						path="end_session_cold_start",
-					)
+				# Check if stats hash exists before deciding how to update.
+				# Two paths:
+				# 1) Stats hash MISSING (cold start): Compute from bitmap which already
+				#    includes the just-completed lesson (SETBIT happened in Lua script above).
+				#    Do NOT also HINCRBY -- that would double-count the completion.
+				# 2) Stats hash EXISTS: Increment completed counters via HINCRBY.
+				stats_exists = await redis_client.exists(sk)
+				if not stats_exists:
+					sem = get_stats_recompute_semaphore()
+					acquired = False
+					try:
+						await asyncio.wait_for(sem.acquire(), timeout=StatsService.RECOMPUTE_TIMEOUT)
+						acquired = True
+					except asyncio.TimeoutError:
+						logger.warning(
+							"stats_recompute_semaphore_timeout",
+							user_id=user.sub,
+							subject_id=session.subject_id,
+							path="end_session_cold_start",
+						)
 
-				try:
-					completed_bits = await progress_service.get_completed_bits(
-						user_id=user.sub,
-						subject_id=session.subject_id,
-						bit_range=hierarchy.bit_range,
-						version=hierarchy.version,
-					)
-					stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
-					await stats_service.set_stats(
-						user_id=user.sub,
-						subject_id=session.subject_id,
-						version=hierarchy.version,
-						stats=stats,
-					)
-				finally:
-					if acquired:
-						sem.release()
-			else:
-				# Stats hash exists: increment completed counters
-				pipe.hincrby(sk, "completed", 1)
-				pipe.hincrby(sk, f"{lesson_path.track_id}:completed", 1)
-				pipe.hincrby(sk, f"{lesson_path.unit_id}:completed", 1)
-				pipe.hincrby(sk, f"{lesson_path.topic_id}:completed", 1)
-				pipe.expire(sk, StatsService.CACHE_TTL + random.randint(0, StatsService.JITTER_RANGE))
-				stats_cache_needs_evict = True
-			stats_updated = True
-
-	pipe_results = await pipe.execute()
-	new_total_xp = pipe_results[0]  # HINCRBY returns new value
+					try:
+						completed_bits = await progress_service.get_completed_bits(
+							user_id=user.sub,
+							subject_id=session.subject_id,
+							bit_range=hierarchy.bit_range,
+							version=hierarchy.version,
+						)
+						stats = compute_stats_from_hierarchy(hierarchy, completed_bits)
+						await stats_service.set_stats(
+							user_id=user.sub,
+							subject_id=session.subject_id,
+							version=hierarchy.version,
+							stats=stats,
+						)
+					finally:
+						if acquired:
+							sem.release()
+				else:
+					pipe = redis_client.pipeline()
+					pipe.hincrby(sk, "completed", 1)
+					pipe.hincrby(sk, f"{lesson_path.track_id}:completed", 1)
+					pipe.hincrby(sk, f"{lesson_path.unit_id}:completed", 1)
+					pipe.hincrby(sk, f"{lesson_path.topic_id}:completed", 1)
+					pipe.expire(sk, StatsService.CACHE_TTL + random.randint(0, StatsService.JITTER_RANGE))
+					await pipe.execute()
+					stats_cache_needs_evict = True
+				stats_updated = True
+	except Exception:
+		logger.exception(
+			"stats_update_failed_after_session_end",
+			user_id=user.sub,
+			session_id=session.session_id,
+			subject_id=session.subject_id,
+		)
 	if stats_cache_needs_evict:
 		stats_service.evict_local_cache(user.sub, session.subject_id, hierarchy.version)
 
-	# RT7: Leaderboard updates
-	await leaderboard_service.update_leaderboards(
-		player_id=user.sub,
-		xp_amount=xp_awarded,
-		subject_id=session.subject_id,
-		plan_id=user.plan,
-	)
+	# RT6: Leaderboard updates
+	try:
+		await leaderboard_service.update_leaderboards(
+			player_id=user.sub,
+			xp_amount=response.xp_awarded,
+			subject_id=session.subject_id,
+			plan_id=user.plan,
+		)
+	except Exception:
+		logger.exception(
+			"leaderboard_update_failed_after_session_end",
+			user_id=user.sub,
+			session_id=session.session_id,
+			subject_id=session.subject_id,
+		)
 
 	logger.info(
 		"session_ended",
@@ -427,19 +474,13 @@ async def end_session(
 		session_id=session.session_id,
 		lesson_id=session.lesson_id,
 		subject_id=session.subject_id,
-		is_replay=is_replay,
-		xp_awarded=xp_awarded,
-		hearts_remaining=hearts_remaining,
-		new_total_xp=new_total_xp,
-		streak=streak,
-		streak_updated=streak_updated,
+		is_replay=response.is_replay,
+		xp_awarded=response.xp_awarded,
+		hearts_remaining=response.hearts_remaining,
+		new_total_xp=response.new_total_xp,
+		streak=response.streak,
 		stages_count=len(request.stages),
 		stats_updated=stats_updated,
 	)
 
-	return EndSessionResponse(
-		success=True,
-		xp_awarded=xp_awarded,
-		is_replay=is_replay,
-		streak=streak,
-	)
+	return response

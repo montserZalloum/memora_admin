@@ -211,6 +211,11 @@ class LessonPlayer(AuthMixin, HttpUser):
 		if not resp:
 			return
 
+		try:
+			session_id = resp.json().get("session_id")
+		except Exception:
+			session_id = None
+
 		api_get(self, "/api/v1/sessions/current")
 
 		time.sleep(random.uniform(3, 10))
@@ -245,7 +250,10 @@ class LessonPlayer(AuthMixin, HttpUser):
 					}
 				)
 
-		api_post(self, "/api/v1/sessions/end", json={"stages": stages})
+		if not session_id:
+			return  # sessions/start succeeded but returned no session_id — skip end
+
+		api_post(self, "/api/v1/sessions/end", json={"session_id": session_id, "stages": stages})
 		api_get(self, "/api/v1/wallet")
 
 

@@ -168,7 +168,7 @@ async def seed():
 			hierarchy = build_hierarchy(subject_id)
 			hierarchy_json = json.dumps(hierarchy)
 			key = f"memora:hierarchy:{subject_id}"
-			await str_redis.set(key, hierarchy_json, ex=7200)  # 2h TTL
+			await str_redis.set(key, hierarchy_json, ex=43200)  # 12h TTL (outlasts any test stage)
 			size_kb = len(hierarchy_json) / 1024
 			print(f"  {key} — {size_kb:.1f} KB ({TOTAL_LESSONS} lessons)")
 		print(f"  Done in {time.perf_counter() - t0:.2f}s\n")

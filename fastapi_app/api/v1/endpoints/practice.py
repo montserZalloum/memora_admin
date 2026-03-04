@@ -19,6 +19,8 @@ from fastapi_app.services.practice import (
 	NoItemsError,
 	OffBatchItemError,
 	PracticeAccessDenied,
+	PracticeHierarchyMetaUnavailableError,
+	PracticeSubjectNotFoundError,
 	PreviousBatchNotSubmittedError,
 )
 
@@ -37,20 +39,26 @@ async def get_practice_hierarchy(
 	filter: Literal["all", "completed"] = Query("all", description="Filter mode"),
 ) -> PracticeHierarchyResponse:
 	"""Browse content hierarchy with item counts and access flags for practice."""
-	result = await practice_service.get_practice_hierarchy(
-		player_id=user.sub,
-		subject_id=subject_id,
-		plan_id=getattr(user, "plan", None),
-		filter_mode=filter,
-	)
-
-	if result is None:
+	try:
+		return await practice_service.get_practice_hierarchy(
+			player_id=user.sub,
+			subject_id=subject_id,
+			plan_id=getattr(user, "plan", None),
+			filter_mode=filter,
+		)
+	except PracticeSubjectNotFoundError:
 		raise HTTPException(
 			status_code=status.HTTP_404_NOT_FOUND,
-			detail="SUBJECT_NOT_FOUND",
+			detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
 		)
-
-	return result
+	except PracticeHierarchyMetaUnavailableError:
+		raise HTTPException(
+			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+			detail={
+				"code": "PRACTICE_META_UNAVAILABLE",
+				"message": "Practice metadata is temporarily unavailable",
+			},
+		)
 
 
 @router.post(

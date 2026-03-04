@@ -233,6 +233,17 @@ def game_session_key(user_id: str) -> str:
 	return f"memora:gamesession:{user_id}"
 
 
+def game_session_completion_key(user_id: str, session_id: str) -> str:
+	"""Recently completed lesson-session response cache.
+
+	Type: STRING (JSON-encoded EndSessionResponse or "__PENDING__")
+	Producers: GameSessionService.complete_session(), cache_end_response()
+	Consumers: GameSessionService.get_end_response_state()
+	TTL: Short-lived (used only to absorb duplicate end-session retries)
+	"""
+	return f"memora:gamesession:complete:{user_id}:{session_id}"
+
+
 def devices_key(user_id: str) -> str:
 	"""Player's registered devices hash.
 

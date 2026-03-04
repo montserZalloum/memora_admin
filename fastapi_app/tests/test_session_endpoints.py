@@ -1,6 +1,6 @@
 """Tests for game session endpoints."""
 
-import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 import redis.asyncio as redis
@@ -15,9 +15,9 @@ from fastapi_app.core.redis_keys import (
 from fastapi_app.core.redis_keys import (
 	progress_key as _progress_key_fn,
 )
+from fastapi_app.services.stats import StatsService
 from fastapi_app.tests.conftest import (
 	cleanup_player_keys,
-	make_hierarchy_json,
 	seed_access_grants,
 	seed_game_session,
 	seed_hierarchy,
@@ -27,6 +27,21 @@ from fastapi_app.tests.conftest import (
 
 # Mark all tests as async
 pytestmark = pytest.mark.asyncio
+
+
+def _end_request_body(session_id: str) -> dict:
+	"""Build a minimal valid end-session payload."""
+	return {
+		"session_id": session_id,
+		"stages": [
+			{
+				"stage_id": "STAGE-001",
+				"time_spent": 30,
+				"fail_count": 0,
+				"completed_at": "2026-02-17T00:00:00Z",
+			}
+		],
+	}
 
 
 class TestGetCurrentSession:
@@ -55,9 +70,10 @@ class TestGetCurrentSession:
 
 		assert response.status_code == 200
 		data = response.json()
-		assert data["session_id"]
-		assert data["lesson_id"] == lesson_id
-		assert data["subject_id"] == subject_id
+		assert data["active"] is True
+		assert data["session"]["session_id"]
+		assert data["session"]["lesson_id"] == lesson_id
+		assert data["session"]["subject_id"] == subject_id
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
@@ -68,17 +84,18 @@ class TestGetCurrentSession:
 		redis_client: redis.Redis,
 	) -> None:
 		"""
-		GET /api/v1/sessions/current returns 404 when no active session.
+		GET /api/v1/sessions/current returns 200 with active=false when no active session.
 
 		No game session seeded
 		→ GET /api/v1/sessions/current
-		→ 404 NO_ACTIVE_SESSION
+		→ 200 active=false
 		"""
 		client, token, player_id, family_id = authed_client
 
 		response = await client.get("/api/v1/sessions/current")
 
-		assert response.status_code == 404
+		assert response.status_code == 200
+		assert response.json() == {"active": False, "session": None}
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
@@ -310,32 +327,27 @@ class TestEndSession:
 
 		subject_id = "SUB-TEST-006"
 		lesson_id = "LESSON-TEST-001"
+		session_id = "SESSION-TEST-END-001"
 
 		# Seed full state
 		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
-		await seed_game_session(redis_client, player_id, lesson_id, subject_id)
+		await seed_game_session(redis_client, player_id, lesson_id, subject_id, session_id=session_id)
 		await seed_settings(redis_client)
 		await seed_wallet(redis_client, player_id, xp=0, streak=0)
 
 		# End session with stages
 		response = await client.post(
 			"/api/v1/sessions/end",
-			json={
-				"stages": [
-					{
-						"stage_id": "STAGE-001",
-						"time_spent": 30,
-						"fail_count": 0,
-						"completed_at": "2026-02-17T00:00:00Z",
-					}
-				]
-			},
+			json=_end_request_body(session_id),
 		)
 
 		assert response.status_code == 200
 		data = response.json()
 		assert data["success"] is True
 		assert data["xp_awarded"] > 0
+		assert data["session_id"] == session_id
+		assert data["is_duplicate"] is False
+		assert data["new_total_xp"] >= data["xp_awarded"]
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
@@ -348,32 +360,56 @@ class TestEndSession:
 		redis_client: redis.Redis,
 	) -> None:
 		"""
-		Ending session without active session returns 403.
+		Ending session without active session returns 409.
 
 		No game session seeded
 		→ POST /api/v1/sessions/end
-		→ 403 NO_ACTIVE_SESSION
+		→ 409 NO_ACTIVE_SESSION
 		"""
 		client, token, player_id, family_id = authed_client
+		session_id = "SESSION-TEST-MISSING"
 
 		response = await client.post(
 			"/api/v1/sessions/end",
-			json={
-				"stages": [
-					{
-						"stage_id": "STAGE-001",
-						"time_spent": 30,
-						"fail_count": 0,
-						"completed_at": "2026-02-17T00:00:00Z",
-					}
-				]
-			},
+			json=_end_request_body(session_id),
 		)
 
-		assert response.status_code == 403
+		assert response.status_code == 409
+		assert response.json()["detail"]["code"] == "NO_ACTIVE_SESSION"
 
 		# Cleanup
 		await cleanup_player_keys(redis_client, player_id)
+
+	async def test_end_session_mismatch(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""Ending with a stale session_id returns 409 SESSION_MISMATCH."""
+		client, token, player_id, family_id = authed_client
+
+		subject_id = "SUB-TEST-006-MISMATCH"
+		lesson_id = "LESSON-TEST-001"
+		active_session_id = "SESSION-ACTIVE-001"
+
+		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
+		await seed_game_session(
+			redis_client,
+			player_id,
+			lesson_id,
+			subject_id,
+			session_id=active_session_id,
+		)
+
+		response = await client.post("/api/v1/sessions/end", json=_end_request_body("SESSION-STALE-001"))
+
+		assert response.status_code == 409
+		detail = response.json()["detail"]
+		assert detail["code"] == "SESSION_MISMATCH"
+		assert detail["active_session_id"] == active_session_id
+
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
 
 	async def test_end_replay_detection(
 		self,
@@ -391,10 +427,11 @@ class TestEndSession:
 
 		subject_id = "SUB-TEST-007"
 		lesson_id = "LESSON-TEST-000"  # bit_index=0 by default
+		session_id = "SESSION-TEST-END-002"
 
 		# Seed full state
 		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
-		await seed_game_session(redis_client, player_id, lesson_id, subject_id)
+		await seed_game_session(redis_client, player_id, lesson_id, subject_id, session_id=session_id)
 		await seed_settings(redis_client)
 		await seed_wallet(redis_client, player_id, xp=0, streak=0)
 
@@ -405,16 +442,7 @@ class TestEndSession:
 		# End session (should detect as replay)
 		response = await client.post(
 			"/api/v1/sessions/end",
-			json={
-				"stages": [
-					{
-						"stage_id": "STAGE-001",
-						"time_spent": 30,
-						"fail_count": 0,
-						"completed_at": "2026-02-17T00:00:00Z",
-					}
-				]
-			},
+			json=_end_request_body(session_id),
 		)
 
 		assert response.status_code == 200
@@ -444,26 +472,18 @@ class TestEndSession:
 
 		subject_id = "SUB-TEST-008"
 		lesson_id = "LESSON-TEST-001"
+		session_id = "SESSION-TEST-END-003"
 
 		# Seed full state
 		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
-		await seed_game_session(redis_client, player_id, lesson_id, subject_id)
+		await seed_game_session(redis_client, player_id, lesson_id, subject_id, session_id=session_id)
 		await seed_settings(redis_client)
 		await seed_wallet(redis_client, player_id, xp=0, streak=0)
 
 		# End session
 		response = await client.post(
 			"/api/v1/sessions/end",
-			json={
-				"stages": [
-					{
-						"stage_id": "STAGE-001",
-						"time_spent": 30,
-						"fail_count": 0,
-						"completed_at": "2026-02-17T00:00:00Z",
-					}
-				]
-			},
+			json=_end_request_body(session_id),
 		)
 
 		assert response.status_code == 200
@@ -491,26 +511,18 @@ class TestEndSession:
 
 		subject_id = "SUB-TEST-009"
 		lesson_id = "LESSON-TEST-001"
+		session_id = "SESSION-TEST-END-004"
 
 		# Seed full state
 		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
-		await seed_game_session(redis_client, player_id, lesson_id, subject_id)
+		await seed_game_session(redis_client, player_id, lesson_id, subject_id, session_id=session_id)
 		await seed_settings(redis_client)
 		await seed_wallet(redis_client, player_id, xp=0, streak=0)
 
 		# End session
 		response = await client.post(
 			"/api/v1/sessions/end",
-			json={
-				"stages": [
-					{
-						"stage_id": "STAGE-001",
-						"time_spent": 30,
-						"fail_count": 0,
-						"completed_at": "2026-02-17T00:00:00Z",
-					}
-				]
-			},
+			json=_end_request_body(session_id),
 		)
 
 		assert response.status_code == 200
@@ -537,26 +549,18 @@ class TestEndSession:
 
 		subject_id = "SUB-TEST-010"
 		lesson_id = "LESSON-TEST-001"
+		session_id = "SESSION-TEST-END-005"
 
 		# Seed full state
 		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
-		await seed_game_session(redis_client, player_id, lesson_id, subject_id)
+		await seed_game_session(redis_client, player_id, lesson_id, subject_id, session_id=session_id)
 		await seed_settings(redis_client)
 		await seed_wallet(redis_client, player_id, xp=0, streak=0)
 
 		# End session
 		response = await client.post(
 			"/api/v1/sessions/end",
-			json={
-				"stages": [
-					{
-						"stage_id": "STAGE-001",
-						"time_spent": 30,
-						"fail_count": 0,
-						"completed_at": "2026-02-17T00:00:00Z",
-					}
-				]
-			},
+			json=_end_request_body(session_id),
 		)
 
 		assert response.status_code == 200
@@ -586,26 +590,18 @@ class TestEndSession:
 
 		subject_id = "SUB-TEST-011"
 		lesson_id = "LESSON-TEST-001"
+		session_id = "SESSION-TEST-END-006"
 
 		# Seed full state
 		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
-		await seed_game_session(redis_client, player_id, lesson_id, subject_id)
+		await seed_game_session(redis_client, player_id, lesson_id, subject_id, session_id=session_id)
 		await seed_settings(redis_client)
 		await seed_wallet(redis_client, player_id, xp=0, streak=0)
 
 		# End session
 		response = await client.post(
 			"/api/v1/sessions/end",
-			json={
-				"stages": [
-					{
-						"stage_id": "STAGE-001",
-						"time_spent": 30,
-						"fail_count": 0,
-						"completed_at": "2026-02-17T00:00:00Z",
-					}
-				]
-			},
+			json=_end_request_body(session_id),
 		)
 
 		assert response.status_code == 200
@@ -639,3 +635,61 @@ class TestEndSession:
 		await redis_client.delete(dirty_wallets_key())
 		for key in all_keys:
 			await redis_client.delete(key)
+
+	async def test_end_duplicate_returns_cached_response(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""Retrying the same session completion returns the cached response."""
+		client, token, player_id, family_id = authed_client
+
+		subject_id = "SUB-TEST-012"
+		lesson_id = "LESSON-TEST-001"
+		session_id = "SESSION-TEST-END-007"
+
+		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
+		await seed_game_session(redis_client, player_id, lesson_id, subject_id, session_id=session_id)
+		await seed_settings(redis_client)
+		await seed_wallet(redis_client, player_id, xp=0, streak=0)
+
+		first = await client.post("/api/v1/sessions/end", json=_end_request_body(session_id))
+		second = await client.post("/api/v1/sessions/end", json=_end_request_body(session_id))
+
+		assert first.status_code == 200
+		assert second.status_code == 200
+		assert second.json()["is_duplicate"] is True
+		assert second.json()["session_id"] == session_id
+		assert second.json()["xp_awarded"] == first.json()["xp_awarded"]
+
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
+		await redis_client.delete(gamification_settings_key())
+
+	async def test_end_succeeds_when_stats_update_fails(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+	) -> None:
+		"""The user still gets success if stats recompute fails after completion."""
+		client, token, player_id, family_id = authed_client
+
+		subject_id = "SUB-TEST-013"
+		lesson_id = "LESSON-TEST-001"
+		session_id = "SESSION-TEST-END-008"
+
+		await seed_hierarchy(redis_client, subject_id, lesson_count=10)
+		await seed_game_session(redis_client, player_id, lesson_id, subject_id, session_id=session_id)
+		await seed_settings(redis_client)
+		await seed_wallet(redis_client, player_id, xp=0, streak=0)
+
+		with patch.object(StatsService, "set_stats", new_callable=AsyncMock) as mock_set_stats:
+			mock_set_stats.side_effect = RuntimeError("stats unavailable")
+			response = await client.post("/api/v1/sessions/end", json=_end_request_body(session_id))
+
+		assert response.status_code == 200
+		assert response.json()["success"] is True
+
+		await cleanup_player_keys(redis_client, player_id)
+		await redis_client.delete(hierarchy_key(subject_id))
+		await redis_client.delete(gamification_settings_key())

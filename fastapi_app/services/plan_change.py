@@ -2,6 +2,11 @@
 
 import time
 
+# Process-local cache for available plans (keyed by current_plan_id).
+# Plans change rarely; 5-minute TTL avoids repeated Frappe calls at scale.
+_local_available_plans_cache: dict[str, tuple[list, float]] = {}
+_LOCAL_AVAILABLE_PLANS_TTL = 300  # 5 minutes
+
 import redis.asyncio as redis
 import structlog
 
@@ -293,18 +298,28 @@ class PlanChangeService:
 			logger.warning("publish_invalidation_error", error=str(e), player_id=player_id)
 
 	async def get_available_plans(self, current_plan_id: str) -> list[dict]:
-		"""Fetch available plans from Frappe API, excluding current plan.
+		"""Fetch available plans from local cache or Frappe API, excluding current plan.
 
 		Returns list of plan dicts with name, plan_name, grade, grade_name,
 		major, major_name, season, season_title.
 		"""
+		# Local in-process cache (plans change rarely)
+		entry = _local_available_plans_cache.get(current_plan_id)
+		if entry is not None:
+			plans, exp = entry
+			if time.monotonic() < exp:
+				return plans
+
 		result = await self.frappe.call(
 			"memora_admin.api.plan_change.get_available_plans",
 			params={"current_plan_id": current_plan_id},
 		)
 		if not result or not isinstance(result, dict):
+			_local_available_plans_cache[current_plan_id] = ([], time.monotonic() + _LOCAL_AVAILABLE_PLANS_TTL)
 			return []
-		return result.get("plans", [])
+		plans = result.get("plans", [])
+		_local_available_plans_cache[current_plan_id] = (plans, time.monotonic() + _LOCAL_AVAILABLE_PLANS_TTL)
+		return plans
 
 	async def _release_freeze(self, player_id: str) -> None:
 		"""Release per-player freeze lock."""
