@@ -292,15 +292,14 @@ async def get_progress_summary(
 	- Returns completion percentages only (not raw bitmaps)
 	- Lightweight endpoint for dashboard/overview
 	"""
-	# Get explicit grants for player
-	grants = await access_service.get_player_grants(user.sub)
+	# Fetch all 3 sources in parallel (on cache hit = 0 RTTs, on miss = 1 parallel RTT)
+	grants, plan_subjects, subjects_with_free_list = await asyncio.gather(
+		access_service.get_player_grants(user.sub),
+		access_service.get_plan_free_subjects(user.plan),
+		hierarchy_service.get_subjects_with_free_content(),
+	)
 	granted_subjects = {g.replace("SUB-", "") for g in grants if g.startswith("SUB-")}
-
-	# Get subjects from player's plan (those with is_premium=0)
-	plan_subjects = set(await access_service.get_plan_free_subjects(user.plan))
-
-	# Get subjects with free content (units/topics with is_free=True)
-	subjects_with_free = set(await hierarchy_service.get_subjects_with_free_content())
+	subjects_with_free = set(subjects_with_free_list)
 
 	# Combine all accessible subjects (deduplicated via set union)
 	all_accessible = granted_subjects | plan_subjects | subjects_with_free
@@ -393,9 +392,17 @@ async def get_subject_tracks(
 			detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
 		)
 
-	# Check access (same logic as existing endpoint)
+	# Parallelize access check + partial stats read (independent after hierarchy)
 	content_key = f"SUB-{subject}"
-	has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+	fields = ["_content_hash"]
+	for t in hierarchy.tracks:
+		fields.append(f"{t.track_id}:completed")
+		fields.append(f"{t.track_id}:total")
+
+	has_access, partial_stats = await asyncio.gather(
+		access_service.check_access_with_plan(user.sub, content_key, user.plan),
+		stats_service.get_partial_stats(user.sub, subject, hierarchy.version, fields),
+	)
 	if not has_access:
 		if not hierarchy.has_any_free_content():
 			raise HTTPException(
@@ -403,16 +410,6 @@ async def get_subject_tracks(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Stats-first partial read: only track-level fields via HMGET
-	fields = ["_content_hash"]
-	for t in hierarchy.tracks:
-		fields.append(f"{t.track_id}:completed")
-		fields.append(f"{t.track_id}:total")
-
-	partial_stats = await stats_service.get_partial_stats(
-		user.sub, subject, hierarchy.version, fields
-	)
-	# For partial reads, _content_hash match alone validates (no "total" key in partial)
 	use_stats_path = (
 		partial_stats is not None and partial_stats.get("_content_hash") == hierarchy.content_hash
 	)
@@ -502,17 +499,8 @@ async def get_track_detail(
 			detail={"code": "TRACK_NOT_FOUND", "message": "Track not found"},
 		)
 
-	# Check access
+	# Parallelize access check + partial stats read (independent after hierarchy)
 	content_key = f"SUB-{subject}"
-	has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
-	if not has_access:
-		if not hierarchy.has_any_free_content():
-			raise HTTPException(
-				status_code=status.HTTP_403_FORBIDDEN,
-				detail={"code": "NO_ACCESS", "message": "Content access required"},
-			)
-
-	# Stats-first partial read: track fields + prev track (for unlock) + all units in track
 	fields = ["_content_hash", f"{track_id}:completed", f"{track_id}:total"]
 	if track_idx > 0 and hierarchy.is_linear:
 		prev_track = hierarchy.tracks[track_idx - 1]
@@ -521,10 +509,17 @@ async def get_track_detail(
 		fields.append(f"{u.unit_id}:completed")
 		fields.append(f"{u.unit_id}:total")
 
-	partial_stats = await stats_service.get_partial_stats(
-		user.sub, subject, hierarchy.version, fields
+	has_access, partial_stats = await asyncio.gather(
+		access_service.check_access_with_plan(user.sub, content_key, user.plan),
+		stats_service.get_partial_stats(user.sub, subject, hierarchy.version, fields),
 	)
-	# For partial reads, _content_hash match alone validates (no "total" key in partial)
+	if not has_access:
+		if not hierarchy.has_any_free_content():
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail={"code": "NO_ACCESS", "message": "Content access required"},
+			)
+
 	use_stats_path = (
 		partial_stats is not None and partial_stats.get("_content_hash") == hierarchy.content_hash
 	)
@@ -637,9 +632,23 @@ async def get_unit_detail(
 			detail={"code": "UNIT_NOT_FOUND", "message": "Unit not found"},
 		)
 
-	# Check access
+	# Parallelize access check + partial stats read (independent after hierarchy)
 	content_key = f"SUB-{subject}"
-	has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+	fields = ["_content_hash", f"{unit_id}:completed", f"{unit_id}:total"]
+	if unit_idx > 0 and track_info.is_linear:
+		prev_unit = track_info.units[unit_idx - 1]
+		fields.extend([f"{prev_unit.unit_id}:completed", f"{prev_unit.unit_id}:total"])
+	if track_idx > 0 and hierarchy.is_linear:
+		prev_track = hierarchy.tracks[track_idx - 1]
+		fields.extend([f"{prev_track.track_id}:completed", f"{prev_track.track_id}:total"])
+	for topic in unit_info.topics:
+		fields.append(f"{topic.topic_id}:completed")
+		fields.append(f"{topic.topic_id}:total")
+
+	has_access, partial_stats = await asyncio.gather(
+		access_service.check_access_with_plan(user.sub, content_key, user.plan),
+		stats_service.get_partial_stats(user.sub, subject, hierarchy.version, fields),
+	)
 	if not has_access:
 		if not hierarchy.has_any_free_content():
 			raise HTTPException(
@@ -647,27 +656,6 @@ async def get_unit_detail(
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Stats-first partial read: unit fields + prev unit (for unlock) + prev track + all topics
-	fields = ["_content_hash", f"{unit_id}:completed", f"{unit_id}:total"]
-	# Previous unit (for linear unlock check)
-	if unit_idx > 0 and track_info.is_linear:
-		prev_unit = track_info.units[unit_idx - 1]
-		fields.extend([f"{prev_unit.unit_id}:completed", f"{prev_unit.unit_id}:total"])
-	# Previous track (for cross-track unlock chain)
-	if track_idx > 0 and hierarchy.is_linear:
-		prev_track = hierarchy.tracks[track_idx - 1]
-		fields.extend([f"{prev_track.track_id}:completed", f"{prev_track.track_id}:total"])
-	# All topics in unit
-	for topic in unit_info.topics:
-		fields.append(f"{topic.topic_id}:completed")
-		fields.append(f"{topic.topic_id}:total")
-	# Previous topic fields (for linear unlock within unit)
-	# Already included since we add all topics above
-
-	partial_stats = await stats_service.get_partial_stats(
-		user.sub, subject, hierarchy.version, fields
-	)
-	# For partial reads, _content_hash match alone validates (no "total" key in partial)
 	use_stats_path = (
 		partial_stats is not None and partial_stats.get("_content_hash") == hierarchy.content_hash
 	)
@@ -774,18 +762,18 @@ async def get_topic_lessons(
 			detail={"code": "TOPIC_NOT_FOUND", "message": "Topic not found"},
 		)
 
-	# Check access (same logic as existing endpoints)
+	# Parallelize access check + bitmap hydration (independent)
 	content_key = f"SUB-{subject}"
-	has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+	has_access, _ = await asyncio.gather(
+		access_service.check_access_with_plan(user.sub, content_key, user.plan),
+		progress_service.ensure_hydrated(user.sub, subject, hierarchy.version),
+	)
 	if not has_access:
 		if not hierarchy.has_any_free_content():
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
-
-	# Ensure progress bitmap is hydrated from MariaDB if missing (after Redis flush)
-	await progress_service.ensure_hydrated(user.sub, subject, hierarchy.version)
 
 	# Get completion status for all lessons via pipeline GETBIT
 	lessons_status = []
@@ -855,19 +843,19 @@ async def get_subject_progress(
 			detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
 		)
 
-	# Verify access (three-level check)
+	# Parallelize access check + stats read (independent after hierarchy)
 	content_key = f"SUB-{subject}"
-	has_access = await access_service.check_access_with_plan(user.sub, content_key, user.plan)
+	has_access, stats = await asyncio.gather(
+		access_service.check_access_with_plan(user.sub, content_key, user.plan),
+		stats_service.get_stats(user.sub, subject, hierarchy.version),
+	)
 	if not has_access:
-		# Still allow if subject has free content (units/topics with is_free=True)
 		if not hierarchy.has_any_free_content():
 			raise HTTPException(
 				status_code=status.HTTP_403_FORBIDDEN,
 				detail={"code": "NO_ACCESS", "message": "Content access required"},
 			)
 
-	# Stats-first fast path: try cached stats before bitmap decode
-	stats = await stats_service.get_stats(user.sub, subject, hierarchy.version)
 	use_stats_path = _stats_are_valid(stats, hierarchy.content_hash)
 
 	if use_stats_path:

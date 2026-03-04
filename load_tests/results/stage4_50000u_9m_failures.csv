@@ -1,0 +1,9 @@
+Method,Name,Error,Occurrences
+GET,/api/v1/profile,CatchResponseError('500: Internal Server Error'),2
+GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":""SUBJECT_NOT_FOUND""}')",480
+GET,/api/v1/sessions/current,"CatchResponseError('404: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active session""}}')",309
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active lesson session""}}')",120
+GET,/api/v1/settings/gamification,CatchResponseError('500: Internal Server Error'),4
+GET,/api/v1/progress,CatchResponseError('500: Internal Server Error'),3
+GET,/api/v1/progress/[subject]/tracks,CatchResponseError('500: Internal Server Error'),1
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""Session already ended""}}')",2

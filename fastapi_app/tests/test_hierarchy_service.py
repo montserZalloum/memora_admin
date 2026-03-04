@@ -162,9 +162,9 @@ class TestLocalCache:
 
 		hierarchy_svc.redis.get = counting_get
 
-		# Second call at t=1400 (400s later, still within 300s TTL? No — 400 > 300, expired)
+		# Second call at t=9000 (8000s later, exceeds 7200s LOCAL_TTL — expired)
 		with patch("fastapi_app.services.hierarchy.time") as mock_time:
-			mock_time.monotonic.return_value = 1400.0
+			mock_time.monotonic.return_value = 9000.0
 			result2 = await hierarchy_svc.get_hierarchy(TEST_SUBJECT)
 			assert result2 is not None
 			assert result2.subject_id == TEST_SUBJECT

@@ -5,11 +5,16 @@ verifying correct bit extraction for edge cases: empty keys, sparse bitmaps,
 full byte coverage (0x00-0xFF), and partial bitmaps.
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
 import redis.asyncio as redis
 
 from fastapi_app.core.redis_keys import progress_key
-from fastapi_app.services.progress import BITFIELD_CHUNK_SIZE, ProgressService
+from fastapi_app.services.progress import ProgressService
+
+# Matches the CHUNK_SIZE local constant in ProgressService._get_completed_bits_bitfield
+BITFIELD_CHUNK_SIZE = 512
 
 
 # Use a unique user/subject per test to avoid cross-test pollution
@@ -211,3 +216,19 @@ class TestBitmapDecodeChunked:
 
 		result = await svc.get_completed_bits(TEST_USER, TEST_SUBJECT, bit_range=bit_range)
 		assert result == set()
+
+
+class TestBitmapDecodeRawFallback:
+	"""Raw GET failures should fall back to BITFIELD decoding."""
+
+	@pytest.mark.asyncio
+	async def test_raw_read_failure_falls_back_to_bitfield(self, redis_client: redis.Redis):
+		"""An exception in the raw GET path should still return the decoded bitmap."""
+		await redis_client.setbit(_key(), 0, 1)
+		await redis_client.setbit(_key(), 9, 1)
+
+		service = ProgressService(redis_client, frappe_client=None, raw_redis=redis_client)
+		service._get_completed_bits_raw = AsyncMock(side_effect=RuntimeError("boom"))
+
+		result = await service.get_completed_bits(TEST_USER, TEST_SUBJECT, bit_range=16)
+		assert result == {0, 9}

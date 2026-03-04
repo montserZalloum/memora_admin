@@ -1,0 +1,31 @@
+Method,Name,Error,Occurrences
+GET,/api/v1/progress/[subject]/tracks,"CatchResponseError('403: {""detail"":{""code"":""NO_ACCESS"",""message"":""Content access required""}}')",278
+GET,/api/v1/profile/stats,CatchResponseError('500: Internal Server Error'),24
+POST,/api/v1/sessions/start,CatchResponseError('500: Internal Server Error'),11
+GET,/api/v1/catalog/,"CatchResponseError('503: {""detail"":""Service temporarily unavailable""}')",1
+GET,/api/v1/practice/hierarchy,CatchResponseError('500: Internal Server Error'),7
+GET,/api/v1/plans/available,CatchResponseError('500: Internal Server Error'),16
+GET,/api/v1/profile,CatchResponseError('500: Internal Server Error'),5
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,CatchResponseError('500: Internal Server Error'),40
+GET,/api/v1/leaderboard/[type],CatchResponseError('500: Internal Server Error'),10
+GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":""SUBJECT_NOT_FOUND""}')",692
+POST,/api/v1/sessions/end,CatchResponseError('500: Internal Server Error'),1
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",705
+POST,/api/v1/sessions/start,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",57
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,"CatchResponseError('403: {""detail"":{""code"":""NO_ACCESS"",""message"":""Content access required""}}')",1924
+GET,/api/v1/progress/[subject]/tracks,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",83
+GET,/api/v1/sessions/current,"CatchResponseError('404: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active session""}}')",285
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active lesson session""}}')",133
+GET,/api/v1/settings/gamification,CatchResponseError('500: Internal Server Error'),1
+POST,/api/v1/sessions/start,"CatchResponseError('403: {""detail"":{""code"":""NO_ACCESS"",""message"":""Content access required""}}')",123
+GET,/api/v1/progress/[subject]/tracks/[track]/units/[unit],CatchResponseError('500: Internal Server Error'),2
+GET,/api/v1/progress,CatchResponseError('500: Internal Server Error'),25
+GET,/api/v1/leaderboard/[type]/me,CatchResponseError('500: Internal Server Error'),4
+GET,/api/v1/progress/[subject]/tracks/[track]/units/[unit],"CatchResponseError('403: {""detail"":{""code"":""NO_ACCESS"",""message"":""Content access required""}}')",3
+GET,/api/v1/progress/[subject]/tracks,CatchResponseError('500: Internal Server Error'),4
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""Session already ended""}}')",1
+GET,/api/v1/reviews,CatchResponseError('500: Internal Server Error'),4
+GET,/api/v1/subscriptions,CatchResponseError('500: Internal Server Error'),2
+POST,/api/v1/sessions/end,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",5
+GET,/api/v1/profile/mastery,CatchResponseError('500: Internal Server Error'),4
+GET,/api/v1/reviews/[subject],CatchResponseError('500: Internal Server Error'),24

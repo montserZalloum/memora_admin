@@ -2,6 +2,7 @@
 
 import httpx
 import structlog
+
 from fastapi_app.core.config import Settings
 
 logger = structlog.get_logger()
@@ -60,7 +61,15 @@ class FrappeClient:
         client = await self._get_client()
         url = f"/api/method/{method}"
 
-        logger.info("frappe_api_call", method=method, args=kwargs)
+        logger.debug(
+            "frappe_api_call",
+            method=method,
+            arg_keys=sorted(kwargs.keys()),
+            sql_length=len(kwargs.get("sql", "")) if isinstance(kwargs.get("sql"), str) else 0,
+            params_count=len(kwargs.get("params", []))
+            if isinstance(kwargs.get("params"), (list, tuple))
+            else 0,
+        )
 
         response = await client.post(url, json=kwargs)
 

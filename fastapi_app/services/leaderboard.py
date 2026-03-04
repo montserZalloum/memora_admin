@@ -22,13 +22,15 @@ from fastapi_app.core.redis_keys import (
 	LBMETA_LOCK_TTL,
 	PLAN_DAILY_KEY_TTL,
 	PLAN_WEEKLY_KEY_TTL,
-	daily_xp_key as _daily_xp_key_fn,
 	lb_daily_key,
 	lb_daily_plan_key,
 	lb_weekly_key,
 	lb_weekly_plan_key,
 	lbmeta_keys_from_lb_key,
 	lbmeta_lock_key,
+)
+from fastapi_app.core.redis_keys import (
+	daily_xp_key as _daily_xp_key_fn,
 )
 
 logger = structlog.get_logger()
@@ -298,10 +300,12 @@ class LeaderboardService:
 			if tier_counts:
 				zadd_mapping = {str(tier): tier for tier in tier_counts}
 				hset_mapping = {str(tier): count for tier, count in tier_counts.items()}
+				pipe.set(version_key, current_version)
 				pipe.zadd(tieridx_key, zadd_mapping)
 				pipe.hset(tiercnt_key, mapping=hset_mapping)
 
 				if lb_ttl > 0:
+					pipe.expire(version_key, lb_ttl)
 					pipe.expire(tieridx_key, lb_ttl)
 					pipe.expire(tiercnt_key, lb_ttl)
 
@@ -381,13 +385,10 @@ class LeaderboardService:
 			if prev_xp is not None and xp != prev_xp:
 				current_rank += 1
 
-			# Handle bytes response from Redis (unless decode_responses=True)
-			pid = player_id.decode() if isinstance(player_id, bytes) else player_id
-
 			all_entries.append(
 				{
 					"rank": current_rank,
-					"player_id": pid,
+					"player_id": player_id,
 					"xp": xp,
 				}
 			)
@@ -479,16 +480,38 @@ class LeaderboardService:
 		stop = position + neighbor_count
 
 		tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(key)
+		version_key = self._tiermeta_version_key(tiercnt_key)
 
 		pipe = self.redis.pipeline()
 		pipe.zrange(key, start, stop, desc=True, withscores=True)
 		pipe.exists(tieridx_key)
 		pipe.exists(tiercnt_key)
+		pipe.exists(version_key)
+		pipe.hvals(tiercnt_key)
 		pipe.zcount(tieridx_key, f"({xp}", "+inf")
 		pipe.zrangebyscore(tieridx_key, f"({xp}", "+inf", withscores=True, start=0, num=1)
-		neighbors_raw, tieridx_exists, tiercnt_exists, idx_distinct_above, min_above_entries = await pipe.execute()
+		(
+			neighbors_raw,
+			tieridx_exists,
+			tiercnt_exists,
+			version_exists,
+			tier_counts_raw,
+			idx_distinct_above,
+			min_above_entries,
+		) = await pipe.execute()
 
-		if tieridx_exists and tiercnt_exists:
+		try:
+			tier_count_sum = sum(int(v) for v in (tier_counts_raw or []))
+		except (TypeError, ValueError):
+			tier_count_sum = -1
+		metadata_healthy = (
+			tieridx_exists
+			and tiercnt_exists
+			and version_exists
+			and tier_count_sum == total
+		)
+
+		if metadata_healthy:
 			# Indexed path: O(log T) via tier index ZSET.
 			distinct_above = idx_distinct_above
 			min_above = int(min_above_entries[0][1]) if min_above_entries else -1
@@ -542,14 +565,12 @@ class LeaderboardService:
 			else:
 				neighbor_rank = my_rank
 
-			nid = neighbor_id.decode() if isinstance(neighbor_id, bytes) else neighbor_id
-
 			neighbors.append(
 				{
 					"rank": neighbor_rank,
-					"player_id": nid,
+					"player_id": neighbor_id,
 					"xp": neighbor_xp,
-					"is_me": nid == player_id,
+					"is_me": neighbor_id == player_id,
 				}
 			)
 

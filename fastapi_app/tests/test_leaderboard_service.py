@@ -2,7 +2,7 @@
 
 import pytest
 
-from fastapi_app.core.redis_keys import lb_daily_plan_key, lb_weekly_plan_key
+from fastapi_app.core.redis_keys import lb_daily_plan_key, lb_weekly_plan_key, lbmeta_keys_from_lb_key
 from fastapi_app.services.leaderboard import LeaderboardService
 
 # Test constants
@@ -385,3 +385,31 @@ class TestDenseRanking:
 		# Third gets rank 2 (dense ranking: 1,1,2 — no gap)
 		assert result[2]["xp"] == 50
 		assert result[2]["rank"] == 2
+
+
+class TestTierMetadataRepair:
+	"""Corrupt tier metadata should be repaired before ranking is trusted."""
+
+	async def test_get_my_rank_repairs_unhealthy_metadata(self, lb_svc, redis_client):
+		"""Mismatched tier counts should trigger a repair before rank calculation."""
+		await lb_svc.update_leaderboards(TEST_PLAYER_1, xp_amount=100, plan_id=TEST_PLAN_A)
+		await lb_svc.update_leaderboards(TEST_PLAYER_2, xp_amount=80, plan_id=TEST_PLAN_A)
+		await lb_svc.update_leaderboards(TEST_PLAYER_3, xp_amount=50, plan_id=TEST_PLAN_A)
+
+		key = lb_svc._get_plan_key("daily", TEST_PLAN_A)
+		tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(key)
+		version_key = lb_svc._tiermeta_version_key(tiercnt_key)
+
+		await redis_client.delete(tieridx_key)
+		await redis_client.zadd(tieridx_key, {"80": 80, "50": 50})
+		await redis_client.delete(tiercnt_key)
+		await redis_client.hset(tiercnt_key, mapping={"80": 1, "50": 1})
+		assert await redis_client.exists(version_key) == 1
+
+		result = await lb_svc.get_my_rank(TEST_PLAYER_2, "daily", plan_id=TEST_PLAN_A)
+
+		assert result["rank"] == 2
+		tiers = await redis_client.zrange(tieridx_key, 0, -1, withscores=True)
+		assert ("50", 50.0) in tiers
+		assert ("80", 80.0) in tiers
+		assert ("100", 100.0) in tiers

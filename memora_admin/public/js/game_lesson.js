@@ -67,6 +67,8 @@ frappe.ui.form.on("Memora Lesson Stage", {
 			open_information_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else if (row.stage_type === "FILL_BLANK") {
 			open_fill_blank_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
+		} else if (row.stage_type === "STORY") {
+			open_story_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else {
 			frappe.msgprint("لا يوجد محرر لهذا النوع بعد");
 		}
@@ -1112,4 +1114,407 @@ function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 
 	d.show();
 	renderPreview();
+}
+
+// =================================================
+// 📖 8. نافذة القصة متعددة الخطوات (Story)
+// =================================================
+function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	// --- helpers ---
+
+	function _esc(str) {
+		if (!str) return "";
+		return str
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
+	}
+
+	function _makeStep(s) {
+		s = s || {};
+		return {
+			text: s.text || "",
+			image_url: s.image || "", // server URL (already uploaded)
+			image_name: s.image_name || "", // Frappe File doc name for deletion
+			pending_file: null, // browser File object, not yet uploaded
+			preview_url: s.image || "", // blob URL or server URL for <img>
+			item_id: s.item_id || null,
+		};
+	}
+
+	// --- state ---
+	let steps = (data.steps || []).map(_makeStep);
+	if (steps.length === 0) steps.push(_makeStep());
+	let activeIdx = 0;
+	let filesToDelete = []; // image_name values to DELETE on save (removed images/steps)
+
+	// --- state mutators ---
+
+	function _syncStep() {
+		let $w = d.fields_dict.story_html.$wrapper;
+		if (steps[activeIdx]) {
+			steps[activeIdx].text = $w.find(".story-text").val() || "";
+		}
+	}
+
+	function _clearStepImage(s) {
+		if (s.image_name) filesToDelete.push(s.image_name);
+		if (s.preview_url && s.preview_url.startsWith("blob:")) URL.revokeObjectURL(s.preview_url);
+		s.image_url = "";
+		s.image_name = "";
+		s.pending_file = null;
+		s.preview_url = "";
+	}
+
+	function _removeStep(idx) {
+		let s = steps[idx];
+		// queue server file for deletion if already uploaded
+		if (s.image_name) filesToDelete.push(s.image_name);
+		// free blob memory if pending
+		if (s.preview_url && s.preview_url.startsWith("blob:")) URL.revokeObjectURL(s.preview_url);
+		steps.splice(idx, 1);
+		if (activeIdx >= steps.length) activeIdx = steps.length - 1;
+	}
+
+	// --- async operations ---
+
+	function _uploadPending() {
+		let pending = steps.filter((s) => s.pending_file);
+		if (!pending.length) return Promise.resolve();
+		return Promise.all(
+			pending.map(
+				(s) =>
+					new Promise((resolve, reject) => {
+						let fd = new FormData();
+						fd.append("file", s.pending_file, s.pending_file.name);
+						fd.append("doctype", frm.doctype);
+						fd.append("docname", frm.docname || "new-doc");
+						fd.append("is_private", "0");
+						// auto-optimize images >200 KB (Frappe resizes to 1920×1080, quality 85%)
+						if (s.pending_file.size > 200 * 1024 && !s.pending_file.type.includes("svg")) {
+							fd.append("optimize", true);
+						}
+						$.ajax({
+							url: "/api/method/upload_file",
+							type: "POST",
+							data: fd,
+							processData: false,
+							contentType: false,
+							headers: { "X-Frappe-CSRF-Token": frappe.csrf_token },
+							success(resp) {
+								if (resp && resp.message) {
+									if (s.preview_url && s.preview_url.startsWith("blob:"))
+										URL.revokeObjectURL(s.preview_url);
+									s.image_url = resp.message.file_url;
+									s.image_name = resp.message.name;
+									s.pending_file = null;
+									s.preview_url = s.image_url;
+								}
+								resolve();
+							},
+							error(xhr) {
+								reject(new Error(xhr.responseText || xhr.statusText));
+							},
+						});
+					})
+			)
+		);
+	}
+
+	function _deleteQueued() {
+		let names = filesToDelete.splice(0);
+		names.forEach((name) => {
+			frappe.call({ method: "frappe.client.delete", args: { doctype: "File", name } });
+		});
+	}
+
+	// --- renderer ---
+
+	function _render() {
+		let $w = d.fields_dict.story_html.$wrapper;
+
+		let tabsHtml = steps
+			.map((s, i) => {
+				let active = i === activeIdx;
+				let preview = s.text
+					? _esc(s.text.substring(0, 22)) + (s.text.length > 22 ? "…" : "")
+					: s.preview_url
+						? "🖼️ صورة"
+						: "";
+				return (
+					'<div class="story-tab" data-idx="' +
+					i +
+					'" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f0f0f0;' +
+					"border-right:3px solid " +
+					(active ? "#1d7fd4" : "transparent") +
+					";background:" +
+					(active ? "#e8f4fd" : "#fff") +
+					';">' +
+					'<div style="font-size:12px;font-weight:' +
+					(active ? "bold" : "normal") +
+					';color:#333;">الخطوة ' +
+					(i + 1) +
+					"</div>" +
+					'<div style="font-size:11px;color:' +
+					(preview ? "#888" : "#ccc") +
+					';margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' +
+					(preview || "فارغة") +
+					"</div></div>"
+				);
+			})
+			.join("");
+
+		let cur = steps[activeIdx] || _makeStep();
+
+		// image area: show preview+remove button OR drop zone
+		let imgHtml = cur.preview_url
+			? '<div style="position:relative;display:inline-block;max-width:100%;">' +
+				'<img src="' +
+				_esc(cur.preview_url) +
+				'" style="max-width:100%;max-height:220px;border-radius:8px;display:block;' +
+				'object-fit:contain;border:1px solid #e0e0e0;" onerror="this.style.display=\'none\'">' +
+				'<button class="story-img-remove" ' +
+				'style="position:absolute;top:6px;left:6px;background:rgba(220,53,69,.85);color:#fff;' +
+				'border:none;border-radius:50%;width:26px;height:26px;font-size:16px;line-height:26px;' +
+				'cursor:pointer;text-align:center;" title="إزالة الصورة">×</button>' +
+				(cur.pending_file
+					? '<div style="font-size:11px;color:#888;margin-top:5px;">📎 ' +
+						_esc(cur.pending_file.name) +
+						" — سيتم الرفع عند الحفظ</div>"
+					: "") +
+				"</div>"
+			: '<label class="story-upload-label" ' +
+				'style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+				"border:2px dashed #d1d8dd;border-radius:8px;padding:28px 20px;cursor:pointer;" +
+				'color:#8d99a6;min-height:90px;transition:border-color .15s,background .15s;">' +
+				'<span style="font-size:30px;margin-bottom:6px;">🖼️</span>' +
+				'<span style="font-size:13px;font-weight:500;">اضغط لاختيار صورة</span>' +
+				'<span style="font-size:11px;margin-top:3px;color:#b0bec5;">PNG، JPG، GIF — اختياري</span>' +
+				'<input class="story-file-input" type="file" accept="image/*" style="display:none;">' +
+				"</label>";
+
+		$w.html(
+			'<div style="display:flex;min-height:430px;direction:rtl;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;">' +
+				// sidebar
+				'<div style="width:155px;border-left:1px solid #e0e0e0;background:#fafafa;display:flex;flex-direction:column;flex-shrink:0;">' +
+				'<div style="padding:9px 12px;font-size:11px;font-weight:bold;color:#666;border-bottom:1px solid #e0e0e0;background:#f5f5f5;">' +
+				"الخطوات (" +
+				steps.length +
+				")</div>" +
+				'<div class="story-tabs" style="flex:1;overflow-y:auto;">' +
+				tabsHtml +
+				"</div>" +
+				'<div style="padding:8px;border-top:1px solid #e0e0e0;">' +
+				'<button class="btn btn-xs btn-primary story-add" style="width:100%;font-size:11px;">+ إضافة خطوة</button>' +
+				"</div></div>" +
+				// editor
+				'<div style="flex:1;padding:20px;background:#fff;min-width:0;overflow-y:auto;">' +
+				'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">' +
+				'<span style="font-size:14px;font-weight:bold;color:#333;">الخطوة ' +
+				(activeIdx + 1) +
+				"</span>" +
+				'<div style="display:flex;gap:6px;">' +
+				'<button class="btn btn-xs btn-default story-up" ' +
+				(activeIdx === 0 ? "disabled" : "") +
+				' title="تحريك لأعلى" style="font-size:13px;">↑</button>' +
+				'<button class="btn btn-xs btn-default story-down" ' +
+				(activeIdx === steps.length - 1 ? "disabled" : "") +
+				' title="تحريك لأسفل" style="font-size:13px;">↓</button>' +
+				'<button class="btn btn-xs btn-danger story-del" ' +
+				(steps.length === 1 ? "disabled" : "") +
+				">حذف</button>" +
+				"</div></div>" +
+				// text
+				'<div style="margin-bottom:16px;">' +
+				'<label style="display:block;font-size:12px;font-weight:bold;color:#555;margin-bottom:5px;">' +
+				'النص <span style="font-weight:normal;color:#aaa;">(اختياري)</span></label>' +
+				'<textarea class="story-text form-control" rows="4" ' +
+				'placeholder="اكتب نص الخطوة هنا..." style="resize:vertical;direction:rtl;line-height:1.9;">' +
+				_esc(cur.text) +
+				"</textarea></div>" +
+				// image
+				'<div><label style="display:block;font-size:12px;font-weight:bold;color:#555;margin-bottom:8px;">' +
+				'الصورة <span style="font-weight:normal;color:#aaa;">(اختياري)</span></label>' +
+				imgHtml +
+				"</div>" +
+				// nav
+				'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:20px;padding-top:12px;border-top:1px solid #f0f0f0;">' +
+				'<button class="btn btn-xs btn-default story-prev" ' +
+				(activeIdx === 0 ? "disabled" : "") +
+				">→ السابق</button>" +
+				'<span style="font-size:12px;color:#888;">' +
+				(activeIdx + 1) +
+				" / " +
+				steps.length +
+				"</span>" +
+				'<button class="btn btn-xs btn-default story-next" ' +
+				(activeIdx === steps.length - 1 ? "disabled" : "") +
+				">التالي ←</button>" +
+				"</div></div></div>"
+		);
+
+		// --- events ---
+
+		$w.find(".story-tab").on("click", function () {
+			_syncStep();
+			activeIdx = parseInt($(this).data("idx"));
+			_render();
+		});
+
+		$w.find(".story-add").on("click", function () {
+			_syncStep();
+			steps.push(_makeStep());
+			activeIdx = steps.length - 1;
+			_render();
+		});
+
+		$w.find(".story-del").on("click", function () {
+			if (steps.length <= 1) return;
+			_syncStep();
+			_removeStep(activeIdx);
+			_render();
+		});
+
+		$w.find(".story-up").on("click", function () {
+			if (!activeIdx) return;
+			_syncStep();
+			[steps[activeIdx], steps[activeIdx - 1]] = [steps[activeIdx - 1], steps[activeIdx]];
+			activeIdx--;
+			_render();
+		});
+
+		$w.find(".story-down").on("click", function () {
+			if (activeIdx === steps.length - 1) return;
+			_syncStep();
+			[steps[activeIdx], steps[activeIdx + 1]] = [steps[activeIdx + 1], steps[activeIdx]];
+			activeIdx++;
+			_render();
+		});
+
+		$w.find(".story-prev").on("click", function () {
+			if (!activeIdx) return;
+			_syncStep();
+			activeIdx--;
+			_render();
+		});
+
+		$w.find(".story-next").on("click", function () {
+			if (activeIdx === steps.length - 1) return;
+			_syncStep();
+			activeIdx++;
+			_render();
+		});
+
+		// file picker
+		$w.find(".story-file-input").on("change", function (e) {
+			let file = e.target.files && e.target.files[0];
+			if (!file) return;
+			let s = steps[activeIdx];
+			// if replacing an existing server file, queue it for deletion
+			if (s.image_name) filesToDelete.push(s.image_name);
+			// revoke old blob URL to free memory
+			if (s.preview_url && s.preview_url.startsWith("blob:")) URL.revokeObjectURL(s.preview_url);
+			s.image_url = "";
+			s.image_name = "";
+			s.pending_file = file;
+			s.preview_url = URL.createObjectURL(file);
+			_render();
+		});
+
+		// remove image
+		$w.find(".story-img-remove").on("click", function (e) {
+			e.stopPropagation();
+			_syncStep();
+			_clearStepImage(steps[activeIdx]);
+			_render();
+		});
+
+		// drop zone hover
+		$w.find(".story-upload-label")
+			.on("mouseenter", function () {
+				$(this).css({ borderColor: "#1d7fd4", background: "#f0f7ff" });
+			})
+			.on("mouseleave", function () {
+				$(this).css({ borderColor: "#d1d8dd", background: "" });
+			});
+
+		// live sidebar preview on text input
+		$w.find(".story-text").on(
+			"input",
+			frappe.utils.debounce(function () {
+				let val = $(this).val() || "";
+				let preview = val
+					? val.substring(0, 22) + (val.length > 22 ? "…" : "")
+					: steps[activeIdx] && steps[activeIdx].preview_url
+						? "🖼️ صورة"
+						: "فارغة";
+				$w.find('.story-tab[data-idx="' + activeIdx + '"] div:last-child').text(preview);
+			}, 300)
+		);
+	}
+
+	// --- dialog ---
+
+	let d = new frappe.ui.Dialog({
+		title: "إعدادات القصة (Story)",
+		fields: [
+			{
+				label: "التعليمات",
+				fieldname: "instruction",
+				fieldtype: "Data",
+				default: data.instruction || "اقرأ القصة التالية",
+			},
+			{ fieldtype: "Section Break", label: "خطوات القصة" },
+			{ fieldname: "story_html", fieldtype: "HTML" },
+		],
+		size: "extra-large",
+		primary_action_label: "حفظ (Save)",
+		primary_action: async function (values) {
+			_syncStep();
+
+			if (!steps.some((s) => s.text || s.preview_url)) {
+				frappe.msgprint("يجب إضافة محتوى لخطوة واحدة على الأقل (نص أو صورة).");
+				return;
+			}
+
+			let $btn = d.$wrapper.find(".modal-footer .btn-primary");
+			$btn.prop("disabled", true).text("جاري رفع الصور...");
+
+			try {
+				await _uploadPending();
+			} catch (e) {
+				frappe.msgprint("حدث خطأ أثناء رفع إحدى الصور. يرجى المحاولة مرة أخرى.");
+				console.error(e);
+				$btn.prop("disabled", false).text("حفظ (Save)");
+				return;
+			}
+
+			// fire-and-forget: delete removed/replaced server files
+			_deleteQueued();
+
+			let config_payload = {
+				instruction: values.instruction,
+				steps: steps
+					.filter((s) => s.text || s.image_url)
+					.map((s, i) => {
+						let step = { id: String(i + 1) };
+						if (s.text) step.text = s.text;
+						if (s.image_url) {
+							step.image = s.image_url;
+							step.image_name = s.image_name; // stored for future deletion
+						}
+						if (!skipItemIds) step.item_id = s.item_id || generateItemUUID();
+						return step;
+					}),
+			};
+
+			frappe.model.set_value(cdt, cdn, "config_json", JSON.stringify(config_payload, null, 2));
+			d.hide();
+			frappe.show_alert({ message: "تم حفظ القصة", indicator: "green" });
+		},
+	});
+
+	d.show();
+	setTimeout(() => _render(), 50);
 }

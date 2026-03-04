@@ -11,6 +11,7 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.config import Settings
+from fastapi_app.core.coalesce import CoalescingLockPool
 from fastapi_app.core.redis_keys import practice_hierarchy_meta_key, practice_session_key
 from fastapi_app.models.practice import (
 	PracticeBatchResponse,
@@ -35,28 +36,12 @@ META_CACHE_TTL = 3600  # 1 hour — same as hierarchy cache
 PRACTICE_SESSION_SCHEMA_VERSION = 2
 
 # Process-local per-key locks for practice metadata cache-fill coalescing.
-# Prevents thundering herd when multiple concurrent requests miss the same meta key.
-# Same pattern as _compute_locks in stats.py and _hierarchy_fill_locks in hierarchy.py.
-_meta_fill_locks: dict[str, asyncio.Lock] = {}
-_MAX_META_FILL_LOCKS = 5_000
+_meta_fill_locks = CoalescingLockPool(max_size=5_000)
 
 
 def _get_meta_fill_lock(key: str) -> asyncio.Lock:
-	"""Get or create a per-key asyncio.Lock for meta fill coalescing.
-
-	Uses setdefault for atomicity: concurrent callers for the same key
-	always get the same Lock instance. Pruning of unlocked entries runs
-	after insertion to keep the dict near _MAX_META_FILL_LOCKS.
-	"""
-	lock = _meta_fill_locks.get(key)
-	if lock is not None:
-		return lock
-	lock = _meta_fill_locks.setdefault(key, asyncio.Lock())
-	if len(_meta_fill_locks) > _MAX_META_FILL_LOCKS:
-		to_remove = [k for k, v in _meta_fill_locks.items() if k != key and not v.locked()]
-		for k in to_remove:
-			_meta_fill_locks.pop(k, None)
-	return lock
+	"""Backward-compatible accessor for the per-key practice meta fill lock."""
+	return _meta_fill_locks.get(key)
 
 
 class PracticeAccessDenied(Exception):
@@ -376,7 +361,7 @@ class PracticeService:
 			return None
 
 		# Coalesce concurrent fills via per-key lock
-		fill_lock = _get_meta_fill_lock(subject_id)
+		fill_lock = _meta_fill_locks.get(subject_id)
 		acquired = False
 		try:
 			await asyncio.wait_for(fill_lock.acquire(), timeout=5.0)

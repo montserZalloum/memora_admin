@@ -106,9 +106,18 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 	import fastapi_app.api.deps as deps_module
 	deps_module._frappe_client = None
 	deps_module._session_fid_cache.clear()
-	# Clear process-local hierarchy cache to prevent order-dependent stale data
+	# Clear process-local caches to prevent order-dependent stale data
 	from fastapi_app.services.hierarchy import _local_hierarchy_cache
 	_local_hierarchy_cache.clear()
+	import fastapi_app.services.hierarchy as hierarchy_module
+	hierarchy_module._free_content_subjects_cache = None
+	from fastapi_app.services.access import _grants_cache, _plan_subjects_cache
+	_grants_cache.clear()
+	_plan_subjects_cache.clear()
+	from fastapi_app.services.stats import _stats_local_cache
+	_stats_local_cache.clear()
+	from fastapi_app.services.progress import _progress_exists_cache
+	_progress_exists_cache.clear()
 
 	yield
 

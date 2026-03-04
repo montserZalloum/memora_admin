@@ -1,5 +1,6 @@
 """Authentication endpoints for player login, admin login, and registration."""
 
+import asyncio
 import json
 from datetime import timedelta
 
@@ -30,7 +31,7 @@ from fastapi_app.models.auth import (
 )
 from fastapi_app.services.device import DeviceService
 from fastapi_app.services.frappe import FrappeAuthService
-from fastapi_app.services.frappe_client import FrappeAPIError
+from fastapi_app.services.frappe_client import FrappeAPIError, FrappeClient
 from fastapi_app.services.otp import OTPService
 from fastapi_app.services.rate_limit import RateLimiter
 from fastapi_app.services.session import SessionService
@@ -89,6 +90,76 @@ async def _force_kick_old_sessions(request: Request, player_id: str) -> None:
 		logger.warning("session_kick_failed", player_id=player_id, error=str(e))
 
 
+async def _complete_player_sign_in(
+	*,
+	request: Request,
+	redis: RedisClient,
+	settings: SettingsDep,
+	frappe_client: FrappeClient,
+	profile: dict,
+	player_id: str,
+	device_id: str,
+	season_id: str,
+) -> PlayerLoginResponse | JSONResponse:
+	"""Complete the shared post-auth sign-in flow for player endpoints."""
+	settings_service = SettingsService(redis, frappe_client)
+	game_settings = await settings_service.get_gamification_settings()
+
+	device_service = DeviceService(redis)
+	device_result = await device_service.register_device(
+		user_id=player_id,
+		device_id=device_id,
+		user_agent=request.headers.get("User-Agent", "Unknown"),
+		max_devices=game_settings.max_devices_per_player,
+		platform_hint=request.headers.get("X-Platform"),
+	)
+	if not device_result.success:
+		return JSONResponse(
+			status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+			content={
+				"code": "DEVICE_LIMIT_EXCEEDED",
+				"message": f"Device limit reached ({device_result.current_count}/{device_result.max_count}). Contact support to manage your devices.",
+			},
+		)
+
+	wallet_service = WalletService(redis, frappe_client=frappe_client)
+	wallet, _ = await asyncio.gather(
+		wallet_service.get_wallet(player_id),
+		_force_kick_old_sessions(request, player_id),
+	)
+
+	session_service = SessionService(redis)
+	family_id = await session_service.create_session(
+		player_id,
+		plan_id=profile["plan"],
+		ttl_days=game_settings.session_timeout_days,
+		season_id=season_id,
+	)
+	evict_session_cache(player_id)
+
+	return PlayerLoginResponse(
+		access_token=create_access_token(
+			user_id=player_id,
+			mobile=profile["mobile"],
+			plan_id=profile["plan"],
+			display_name=profile.get("display_name", ""),
+			family_id=family_id,
+			season_id=season_id,
+			expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
+		),
+		refresh_token=create_refresh_token(
+			user_id=player_id,
+			family_id=family_id,
+			expires_delta=timedelta(days=game_settings.session_timeout_days),
+		),
+		profile=LoginProfile(
+			display_name=profile.get("display_name", ""),
+			avatar=profile.get("avatar") or "default_avatar",
+			xp=wallet.get("xp", 0),
+		),
+	)
+
+
 @router.post("/player/login", response_model=PlayerLoginResponse)
 async def player_login(
 	request: Request,
@@ -114,15 +185,11 @@ async def player_login(
 			detail={"code": "DEVICE_ID_REQUIRED", "message": "X-Device-ID header required"},
 		)
 
-	# Extract optional headers for device info
-	user_agent = request.headers.get("User-Agent", "Unknown")
-	platform_hint = request.headers.get("X-Platform")  # Optional: iOS, Android, Web
-
 	client_ip = _get_client_ip(request)
 
 	# 2. Rate limit check
 	rate_limiter = RateLimiter(redis)
-	allowed, retry_after, limit_type = await rate_limiter.check_rate_limit(
+	allowed, retry_after, _limit_type = await rate_limiter.check_rate_limit(
 		ip_address=client_ip,
 		target_account=credentials.mobile,
 	)
@@ -158,76 +225,15 @@ async def player_login(
 		)
 
 	player_id = profile["player_id"]
-
-	# 5. Fetch session_timeout_days from Memora Settings
-	settings_service = SettingsService(redis, frappe_client)
-	game_settings = await settings_service.get_gamification_settings()
-	session_ttl_days = game_settings.session_timeout_days
-	max_devices = game_settings.max_devices_per_player
-
-	# 6. Device registration (atomic with limit check)
-	device_service = DeviceService(redis)
-	device_result = await device_service.register_device(
-		user_id=player_id,
+	return await _complete_player_sign_in(
+		request=request,
+		redis=redis,
+		settings=settings,
+		frappe_client=frappe_client,
+		profile=profile,
+		player_id=player_id,
 		device_id=device_id,
-		user_agent=user_agent,
-		max_devices=max_devices,
-		platform_hint=platform_hint,
-	)
-
-	if not device_result.success:
-		return JSONResponse(
-			status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-			content={
-				"code": "DEVICE_LIMIT_EXCEEDED",
-				"message": f"Device limit reached ({device_result.current_count}/{device_result.max_count}). Contact support to manage your devices.",
-			},
-		)
-
-	# 7. Fetch wallet for XP (with FrappeClient for hydration after cache flush)
-	wallet_service = WalletService(redis, frappe_client=frappe_client)
-	wallet = await wallet_service.get_wallet(player_id)
-
-	# 8. Force-kick old WebSocket connections BEFORE creating new session
-	# This sends "session_invalidated" to any connected devices and closes their WS
-	await _force_kick_old_sessions(request, player_id)
-
-	# 9. Create session (invalidates any previous session in Redis)
-	session_service = SessionService(redis)
-	family_id = await session_service.create_session(
-		player_id,
-		plan_id=profile["plan"],
-		ttl_days=session_ttl_days,
 		season_id=profile.get("season", ""),
-	)
-	evict_session_cache(player_id)
-
-	# 10. Create tokens (player: mobile claim, no email, season for Gate 1)
-	access_token = create_access_token(
-		user_id=player_id,
-		mobile=profile["mobile"],
-		plan_id=profile["plan"],
-		display_name=profile.get("display_name", ""),
-		family_id=family_id,
-		season_id=profile.get("season", ""),
-		expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
-	)
-
-	refresh_token = create_refresh_token(
-		user_id=player_id,
-		family_id=family_id,
-		expires_delta=timedelta(days=session_ttl_days),
-	)
-
-	# 11. Return enriched response (no gender per CONTEXT.md)
-	return PlayerLoginResponse(
-		access_token=access_token,
-		refresh_token=refresh_token,
-		profile=LoginProfile(
-			display_name=profile.get("display_name", ""),
-			avatar=profile.get("avatar") or "default_avatar",
-			xp=wallet.get("xp", 0),
-		),
 	)
 
 
@@ -249,7 +255,7 @@ async def admin_login(
 
 	# 1. Rate limit check
 	rate_limiter = RateLimiter(redis)
-	allowed, retry_after, limit_type = await rate_limiter.check_rate_limit(
+	allowed, retry_after, _limit_type = await rate_limiter.check_rate_limit(
 		ip_address=client_ip,
 		target_account=credentials.email,
 	)
@@ -552,81 +558,19 @@ async def player_register_verify(
 		)
 
 	player_id = profile["player_id"]
-
-	# Auto-login flow (same pattern as player_login)
-	# Fetch session_timeout_days from Memora Settings
-	settings_service = SettingsService(redis, frappe_client)
-	game_settings = await settings_service.get_gamification_settings()
-	session_ttl_days = game_settings.session_timeout_days
-	max_devices = game_settings.max_devices_per_player
-
-	# Device registration
-	user_agent = request.headers.get("User-Agent", "Unknown")
-	platform_hint = request.headers.get("X-Platform")
-
-	device_service = DeviceService(redis)
-	device_result = await device_service.register_device(
-		user_id=player_id,
+	response = await _complete_player_sign_in(
+		request=request,
+		redis=redis,
+		settings=settings,
+		frappe_client=frappe_client,
+		profile=profile,
+		player_id=player_id,
 		device_id=device_id,
-		user_agent=user_agent,
-		max_devices=max_devices,
-		platform_hint=platform_hint,
-	)
-
-	if not device_result.success:
-		return JSONResponse(
-			status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-			content={
-				"code": "DEVICE_LIMIT_EXCEEDED",
-				"message": f"Device limit reached ({device_result.current_count}/{device_result.max_count}). Contact support to manage your devices.",
-			},
-		)
-
-	# Fetch wallet XP (should be 0 for new player)
-	wallet_service = WalletService(redis, frappe_client=frappe_client)
-	wallet = await wallet_service.get_wallet(player_id)
-
-	# Force-kick old WebSocket connections (unlikely for new registration but safe)
-	await _force_kick_old_sessions(request, player_id)
-
-	# Create session
-	session_service = SessionService(redis)
-	family_id = await session_service.create_session(
-		player_id,
-		plan_id=profile["plan"],
-		ttl_days=session_ttl_days,
 		season_id=season,
 	)
-	evict_session_cache(player_id)
-
-	# Create tokens (player: mobile claim, no email, season for Gate 1)
-	access_token = create_access_token(
-		user_id=player_id,
-		mobile=profile["mobile"],
-		plan_id=profile["plan"],
-		display_name=profile.get("display_name", ""),
-		family_id=family_id,
-		season_id=season,
-		expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
-	)
-
-	refresh_token = create_refresh_token(
-		user_id=player_id,
-		family_id=family_id,
-		expires_delta=timedelta(days=session_ttl_days),
-	)
-
-	logger.info("player_registered", player_id=player_id)
-
-	return PlayerLoginResponse(
-		access_token=access_token,
-		refresh_token=refresh_token,
-		profile=LoginProfile(
-			display_name=profile.get("display_name", ""),
-			avatar=profile.get("avatar") or "default_avatar",
-			xp=wallet.get("xp", 0),
-		),
-	)
+	if not isinstance(response, JSONResponse):
+		logger.info("player_registered", player_id=player_id)
+	return response
 
 
 @router.post("/player/register/resend")

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import redis.asyncio as redis
 import structlog
+from cachetools import TTLCache
 
 from fastapi_app.core.redis_keys import ACCESS_KEY_TTL, access_key as _access_key_fn, plan_free_subjects_key as _plan_free_subjects_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
@@ -14,6 +15,11 @@ if TYPE_CHECKING:
 	from fastapi_app.services.frappe_client import FrappeClient
 
 logger = structlog.get_logger()
+
+# Process-local TTL caches — eliminates Redis RTTs for repeat accesses within TTL window.
+# Each uvicorn worker gets its own copy. Safe under asyncio (single-threaded per worker).
+_grants_cache: TTLCache[str, set[str]] = TTLCache(maxsize=10_000, ttl=10)
+_plan_subjects_cache: TTLCache[str, set[str]] = TTLCache(maxsize=500, ttl=60)
 
 
 class AccessService:
@@ -98,10 +104,7 @@ class AccessService:
 	async def check_access(self, player_id: str, content_key: str) -> bool:
 		"""
 		Check if player has access to content.
-		O(1) complexity via SISMEMBER (after hydration check).
-
-		Ensures access set is hydrated from MariaDB before checking,
-		preventing false negatives after Redis cache flush.
+		Uses local grants cache for O(1) set membership check.
 
 		Args:
 		    player_id: Player's user ID
@@ -110,14 +113,8 @@ class AccessService:
 		Returns:
 		    True if player has grant for this content
 		"""
-		# Ensure access set exists in Redis before checking.
-		# Without this, SISMEMBER on a missing key returns 0, denying access.
-		await self.ensure_hydrated(player_id)
-
-		key = self._access_key(player_id)
-		result = await self.redis.sismember(key, content_key)
-		# Handle both int (0/1) and bool responses
-		return bool(result)
+		grants = await self.get_player_grants(player_id)
+		return content_key in grants
 
 	async def grant_access(self, player_id: str, content_keys: list[str]) -> int:
 		"""
@@ -130,7 +127,9 @@ class AccessService:
 		if not content_keys:
 			return 0
 		key = self._access_key(player_id)
-		return await self.redis.sadd(key, *content_keys)
+		result = await self.redis.sadd(key, *content_keys)
+		_grants_cache.pop(player_id, None)
+		return result
 
 	async def revoke_access(self, player_id: str, content_keys: list[str]) -> int:
 		"""
@@ -142,23 +141,26 @@ class AccessService:
 		if not content_keys:
 			return 0
 		key = self._access_key(player_id)
-		return await self.redis.srem(key, *content_keys)
+		result = await self.redis.srem(key, *content_keys)
+		_grants_cache.pop(player_id, None)
+		return result
 
 	async def get_player_grants(self, player_id: str) -> set[str]:
 		"""
 		Get all content keys player has access to.
-		O(N) - use sparingly, prefer check_access for single checks.
-
-		Ensures access set is hydrated from MariaDB before reading,
-		preventing empty results after Redis cache flush.
+		Uses local TTL cache (10s) to avoid Redis RTTs on repeat calls.
 		"""
-		# Ensure access set exists in Redis before reading.
+		cached = _grants_cache.get(player_id)
+		if cached is not None:
+			return cached
+
 		await self.ensure_hydrated(player_id)
 
 		key = self._access_key(player_id)
 		members = await self.redis.smembers(key)
-		# Handle bytes or str responses
-		return {m.decode() if isinstance(m, bytes) else m for m in members}
+		result = set(members)
+		_grants_cache[player_id] = result
+		return result
 
 	# =========================================================================
 	# Plan-Aware Access Methods (Level 1: Plan membership grants)
@@ -170,66 +172,40 @@ class AccessService:
 
 	async def is_subject_free_in_plan(self, plan_id: str, subject_id: str) -> bool:
 		"""Check if subject is marked non-premium in player's plan.
-
-		Per CONTEXT.md: is_premium=0 on Memora Plan Subject means the subject
-		is included in the plan without requiring an explicit grant.
-
-		O(1) complexity via SISMEMBER.
-
-		Args:
-		    plan_id: The plan identifier
-		    subject_id: The subject identifier
-
-		Returns:
-		    True if subject is free in the plan (is_premium=0)
+		Uses local TTL cache (60s) for O(1) set membership check.
 		"""
 		if not plan_id:
 			return False
-		key = self._plan_free_subjects_key(plan_id)
-		result = await self.redis.sismember(key, subject_id)
-		return bool(result)
+		plan_subjects = await self.get_plan_free_subjects(plan_id)
+		return subject_id in plan_subjects
 
-	async def get_plan_free_subjects(self, plan_id: str | None) -> list[str]:
-		"""Get subjects marked as non-premium in player's plan (from Redis cache).
-
-		Args:
-		    plan_id: The plan identifier, or None if player has no plan
-
-		Returns:
-		    List of subject IDs that are free in the plan
+	async def get_plan_free_subjects(self, plan_id: str | None) -> set[str]:
+		"""Get subjects marked as non-premium in player's plan.
+		Uses local TTL cache (60s) — plans change very rarely.
 		"""
 		if not plan_id:
-			return []
+			return set()
+		cached = _plan_subjects_cache.get(plan_id)
+		if cached is not None:
+			return cached
 		key = self._plan_free_subjects_key(plan_id)
 		members = await self.redis.smembers(key)
-		return [m.decode() if isinstance(m, bytes) else m for m in members]
+		result = set(members)
+		_plan_subjects_cache[plan_id] = result
+		return result
 
 	async def check_access_with_plan(self, player_id: str, content_key: str, plan_id: str | None) -> bool:
 		"""Check access via explicit grant OR plan membership.
-
-		Per CONTEXT.md: Grants are additive (direct OR plan membership).
-
-		Returns True if:
-		1. Player has explicit grant (SUB-* in Redis set), OR
-		2. Subject is in player's plan with is_premium=0
-
-		Args:
-		    player_id: Player's user ID
-		    content_key: Access key (e.g., "SUB-MATH")
-		    plan_id: Player's plan ID (from JWT), or None
-
-		Returns:
-		    True if player has access through either method
+		Both checks use local caches — typically 0 Redis RTTs.
 		"""
-		# Check explicit grant first (fast path)
-		# Note: check_access() already calls ensure_hydrated()
-		if await self.check_access(player_id, content_key):
+		grants = await self.get_player_grants(player_id)
+		if content_key in grants:
 			return True
 
-		# Check plan membership (if plan provided and content is subject-level)
 		if plan_id and content_key.startswith("SUB-"):
 			subject_id = content_key.replace("SUB-", "")
-			if await self.is_subject_free_in_plan(plan_id, subject_id):
+			plan_subjects = await self.get_plan_free_subjects(plan_id)
+			if subject_id in plan_subjects:
 				return True
 
 		return False

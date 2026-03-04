@@ -6,9 +6,11 @@ from typing import TYPE_CHECKING
 
 import redis.asyncio as redis
 import structlog
+from cachetools import TTLCache
 
 from fastapi_app.core.constants import DIRTY_PROGRESS_KEY
-from fastapi_app.core.redis_keys import PROGRESS_KEY_TTL, progress_key as _progress_key_fn
+from fastapi_app.core.redis_keys import PROGRESS_KEY_TTL
+from fastapi_app.core.redis_keys import progress_key as _progress_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:
@@ -16,10 +18,10 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-# Max bytes per BITFIELD call. 512 bytes = 4096 bits per subcommand batch.
-# Keeps each BITFIELD invocation well under Redis proxy/cluster limits (~512 subcommands).
-# Multiple batches are pipelined into a single Redis round-trip.
-BITFIELD_CHUNK_SIZE = 512
+# Process-local cache tracking whether a progress bitmap EXISTS in Redis.
+# Avoids the EXISTS RTT on every ensure_hydrated() call for recently verified keys.
+# TTL=30s — after 30s we re-check Redis (safe because bitmaps have 48h TTL).
+_progress_exists_cache: TTLCache[str, bool] = TTLCache(maxsize=50_000, ttl=30)
 
 
 class ProgressService:
@@ -36,7 +38,7 @@ class ProgressService:
     - complete_lesson: SETBIT O(1) - marks lesson complete
     - is_complete: GETBIT O(1) - checks single lesson status
     - get_completed_count: BITCOUNT O(N) on bitmap size
-    - get_completed_bits: BITFIELD GET u8 + client-side bitmap decode for unlock calculation
+    - get_completed_bits: Single GET + byte-skipping decode for unlock calculation
 
     Hydration: After a Redis flush, progress bitmaps are lost. The ensure_hydrated()
     method restores them from MariaDB via the Frappe API, following the same
@@ -47,9 +49,11 @@ class ProgressService:
         self,
         redis_client: redis.Redis,
         frappe_client: FrappeClient | None = None,
+        raw_redis: redis.Redis | None = None,
     ):
         self.redis = redis_client
         self.frappe = frappe_client
+        self._raw_redis = raw_redis
 
     def _progress_key(self, user_id: str, subject_id: str, version: int = 1) -> str:
         """Generate Redis key for player's progress bitmap.
@@ -67,18 +71,17 @@ class ProgressService:
     async def ensure_hydrated(self, user_id: str, subject_id: str, version: int = 1) -> None:
         """Ensure progress bitmap exists in Redis, hydrating from MariaDB if missing.
 
-        Uses distributed lock + semaphore to prevent thundering herd after Redis flush.
-        Only one request per user+subject hydrates at a time; others wait for the result.
-
-        Args:
-            user_id: Player's user ID
-            subject_id: Subject identifier
-            version: Bitmap version
+        Uses local exists cache (30s TTL) to skip Redis EXISTS RTT on repeat calls.
         """
         key = self._progress_key(user_id, subject_id, version)
 
+        # Fastest path: local cache says it exists (0 RTTs)
+        if _progress_exists_cache.get(key):
+            return
+
         # Fast path: bitmap already exists in Redis
         if await self.redis.exists(key):
+            _progress_exists_cache[key] = True
             return
 
         # No Frappe client — can't hydrate
@@ -156,9 +159,11 @@ class ProgressService:
         await self.redis.expire(key, PROGRESS_KEY_TTL)
 
         # Mark dirty for background sync to MariaDB
-        # Format: user_id:subject_id:v{version}
         dirty_member = f"{user_id}:{subject_id}:v{version}"
         await self.redis.sadd(DIRTY_PROGRESS_KEY, dirty_member)
+
+        # We just wrote to the bitmap — it definitely exists
+        _progress_exists_cache[key] = True
 
         return bool(previous)
 
@@ -215,13 +220,14 @@ class ProgressService:
         bit_range: int,
         version: int = 1,
     ) -> set[int]:
-        """Get set of completed bit indexes via BITFIELD bitmap decode.
+        """Get set of completed bit indexes via single GET + byte-skipping decode.
 
-        Uses BITFIELD GET u8 subcommands to read each byte as an integer,
-        immune to decode_responses=True UTF-8 corruption. For large bitmaps
-        (>512 bytes / 4096 bits), chunks into pipelined BITFIELD calls to
-        stay under Redis proxy subcommand limits while keeping a single
-        round-trip.
+        Uses a raw Redis client (decode_responses=False) for a single binary-safe
+        GET, then iterates only non-zero bytes to extract set bits.  For a 50k-lesson
+        subject at 20% completion, this skips ~80% of bytes vs the old O(bit_range) loop.
+
+        Falls back to chunked BITFIELD if no raw client is available (e.g. in tests
+        or PracticeService where raw_redis is None).
 
         Args:
             user_id: Player's user ID
@@ -242,15 +248,55 @@ class ProgressService:
         if num_bytes == 0:
             return set()
 
-        # Use BITFIELD GET u8 to read each byte as an integer.
-        # Returns integers — immune to decode_responses=True UTF-8 decode
-        # (plain GET fails on bitmap bytes > 0x7F like 0xFF).
-        #
-        # Chunk into batches of BITFIELD_CHUNK_SIZE bytes per call to stay
-        # under Redis proxy/cluster subcommand limits (~512). All chunks
-        # are pipelined into a single Redis round-trip.
-        if num_bytes <= BITFIELD_CHUNK_SIZE:
-            # Fast path: small bitmap fits in one BITFIELD call
+        if self._raw_redis is not None:
+            try:
+                return await self._get_completed_bits_raw(key, bit_range, num_bytes)
+            except Exception as e:
+                logger.warning(
+                    "progress_raw_read_failed_falling_back",
+                    key=key,
+                    bit_range=bit_range,
+                    error=str(e),
+                )
+
+        # Fallback: chunked BITFIELD (for contexts without raw client)
+        return await self._get_completed_bits_bitfield(key, bit_range, num_bytes)
+
+    async def _get_completed_bits_raw(
+        self, key: str, bit_range: int, num_bytes: int
+    ) -> set[int]:
+        """Fast path: single GET + byte-skipping decode.
+
+        One Redis command (GET) returns the full bitmap as raw bytes.
+        Iterates only non-zero bytes, skipping empties entirely.
+        For 50k lessons at 20% completion: ~1250 iterations vs 50k.
+        """
+        raw: bytes | None = await self._raw_redis.get(key)
+        if not raw:
+            return set()
+
+        completed = set()
+        # Limit to what we care about (bitmap may be larger than bit_range)
+        scan_bytes = min(len(raw), num_bytes)
+        for byte_idx in range(scan_bytes):
+            byte_val = raw[byte_idx]
+            if byte_val == 0:
+                continue  # Skip empty bytes — huge win at low completion %
+            # Redis bitmaps use MSB-first bit ordering within each byte
+            base = byte_idx * 8
+            for bit_off in range(8):
+                if byte_val & (0x80 >> bit_off):
+                    bit_idx = base + bit_off
+                    if bit_idx < bit_range:
+                        completed.add(bit_idx)
+        return completed
+
+    async def _get_completed_bits_bitfield(
+        self, key: str, bit_range: int, num_bytes: int
+    ) -> set[int]:
+        """Fallback: chunked BITFIELD for contexts without raw Redis client."""
+        CHUNK_SIZE = 512
+        if num_bytes <= CHUNK_SIZE:
             args = []
             for byte_idx in range(num_bytes):
                 args.extend(["GET", "u8", str(byte_idx * 8)])
@@ -258,16 +304,14 @@ class ProgressService:
             if not byte_values:
                 return set()
         else:
-            # Chunked path: pipeline multiple BITFIELD calls
             pipe = self.redis.pipeline(transaction=False)
-            for offset in range(0, num_bytes, BITFIELD_CHUNK_SIZE):
-                count = min(BITFIELD_CHUNK_SIZE, num_bytes - offset)
+            for offset in range(0, num_bytes, CHUNK_SIZE):
+                count = min(CHUNK_SIZE, num_bytes - offset)
                 args = []
                 for i in range(count):
                     args.extend(["GET", "u8", str((offset + i) * 8)])
                 pipe.execute_command("BITFIELD", key, *args)
             results = await pipe.execute()
-            # Flatten list-of-lists into single byte_values list
             byte_values = []
             for chunk in results:
                 if chunk:
@@ -276,10 +320,14 @@ class ProgressService:
                 return set()
 
         completed = set()
-        for i in range(bit_range):
-            byte_idx, bit_offset = divmod(i, 8)
-            if byte_idx < len(byte_values):
-                # Redis bitmaps use MSB-first bit ordering within each byte
-                if byte_values[byte_idx] & (0x80 >> bit_offset):
-                    completed.add(i)
+        for byte_idx in range(len(byte_values)):
+            byte_val = byte_values[byte_idx]
+            if byte_val == 0:
+                continue
+            base = byte_idx * 8
+            for bit_off in range(8):
+                if byte_val & (0x80 >> bit_off):
+                    bit_idx = base + bit_off
+                    if bit_idx < bit_range:
+                        completed.add(bit_idx)
         return completed

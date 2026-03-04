@@ -258,11 +258,12 @@ class WalletService:
 		# Without this, HINCRBY on a missing key starts from 0, resetting XP.
 		await self.ensure_hydrated(player_id)
 
-		new_total = await self.redis.hincrby(key, "xp", amount)
-		await self.redis.expire(key, WALLET_KEY_TTL)
-
-		# Mark dirty for background sync to MariaDB
-		await self.redis.sadd(DIRTY_WALLETS_KEY, player_id)
+		pipe = self.redis.pipeline()
+		pipe.hincrby(key, "xp", amount)
+		pipe.expire(key, WALLET_KEY_TTL)
+		pipe.sadd(DIRTY_WALLETS_KEY, player_id)
+		results = await pipe.execute()
+		new_total = results[0]
 
 		logger.debug(
 			"xp_awarded",

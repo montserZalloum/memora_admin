@@ -1,5 +1,7 @@
 """Frappe authentication service."""
 
+import asyncio
+
 import httpx
 
 from fastapi_app.models.auth import FrappeUser
@@ -79,11 +81,20 @@ class FrappeAuthService:
                     if not user_email:
                         return (None, None)
 
-                    # Step 3: Get user profile details
-                    profile_response = await client.get(
-                        f"{self.frappe_url}/api/resource/User/{user_email}",
-                        cookies=cookies,
-                        headers={"Host": self.site},
+                    profile_response, player_profile_response = await asyncio.gather(
+                        client.get(
+                            f"{self.frappe_url}/api/resource/User/{user_email}",
+                            cookies=cookies,
+                            headers={"Host": self.site},
+                        ),
+                        client.get(
+                            f"{self.frappe_url}/api/resource/Memora Player Profile/{user_email}",
+                            params={
+                                "fields": '["plan", "display_name", "avatar", "gender"]',
+                            },
+                            cookies=cookies,
+                            headers={"Host": self.site},
+                        ),
                     )
 
                     frappe_user = None
@@ -105,16 +116,6 @@ class FrappeAuthService:
                             user_type="Website User",
                             time_zone=None,
                         )
-
-                    # Step 4: Fetch player profile during authenticated session
-                    player_profile_response = await client.get(
-                        f"{self.frappe_url}/api/resource/Memora Player Profile/{user_email}",
-                        params={
-                            "fields": '["plan", "display_name", "avatar", "gender"]',
-                        },
-                        cookies=cookies,
-                        headers={"Host": self.site},
-                    )
 
                     player_profile = None
                     if player_profile_response.status_code == 200:

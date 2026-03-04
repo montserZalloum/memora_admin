@@ -23,7 +23,7 @@ from fastapi_app.api.deps import (
 	require_rate_limit,
 )
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
-from fastapi_app.core.redis_keys import freeze_key, stats_key, wallet_key
+from fastapi_app.core.redis_keys import WALLET_KEY_TTL, freeze_key, stats_key, wallet_key
 from fastapi_app.models.game_session import (
 	CurrentSessionResponse,
 	EndSessionRequest,
@@ -343,12 +343,14 @@ async def end_session(
 	# XP award
 	wk = wallet_key(user.sub)
 	pipe.hincrby(wk, "xp", xp_awarded)
+	pipe.expire(wk, WALLET_KEY_TTL)
 
 	# Dirty wallet
 	pipe.sadd(DIRTY_WALLETS_KEY, user.sub)
 
 	# Stats (non-replay only)
 	stats_updated = False
+	stats_cache_needs_evict = False
 	if not is_replay:
 		lesson_path = hierarchy.find_lesson_path(session.lesson_id)
 		if lesson_path:
@@ -403,10 +405,13 @@ async def end_session(
 				pipe.hincrby(sk, f"{lesson_path.unit_id}:completed", 1)
 				pipe.hincrby(sk, f"{lesson_path.topic_id}:completed", 1)
 				pipe.expire(sk, StatsService.CACHE_TTL + random.randint(0, StatsService.JITTER_RANGE))
+				stats_cache_needs_evict = True
 			stats_updated = True
 
 	pipe_results = await pipe.execute()
 	new_total_xp = pipe_results[0]  # HINCRBY returns new value
+	if stats_cache_needs_evict:
+		stats_service.evict_local_cache(user.sub, session.subject_id, hierarchy.version)
 
 	# RT7: Leaderboard updates
 	await leaderboard_service.update_leaderboards(

@@ -5,11 +5,17 @@ import random
 
 import redis.asyncio as redis
 import structlog
+from cachetools import TTLCache
 
+from fastapi_app.core.coalesce import CoalescingLockPool
 from fastapi_app.core.redis_keys import stats_key as _stats_key_fn
 from fastapi_app.models.progress import SubjectHierarchy
 
 logger = structlog.get_logger()
+
+# Process-local TTL cache for stats hashes. Short TTL (5s) since stats can change on lesson completion.
+# Eliminates HGETALL/HMGET Redis RTTs for repeat reads of the same user+subject within 5s window.
+_stats_local_cache: TTLCache[str, dict[str, str]] = TTLCache(maxsize=20_000, ttl=5)
 
 # Process-local semaphore. With N uvicorn workers, effective system-wide
 # limit is N x MAX_CONCURRENT_STATS_RECOMPUTES (e.g., 4 workers x 30 = 120).
@@ -18,37 +24,13 @@ MAX_CONCURRENT_STATS_RECOMPUTES = 30
 _stats_recompute_semaphore: asyncio.Semaphore | None = None
 
 # Process-local per-key locks for stats recompute coalescing.
-# Prevents thundering herd when multiple requests trigger cold-start recompute for the same key.
-# Soft-bounded to _MAX_COMPUTE_LOCKS: unlocked entries are pruned on overflow. The dict may
-# temporarily exceed the cap by the number of concurrent unique in-flight keys (each holds its
-# per-key lock before reaching the semaphore). In practice this is bounded by uvicorn's worker
-# concurrency. The dict shrinks back on the next insertion once those requests complete.
-_compute_locks: dict[str, asyncio.Lock] = {}
-_MAX_COMPUTE_LOCKS = 10_000
+# The pool is soft-bounded: unlocked entries are pruned on overflow.
+_compute_locks = CoalescingLockPool(max_size=10_000)
 
 
 def _get_compute_lock(key: str) -> asyncio.Lock:
-	"""Get or create a per-key asyncio.Lock for compute coalescing.
-
-	Uses setdefault for atomicity: concurrent callers for the same key
-	always get the same Lock instance. Pruning of unlocked entries runs
-	after insertion to keep the dict near _MAX_COMPUTE_LOCKS. The new
-	key is excluded from pruning so same-key coalescing is never broken.
-	The dict may temporarily exceed the cap by the number of concurrent
-	unique in-flight keys (per-key locks are acquired before the
-	semaphore). Bounded by uvicorn worker concurrency in practice.
-	"""
-	lock = _compute_locks.get(key)
-	if lock is not None:
-		return lock
-	# setdefault is atomic: if another call raced us, we get their lock
-	lock = _compute_locks.setdefault(key, asyncio.Lock())
-	# Prune unlocked entries if over capacity, but never the key we just inserted
-	if len(_compute_locks) > _MAX_COMPUTE_LOCKS:
-		to_remove = [k for k, v in _compute_locks.items() if k != key and not v.locked()]
-		for k in to_remove:
-			_compute_locks.pop(k, None)
-	return lock
+	"""Backward-compatible accessor for the per-key stats recompute lock."""
+	return _compute_locks.get(key)
 
 
 def get_stats_recompute_semaphore() -> asyncio.Semaphore:
@@ -137,6 +119,8 @@ class StatsService:
 		# Refresh TTL on update
 		pipe.expire(key, self.CACHE_TTL)
 		await pipe.execute()
+		# Evict local cache — next read will fetch fresh data from Redis
+		_stats_local_cache.pop(key, None)
 
 	async def get_stats(
 		self,
@@ -145,34 +129,21 @@ class StatsService:
 		version: int,
 	) -> dict[str, str] | None:
 		"""Retrieve all stats from Redis hash.
-
-		Uses HGETALL to retrieve all fields.
-		Returns None if key doesn't exist (signals need for lazy init).
-
-		Args:
-			user_id: Player's user ID
-			subject_id: Subject identifier
-			version: Bitmap version
-
-		Returns:
-			Dict of field->value (strings) or None if not cached
+		Uses local TTL cache (5s) to avoid HGETALL RTT on repeat reads.
 		"""
 		key = self._stats_key(user_id, subject_id, version)
 
-		# HGETALL returns empty dict if key doesn't exist
+		cached = _stats_local_cache.get(key)
+		if cached is not None:
+			return cached
+
 		result = await self.redis.hgetall(key)
 
 		if not result:
 			return None
 
-		# Handle bytes decoding for Redis response
-		decoded: dict[str, str] = {}
-		for k, v in result.items():
-			decoded_key = k.decode() if isinstance(k, bytes) else k
-			decoded_val = v.decode() if isinstance(v, bytes) else v
-			decoded[decoded_key] = decoded_val
-
-		return decoded
+		_stats_local_cache[key] = result
+		return result
 
 	async def get_partial_stats(
 		self,
@@ -181,28 +152,28 @@ class StatsService:
 		version: int,
 		fields: list[str],
 	) -> dict[str, str] | None:
-		"""Read specific fields from stats hash via HMGET.
-
-		More efficient than HGETALL when only a subset of fields is needed
-		(e.g., track-level endpoint needs ~21 fields vs ~500 total).
-
-		Args:
-			user_id: Player's user ID
-			subject_id: Subject identifier
-			version: Bitmap version
-			fields: List of hash field names to retrieve
-
-		Returns:
-			Dict of field->value for requested fields, or None if key doesn't exist.
-			Fields not found in hash are excluded from the result dict.
+		"""Read specific fields from stats hash.
+		If full stats are in local cache, extracts fields locally (0 RTTs).
+		Otherwise falls back to HMGET.
 		"""
 		key = self._stats_key(user_id, subject_id, version)
+
+		# Fast path: extract from local full-stats cache
+		full_cached = _stats_local_cache.get(key)
+		if full_cached is not None:
+			result: dict[str, str] = {}
+			for field in fields:
+				val = full_cached.get(field)
+				if val is not None:
+					result[field] = val
+			return result if result else None
+
 		values = await self.redis.hmget(key, fields)
 
 		result: dict[str, str] = {}
 		for field, value in zip(fields, values):
 			if value is not None:
-				result[field] = value.decode() if isinstance(value, bytes) else value
+				result[field] = value
 
 		return result if result else None
 
@@ -217,18 +188,20 @@ class StatsService:
 
 		Uses HSET with mapping for batch initialization.
 		Sets TTL via EXPIRE.
-
-		Args:
-			user_id: Player's user ID
-			subject_id: Subject identifier
-			version: Bitmap version
-			stats: Dict of field->value (strings) to store
 		"""
 		key = self._stats_key(user_id, subject_id, version)
 
-		# HSET with mapping for batch initialization
-		await self.redis.hset(key, mapping=stats)
-		await self.redis.expire(key, self.CACHE_TTL + random.randint(0, self.JITTER_RANGE))
+		pipe = self.redis.pipeline()
+		pipe.hset(key, mapping=stats)
+		pipe.expire(key, self.CACHE_TTL + random.randint(0, self.JITTER_RANGE))
+		await pipe.execute()
+		# Update local cache with fresh data
+		_stats_local_cache[key] = stats
+
+	def evict_local_cache(self, user_id: str, subject_id: str, version: int) -> None:
+		"""Drop the process-local cache entry for one stats hash."""
+		key = self._stats_key(user_id, subject_id, version)
+		_stats_local_cache.pop(key, None)
 
 	async def invalidate_stats(
 		self,
@@ -236,15 +209,10 @@ class StatsService:
 		subject_id: str,
 		version: int,
 	) -> None:
-		"""Delete the stats key for cache invalidation.
-
-		Args:
-			user_id: Player's user ID
-			subject_id: Subject identifier
-			version: Bitmap version
-		"""
+		"""Delete the stats key for cache invalidation."""
 		key = self._stats_key(user_id, subject_id, version)
 		await self.redis.delete(key)
+		_stats_local_cache.pop(key, None)
 
 	async def get_or_recompute(
 		self,
@@ -282,7 +250,7 @@ class StatsService:
 			return stats
 
 		# Slow path: per-key lock prevents thundering herd for same key
-		lock = _get_compute_lock(key)
+		lock = _compute_locks.get(key)
 		async with lock:
 			# Double-check after acquiring per-key lock
 			stats = await self.get_stats(user_id, subject_id, version)

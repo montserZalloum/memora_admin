@@ -58,6 +58,16 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 		self.limit = limit
 		self.window = window
 		self.fail_open = fail_open
+		self._redis_client: aioredis.Redis | None = None
+		self._limiter: GlobalRateLimiter | None = None
+
+	def _get_limiter(self, request: Request) -> GlobalRateLimiter:
+		"""Lazily initialize and reuse the shared Redis-backed limiter."""
+		if self._limiter is None:
+			pool = request.app.state.redis_pool
+			self._redis_client = aioredis.Redis(connection_pool=pool)
+			self._limiter = GlobalRateLimiter(self._redis_client)
+		return self._limiter
 
 	async def dispatch(self, request: Request, call_next) -> Response:
 		"""Check rate limit before passing request through."""
@@ -72,9 +82,7 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 
 		# Check rate limit (fail-open: any error lets request through)
 		try:
-			pool = request.app.state.redis_pool
-			redis_client = aioredis.Redis(connection_pool=pool)
-			limiter = GlobalRateLimiter(redis_client)
+			limiter = self._get_limiter(request)
 			key = global_ratelimit_key(client_ip)
 			allowed, count, ttl = await limiter.check(key, self.limit, self.window)
 		except Exception:

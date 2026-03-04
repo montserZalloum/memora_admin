@@ -26,7 +26,7 @@ from fastapi_app.core.redis_keys import hydration_lock_key
 logger = structlog.get_logger()
 
 # Max concurrent Frappe hydration calls per uvicorn worker process.
-# With 4 workers × 50 = 200 max concurrent Frappe calls across the service.
+# With 4 workers x 50 = 200 max concurrent Frappe calls across the service.
 MAX_CONCURRENT_HYDRATIONS = 50
 
 # How long to remember that a key hydrated to empty (seconds).
@@ -50,7 +50,7 @@ def get_hydration_semaphore() -> asyncio.Semaphore:
 async def guarded_hydrate(
 	redis_client: aioredis.Redis,
 	cache_key: str,
-	hydrate_fn: Callable[[], Awaitable[None]],
+	hydrate_fn: Callable[[], Awaitable[bool | None]],
 	*,
 	lock_ttl: int = 30,
 	wait_timeout: float = 5.0,
@@ -68,7 +68,8 @@ async def guarded_hydrate(
 	Args:
 		redis_client: Redis connection.
 		cache_key: The Redis key being hydrated (polled for existence by waiters).
-		hydrate_fn: Async callable that performs the Frappe call and writes to Redis.
+		hydrate_fn: Async callable that performs the Frappe call and returns
+			truthy when it wrote the cache key.
 		lock_ttl: Lock auto-expiration in seconds (deadlock protection).
 		wait_timeout: Max seconds a waiter polls before giving up.
 		poll_interval: Seconds between existence checks while waiting.
@@ -104,15 +105,15 @@ async def guarded_hydrate(
 		return
 
 	# We hold the lock — hydrate under the global semaphore
+	wrote_data = False
 	try:
 		sem = get_hydration_semaphore()
 		async with sem:
-			await hydrate_fn()
+			wrote_data = bool(await hydrate_fn())
 	finally:
-		# Set sentinel whether data was written or not. If hydrate_fn wrote
-		# real data, the sentinel is harmless (ensure_hydrated() fast path
-		# returns on EXISTS before reaching guarded_hydrate). If no data was
-		# written, the sentinel prevents 5s waiter timeouts for empty players.
-		await redis_client.set(sentinel_key, "1", ex=sentinel_ttl)
+		# Only set the sentinel when hydration wrote no data. That preserves the
+		# empty-player fast path without masking a freshly written cache entry.
+		if not wrote_data:
+			await redis_client.set(sentinel_key, "1", ex=sentinel_ttl)
 		# Release lock. On crash, the TTL auto-expires it anyway.
 		await redis_client.delete(lock_key)

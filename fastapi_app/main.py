@@ -16,7 +16,7 @@ from fastapi_app.api.v1.router import router as v1_router
 from fastapi_app.core.config import get_settings
 from fastapi_app.core.logging import configure_logging
 from fastapi_app.core.pubsub import start_notification_listener, start_pubsub_listener
-from fastapi_app.core.redis import create_redis_pool, verify_redis_connection
+from fastapi_app.core.redis import create_redis_pool, create_redis_raw_pool, verify_redis_connection
 from fastapi_app.core.ws_manager import ConnectionManager
 from fastapi_app.middleware.rate_limit import GlobalRateLimitMiddleware
 from fastapi_app.middleware.request_id import RequestIDMiddleware
@@ -43,6 +43,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     pool = await create_redis_pool()
     await verify_redis_connection(pool)
     app.state.redis_pool = pool
+
+    # Create raw pool for binary-safe bitmap reads (decode_responses=False)
+    raw_pool = await create_redis_raw_pool()
+    app.state.redis_raw_pool = raw_pool
 
     # Create Redis client for services
     redis_client = redis.Redis(connection_pool=pool)
@@ -131,8 +135,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if hasattr(app.state, "frappe_client"):
         await app.state.frappe_client.close()
 
-    # Cleanup Redis pool
+    # Cleanup Redis pools
     await pool.disconnect()
+    if hasattr(app.state, "redis_raw_pool"):
+        await app.state.redis_raw_pool.disconnect()
     logger.info("fastapi_shutdown")
 
 

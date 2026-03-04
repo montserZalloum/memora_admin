@@ -71,7 +71,7 @@ class SettingsService:
 		logger.warning("settings_frappe_empty", action="using_defaults")
 		return GamificationSettings()
 
-	async def _hydrate_from_frappe(self) -> None:
+	async def _hydrate_from_frappe(self) -> bool:
 		"""Fetch settings from Frappe and write to Redis (no TTL)."""
 		try:
 			result = await self.frappe.call(
@@ -79,10 +79,10 @@ class SettingsService:
 			)
 		except Exception:
 			logger.exception("settings_frappe_call_failed")
-			return
+			return False
 
 		if not result:
-			return
+			return False
 
 		settings = GamificationSettings.model_validate(result)
 
@@ -98,6 +98,7 @@ class SettingsService:
 			replay_xp=settings.replay_xp,
 			max_streak=settings.max_streak_multiplier_percent,
 		)
+		return True
 
 	async def invalidate(self) -> None:
 		"""

@@ -62,6 +62,18 @@ async def get_redis(request: Request) -> redis.Redis:
 	return redis.Redis(connection_pool=request.app.state.redis_pool)
 
 
+async def get_redis_raw(request: Request) -> redis.Redis | None:
+	"""Get raw Redis client (decode_responses=False) for binary-safe reads.
+
+	Returns None if raw pool is not configured (e.g. in test environments),
+	causing ProgressService to fall back to BITFIELD decode.
+	"""
+	raw_pool = getattr(request.app.state, "redis_raw_pool", None)
+	if raw_pool is None:
+		return None
+	return redis.Redis(connection_pool=raw_pool)
+
+
 # Type alias for dependency injection
 RedisClient = Annotated[redis.Redis, Depends(get_redis)]
 
@@ -211,10 +223,13 @@ async def get_access_service(redis_client: RedisClient) -> AccessService:
 AccessServiceDep = Annotated[AccessService, Depends(get_access_service)]
 
 
-async def get_progress_service(redis_client: RedisClient) -> ProgressService:
+async def get_progress_service(
+	redis_client: RedisClient,
+	raw_redis: Annotated[redis.Redis | None, Depends(get_redis_raw)],
+) -> ProgressService:
 	"""Get ProgressService with Redis and FrappeClient from app state."""
 	frappe_client = await get_frappe_client()
-	return ProgressService(redis_client, frappe_client=frappe_client)
+	return ProgressService(redis_client, frappe_client=frappe_client, raw_redis=raw_redis)
 
 
 ProgressServiceDep = Annotated[ProgressService, Depends(get_progress_service)]
@@ -359,7 +374,7 @@ async def get_practice_service(
 	frappe_client = await get_frappe_client()
 	hierarchy_service = HierarchyService(redis_client, frappe_client)
 	access_service = AccessService(redis_client, frappe_client=frappe_client)
-	progress_service = ProgressService(redis_client, frappe_client=frappe_client)
+	progress_service = ProgressService(redis_client, frappe_client=frappe_client, raw_redis=None)
 	return PracticeService(
 		redis_client,
 		frappe_client,

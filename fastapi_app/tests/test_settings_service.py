@@ -2,11 +2,12 @@
 
 import pytest
 
-from fastapi_app.services.settings import SettingsService
 from fastapi_app.models.settings import GamificationSettings
+from fastapi_app.services.settings import SettingsService
 
 # Settings cache key is hardcoded
 SETTINGS_CACHE_KEY = "memora:settings:gamification"
+SETTINGS_SENTINEL_KEY = f"{SETTINGS_CACHE_KEY}:_hydrated"
 
 
 @pytest.fixture
@@ -19,7 +20,7 @@ async def settings_svc(redis_client, mock_frappe):
 async def cleanup_settings_key(redis_client):
 	"""Auto-cleanup settings cache key after each test."""
 	yield
-	await redis_client.delete(SETTINGS_CACHE_KEY)
+	await redis_client.delete(SETTINGS_CACHE_KEY, SETTINGS_SENTINEL_KEY)
 
 
 class TestCacheHit:
@@ -76,6 +77,20 @@ class TestCacheMiss:
 		# Assert: no TTL (persistent — invalidated by Frappe hook on save)
 		ttl = await redis_client.ttl(SETTINGS_CACHE_KEY)
 		assert ttl == -1
+
+	async def test_tc_set_02b_cache_miss_does_not_leave_sentinel_on_success(
+		self,
+		settings_svc,
+		redis_client,
+		mock_frappe,
+	):
+		"""Successful hydration should not leave an empty-result sentinel behind."""
+		mock_frappe.call.return_value = {"base_lesson_xp": 120, "replay_xp": 60}
+
+		await settings_svc.get_gamification_settings()
+
+		assert await redis_client.exists(SETTINGS_CACHE_KEY) == 1
+		assert await redis_client.exists(SETTINGS_SENTINEL_KEY) == 0
 
 
 class TestFrappeUnavailable:
