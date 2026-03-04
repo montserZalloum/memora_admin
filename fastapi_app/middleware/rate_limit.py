@@ -9,6 +9,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from fastapi_app.core.redis_keys import global_ratelimit_key
+from fastapi_app.core.request_meta import get_client_ip
 from fastapi_app.services.global_rate_limit import GlobalRateLimiter
 
 logger = structlog.get_logger()
@@ -26,17 +27,6 @@ def _is_exempt(path: str) -> bool:
 		if path.startswith(prefix):
 			return True
 	return False
-
-
-def _extract_client_ip(request: Request) -> str:
-	"""Extract client IP from X-Forwarded-For or request.client.host."""
-	forwarded_for = request.headers.get("X-Forwarded-For")
-	if forwarded_for:
-		# First entry is the real client IP (set by nginx)
-		return forwarded_for.split(",")[0].strip()
-	if request.client:
-		return request.client.host
-	return "unknown"
 
 
 class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
@@ -78,7 +68,7 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 			return await call_next(request)
 
 		# Extract client IP
-		client_ip = _extract_client_ip(request)
+		client_ip = get_client_ip(request)
 
 		# Check rate limit (fail-open: any error lets request through)
 		try:

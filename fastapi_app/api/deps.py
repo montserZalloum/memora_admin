@@ -368,13 +368,14 @@ ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 
 async def get_practice_service(
 	redis_client: RedisClient,
+	raw_redis: Annotated[redis.Redis | None, Depends(get_redis_raw)],
 	settings: SettingsDep,
 ) -> PracticeService:
 	"""Get PracticeService with all required dependencies."""
 	frappe_client = await get_frappe_client()
 	hierarchy_service = HierarchyService(redis_client, frappe_client)
 	access_service = AccessService(redis_client, frappe_client=frappe_client)
-	progress_service = ProgressService(redis_client, frappe_client=frappe_client, raw_redis=None)
+	progress_service = ProgressService(redis_client, frappe_client=frappe_client, raw_redis=raw_redis)
 	return PracticeService(
 		redis_client,
 		frappe_client,

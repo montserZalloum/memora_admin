@@ -111,6 +111,59 @@ class TestFullMissWithFallback:
 		assert result[TEST_PLAYER_2].display_name.startswith("Anonymous")
 
 
+class TestBatchChunking:
+	"""Batch fetches over MAX_FRAPPE_BATCH are chunked, not truncated."""
+
+	async def test_tc_prf_05_over_50_ids_chunked_into_two_calls(
+		self, profile_svc, redis_client, test_prefix, mock_frappe
+	):
+		"""TC-PRF-05: 75 cache-missed IDs produce 2 Frappe calls (50+25), all returned."""
+		ids = [f"PLAYER-TEST-PRF-{i:04d}" for i in range(75)]
+
+		# Frappe returns a profile for every ID it receives
+		mock_frappe.call.side_effect = lambda method, params: [
+			_make_test_profile(pid) for pid in params["player_ids"]
+		]
+
+		result = await profile_svc.get_profiles_batch(ids)
+
+		# All 75 profiles returned
+		assert len(result) == 75
+		for pid in ids:
+			assert pid in result
+
+		# Exactly 2 Frappe calls: chunk of 50 + chunk of 25
+		assert mock_frappe.call.call_count == 2
+		# call(method, params) — positional args
+		first_batch = mock_frappe.call.call_args_list[0][0][1]["player_ids"]
+		second_batch = mock_frappe.call.call_args_list[1][0][1]["player_ids"]
+		assert len(first_batch) == 50
+		assert len(second_batch) == 25
+
+	async def test_tc_prf_06_chunk_error_continues_remaining(
+		self, profile_svc, redis_client, test_prefix, mock_frappe
+	):
+		"""TC-PRF-06: If first chunk errors, second chunk still fetched."""
+		ids = [f"PLAYER-TEST-PRF-{i:04d}" for i in range(75)]
+
+		call_count = 0
+
+		async def _side_effect(method, params):
+			nonlocal call_count
+			call_count += 1
+			if call_count == 1:
+				raise Exception("Frappe timeout")
+			return [_make_test_profile(pid) for pid in params["player_ids"]]
+
+		mock_frappe.call.side_effect = _side_effect
+
+		result = await profile_svc.get_profiles_batch(ids)
+
+		# 25 real profiles from second chunk + 50 fallbacks from failed first chunk
+		assert len(result) == 75
+		assert mock_frappe.call.call_count == 2
+
+
 class TestEmptyInput:
 	"""Empty input returns empty dict immediately."""
 

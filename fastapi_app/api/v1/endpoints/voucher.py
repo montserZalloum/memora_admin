@@ -10,6 +10,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from fastapi_app.api.deps import CurrentUser, VoucherServiceDep
+from fastapi_app.core.request_meta import get_client_ip
 from fastapi_app.models.voucher import VoucherPreviewRequest, VoucherRedeemRequest
 from fastapi_app.services.voucher import FAILURE_ERRORS
 
@@ -35,14 +36,6 @@ ERROR_STATUS_MAP: dict[str, int] = {
 	"RATE_LIMITED": 429,
 	"REDEMPTION_FAILED": 500,
 }
-
-
-def _get_client_ip(request: Request) -> str:
-	"""Extract client IP, respecting X-Forwarded-For from nginx."""
-	forwarded = request.headers.get("X-Forwarded-For")
-	if forwarded:
-		return forwarded.split(",")[0].strip()
-	return request.client.host if request.client else "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -113,7 +106,7 @@ async def redeem_voucher(
 		4xx: Machine-readable error code with appropriate HTTP status
 		503: Redis unavailable
 	"""
-	client_ip = _get_client_ip(request)
+	client_ip = get_client_ip(request)
 
 	try:
 		# 1. Check rate limit BEFORE operation

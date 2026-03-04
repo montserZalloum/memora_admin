@@ -20,6 +20,7 @@ from fastapi_app.core.redis import create_redis_pool, create_redis_raw_pool, ver
 from fastapi_app.core.ws_manager import ConnectionManager
 from fastapi_app.middleware.rate_limit import GlobalRateLimitMiddleware
 from fastapi_app.middleware.request_id import RequestIDMiddleware
+from fastapi_app.middleware.request_metrics import RequestMetricsMiddleware
 from fastapi_app.services.announcements import AnnouncementService
 from fastapi_app.services.catalog import CatalogService
 from fastapi_app.services.frappe_client import FrappeClient
@@ -155,6 +156,7 @@ app.add_middleware(
 	fail_open=settings.rate_limit_fail_open,
 )
 app.add_middleware(RequestIDMiddleware)
+app.add_middleware(RequestMetricsMiddleware)
 app.add_middleware(
 	CORSMiddleware,
 	allow_origins=[

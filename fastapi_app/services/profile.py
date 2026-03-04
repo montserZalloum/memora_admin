@@ -135,31 +135,38 @@ class ProfileService:
 		if not player_ids:
 			return {}
 
-		# Limit batch size per RESEARCH.md pitfall
-		batch = player_ids[: self.MAX_FRAPPE_BATCH]
-		if len(player_ids) > self.MAX_FRAPPE_BATCH:
-			logger.warning(
-				"profile_batch_truncated",
+		batches = [
+			player_ids[i : i + self.MAX_FRAPPE_BATCH]
+			for i in range(0, len(player_ids), self.MAX_FRAPPE_BATCH)
+		]
+		if len(batches) > 1:
+			logger.info(
+				"profile_batch_chunked",
 				requested=len(player_ids),
-				fetched=self.MAX_FRAPPE_BATCH,
+				chunks=len(batches),
+				chunk_size=self.MAX_FRAPPE_BATCH,
 			)
 
-		try:
-			result = await self.frappe.call(
-				"memora_admin.api.profile.get_profiles_batch",
-				{"player_ids": batch},
-			)
-		except Exception as e:
-			logger.error("profile_frappe_fetch_error", error=str(e))
-			return {}
+		results: list[dict] = []
+		for batch in batches:
+			try:
+				batch_result = await self.frappe.call(
+					"memora_admin.api.profile.get_profiles_batch",
+					{"player_ids": batch},
+				)
+			except Exception as e:
+				logger.error("profile_frappe_fetch_error", error=str(e), batch_size=len(batch))
+				continue
+			if batch_result:
+				results.extend(batch_result)
 
-		if not result:
+		if not results:
 			return {}
 
 		profiles: dict[str, PlayerProfile] = {}
 		cache_pipe = self.redis.pipeline()
 
-		for item in result:
+		for item in results:
 			try:
 				# Handle empty display_name as missing (per CONTEXT.md)
 				display_name = item.get("display_name") or ""

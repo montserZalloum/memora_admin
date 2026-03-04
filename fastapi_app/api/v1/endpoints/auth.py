@@ -11,6 +11,7 @@ from fastapi.responses import JSONResponse
 
 from fastapi_app.api.deps import RedisClient, SettingsDep, evict_session_cache, get_frappe_client
 from fastapi_app.core.redis_keys import registration_options_key
+from fastapi_app.core.request_meta import get_client_ip
 from fastapi_app.core.security import create_access_token, create_refresh_token, decode_token
 from fastapi_app.core.ws_manager import ConnectionManager
 from fastapi_app.models.auth import (
@@ -41,15 +42,6 @@ from fastapi_app.services.wallet import WalletService
 logger = structlog.get_logger()
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-
-def _get_client_ip(request: Request) -> str:
-	"""Extract client IP, respecting X-Forwarded-For from nginx."""
-	forwarded = request.headers.get("X-Forwarded-For")
-	if forwarded:
-		# First IP in chain is the original client
-		return forwarded.split(",")[0].strip()
-	return request.client.host if request.client else "unknown"
 
 
 async def _force_kick_old_sessions(request: Request, player_id: str) -> None:
@@ -185,7 +177,7 @@ async def player_login(
 			detail={"code": "DEVICE_ID_REQUIRED", "message": "X-Device-ID header required"},
 		)
 
-	client_ip = _get_client_ip(request)
+	client_ip = get_client_ip(request)
 
 	# 2. Rate limit check
 	rate_limiter = RateLimiter(redis)
@@ -251,7 +243,7 @@ async def admin_login(
 	Returns JWT tokens only (no profile enrichment).
 	No X-Device-ID required for admin.
 	"""
-	client_ip = _get_client_ip(request)
+	client_ip = get_client_ip(request)
 
 	# 1. Rate limit check
 	rate_limiter = RateLimiter(redis)
@@ -434,7 +426,7 @@ async def player_register(
 
 	Rate limited: 3 OTP/phone/10min, 10 OTP/IP/10min, 60s resend cooldown.
 	"""
-	client_ip = _get_client_ip(request)
+	client_ip = get_client_ip(request)
 
 	# Check if phone already registered in MariaDB (upfront for better UX)
 	frappe_client = await get_frappe_client()
@@ -585,7 +577,7 @@ async def player_register_resend(
 	Generates a new OTP and resets the attempt counter.
 	Subject to 60-second cooldown between resends.
 	"""
-	client_ip = _get_client_ip(request)
+	client_ip = get_client_ip(request)
 	otp_service = OTPService(redis)
 	await otp_service.resend_registration_otp(body.pending_id, client_ip)
 	return {"message": "OTP resent"}
@@ -609,7 +601,7 @@ async def password_reset_request(
 	of whether the phone number is registered. Rate limits and cooldown run
 	in all cases for timing consistency.
 	"""
-	client_ip = _get_client_ip(request)
+	client_ip = get_client_ip(request)
 	otp_service = OTPService(redis)
 
 	# Check phone existence (needed to decide whether to store OTP)

@@ -1,5 +1,7 @@
 """Frappe API client for external whitelisted method calls."""
 
+import time
+
 import httpx
 import structlog
 
@@ -71,7 +73,15 @@ class FrappeClient:
 			else 0,
 		)
 
+		started = time.perf_counter()
 		response = await client.post(url, json=kwargs)
+		duration_ms = round((time.perf_counter() - started) * 1000, 2)
+		logger.info(
+			"frappe_api_timed",
+			method=method,
+			status_code=response.status_code,
+			duration_ms=duration_ms,
+		)
 
 		if response.status_code != 200:
 			error_msg = response.text
