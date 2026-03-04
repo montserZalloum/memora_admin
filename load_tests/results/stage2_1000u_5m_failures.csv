@@ -1,0 +1,28 @@
+Method,Name,Error,Occurrences
+GET,/api/v1/wallet,CatchResponseError('500: Internal Server Error'),36
+GET,/api/v1/profile/stats,CatchResponseError('500: Internal Server Error'),94
+POST,/api/v1/sessions/start,CatchResponseError('500: Internal Server Error'),137
+GET,/api/v1/catalog/,"CatchResponseError('503: {""detail"":""Service temporarily unavailable""}')",76
+GET,/api/v1/practice/hierarchy,CatchResponseError('500: Internal Server Error'),131
+GET,/api/v1/sessions/current,CatchResponseError('500: Internal Server Error'),46
+GET,/api/v1/announcements/,CatchResponseError('500: Internal Server Error'),34
+GET,/api/v1/progress/[subject]/tracks/[track],CatchResponseError('500: Internal Server Error'),67
+GET,/api/v1/profile,CatchResponseError('500: Internal Server Error'),119
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,CatchResponseError('500: Internal Server Error'),377
+GET,/api/v1/leaderboard/[type],CatchResponseError('500: Internal Server Error'),125
+GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":""SUBJECT_NOT_FOUND""}')",578
+POST,/api/v1/sessions/end,CatchResponseError('500: Internal Server Error'),4
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",7252
+POST,/api/v1/sessions/start,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",154
+GET,/api/v1/progress/[subject]/tracks,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",207
+GET,/api/v1/sessions/current,"CatchResponseError('404: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active session""}}')",292
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active lesson session""}}')",182
+GET,/api/v1/settings/gamification,CatchResponseError('500: Internal Server Error'),52
+GET,/api/v1/progress/[subject]/tracks/[track]/units/[unit],CatchResponseError('500: Internal Server Error'),30
+GET,/api/v1/progress,CatchResponseError('500: Internal Server Error'),249
+GET,/api/v1/leaderboard/[type]/me,CatchResponseError('500: Internal Server Error'),38
+GET,/api/v1/progress/[subject]/tracks,CatchResponseError('500: Internal Server Error'),196
+GET,/api/v1/reviews,CatchResponseError('500: Internal Server Error'),95
+GET,/api/v1/subscriptions,CatchResponseError('500: Internal Server Error'),18
+GET,/api/v1/profile/mastery,CatchResponseError('500: Internal Server Error'),16
+GET,/api/v1/profile/activity,CatchResponseError('500: Internal Server Error'),1886

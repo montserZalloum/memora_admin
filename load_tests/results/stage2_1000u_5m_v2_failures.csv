@@ -1,0 +1,4 @@
+Method,Name,Error,Occurrences
+GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":""SUBJECT_NOT_FOUND""}')",600
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active lesson session""}}')",169
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""Session already ended""}}')",1
