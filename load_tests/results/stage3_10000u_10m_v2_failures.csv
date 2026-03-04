@@ -1,0 +1,10 @@
+Method,Name,Error,Occurrences
+GET,/api/v1/sessions/current,CatchResponseError('500: Internal Server Error'),2
+GET,/api/v1/announcements/,CatchResponseError('500: Internal Server Error'),1
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,CatchResponseError('500: Internal Server Error'),4
+GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":""SUBJECT_NOT_FOUND""}')",1200
+POST,/api/v1/sessions/end,CatchResponseError('500: Internal Server Error'),1
+GET,/api/v1/sessions/current,"CatchResponseError('404: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active session""}}')",726
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active lesson session""}}')",345
+POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""Session already ended""}}')",8
+GET,/api/v1/profile/activity,CatchResponseError('500: Internal Server Error'),1
