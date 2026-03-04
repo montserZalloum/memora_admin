@@ -144,9 +144,10 @@ return {old_score, new_score}
 # Per CONTEXT.md: Daily resets at midnight, weekly resets Friday midnight
 AMMAN_TZ = ZoneInfo("Asia/Amman")
 
-# TTLs for periodic leaderboard keys (prevents unbounded accumulation after Redis data loss)
-DAILY_KEY_TTL = 30 * 86400  # 30 days
-WEEKLY_KEY_TTL = 90 * 86400  # 90 days
+# TTLs for periodic leaderboard keys — only the current period is ever queried,
+# so keep a small buffer beyond the period length for safety.
+DAILY_KEY_TTL = 48 * 3600  # 48 hours (matches plan-scoped daily)
+WEEKLY_KEY_TTL = 8 * 86400  # 8 days (matches plan-scoped weekly)
 
 
 class LeaderboardService:
@@ -504,12 +505,7 @@ class LeaderboardService:
 			tier_count_sum = sum(int(v) for v in (tier_counts_raw or []))
 		except (TypeError, ValueError):
 			tier_count_sum = -1
-		metadata_healthy = (
-			tieridx_exists
-			and tiercnt_exists
-			and version_exists
-			and tier_count_sum == total
-		)
+		metadata_healthy = tieridx_exists and tiercnt_exists and version_exists and tier_count_sum == total
 
 		if metadata_healthy:
 			# Indexed path: O(log T) via tier index ZSET.

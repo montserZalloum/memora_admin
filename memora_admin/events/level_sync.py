@@ -37,6 +37,8 @@ def on_level_settings_updated(doc, method):
 			),
 		)
 
-		frappe.logger().info(f"Level config synced to Redis: a={doc.quadratic_coefficient}, b={doc.linear_coefficient}, max={doc.max_level}")
+		frappe.logger().info(
+			f"Level config synced to Redis: a={doc.quadratic_coefficient}, b={doc.linear_coefficient}, max={doc.max_level}"
+		)
 	except Exception as e:
 		frappe.logger().error(f"Failed to sync level config to Redis: {e}")

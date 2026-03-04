@@ -15,6 +15,7 @@ Tests verify all 10 auth routes:
 
 Reference: contracts/endpoint-test-contracts.md §2
 """
+
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
@@ -352,10 +353,15 @@ class TestAdminLoginAndRefresh:
 
 			# Seed session with matching family_id AND plan_id
 			sess_key = session_key(player_id)
-			await redis_client.set(sess_key, json.dumps({
-				"fid": family_id,
-				"plan": plan_id,
-			}))
+			await redis_client.set(
+				sess_key,
+				json.dumps(
+					{
+						"fid": family_id,
+						"plan": plan_id,
+					}
+				),
+			)
 
 			resp = await app_client.post(
 				"/api/v1/auth/refresh",
@@ -371,8 +377,9 @@ class TestAdminLoginAndRefresh:
 
 	async def test_refresh_expired_token(self, app_client):
 		"""Expired refresh token returns 401."""
-		from fastapi_app.core.security import create_refresh_token
 		from datetime import timedelta
+
+		from fastapi_app.core.security import create_refresh_token
 
 		player_id = f"PLAYER-EXPIRED-{uuid4().hex[:8]}"
 		family_id = str(uuid4())
@@ -540,33 +547,38 @@ class TestRegistration:
 			# Pre-seed registration options in Redis
 			await redis_client.set(
 				registration_options_key(),
-				json.dumps({
-					"grades": [{"name": "1", "majors": []}],
-					"plans": [{"name": "PLAN-FREE", "label": "Free Plan"}],
-					"seasons": [{"name": "SEAS-00027", "label": "2024-2025"}],
-				}),
+				json.dumps(
+					{
+						"grades": [{"name": "1", "majors": []}],
+						"plans": [{"name": "PLAN-FREE", "label": "Free Plan"}],
+						"seasons": [{"name": "SEAS-00027", "label": "2024-2025"}],
+					}
+				),
 				ex=300,
 			)
 
 			# Pre-seed pending registration with all required fields
 			await redis_client.set(
 				pending_reg_key(pending_id),
-				json.dumps({
-					"mobile": mobile,
-					"plan": "PLAN-FREE",
-					"otp": otp,
-					"attempts": 0,
-					"password": "pass123",
-					"display_name": "Test Player",
-					"gender": "M",
-					"grade": "1",
-				}),
+				json.dumps(
+					{
+						"mobile": mobile,
+						"plan": "PLAN-FREE",
+						"otp": otp,
+						"attempts": 0,
+						"password": "pass123",
+						"display_name": "Test Player",
+						"gender": "M",
+						"grade": "1",
+					}
+				),
 				ex=3600,
 			)
 
 			with patch("fastapi_app.api.v1.endpoints.auth.get_frappe_client") as mock_get_frappe:
 				mock_frappe_client = AsyncMock()
 				mock_get_frappe.return_value = mock_frappe_client
+
 				# Configure mock to return different values based on the method called
 				async def mock_call(method, *args, **kwargs):
 					if "register_player" in method or "create" in method:
@@ -730,7 +742,9 @@ class TestPasswordReset:
 
 		try:
 			# Pre-seed correct OTP (JSON format)
-			await redis_client.set(reset_otp_key(mobile), json.dumps({"otp": correct_otp, "attempts": 0}), ex=600)
+			await redis_client.set(
+				reset_otp_key(mobile), json.dumps({"otp": correct_otp, "attempts": 0}), ex=600
+			)
 
 			resp = await app_client.post(
 				"/api/v1/auth/player/password-reset/verify",

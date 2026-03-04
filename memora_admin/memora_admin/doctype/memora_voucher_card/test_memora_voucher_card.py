@@ -11,24 +11,25 @@ This test suite covers 22 test cases across 5 user stories:
 - US5: Batch Auto-Close (1 test)
 """
 
-import frappe
 import hmac
 import inspect
 
-from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
+import frappe
+
 from memora_admin.memora_admin.tests.voucher_fixtures import (
-	make_product_grant,
-	make_player,
 	make_batch,
 	make_customer,
+	make_player,
+	make_product_grant,
 )
 from memora_admin.memora_admin.tests.voucher_helpers import (
-	generate_batch_sync,
 	fill_and_complete_allocation,
-	redeem_card_by_pin,
+	generate_batch_sync,
 	get_pins_from_export,
 	preview_card_by_pin,
+	redeem_card_by_pin,
 )
+from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
 
 
 class TestMemoraVoucherCard(VoucherTestCase):
@@ -51,34 +52,42 @@ class TestMemoraVoucherCard(VoucherTestCase):
 
 		# Step 1: Create two Memora Subjects for grant component targets
 		# We need different subjects for each grant to avoid ALREADY_OWNED conflicts
-		cls.subject1 = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": "Test Subject 1 for Redemption",
-			"subject_code": f"TST1-{frappe.generate_hash(length=6)}",
-		})
+		cls.subject1 = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": "Test Subject 1 for Redemption",
+				"subject_code": f"TST1-{frappe.generate_hash(length=6)}",
+			}
+		)
 		cls.subject1.insert(ignore_permissions=True)
 
-		cls.subject2 = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": "Test Subject 2 for Redemption",
-			"subject_code": f"TST2-{frappe.generate_hash(length=6)}",
-		})
+		cls.subject2 = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": "Test Subject 2 for Redemption",
+				"subject_code": f"TST2-{frappe.generate_hash(length=6)}",
+			}
+		)
 		cls.subject2.insert(ignore_permissions=True)
 
 		# Step 2: Create 2 Product Grants with different grant components
 		cls.grant1 = make_product_grant(
 			season="SEAS-00027",
-			grant_components=[{
-				"target_doctype": "Memora Subject",
-				"target_name": cls.subject1.name,
-			}],
+			grant_components=[
+				{
+					"target_doctype": "Memora Subject",
+					"target_name": cls.subject1.name,
+				}
+			],
 		)
 		cls.grant2 = make_product_grant(
 			season="SEAS-00027",
-			grant_components=[{
-				"target_doctype": "Memora Subject",
-				"target_name": cls.subject2.name,
-			}],
+			grant_components=[
+				{
+					"target_doctype": "Memora Subject",
+					"target_name": cls.subject2.name,
+				}
+			],
 		)
 
 		# Step 3: Create a Voucher Batch with both grants
@@ -107,12 +116,13 @@ class TestMemoraVoucherCard(VoucherTestCase):
 
 		# Step 8: Create a Player Profile with unique mobile
 		# Import make_player dependencies
+		import random
+
 		from memora_admin.memora_admin.tests.voucher_fixtures import (
 			_make_grade,
 			_make_major,
 			_make_plan,
 		)
-		import random
 
 		# Generate unique mobile number to avoid collisions
 		unique_mobile = f"2010{random.randint(10000000, 99999999)}"
@@ -123,16 +133,18 @@ class TestMemoraVoucherCard(VoucherTestCase):
 		plan = _make_plan(grade=grade.name, season="SEAS-00027")
 
 		# Create player manually with unique mobile
-		cls.player = frappe.get_doc({
-			"doctype": "Memora Player Profile",
-			"display_name": f"Test Player {frappe.generate_hash(length=8)}",
-			"plan": plan.name,
-			"grade": grade.name,
-			"major": major.name,
-			"season": "SEAS-00027",
-			"avatar": "pre",
-			"mobile": unique_mobile,
-		})
+		cls.player = frappe.get_doc(
+			{
+				"doctype": "Memora Player Profile",
+				"display_name": f"Test Player {frappe.generate_hash(length=8)}",
+				"plan": plan.name,
+				"grade": grade.name,
+				"major": major.name,
+				"season": "SEAS-00027",
+				"avatar": "pre",
+				"mobile": unique_mobile,
+			}
+		)
 		cls.player.insert(ignore_permissions=True)
 
 		# Step 9: Build cards list (all Allocated cards)
@@ -603,12 +615,14 @@ class TestMemoraVoucherCard(VoucherTestCase):
 		access_key = f"SUB-{self.subject1.name}"
 
 		# Create a Player Subscription to simulate prior ownership
-		subscription = frappe.get_doc({
-			"doctype": "Memora Player Subscription",
-			"player": self.player.name,
-			"access_key": access_key,
-			"expires_at": "2030-12-31",
-		})
+		subscription = frappe.get_doc(
+			{
+				"doctype": "Memora Player Subscription",
+				"player": self.player.name,
+				"access_key": access_key,
+				"expires_at": "2030-12-31",
+			}
+		)
 		subscription.insert(ignore_permissions=True)
 
 		try:
@@ -680,12 +694,14 @@ class TestMemoraVoucherCard(VoucherTestCase):
 
 		# Create a Player Subscription for grant1's access key (subject1)
 		access_key1 = f"SUB-{self.subject1.name}"
-		subscription = frappe.get_doc({
-			"doctype": "Memora Player Subscription",
-			"player": self.player.name,
-			"access_key": access_key1,
-			"expires_at": "2030-12-31",
-		})
+		subscription = frappe.get_doc(
+			{
+				"doctype": "Memora Player Subscription",
+				"player": self.player.name,
+				"access_key": access_key1,
+				"expires_at": "2030-12-31",
+			}
+		)
 		subscription.insert(ignore_permissions=True)
 
 		try:
@@ -721,20 +737,24 @@ class TestMemoraVoucherCard(VoucherTestCase):
 		access_key1 = f"SUB-{self.subject1.name}"
 		access_key2 = f"SUB-{self.subject2.name}"
 
-		subscription1 = frappe.get_doc({
-			"doctype": "Memora Player Subscription",
-			"player": self.player.name,
-			"access_key": access_key1,
-			"expires_at": "2030-12-31",
-		})
+		subscription1 = frappe.get_doc(
+			{
+				"doctype": "Memora Player Subscription",
+				"player": self.player.name,
+				"access_key": access_key1,
+				"expires_at": "2030-12-31",
+			}
+		)
 		subscription1.insert(ignore_permissions=True)
 
-		subscription2 = frappe.get_doc({
-			"doctype": "Memora Player Subscription",
-			"player": self.player.name,
-			"access_key": access_key2,
-			"expires_at": "2030-12-31",
-		})
+		subscription2 = frappe.get_doc(
+			{
+				"doctype": "Memora Player Subscription",
+				"player": self.player.name,
+				"access_key": access_key2,
+				"expires_at": "2030-12-31",
+			}
+		)
 		subscription2.insert(ignore_permissions=True)
 
 		try:

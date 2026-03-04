@@ -5,6 +5,7 @@ Tests verify WebSocket endpoint:
 
 Reference: contracts/endpoint-test-contracts.md §11
 """
+
 import json
 from unittest.mock import AsyncMock, patch
 

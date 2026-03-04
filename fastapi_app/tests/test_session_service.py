@@ -2,6 +2,7 @@
 """Tests for SessionService — authentication session management with family_id."""
 
 import json
+
 import pytest
 import redis.asyncio as redis
 
@@ -57,9 +58,7 @@ class TestSessionManagement:
 		assert plan == TEST_PLAN, "Should return correct plan_id"
 		assert season is None, "Should return None for session without season"
 
-	async def test_tc_ss_03_validate_mismatched_returns_false_and_none(
-		self, session_service: SessionService
-	):
+	async def test_tc_ss_03_validate_mismatched_returns_false_and_none(self, session_service: SessionService):
 		"""TC-SS-03: Validate mismatched family_id returns (False, None)."""
 		# Create a session
 		await session_service.create_session(TEST_USER, TEST_PLAN)

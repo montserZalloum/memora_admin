@@ -6,7 +6,9 @@ import json
 import redis.asyncio as redis
 import structlog
 
-from fastapi_app.core.redis_keys import access_key as _access_key_fn, catalog_key as _catalog_key_fn, pending_key as _pending_key_fn
+from fastapi_app.core.redis_keys import access_key as _access_key_fn
+from fastapi_app.core.redis_keys import catalog_key as _catalog_key_fn
+from fastapi_app.core.redis_keys import pending_key as _pending_key_fn
 from fastapi_app.models.catalog import CatalogProduct
 from fastapi_app.services.frappe_client import FrappeClient
 
@@ -95,6 +97,7 @@ class CatalogService:
 		Returns:
 			Filtered list of CatalogProduct
 		"""
+
 		# Parallel: catalog fetch + player access/pending sets are independent (2 RTT → 1)
 		async def _get_player_sets():
 			pipe = self.redis.pipeline()
@@ -120,7 +123,9 @@ class CatalogService:
 				continue
 
 			# Check purchased: hide if player has access to ALL subjects and tracks in grant
-			access_keys = {f"SUB-{s.subject_id}" for s in product.subjects} | {f"TRK-{t.track_id}" for t in product.tracks}
+			access_keys = {f"SUB-{s.subject_id}" for s in product.subjects} | {
+				f"TRK-{t.track_id}" for t in product.tracks
+			}
 			if access_keys and access_keys.issubset(access_set):
 				continue  # All components accessible = already purchased
 

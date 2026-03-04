@@ -10,15 +10,16 @@ when bugs are resolved.
 """
 
 import json
-import pytest
-import redis.asyncio
 from unittest.mock import AsyncMock
 
-from fastapi_app.core.redis_keys import stats_key as _stats_key_fn, wallet_key as _wallet_key_fn
+import pytest
+import redis.asyncio
 
-from fastapi_app.services.wallet import WalletService
+from fastapi_app.core.redis_keys import stats_key as _stats_key_fn
+from fastapi_app.core.redis_keys import wallet_key as _wallet_key_fn
 from fastapi_app.services.stats import StatsService, compute_stats_from_hierarchy
-from fastapi_app.tests.conftest import seed_wallet, make_hierarchy_json
+from fastapi_app.services.wallet import WalletService
+from fastapi_app.tests.conftest import make_hierarchy_json, seed_wallet
 
 pytestmark = [pytest.mark.asyncio, pytest.mark.characterization]
 
@@ -162,10 +163,7 @@ class TestInteractionBufferLtrimRisk:
 		buffer_key = f"{test_prefix}buffer:interactions"
 
 		# Setup: Create a buffer with 5 items
-		items = [
-			json.dumps({"player": f"P{i}", "lesson": f"L{i}"})
-			for i in range(5)
-		]
+		items = [json.dumps({"player": f"P{i}", "lesson": f"L{i}"}) for i in range(5)]
 		await redis_client.rpush(buffer_key, *items)
 
 		# Simulate: all 5 items succeed → inserted = 5

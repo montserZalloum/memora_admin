@@ -30,28 +30,29 @@ Functional Requirements Coverage:
 Total: 23 tests across 7 test classes
 """
 
-import frappe
 from decimal import Decimal
 
-from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
+import frappe
+
+from memora_admin.memora_admin.api.allocation import (
+	approve_allocation,
+	fill_cards,
+	reject_allocation,
+	submit_allocation,
+)
 from memora_admin.memora_admin.tests.voucher_fixtures import (
+	make_allocation,
 	make_batch,
 	make_customer,
 	make_product_grant,
-	make_allocation,
 )
 from memora_admin.memora_admin.tests.voucher_helpers import (
+	assert_batch_counters,
+	fill_and_complete_allocation,
 	generate_batch_sync,
 	get_card_statuses,
-	fill_and_complete_allocation,
-	assert_batch_counters,
 )
-from memora_admin.memora_admin.api.allocation import (
-	fill_cards,
-	submit_allocation,
-	approve_allocation,
-	reject_allocation,
-)
+from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
 
 # Use existing season to avoid MySQL partitioning constraints
 SEASON = "SEAS-00027"
@@ -82,10 +83,7 @@ class TestFillCards(VoucherTestCase):
 
 		# Create Draft Allocate allocation
 		alloc = make_allocation(
-			batch=batch.name,
-			customer=self.library.name,
-			allocation_type="Allocate",
-			sale_model="Prepaid"
+			batch=batch.name, customer=self.library.name, allocation_type="Allocate", sale_model="Prepaid"
 		)
 
 		# Fill with quantity=0 (all cards)
@@ -113,10 +111,7 @@ class TestFillCards(VoucherTestCase):
 
 		# Create Draft Allocate allocation
 		alloc = make_allocation(
-			batch=batch.name,
-			customer=self.library.name,
-			allocation_type="Allocate",
-			sale_model="Prepaid"
+			batch=batch.name, customer=self.library.name, allocation_type="Allocate", sale_model="Prepaid"
 		)
 
 		# Fill with quantity=5
@@ -135,9 +130,7 @@ class TestFillCards(VoucherTestCase):
 
 		# Create and complete an allocation
 		completed_alloc = fill_and_complete_allocation(
-			batch_name=batch.name,
-			customer_name=self.library.name,
-			quantity=5
+			batch_name=batch.name, customer_name=self.library.name, quantity=5
 		)
 
 		# Attempt to fill again on Completed allocation
@@ -154,10 +147,7 @@ class TestFillCards(VoucherTestCase):
 
 		# Create Draft allocation
 		alloc = make_allocation(
-			batch=batch.name,
-			customer=self.library.name,
-			allocation_type="Allocate",
-			sale_model="Prepaid"
+			batch=batch.name, customer=self.library.name, allocation_type="Allocate", sale_model="Prepaid"
 		)
 
 		# First fill with all cards (10)
@@ -180,18 +170,11 @@ class TestFillCards(VoucherTestCase):
 
 		# First allocate 5 cards to Library A
 		library_a = make_customer(requires_approval=False)
-		fill_and_complete_allocation(
-			batch_name=batch.name,
-			customer_name=library_a.name,
-			quantity=5
-		)
+		fill_and_complete_allocation(batch_name=batch.name, customer_name=library_a.name, quantity=5)
 
 		# Create Return-type allocation for Library A
 		return_alloc = make_allocation(
-			batch=batch.name,
-			customer=library_a.name,
-			allocation_type="Return",
-			sale_model="Prepaid"
+			batch=batch.name, customer=library_a.name, allocation_type="Return", sale_model="Prepaid"
 		)
 
 		# Fill the return allocation
@@ -239,7 +222,7 @@ class TestSubmitAndApproval(VoucherTestCase):
 			batch=batch.name,
 			customer=self.no_approval_lib.name,
 			allocation_type="Allocate",
-			sale_model="Prepaid"
+			sale_model="Prepaid",
 		)
 		fill_cards(alloc.name, quantity=5)
 
@@ -260,7 +243,7 @@ class TestSubmitAndApproval(VoucherTestCase):
 			batch=batch.name,
 			customer=self.approval_lib.name,
 			allocation_type="Allocate",
-			sale_model="Prepaid"
+			sale_model="Prepaid",
 		)
 		fill_cards(alloc.name, quantity=5)
 
@@ -281,7 +264,7 @@ class TestSubmitAndApproval(VoucherTestCase):
 			batch=batch.name,
 			customer=self.no_approval_lib.name,
 			allocation_type="Allocate",
-			sale_model="Prepaid"
+			sale_model="Prepaid",
 		)
 		# DO NOT fill cards
 
@@ -304,14 +287,12 @@ class TestSubmitAndApproval(VoucherTestCase):
 			batch=batch_a.name,
 			customer=self.no_approval_lib.name,
 			allocation_type="Allocate",
-			sale_model="Prepaid"
+			sale_model="Prepaid",
 		)
 
 		# Manually add a card from batch B
 		card_from_b = frappe.get_all(
-			"Memora Voucher Card",
-			filters={"batch": batch_b.name, "status": "Available"},
-			limit=1
+			"Memora Voucher Card", filters={"batch": batch_b.name, "status": "Available"}, limit=1
 		)[0].name
 
 		alloc.append("allocation_cards", {"voucher_card": card_from_b})
@@ -331,7 +312,7 @@ class TestSubmitAndApproval(VoucherTestCase):
 			batch=batch.name,
 			customer=self.approval_lib.name,
 			allocation_type="Allocate",
-			sale_model="Prepaid"
+			sale_model="Prepaid",
 		)
 		fill_cards(alloc.name, quantity=5)
 		submit_allocation(alloc.name)
@@ -353,7 +334,7 @@ class TestSubmitAndApproval(VoucherTestCase):
 			batch=batch.name,
 			customer=self.approval_lib.name,
 			allocation_type="Allocate",
-			sale_model="Prepaid"
+			sale_model="Prepaid",
 		)
 		fill_cards(alloc.name, quantity=5)
 		submit_allocation(alloc.name)
@@ -377,7 +358,7 @@ class TestSubmitAndApproval(VoucherTestCase):
 			batch=batch.name,
 			customer=self.approval_lib.name,
 			allocation_type="Allocate",
-			sale_model="Prepaid"
+			sale_model="Prepaid",
 		)
 		fill_cards(alloc.name, quantity=5)
 		# DO NOT submit
@@ -408,10 +389,7 @@ class TestCardStateOnAllocate(VoucherTestCase):
 
 		# Allocate 5 cards (Prepaid) to library
 		cls.alloc = fill_and_complete_allocation(
-			batch_name=cls.batch.name,
-			customer_name=cls.library.name,
-			quantity=5,
-			sale_model="Prepaid"
+			batch_name=cls.batch.name, customer_name=cls.library.name, quantity=5, sale_model="Prepaid"
 		)
 
 	def test_allocated_cards_have_correct_fields(self):
@@ -434,7 +412,7 @@ class TestCardStateOnAllocate(VoucherTestCase):
 		all_cards = frappe.get_all(
 			"Memora Voucher Card",
 			filters={"batch": self.batch.name},
-			fields=["name", "status", "library", "allocation"]
+			fields=["name", "status", "library", "allocation"],
 		)
 		self.assertEqual(len(all_cards), 10)
 
@@ -471,18 +449,12 @@ class TestCardStateOnReturn(VoucherTestCase):
 
 		# First allocate 5 cards to library
 		cls.allocate_alloc = fill_and_complete_allocation(
-			batch_name=cls.batch.name,
-			customer_name=cls.library.name,
-			quantity=5,
-			sale_model="Prepaid"
+			batch_name=cls.batch.name, customer_name=cls.library.name, quantity=5, sale_model="Prepaid"
 		)
 
 		# Then return those 5 cards
 		cls.return_alloc = make_allocation(
-			batch=cls.batch.name,
-			customer=cls.library.name,
-			allocation_type="Return",
-			sale_model="Prepaid"
+			batch=cls.batch.name, customer=cls.library.name, allocation_type="Return", sale_model="Prepaid"
 		)
 		fill_cards(cls.return_alloc.name, quantity=0)
 		submit_allocation(cls.return_alloc.name)
@@ -509,10 +481,7 @@ class TestCardStateOnReturn(VoucherTestCase):
 
 		# Create Return allocation for library B
 		return_alloc_b = make_allocation(
-			batch=self.batch.name,
-			customer=library_b.name,
-			allocation_type="Return",
-			sale_model="Prepaid"
+			batch=self.batch.name, customer=library_b.name, allocation_type="Return", sale_model="Prepaid"
 		)
 
 		# Fill should return 0 cards
@@ -543,9 +512,7 @@ class TestBatchCountersAndStatus(VoucherTestCase):
 
 		# Allocate 5 of 10 cards
 		cls.alloc = fill_and_complete_allocation(
-			batch_name=cls.batch.name,
-			customer_name=cls.library.name,
-			quantity=5
+			batch_name=cls.batch.name, customer_name=cls.library.name, quantity=5
 		)
 
 	def test_allocated_count_updated(self):
@@ -577,17 +544,12 @@ class TestPrepaidInvoiceOnAllocation(VoucherTestCase):
 		cls.batch = make_batch(grants=[cls.grant.name], quantity=10, face_value=10)
 		generate_batch_sync(cls.batch.name)
 		cls.library = make_customer(
-			requires_approval=False,
-			commission_type="Percentage",
-			commission_value="10"
+			requires_approval=False, commission_type="Percentage", commission_value="10"
 		)
 
 		# Complete Prepaid allocation of 5 cards
 		cls.alloc = fill_and_complete_allocation(
-			batch_name=cls.batch.name,
-			customer_name=cls.library.name,
-			quantity=5,
-			sale_model="Prepaid"
+			batch_name=cls.batch.name, customer_name=cls.library.name, quantity=5, sale_model="Prepaid"
 		)
 
 	def test_prepaid_creates_linked_sales_invoice(self):
@@ -629,17 +591,12 @@ class TestPrepaidInvoiceOnAllocation(VoucherTestCase):
 
 		# Complete Consignment allocation
 		consignment_alloc = fill_and_complete_allocation(
-			batch_name=batch.name,
-			customer_name=library.name,
-			quantity=5,
-			sale_model="Consignment"
+			batch_name=batch.name, customer_name=library.name, quantity=5, sale_model="Consignment"
 		)
 
 		# Verify no invoice created
 		consignment_alloc.reload()
-		self.assertTrue(
-			consignment_alloc.sales_invoice is None or consignment_alloc.sales_invoice == ""
-		)
+		self.assertTrue(consignment_alloc.sales_invoice is None or consignment_alloc.sales_invoice == "")
 
 
 class TestStateMachineEnforcement(VoucherTestCase):
@@ -666,7 +623,7 @@ class TestStateMachineEnforcement(VoucherTestCase):
 			batch=batch.name,
 			customer=self.approval_lib.name,
 			allocation_type="Allocate",
-			sale_model="Prepaid"
+			sale_model="Prepaid",
 		)
 
 		# Attempt invalid transition: Draft → Completed (skipping Pending Approval/Approved)
@@ -683,9 +640,7 @@ class TestStateMachineEnforcement(VoucherTestCase):
 		batch = make_batch(grants=[self.grant.name], quantity=10)
 		generate_batch_sync(batch.name)
 		completed_alloc = fill_and_complete_allocation(
-			batch_name=batch.name,
-			customer_name=self.approval_lib.name,
-			quantity=5
+			batch_name=batch.name, customer_name=self.approval_lib.name, quantity=5
 		)
 
 		# Attempt invalid transition: Completed → Draft (terminal state escape)

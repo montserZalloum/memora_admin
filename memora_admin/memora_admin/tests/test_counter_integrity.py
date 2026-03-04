@@ -16,14 +16,14 @@ Usage:
 
 import frappe
 
-from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
+from memora_admin.memora_admin.api.voucher import void_batch
+from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close
 from memora_admin.memora_admin.tests.voucher_fixtures import (
 	make_batch,
 	make_product_grant,
 )
 from memora_admin.memora_admin.tests.voucher_helpers import generate_batch_sync
-from memora_admin.memora_admin.api.voucher import void_batch
-from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close
+from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
 
 
 class TestCounterIntegrity(VoucherTestCase):
@@ -35,19 +35,23 @@ class TestCounterIntegrity(VoucherTestCase):
 		super().setUpClass()
 
 		# Create a subject
-		cls.subject = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
-		})
+		cls.subject = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
+			}
+		)
 		cls.subject.insert(ignore_permissions=True)
 
 		# Create product grant
 		cls.grant = make_product_grant(
 			season="SEAS-00027",
-			grant_components=[{
-				"target_doctype": "Memora Subject",
-				"target_name": cls.subject.name,
-			}],
+			grant_components=[
+				{
+					"target_doctype": "Memora Subject",
+					"target_name": cls.subject.name,
+				}
+			],
 		)
 
 	@classmethod

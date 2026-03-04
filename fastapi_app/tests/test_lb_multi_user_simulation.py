@@ -33,7 +33,6 @@ import pytest
 
 from fastapi_app.services.leaderboard import LeaderboardService
 
-
 # -- Fixtures ------------------------------------------------------------------
 
 
@@ -86,9 +85,7 @@ def _validate_dense_ranks(entries: list[dict]) -> list[str]:
 		rank = entry["rank"]
 		if xp in xp_to_rank:
 			if xp_to_rank[xp] != rank:
-				violations.append(
-					f"XP {xp} has inconsistent ranks: {xp_to_rank[xp]} and {rank}"
-				)
+				violations.append(f"XP {xp} has inconsistent ranks: {xp_to_rank[xp]} and {rank}")
 		else:
 			xp_to_rank[xp] = rank
 
@@ -122,10 +119,7 @@ class TestRandomXP500Users:
 	async def test_dense_ranking_500_random_xp(self, lb_svc, redis_client):
 		"""500 users with random XP: dense ranking invariants hold."""
 		random.seed(42)
-		players = [
-			(f"PLAYER-TEST-R500-{i:04d}", random.randint(1, 10000))
-			for i in range(self.N_USERS)
-		]
+		players = [(f"PLAYER-TEST-R500-{i:04d}", random.randint(1, 10000)) for i in range(self.N_USERS)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		# get_top for all players
@@ -138,10 +132,7 @@ class TestRandomXP500Users:
 	async def test_total_players_correct(self, lb_svc, redis_client):
 		"""total_players matches actual ZSET cardinality."""
 		random.seed(43)
-		players = [
-			(f"PLAYER-TEST-TP-{i:04d}", random.randint(1, 5000))
-			for i in range(self.N_USERS)
-		]
+		players = [(f"PLAYER-TEST-TP-{i:04d}", random.randint(1, 5000)) for i in range(self.N_USERS)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		# Check via get_my_rank
@@ -179,26 +170,19 @@ class TestRandomXP500Users:
 					f"got {result['xp_to_next']}"
 				)
 			else:
-				assert result["xp_to_next"] is None, (
-					f"Top player {player_id} should have xp_to_next=None"
-				)
+				assert result["xp_to_next"] is None, f"Top player {player_id} should have xp_to_next=None"
 
 	async def test_get_top_sorted_descending(self, lb_svc, redis_client):
 		"""get_top returns entries sorted by XP descending."""
 		random.seed(45)
-		players = [
-			(f"PLAYER-TEST-SORT-{i:04d}", random.randint(1, 10000))
-			for i in range(200)
-		]
+		players = [(f"PLAYER-TEST-SORT-{i:04d}", random.randint(1, 10000)) for i in range(200)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		top = await lb_svc.get_top("daily", limit=200, plan_id=self.PLAN)
 		xps = [e["xp"] for e in top]
 
 		for i in range(1, len(xps)):
-			assert xps[i] <= xps[i - 1], (
-				f"Not sorted descending at position {i}: {xps[i-1]} → {xps[i]}"
-			)
+			assert xps[i] <= xps[i - 1], f"Not sorted descending at position {i}: {xps[i-1]} → {xps[i]}"
 
 
 class TestTieGroups:
@@ -256,10 +240,7 @@ class TestTieGroups:
 
 	async def test_massive_single_tie_group(self, lb_svc, redis_client):
 		"""500 players all with same XP → all rank 1, xp_to_next=None."""
-		players = [
-			(f"PLAYER-TEST-MEGA-{i:04d}", 500)
-			for i in range(500)
-		]
+		players = [(f"PLAYER-TEST-MEGA-{i:04d}", 500) for i in range(500)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		top = await lb_svc.get_top("daily", limit=500, plan_id=self.PLAN)
@@ -280,10 +261,7 @@ class TestUniqueXPTiers:
 
 	async def test_500_unique_tiers_ranking(self, lb_svc, redis_client):
 		"""500 unique XP values → 500 unique dense ranks (1 through 500)."""
-		players = [
-			(f"PLAYER-TEST-UNQ-{i:04d}", i + 1)
-			for i in range(500)
-		]
+		players = [(f"PLAYER-TEST-UNQ-{i:04d}", i + 1) for i in range(500)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		top = await lb_svc.get_top("daily", limit=500, plan_id=self.PLAN)
@@ -302,10 +280,7 @@ class TestUniqueXPTiers:
 		This is the worst case for the Lua script: it must iterate through
 		all 499 tiers above to count distinct_above. See FINDING-1.
 		"""
-		players = [
-			(f"PLAYER-TEST-BTM-{i:04d}", i + 1)
-			for i in range(500)
-		]
+		players = [(f"PLAYER-TEST-BTM-{i:04d}", i + 1) for i in range(500)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		# Bottom player = XP 1
@@ -317,10 +292,7 @@ class TestUniqueXPTiers:
 
 	async def test_top_player_rank_correct(self, lb_svc, redis_client):
 		"""Top player with 500 unique tiers → rank 1, xp_to_next=None."""
-		players = [
-			(f"PLAYER-TEST-TOP-{i:04d}", i + 1)
-			for i in range(500)
-		]
+		players = [(f"PLAYER-TEST-TOP-{i:04d}", i + 1) for i in range(500)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		# Top player = XP 500
@@ -335,10 +307,7 @@ class TestUniqueXPTiers:
 		Bottom player triggers 499 ZRANGEBYSCORE iterations.
 		This is a performance regression test, not a correctness test.
 		"""
-		players = [
-			(f"PLAYER-TEST-PERF-{i:04d}", i + 1)
-			for i in range(500)
-		]
+		players = [(f"PLAYER-TEST-PERF-{i:04d}", i + 1) for i in range(500)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		start = time.monotonic()
@@ -346,9 +315,7 @@ class TestUniqueXPTiers:
 		elapsed_ms = (time.monotonic() - start) * 1000
 
 		assert result["rank"] == 500
-		assert elapsed_ms < 500, (
-			f"Lua script took {elapsed_ms:.1f}ms for 500 unique tiers — too slow"
-		)
+		assert elapsed_ms < 500, f"Lua script took {elapsed_ms:.1f}ms for 500 unique tiers — too slow"
 
 
 class TestStress1000Users:
@@ -420,10 +387,7 @@ class TestNeighborWindow:
 
 	async def test_neighbor_count_boundary(self, lb_svc, redis_client):
 		"""Neighbor window respects neighbor_count=2 (default)."""
-		players = [
-			(f"PLAYER-TEST-NB-{i:04d}", (100 - i) * 10)
-			for i in range(20)
-		]
+		players = [(f"PLAYER-TEST-NB-{i:04d}", (100 - i) * 10) for i in range(20)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		# Middle player (rank ~10)
@@ -434,10 +398,7 @@ class TestNeighborWindow:
 
 	async def test_top_player_neighbor_window(self, lb_svc, redis_client):
 		"""Top player's window only extends downward."""
-		players = [
-			(f"PLAYER-TEST-NB-TOP-{i:04d}", (50 - i) * 10)
-			for i in range(50)
-		]
+		players = [(f"PLAYER-TEST-NB-TOP-{i:04d}", (50 - i) * 10) for i in range(50)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		result = await lb_svc.get_my_rank("PLAYER-TEST-NB-TOP-0000", "daily", plan_id=self.PLAN)
@@ -448,10 +409,7 @@ class TestNeighborWindow:
 
 	async def test_bottom_player_neighbor_window(self, lb_svc, redis_client):
 		"""Bottom player's window only extends upward."""
-		players = [
-			(f"PLAYER-TEST-NB-BTM-{i:04d}", (50 - i) * 10)
-			for i in range(50)
-		]
+		players = [(f"PLAYER-TEST-NB-BTM-{i:04d}", (50 - i) * 10) for i in range(50)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		result = await lb_svc.get_my_rank("PLAYER-TEST-NB-BTM-0049", "daily", plan_id=self.PLAN)
@@ -462,10 +420,7 @@ class TestNeighborWindow:
 
 	async def test_neighbor_ranks_consistent_with_get_top(self, lb_svc, redis_client):
 		"""Neighbor ranks in get_my_rank match ranks from get_top."""
-		players = [
-			(f"PLAYER-TEST-NRC-{i:04d}", (30 - i) * 10)
-			for i in range(30)
-		]
+		players = [(f"PLAYER-TEST-NRC-{i:04d}", (30 - i) * 10) for i in range(30)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		top = await lb_svc.get_top("daily", limit=30, plan_id=self.PLAN)
@@ -513,10 +468,7 @@ class TestPaginatedRankConsistency:
 
 	async def test_paginated_ranks_no_reset(self, lb_svc, redis_client):
 		"""Ranks in page 2 continue from page 1 (no rank reset)."""
-		players = [
-			(f"PLAYER-TEST-PAG-{i:04d}", (100 - i) * 10)
-			for i in range(100)
-		]
+		players = [(f"PLAYER-TEST-PAG-{i:04d}", (100 - i) * 10) for i in range(100)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		page1 = await lb_svc.get_top("daily", limit=20, offset=0, plan_id=self.PLAN)
@@ -533,10 +485,7 @@ class TestPaginatedRankConsistency:
 	async def test_full_pagination_sweep(self, lb_svc, redis_client):
 		"""Sweeping all pages produces the same ranks as a single full fetch."""
 		random.seed(77)
-		players = [
-			(f"PLAYER-TEST-SWEEP-{i:04d}", random.randint(1, 1000))
-			for i in range(100)
-		]
+		players = [(f"PLAYER-TEST-SWEEP-{i:04d}", random.randint(1, 1000)) for i in range(100)]
 		await _seed_players(lb_svc, players, self.PLAN)
 
 		# Full fetch
@@ -552,9 +501,9 @@ class TestPaginatedRankConsistency:
 
 		# Every player's rank must match
 		for pid, rank in full_map.items():
-			assert paginated_map.get(pid) == rank, (
-				f"Player {pid}: full={rank}, paginated={paginated_map.get(pid)}"
-			)
+			assert (
+				paginated_map.get(pid) == rank
+			), f"Player {pid}: full={rank}, paginated={paginated_map.get(pid)}"
 
 
 class TestWeeklyAccumulation:

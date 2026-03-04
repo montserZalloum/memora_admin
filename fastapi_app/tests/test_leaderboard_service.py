@@ -73,14 +73,14 @@ class TestUpdateLeaderboardsPlanScoped:
 
 	async def test_plan_scoped_keys_created_with_plan_id(self, lb_svc, redis_client):
 		"""With plan_id, plan-scoped ZINCRBY keys are created."""
-		await lb_svc.update_leaderboards(
-			TEST_PLAYER_1, xp_amount=100, plan_id=TEST_PLAN_A
-		)
+		await lb_svc.update_leaderboards(TEST_PLAYER_1, xp_amount=100, plan_id=TEST_PLAN_A)
 
 		# Find plan-scoped daily key
 		cursor, keys = 0, []
 		while True:
-			cursor, found = await redis_client.scan(cursor, match=f"memora:lb:daily:*:plan:{TEST_PLAN_A}", count=10)
+			cursor, found = await redis_client.scan(
+				cursor, match=f"memora:lb:daily:*:plan:{TEST_PLAN_A}", count=10
+			)
 			keys.extend(found)
 			if cursor == 0:
 				break
@@ -91,7 +91,9 @@ class TestUpdateLeaderboardsPlanScoped:
 		# Find plan-scoped weekly key
 		cursor, keys = 0, []
 		while True:
-			cursor, found = await redis_client.scan(cursor, match=f"memora:lb:weekly:*:plan:{TEST_PLAN_A}", count=10)
+			cursor, found = await redis_client.scan(
+				cursor, match=f"memora:lb:weekly:*:plan:{TEST_PLAN_A}", count=10
+			)
 			keys.extend(found)
 			if cursor == 0:
 				break
@@ -132,9 +134,7 @@ class TestUpdateLeaderboardsPlanScoped:
 
 	async def test_global_daily_weekly_still_written_with_plan_id(self, lb_svc, redis_client):
 		"""Global daily/weekly keys are still written when plan_id is provided."""
-		await lb_svc.update_leaderboards(
-			TEST_PLAYER_1, xp_amount=75, plan_id=TEST_PLAN_A
-		)
+		await lb_svc.update_leaderboards(TEST_PLAYER_1, xp_amount=75, plan_id=TEST_PLAN_A)
 
 		# Global daily key still written
 		cursor, keys = 0, []
@@ -151,14 +151,14 @@ class TestUpdateLeaderboardsPlanScoped:
 
 	async def test_plan_daily_ttl(self, lb_svc, redis_client):
 		"""Plan daily keys have 48h TTL."""
-		await lb_svc.update_leaderboards(
-			TEST_PLAYER_1, xp_amount=10, plan_id=TEST_PLAN_A
-		)
+		await lb_svc.update_leaderboards(TEST_PLAYER_1, xp_amount=10, plan_id=TEST_PLAN_A)
 
 		# Find the plan daily key
 		cursor, keys = 0, []
 		while True:
-			cursor, found = await redis_client.scan(cursor, match=f"memora:lb:daily:*:plan:{TEST_PLAN_A}", count=10)
+			cursor, found = await redis_client.scan(
+				cursor, match=f"memora:lb:daily:*:plan:{TEST_PLAN_A}", count=10
+			)
 			keys.extend(found)
 			if cursor == 0:
 				break
@@ -169,13 +169,13 @@ class TestUpdateLeaderboardsPlanScoped:
 
 	async def test_plan_weekly_ttl(self, lb_svc, redis_client):
 		"""Plan weekly keys have 8d TTL."""
-		await lb_svc.update_leaderboards(
-			TEST_PLAYER_1, xp_amount=10, plan_id=TEST_PLAN_A
-		)
+		await lb_svc.update_leaderboards(TEST_PLAYER_1, xp_amount=10, plan_id=TEST_PLAN_A)
 
 		cursor, keys = 0, []
 		while True:
-			cursor, found = await redis_client.scan(cursor, match=f"memora:lb:weekly:*:plan:{TEST_PLAN_A}", count=10)
+			cursor, found = await redis_client.scan(
+				cursor, match=f"memora:lb:weekly:*:plan:{TEST_PLAN_A}", count=10
+			)
 			keys.extend(found)
 			if cursor == 0:
 				break
@@ -199,9 +199,7 @@ class TestUpdateLeaderboardsPlanScoped:
 
 	async def test_zero_xp_skipped(self, lb_svc, redis_client):
 		"""update_leaderboards with xp_amount=0 must NOT create ZSET members."""
-		await lb_svc.update_leaderboards(
-			TEST_PLAYER_1, xp_amount=0, plan_id=TEST_PLAN_A
-		)
+		await lb_svc.update_leaderboards(TEST_PLAYER_1, xp_amount=0, plan_id=TEST_PLAN_A)
 
 		# No keys should exist — 0 XP is a no-op
 		cursor, keys = 0, []
@@ -214,9 +212,7 @@ class TestUpdateLeaderboardsPlanScoped:
 
 	async def test_negative_xp_skipped(self, lb_svc, redis_client):
 		"""update_leaderboards with negative xp_amount must NOT write."""
-		await lb_svc.update_leaderboards(
-			TEST_PLAYER_1, xp_amount=-5, plan_id=TEST_PLAN_A
-		)
+		await lb_svc.update_leaderboards(TEST_PLAYER_1, xp_amount=-5, plan_id=TEST_PLAN_A)
 
 		cursor, keys = 0, []
 		while True:
@@ -233,12 +229,8 @@ class TestGetTopPlanScoped:
 	async def test_get_top_with_plan_id(self, lb_svc, redis_client):
 		"""get_top with plan_id reads from plan-scoped key, not global."""
 		# Seed plan-scoped data
-		await lb_svc.update_leaderboards(
-			TEST_PLAYER_1, xp_amount=100, plan_id=TEST_PLAN_A
-		)
-		await lb_svc.update_leaderboards(
-			TEST_PLAYER_2, xp_amount=80, plan_id=TEST_PLAN_A
-		)
+		await lb_svc.update_leaderboards(TEST_PLAYER_1, xp_amount=100, plan_id=TEST_PLAN_A)
+		await lb_svc.update_leaderboards(TEST_PLAYER_2, xp_amount=80, plan_id=TEST_PLAN_A)
 
 		result = await lb_svc.get_top("daily", limit=20, plan_id=TEST_PLAN_A)
 

@@ -15,17 +15,18 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from fastapi_app.core.redis_keys import (
+	daily_xp_key,
 	lb_daily_key,
 	lb_daily_plan_key,
 	lb_weekly_key,
 	lb_weekly_plan_key,
-	daily_xp_key,
 )
-from fastapi_app.services.leaderboard import LeaderboardService, AMMAN_TZ
+from fastapi_app.services.leaderboard import AMMAN_TZ, LeaderboardService
 
 # ------------------------------------------------------------------ #
 # Helpers
 # ------------------------------------------------------------------ #
+
 
 def _current_friday() -> str:
 	now = datetime.now(AMMAN_TZ)
@@ -65,6 +66,7 @@ async def _cleanup(r):
 # ------------------------------------------------------------------ #
 # Test 1: ZINCRBY accumulation produces exact integer scores
 # ------------------------------------------------------------------ #
+
 
 @pytest.mark.asyncio
 class TestZincrbyAccumulation:
@@ -119,6 +121,7 @@ class TestZincrbyAccumulation:
 # Test 2: Dense ranking correctness
 # ------------------------------------------------------------------ #
 
+
 @pytest.mark.asyncio
 class TestDenseRankingCorrectness:
 	"""Verify dense ranking produces correct ranks in all cases."""
@@ -131,14 +134,17 @@ class TestDenseRankingCorrectness:
 		# Seed directly with ZADD for precise control
 		friday = _current_friday()
 		key = lb_weekly_plan_key(friday, PLAN_A)
-		await redis_client.zadd(key, {
-			"DIAG-R-A": 500,
-			"DIAG-R-B": 300,
-			"DIAG-R-C": 300,
-			"DIAG-R-D": 100,
-			"DIAG-R-E": 100,
-			"DIAG-R-F": 50,
-		})
+		await redis_client.zadd(
+			key,
+			{
+				"DIAG-R-A": 500,
+				"DIAG-R-B": 300,
+				"DIAG-R-C": 300,
+				"DIAG-R-D": 100,
+				"DIAG-R-E": 100,
+				"DIAG-R-F": 50,
+			},
+		)
 		await redis_client.expire(key, 3600)
 
 		result = await svc.get_top("weekly", limit=10, plan_id=PLAN_A)
@@ -160,11 +166,14 @@ class TestDenseRankingCorrectness:
 
 		friday = _current_friday()
 		key = lb_weekly_plan_key(friday, PLAN_A)
-		await redis_client.zadd(key, {
-			"DIAG-TIE-A": 100,
-			"DIAG-TIE-B": 100,
-			"DIAG-TIE-C": 100,
-		})
+		await redis_client.zadd(
+			key,
+			{
+				"DIAG-TIE-A": 100,
+				"DIAG-TIE-B": 100,
+				"DIAG-TIE-C": 100,
+			},
+		)
 		await redis_client.expire(key, 3600)
 
 		result = await svc.get_top("weekly", limit=10, plan_id=PLAN_A)
@@ -180,13 +189,16 @@ class TestDenseRankingCorrectness:
 
 		friday = _current_friday()
 		key = lb_weekly_plan_key(friday, PLAN_A)
-		await redis_client.zadd(key, {
-			"DIAG-NT-A": 500,
-			"DIAG-NT-B": 400,
-			"DIAG-NT-C": 300,
-			"DIAG-NT-D": 200,
-			"DIAG-NT-E": 100,
-		})
+		await redis_client.zadd(
+			key,
+			{
+				"DIAG-NT-A": 500,
+				"DIAG-NT-B": 400,
+				"DIAG-NT-C": 300,
+				"DIAG-NT-D": 200,
+				"DIAG-NT-E": 100,
+			},
+		)
 		await redis_client.expire(key, 3600)
 
 		result = await svc.get_top("weekly", limit=10, plan_id=PLAN_A)
@@ -202,13 +214,16 @@ class TestDenseRankingCorrectness:
 
 		friday = _current_friday()
 		key = lb_weekly_plan_key(friday, PLAN_A)
-		await redis_client.zadd(key, {
-			"DIAG-OFF-A": 500,  # rank 1
-			"DIAG-OFF-B": 300,  # rank 2
-			"DIAG-OFF-C": 300,  # rank 2
-			"DIAG-OFF-D": 100,  # rank 3
-			"DIAG-OFF-E": 50,   # rank 4
-		})
+		await redis_client.zadd(
+			key,
+			{
+				"DIAG-OFF-A": 500,  # rank 1
+				"DIAG-OFF-B": 300,  # rank 2
+				"DIAG-OFF-C": 300,  # rank 2
+				"DIAG-OFF-D": 100,  # rank 3
+				"DIAG-OFF-E": 50,  # rank 4
+			},
+		)
 		await redis_client.expire(key, 3600)
 
 		# offset=2 should skip A and B, return C(rank 2), D(rank 3), E(rank 4)
@@ -222,6 +237,7 @@ class TestDenseRankingCorrectness:
 # ------------------------------------------------------------------ #
 # Test 3: get_top vs get_my_rank rank agreement
 # ------------------------------------------------------------------ #
+
 
 @pytest.mark.asyncio
 class TestRankConsistency:
@@ -254,9 +270,7 @@ class TestRankConsistency:
 			my_result = await svc.get_my_rank(pid, "weekly", plan_id=PLAN_A)
 			my_rank = my_result["rank"]
 			if top_ranks[pid] != my_rank:
-				mismatches.append(
-					f"{pid}: get_top={top_ranks[pid]}, get_my_rank={my_rank}"
-				)
+				mismatches.append(f"{pid}: get_top={top_ranks[pid]}, get_my_rank={my_rank}")
 
 		assert not mismatches, f"Rank mismatches:\n" + "\n".join(mismatches)
 
@@ -284,13 +298,9 @@ class TestRankConsistency:
 		for pid, expected_xp in players.items():
 			my_result = await svc.get_my_rank(pid, "weekly", plan_id=PLAN_A)
 			if top_xps[pid] != my_result["xp"]:
-				mismatches.append(
-					f"{pid}: get_top.xp={top_xps[pid]}, get_my_rank.xp={my_result['xp']}"
-				)
+				mismatches.append(f"{pid}: get_top.xp={top_xps[pid]}, get_my_rank.xp={my_result['xp']}")
 			if my_result["xp"] != expected_xp:
-				mismatches.append(
-					f"{pid}: expected xp={expected_xp}, got {my_result['xp']}"
-				)
+				mismatches.append(f"{pid}: expected xp={expected_xp}, got {my_result['xp']}")
 
 		assert not mismatches, f"XP mismatches:\n" + "\n".join(mismatches)
 
@@ -300,6 +310,7 @@ class TestRankConsistency:
 # ------------------------------------------------------------------ #
 # Test 4: update_leaderboards writes to ALL required keys
 # ------------------------------------------------------------------ #
+
 
 @pytest.mark.asyncio
 class TestUpdateLeaderboardsWrites:
@@ -361,9 +372,7 @@ class TestUpdateLeaderboardsWrites:
 		score = await redis_client.zscore(key, "DIAG-SCORE-01")
 
 		expected = sum(amounts)  # 53
-		assert int(score) == expected, (
-			f"Weekly plan score mismatch: expected {expected}, got {int(score)}"
-		)
+		assert int(score) == expected, f"Weekly plan score mismatch: expected {expected}, got {int(score)}"
 
 		await _cleanup(redis_client)
 
@@ -386,9 +395,7 @@ class TestUpdateLeaderboardsWrites:
 
 		expected = sum(amounts)
 		assert daily_xp is not None, "daily_xp hash missing"
-		assert int(daily_xp) == expected, (
-			f"daily_xp for today: expected {expected}, got {daily_xp}"
-		)
+		assert int(daily_xp) == expected, f"daily_xp for today: expected {expected}, got {daily_xp}"
 
 		await _cleanup(redis_client)
 
@@ -396,6 +403,7 @@ class TestUpdateLeaderboardsWrites:
 # ------------------------------------------------------------------ #
 # Test 5: Plan isolation — players in different plans don't mix
 # ------------------------------------------------------------------ #
+
 
 @pytest.mark.asyncio
 class TestPlanIsolation:
@@ -445,6 +453,7 @@ class TestPlanIsolation:
 # Test 6: Edge cases — 0 XP, single player, unranked
 # ------------------------------------------------------------------ #
 
+
 @pytest.mark.asyncio
 class TestEdgeCases:
 	"""Test edge cases that could produce wrong data."""
@@ -465,9 +474,7 @@ class TestEdgeCases:
 		friday = _current_friday()
 		plan_weekly_key = lb_weekly_plan_key(friday, PLAN_A)
 		score = await redis_client.zscore(plan_weekly_key, "DIAG-ZERO-01")
-		assert score is None, (
-			f"0-XP player should NOT exist in weekly ZSET, but has score={score}"
-		)
+		assert score is None, f"0-XP player should NOT exist in weekly ZSET, but has score={score}"
 
 		# Also verify no daily_xp hash was created
 		dxp_key = daily_xp_key("DIAG-ZERO-01")
@@ -550,30 +557,29 @@ class TestEdgeCases:
 
 		friday = _current_friday()
 		key = lb_weekly_plan_key(friday, PLAN_A)
-		await redis_client.zadd(key, {
-			"DIAG-XTN-A": 500,   # rank 1
-			"DIAG-XTN-B": 300,   # rank 2
-			"DIAG-XTN-C": 150,   # rank 3
-		})
+		await redis_client.zadd(
+			key,
+			{
+				"DIAG-XTN-A": 500,  # rank 1
+				"DIAG-XTN-B": 300,  # rank 2
+				"DIAG-XTN-C": 150,  # rank 3
+			},
+		)
 		await redis_client.expire(key, 3600)
 
 		# Player C (150 XP): next tier is 300, gap = 150
 		result_c = await svc.get_my_rank("DIAG-XTN-C", "weekly", plan_id=PLAN_A)
-		assert result_c["xp_to_next"] == 150, (
-			f"Expected xp_to_next=150, got {result_c['xp_to_next']}"
-		)
+		assert result_c["xp_to_next"] == 150, f"Expected xp_to_next=150, got {result_c['xp_to_next']}"
 
 		# Player A (500 XP): no one above, xp_to_next = None
 		result_a = await svc.get_my_rank("DIAG-XTN-A", "weekly", plan_id=PLAN_A)
-		assert result_a["xp_to_next"] is None, (
-			f"Top player should have xp_to_next=None, got {result_a['xp_to_next']}"
-		)
+		assert (
+			result_a["xp_to_next"] is None
+		), f"Top player should have xp_to_next=None, got {result_a['xp_to_next']}"
 
 		# Player B (300 XP): next tier is 500, gap = 200
 		result_b = await svc.get_my_rank("DIAG-XTN-B", "weekly", plan_id=PLAN_A)
-		assert result_b["xp_to_next"] == 200, (
-			f"Expected xp_to_next=200, got {result_b['xp_to_next']}"
-		)
+		assert result_b["xp_to_next"] == 200, f"Expected xp_to_next=200, got {result_b['xp_to_next']}"
 
 		await _cleanup(redis_client)
 
@@ -581,6 +587,7 @@ class TestEdgeCases:
 # ------------------------------------------------------------------ #
 # Test 7: Large-scale stress test for ranking
 # ------------------------------------------------------------------ #
+
 
 @pytest.mark.asyncio
 class TestLargeScaleRanking:
@@ -614,15 +621,11 @@ class TestLargeScaleRanking:
 
 		# Should have ranks 1 through 20 (dense)
 		unique_ranks = sorted(set(ranks))
-		assert unique_ranks == list(range(1, 21)), (
-			f"Expected 20 dense ranks, got {unique_ranks}"
-		)
+		assert unique_ranks == list(range(1, 21)), f"Expected 20 dense ranks, got {unique_ranks}"
 
 		# XPs should be non-increasing
 		for i in range(1, len(xps)):
-			assert xps[i] <= xps[i - 1], (
-				f"XP not non-increasing at position {i}: {xps[i-1]} then {xps[i]}"
-			)
+			assert xps[i] <= xps[i - 1], f"XP not non-increasing at position {i}: {xps[i-1]} then {xps[i]}"
 
 		# Each group of 5 should share the same rank
 		rank_counts = {}
@@ -669,6 +672,7 @@ class TestLargeScaleRanking:
 # Test 8: Cross-validate wallet XP vs leaderboard XP
 # ------------------------------------------------------------------ #
 
+
 @pytest.mark.asyncio
 class TestWalletLeaderboardConsistency:
 	"""Verify leaderboard XP reflects actual wallet awards."""
@@ -691,15 +695,15 @@ class TestWalletLeaderboardConsistency:
 		friday = _current_friday()
 		weekly_key = lb_weekly_plan_key(friday, PLAN_A)
 		weekly_score = await redis_client.zscore(weekly_key, "DIAG-SESS-01")
-		assert int(weekly_score) == sum(session_xps), (
-			f"Weekly XP: expected {sum(session_xps)}, got {int(weekly_score)}"
-		)
+		assert int(weekly_score) == sum(
+			session_xps
+		), f"Weekly XP: expected {sum(session_xps)}, got {int(weekly_score)}"
 
 		# Daily should also be sum
 		daily_key = lb_daily_plan_key(_today(), PLAN_A)
 		daily_score = await redis_client.zscore(daily_key, "DIAG-SESS-01")
-		assert int(daily_score) == sum(session_xps), (
-			f"Daily XP: expected {sum(session_xps)}, got {int(daily_score)}"
-		)
+		assert int(daily_score) == sum(
+			session_xps
+		), f"Daily XP: expected {sum(session_xps)}, got {int(daily_score)}"
 
 		await _cleanup(redis_client)

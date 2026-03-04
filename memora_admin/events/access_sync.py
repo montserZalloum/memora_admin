@@ -15,24 +15,27 @@ import frappe
 from fastapi_app.core.redis_keys import (
 	ACCESS_KEY_TTL,
 	PLAN_FREE_SUBJECTS_TTL,
-	access_key as _access_key,
 	cache_invalidation_channel,
 	plan_free_subjects_key,
 	season_key,
 	subjects_with_free_content_key,
 )
+from fastapi_app.core.redis_keys import (
+	access_key as _access_key,
+)
 from memora_admin.utils.redis_connection import get_memora_redis
 
 
 def get_fastapi_redis():
-    """Deprecated: use get_memora_redis() from memora_admin.utils.redis_connection instead."""
-    import warnings
-    warnings.warn(
-        "get_fastapi_redis() is deprecated, use get_memora_redis() from memora_admin.utils.redis_connection",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return get_memora_redis()
+	"""Deprecated: use get_memora_redis() from memora_admin.utils.redis_connection instead."""
+	import warnings
+
+	warnings.warn(
+		"get_fastapi_redis() is deprecated, use get_memora_redis() from memora_admin.utils.redis_connection",
+		DeprecationWarning,
+		stacklevel=2,
+	)
+	return get_memora_redis()
 
 
 # =============================================================================
@@ -41,37 +44,37 @@ def get_fastapi_redis():
 
 
 def on_season_updated(doc, method):
-    """
-    Sync season metadata to Redis on create/update.
+	"""
+	Sync season metadata to Redis on create/update.
 
-    Per CONTEXT.md:
-    - Gate 1 validates season is active and not expired
-    - Uses Redis hash for atomic multi-field updates
-    """
-    r = get_memora_redis()
-    redis_key = season_key(doc.name)
+	Per CONTEXT.md:
+	- Gate 1 validates season is active and not expired
+	- Uses Redis hash for atomic multi-field updates
+	"""
+	r = get_memora_redis()
+	redis_key = season_key(doc.name)
 
-    # Use single hset with mapping for atomic update
-    r.hset(
-        redis_key,
-        mapping={
-            "is_published": "1" if doc.is_published else "0",
-            "start_date": str(doc.start_date),
-            "end_date": str(doc.end_date),
-            "season_seq": str(doc.season_seq),
-        },
-    )
+	# Use single hset with mapping for atomic update
+	r.hset(
+		redis_key,
+		mapping={
+			"is_published": "1" if doc.is_published else "0",
+			"start_date": str(doc.start_date),
+			"end_date": str(doc.end_date),
+			"season_seq": str(doc.season_seq),
+		},
+	)
 
-    frappe.logger().info(f"Season {doc.name} synced to Redis")
+	frappe.logger().info(f"Season {doc.name} synced to Redis")
 
 
 def on_season_deleted(doc, method):
-    """Remove season from Redis cache when deleted."""
-    r = get_memora_redis()
-    redis_key = season_key(doc.name)
-    r.delete(redis_key)
+	"""Remove season from Redis cache when deleted."""
+	r = get_memora_redis()
+	redis_key = season_key(doc.name)
+	r.delete(redis_key)
 
-    frappe.logger().info(f"Season {doc.name} removed from Redis")
+	frappe.logger().info(f"Season {doc.name} removed from Redis")
 
 
 # =============================================================================
@@ -80,54 +83,64 @@ def on_season_deleted(doc, method):
 
 
 def on_subscription_change(doc, method):
-    """
-    Sync subscription grant to Redis on create/update.
+	"""
+	Sync subscription grant to Redis on create/update.
 
-    Per CONTEXT.md:
-    - Immediate sync (sub-second propagation)
-    - Add grant if is_active, remove if not
-    - Grants are additive and permanent until revoked
-    """
-    # doc.player is the PLAYER-##### docname — use directly as Redis identity key
-    user_id = doc.player
-    access_key = doc.access_key
+	Per CONTEXT.md:
+	- Immediate sync (sub-second propagation)
+	- Add grant if is_active, remove if not
+	- Grants are additive and permanent until revoked
+	"""
+	# doc.player is the PLAYER-##### docname — use directly as Redis identity key
+	user_id = doc.player
+	access_key = doc.access_key
 
-    r = get_memora_redis()
-    redis_key = _access_key(user_id)
+	r = get_memora_redis()
+	redis_key = _access_key(user_id)
 
-    if doc.is_active:
-        r.sadd(redis_key, access_key)
-        r.expire(redis_key, ACCESS_KEY_TTL)
-        frappe.logger().info(f"Granted {access_key} to {user_id}")
-    else:
-        r.srem(redis_key, access_key)
-        # Refresh TTL so remaining grants don't expire prematurely
-        if r.exists(redis_key):
-            r.expire(redis_key, ACCESS_KEY_TTL)
-        frappe.logger().info(f"Revoked {access_key} from {user_id}")
+	if doc.is_active:
+		r.sadd(redis_key, access_key)
+		r.expire(redis_key, ACCESS_KEY_TTL)
+		frappe.logger().info(f"Granted {access_key} to {user_id}")
+	else:
+		r.srem(redis_key, access_key)
+		# Refresh TTL so remaining grants don't expire prematurely
+		if r.exists(redis_key):
+			r.expire(redis_key, ACCESS_KEY_TTL)
+		frappe.logger().info(f"Revoked {access_key} from {user_id}")
 
-    # Notify the player to re-fetch subscriptions
-    r.publish(cache_invalidation_channel(), json.dumps({
-        "type": "subscription_changed",
-        "player_id": user_id,
-    }))
+	# Notify the player to re-fetch subscriptions
+	r.publish(
+		cache_invalidation_channel(),
+		json.dumps(
+			{
+				"type": "subscription_changed",
+				"player_id": user_id,
+			}
+		),
+	)
 
 
 def on_subscription_deleted(doc, method):
-    """Remove grant when subscription is deleted."""
-    # doc.player is the PLAYER-##### docname — use directly as Redis identity key
-    user_id = doc.player
+	"""Remove grant when subscription is deleted."""
+	# doc.player is the PLAYER-##### docname — use directly as Redis identity key
+	user_id = doc.player
 
-    r = get_memora_redis()
-    redis_key = _access_key(user_id)
-    r.srem(redis_key, doc.access_key)
-    frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
+	r = get_memora_redis()
+	redis_key = _access_key(user_id)
+	r.srem(redis_key, doc.access_key)
+	frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
 
-    # Notify the player to re-fetch subscriptions
-    r.publish(cache_invalidation_channel(), json.dumps({
-        "type": "subscription_changed",
-        "player_id": user_id,
-    }))
+	# Notify the player to re-fetch subscriptions
+	r.publish(
+		cache_invalidation_channel(),
+		json.dumps(
+			{
+				"type": "subscription_changed",
+				"player_id": user_id,
+			}
+		),
+	)
 
 
 # =============================================================================
@@ -136,60 +149,65 @@ def on_subscription_deleted(doc, method):
 
 
 def on_plan_subject_changed(doc, method):
-    """Sync plan free subjects to Redis when plan subject is added/updated/deleted.
+	"""Sync plan free subjects to Redis when plan subject is added/updated/deleted.
 
-    Per CONTEXT.md: is_premium=0 means subject is free in the plan.
-    Maintains Redis set: memora:plan:{plan_id}:free_subjects
-    """
-    plan_id = doc.parent
-    subject_id = doc.subject
-    redis_key = plan_free_subjects_key(plan_id)
+	Per CONTEXT.md: is_premium=0 means subject is free in the plan.
+	Maintains Redis set: memora:plan:{plan_id}:free_subjects
+	"""
+	plan_id = doc.parent
+	subject_id = doc.subject
+	redis_key = plan_free_subjects_key(plan_id)
 
-    r = get_memora_redis()
+	r = get_memora_redis()
 
-    if method == "on_trash":
-        # Remove from set regardless of is_premium (it's being deleted)
-        r.srem(redis_key, subject_id)
-        frappe.logger().info(f"Plan subject {subject_id} removed from plan {plan_id}")
-    elif not doc.is_premium:
-        # Add to free set (is_premium=0 means free)
-        r.sadd(redis_key, subject_id)
-        r.expire(redis_key, PLAN_FREE_SUBJECTS_TTL)
-        frappe.logger().info(f"Plan subject {subject_id} marked free in plan {plan_id}")
-    else:
-        # Remove from free set (is_premium=1 means paid)
-        r.srem(redis_key, subject_id)
-        frappe.logger().info(f"Plan subject {subject_id} marked premium in plan {plan_id}")
+	if method == "on_trash":
+		# Remove from set regardless of is_premium (it's being deleted)
+		r.srem(redis_key, subject_id)
+		frappe.logger().info(f"Plan subject {subject_id} removed from plan {plan_id}")
+	elif not doc.is_premium:
+		# Add to free set (is_premium=0 means free)
+		r.sadd(redis_key, subject_id)
+		r.expire(redis_key, PLAN_FREE_SUBJECTS_TTL)
+		frappe.logger().info(f"Plan subject {subject_id} marked free in plan {plan_id}")
+	else:
+		# Remove from free set (is_premium=1 means paid)
+		r.srem(redis_key, subject_id)
+		frappe.logger().info(f"Plan subject {subject_id} marked premium in plan {plan_id}")
 
-    # Notify connected clients on this plan to re-fetch subscriptions
-    r.publish(cache_invalidation_channel(), json.dumps({
-        "type": "plan_subjects",
-        "plan_id": plan_id,
-    }))
+	# Notify connected clients on this plan to re-fetch subscriptions
+	r.publish(
+		cache_invalidation_channel(),
+		json.dumps(
+			{
+				"type": "plan_subjects",
+				"plan_id": plan_id,
+			}
+		),
+	)
 
 
 def rebuild_plan_free_subjects(plan_id: str):
-    """Rebuild entire plan free subjects set (for initial sync or repair).
+	"""Rebuild entire plan free subjects set (for initial sync or repair).
 
-    Args:
-        plan_id: The plan identifier to rebuild
-    """
-    subjects = frappe.get_all(
-        "Memora Plan Subject",
-        filters={"parent": plan_id, "is_premium": 0},
-        pluck="subject",
-    )
+	Args:
+	    plan_id: The plan identifier to rebuild
+	"""
+	subjects = frappe.get_all(
+		"Memora Plan Subject",
+		filters={"parent": plan_id, "is_premium": 0},
+		pluck="subject",
+	)
 
-    r = get_memora_redis()
-    redis_key = plan_free_subjects_key(plan_id)
+	r = get_memora_redis()
+	redis_key = plan_free_subjects_key(plan_id)
 
-    # Clear and rebuild
-    r.delete(redis_key)
-    if subjects:
-        r.sadd(redis_key, *subjects)
-        r.expire(redis_key, PLAN_FREE_SUBJECTS_TTL)
+	# Clear and rebuild
+	r.delete(redis_key)
+	if subjects:
+		r.sadd(redis_key, *subjects)
+		r.expire(redis_key, PLAN_FREE_SUBJECTS_TTL)
 
-    print(f"Rebuilt plan free subjects for {plan_id}: {len(subjects)} subjects")
+	print(f"Rebuilt plan free subjects for {plan_id}: {len(subjects)} subjects")
 
 
 # =============================================================================
@@ -198,79 +216,79 @@ def rebuild_plan_free_subjects(plan_id: str):
 
 
 def on_unit_free_changed(doc, method):
-    """Update subjects_with_free_content set when Unit.is_free changes.
+	"""Update subjects_with_free_content set when Unit.is_free changes.
 
-    Maintains Redis set: memora:subjects_with_free_content
-    """
-    # Get subject via Track -> Subject relationship
-    if not doc.track:
-        return
+	Maintains Redis set: memora:subjects_with_free_content
+	"""
+	# Get subject via Track -> Subject relationship
+	if not doc.track:
+		return
 
-    track = frappe.get_doc("Memora Track", doc.track)
-    if not track.subject:
-        return
+	track = frappe.get_doc("Memora Track", doc.track)
+	if not track.subject:
+		return
 
-    subject_id = track.subject
-    redis_key = subjects_with_free_content_key()
-    r = get_memora_redis()
+	subject_id = track.subject
+	redis_key = subjects_with_free_content_key()
+	r = get_memora_redis()
 
-    if method == "on_trash":
-        # Check if subject still has free content after this unit is deleted
-        _update_subject_free_content_status(subject_id, r, redis_key)
-    elif doc.is_free:
-        # Subject now has free content
-        r.sadd(redis_key, subject_id)
-        frappe.logger().info(f"Subject {subject_id} now has free content (unit {doc.name})")
-    else:
-        # Check if subject still has other free content
-        _update_subject_free_content_status(subject_id, r, redis_key)
+	if method == "on_trash":
+		# Check if subject still has free content after this unit is deleted
+		_update_subject_free_content_status(subject_id, r, redis_key)
+	elif doc.is_free:
+		# Subject now has free content
+		r.sadd(redis_key, subject_id)
+		frappe.logger().info(f"Subject {subject_id} now has free content (unit {doc.name})")
+	else:
+		# Check if subject still has other free content
+		_update_subject_free_content_status(subject_id, r, redis_key)
 
 
 def on_topic_free_changed(doc, method):
-    """Update subjects_with_free_content set when Topic.is_free changes.
+	"""Update subjects_with_free_content set when Topic.is_free changes.
 
-    Maintains Redis set: memora:subjects_with_free_content
-    """
-    # Get subject via Unit -> Track -> Subject relationship
-    if not doc.unit:
-        return
+	Maintains Redis set: memora:subjects_with_free_content
+	"""
+	# Get subject via Unit -> Track -> Subject relationship
+	if not doc.unit:
+		return
 
-    unit = frappe.get_doc("Memora Unit", doc.unit)
-    if not unit.track:
-        return
+	unit = frappe.get_doc("Memora Unit", doc.unit)
+	if not unit.track:
+		return
 
-    track = frappe.get_doc("Memora Track", unit.track)
-    if not track.subject:
-        return
+	track = frappe.get_doc("Memora Track", unit.track)
+	if not track.subject:
+		return
 
-    subject_id = track.subject
-    redis_key = subjects_with_free_content_key()
-    r = get_memora_redis()
+	subject_id = track.subject
+	redis_key = subjects_with_free_content_key()
+	r = get_memora_redis()
 
-    if method == "on_trash":
-        # Check if subject still has free content after this topic is deleted
-        _update_subject_free_content_status(subject_id, r, redis_key)
-    elif doc.is_free:
-        # Subject now has free content
-        r.sadd(redis_key, subject_id)
-        frappe.logger().info(f"Subject {subject_id} now has free content (topic {doc.name})")
-    else:
-        # Check if subject still has other free content
-        _update_subject_free_content_status(subject_id, r, redis_key)
+	if method == "on_trash":
+		# Check if subject still has free content after this topic is deleted
+		_update_subject_free_content_status(subject_id, r, redis_key)
+	elif doc.is_free:
+		# Subject now has free content
+		r.sadd(redis_key, subject_id)
+		frappe.logger().info(f"Subject {subject_id} now has free content (topic {doc.name})")
+	else:
+		# Check if subject still has other free content
+		_update_subject_free_content_status(subject_id, r, redis_key)
 
 
 def _update_subject_free_content_status(subject_id: str, r, redis_key: str):
-    """Check if subject still has any free units or topics and update Redis.
+	"""Check if subject still has any free units or topics and update Redis.
 
-    Single SQL with EXISTS for early exit — replaces 4 ORM queries.
+	Single SQL with EXISTS for early exit — replaces 4 ORM queries.
 
-    Args:
-        subject_id: The subject to check
-        r: Redis connection (from get_memora_redis())
-        redis_key: The Redis key for subjects_with_free_content set
-    """
-    has_free = frappe.db.sql(
-        """
+	Args:
+	    subject_id: The subject to check
+	    r: Redis connection (from get_memora_redis())
+	    redis_key: The Redis key for subjects_with_free_content set
+	"""
+	has_free = frappe.db.sql(
+		"""
         SELECT EXISTS(
             SELECT 1 FROM `tabMemora Unit` u
             INNER JOIN `tabMemora Track` t ON t.name = u.track
@@ -284,58 +302,58 @@ def _update_subject_free_content_status(subject_id: str, r, redis_key: str):
             LIMIT 1
         ) AS has_free
         """,
-        {"subject": subject_id},
-    )[0][0]
+		{"subject": subject_id},
+	)[0][0]
 
-    if has_free:
-        r.sadd(redis_key, subject_id)
-    else:
-        r.srem(redis_key, subject_id)
+	if has_free:
+		r.sadd(redis_key, subject_id)
+	else:
+		r.srem(redis_key, subject_id)
 
-    frappe.logger().info(f"Subject {subject_id} free content status: {'yes' if has_free else 'no'}")
+	frappe.logger().info(f"Subject {subject_id} free content status: {'yes' if has_free else 'no'}")
 
 
 def rebuild_subjects_with_free_content():
-    """Rebuild entire subjects_with_free_content set (for initial sync or repair)."""
-    r = get_memora_redis()
-    redis_key = subjects_with_free_content_key()
+	"""Rebuild entire subjects_with_free_content set (for initial sync or repair)."""
+	r = get_memora_redis()
+	redis_key = subjects_with_free_content_key()
 
-    # Clear existing
-    r.delete(redis_key)
+	# Clear existing
+	r.delete(redis_key)
 
-    # Find all subjects with free units
-    free_unit_subjects = frappe.db.sql(
-        """
+	# Find all subjects with free units
+	free_unit_subjects = frappe.db.sql(
+		"""
         SELECT DISTINCT t.subject
         FROM `tabMemora Track` t
         INNER JOIN `tabMemora Unit` u ON u.track = t.name
         WHERE u.is_free = 1
         """,
-        as_dict=True,
-    )
+		as_dict=True,
+	)
 
-    # Find all subjects with free topics
-    free_topic_subjects = frappe.db.sql(
-        """
+	# Find all subjects with free topics
+	free_topic_subjects = frappe.db.sql(
+		"""
         SELECT DISTINCT t.subject
         FROM `tabMemora Track` t
         INNER JOIN `tabMemora Unit` u ON u.track = t.name
         INNER JOIN `tabMemora Topic` tp ON tp.unit = u.name
         WHERE tp.is_free = 1
         """,
-        as_dict=True,
-    )
+		as_dict=True,
+	)
 
-    # Combine and add to set
-    all_subjects = set()
-    for row in free_unit_subjects:
-        if row.subject:
-            all_subjects.add(row.subject)
-    for row in free_topic_subjects:
-        if row.subject:
-            all_subjects.add(row.subject)
+	# Combine and add to set
+	all_subjects = set()
+	for row in free_unit_subjects:
+		if row.subject:
+			all_subjects.add(row.subject)
+	for row in free_topic_subjects:
+		if row.subject:
+			all_subjects.add(row.subject)
 
-    if all_subjects:
-        r.sadd(redis_key, *all_subjects)
+	if all_subjects:
+		r.sadd(redis_key, *all_subjects)
 
-    print(f"Rebuilt subjects_with_free_content: {len(all_subjects)} subjects")
+	print(f"Rebuilt subjects_with_free_content: {len(all_subjects)} subjects")

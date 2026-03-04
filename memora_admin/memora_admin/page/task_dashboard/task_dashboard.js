@@ -111,7 +111,9 @@ function trigger_task_with_confirm(task_name, task_label, page) {
 					} else {
 						frappe.show_alert(
 							{
-								message: `${task_label} failed: ${r.message ? r.message.error : "Unknown error"}`,
+								message: `${task_label} failed: ${
+									r.message ? r.message.error : "Unknown error"
+								}`,
 								indicator: "red",
 							},
 							7

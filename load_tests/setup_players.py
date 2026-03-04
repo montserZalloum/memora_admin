@@ -4,8 +4,8 @@
 Run from bench root: python3 apps/memora_admin/load_tests/setup_players.py
 """
 
-import sys
 import os
+import sys
 
 # Add bench apps to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -128,7 +128,8 @@ def _ensure_subscriptions(player_id: str):
 def _hydrate_redis(player_ids: list[str]):
 	"""Push access keys into Redis for immediate FastAPI access."""
 	try:
-		from fastapi_app.core.redis_keys import ACCESS_KEY_TTL, access_key as access_key_fn
+		from fastapi_app.core.redis_keys import ACCESS_KEY_TTL
+		from fastapi_app.core.redis_keys import access_key as access_key_fn
 		from memora_admin.utils.redis_connection import get_memora_redis
 
 		r = get_memora_redis()

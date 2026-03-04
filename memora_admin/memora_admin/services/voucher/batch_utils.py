@@ -36,22 +36,10 @@ def recount_and_maybe_close(batch_name: str) -> dict:
 	import frappe
 
 	# Phase 1: Recount all 4 counter fields from actual card states
-	allocated_count = frappe.db.count(
-		"Memora Voucher Card",
-		{"batch": batch_name, "status": "Allocated"}
-	)
-	redeemed_count = frappe.db.count(
-		"Memora Voucher Card",
-		{"batch": batch_name, "status": "Redeemed"}
-	)
-	voided_count = frappe.db.count(
-		"Memora Voucher Card",
-		{"batch": batch_name, "status": "Void"}
-	)
-	expired_count = frappe.db.count(
-		"Memora Voucher Card",
-		{"batch": batch_name, "status": "Expired"}
-	)
+	allocated_count = frappe.db.count("Memora Voucher Card", {"batch": batch_name, "status": "Allocated"})
+	redeemed_count = frappe.db.count("Memora Voucher Card", {"batch": batch_name, "status": "Redeemed"})
+	voided_count = frappe.db.count("Memora Voucher Card", {"batch": batch_name, "status": "Void"})
+	expired_count = frappe.db.count("Memora Voucher Card", {"batch": batch_name, "status": "Expired"})
 
 	# Update all 4 counter fields on the batch via single call
 	frappe.db.set_value(
@@ -74,8 +62,7 @@ def recount_and_maybe_close(batch_name: str) -> dict:
 	if batch.status == "Active":
 		# Count cards with non-terminal statuses (Available or Allocated)
 		non_terminal_count = frappe.db.count(
-			"Memora Voucher Card",
-			{"batch": batch_name, "status": ["in", ["Available", "Allocated"]]}
+			"Memora Voucher Card", {"batch": batch_name, "status": ["in", ["Available", "Allocated"]]}
 		)
 
 		# If all cards are terminal (no Available or Allocated), transition to Closed

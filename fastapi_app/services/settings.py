@@ -74,9 +74,7 @@ class SettingsService:
 	async def _hydrate_from_frappe(self) -> bool:
 		"""Fetch settings from Frappe and write to Redis (no TTL)."""
 		try:
-			result = await self.frappe.call(
-				"memora_admin.api.settings.get_gamification_settings"
-			)
+			result = await self.frappe.call("memora_admin.api.settings.get_gamification_settings")
 		except Exception:
 			logger.exception("settings_frappe_call_failed")
 			return False

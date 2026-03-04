@@ -16,12 +16,24 @@ from fastapi_app.core.constants import MASTERY_CACHE_TTL
 from fastapi_app.core.level_config import calculate_level, get_level_config, get_threshold
 from fastapi_app.core.redis_keys import (
 	daily_xp_key as _daily_xp_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	items_learned_key as _items_learned_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	lb_archive_daily_key,
 	lb_daily_key,
+)
+from fastapi_app.core.redis_keys import (
 	mastery_key as _mastery_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	plan_season_seq_key as _plan_season_seq_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	player_plan_key as _player_plan_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	profile_key as _profile_key_fn,
 )
 from fastapi_app.services.frappe_client import FrappeClient
@@ -267,8 +279,7 @@ class ProfilePageService:
 					pipe3.expire(daily_xp_key, 8 * 86400)
 					await pipe3.execute()
 					daily_xp_data = {
-						(k.decode() if isinstance(k, bytes) else k): str(v)
-						for k, v in restored.items()
+						(k.decode() if isinstance(k, bytes) else k): str(v) for k, v in restored.items()
 					}
 			for i in still_missing:
 				key = days[i]["date"]

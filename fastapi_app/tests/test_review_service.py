@@ -1,6 +1,7 @@
 """Tests for ReviewService - Review caching and delegation."""
 
 import json
+
 import pytest
 
 from fastapi_app.core.redis_keys import reviews_overview_key

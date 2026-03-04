@@ -11,9 +11,8 @@ services and compute_stats_from_hierarchy directly).
 
 import pytest
 
-from fastapi_app.models.progress import SubjectHierarchy, TrackInfo, UnitInfo, TopicInfo, LessonInfo
+from fastapi_app.models.progress import LessonInfo, SubjectHierarchy, TopicInfo, TrackInfo, UnitInfo
 from fastapi_app.services.stats import StatsService, compute_stats_from_hierarchy
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -49,9 +48,7 @@ def _make_hierarchy(content_hash: str = "aabbccdd", num_lessons: int = 3) -> Sub
 				units=[
 					UnitInfo(
 						unit_id="UNT-001",
-						topics=[
-							TopicInfo(topic_id="TPC-001", lessons=lessons)
-						],
+						topics=[TopicInfo(topic_id="TPC-001", lessons=lessons)],
 					)
 				],
 			)
@@ -116,7 +113,9 @@ class TestStalenessDetection:
 		stats = await stats_svc.get_stats(TEST_USER, TEST_SUBJECT, TEST_VERSION)
 
 		# Staleness check condition (as implemented in endpoints):
-		is_stale = stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		is_stale = (
+			stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		)
 		assert is_stale, "Stats with old hash should be detected as stale"
 
 		# Recompute (1 lesson completed, 4 total)
@@ -160,7 +159,9 @@ class TestStalenessDetection:
 		hierarchy = _make_hierarchy(content_hash="anyvalue")
 		stats = None
 
-		is_stale = stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		is_stale = (
+			stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		)
 		assert is_stale, "None stats must be treated as stale (cold start)"
 
 	async def test_stats_missing_total_treated_as_stale(self):
@@ -168,7 +169,9 @@ class TestStalenessDetection:
 		hierarchy = _make_hierarchy(content_hash="anyvalue")
 		stats = {"completed": "1"}  # no 'total' key
 
-		is_stale = stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		is_stale = (
+			stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		)
 		assert is_stale, "Stats missing 'total' must be detected as stale"
 
 
@@ -198,7 +201,9 @@ class TestPreMigrationSelfHealing:
 		assert "_content_hash" not in stats, "Pre-migration stats should not have _content_hash"
 
 		# Apply staleness check
-		is_stale = stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		is_stale = (
+			stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		)
 		assert is_stale, "Pre-migration stats (no _content_hash) must be treated as stale"
 
 		# Recompute → self-heal
@@ -258,9 +263,7 @@ class TestHincrbyPreservation:
 
 		# Apply staleness check
 		is_stale = (
-			stats is None
-			or "total" not in stats
-			or stats.get("_content_hash") != hierarchy.content_hash
+			stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
 		)
 		assert not is_stale, "Up-to-date stats should not trigger recompute"
 
@@ -308,7 +311,9 @@ class TestBitmapEndpointsUnaffected:
 
 		# Stats cache is still stale — staleness check should detect it
 		stats = await stats_svc.get_stats(TEST_USER, TEST_SUBJECT, TEST_VERSION)
-		is_stale = stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		is_stale = (
+			stats is None or "total" not in stats or stats.get("_content_hash") != hierarchy.content_hash
+		)
 		assert is_stale, "Stats cache should still be detected as stale (for stats endpoints)"
 		# But the lesson endpoint would have returned correct data anyway (from bitmap)
 
@@ -358,9 +363,9 @@ class TestZeroWriteStormOnContentChange:
 				f"Stats for {uid} should be unchanged after content change "
 				f"(lazy validation — no eager writes). Got: {current}"
 			)
-			assert current["_content_hash"] == old_hash, (
-				f"Stats for {uid} still carry old hash — content change caused zero writes"
-			)
+			assert (
+				current["_content_hash"] == old_hash
+			), f"Stats for {uid} still carry old hash — content change caused zero writes"
 
 	async def test_lazy_recompute_updates_only_requesting_user(self, stats_svc, redis_client, test_prefix):
 		"""Only the requesting user's stats are updated — others remain stale.

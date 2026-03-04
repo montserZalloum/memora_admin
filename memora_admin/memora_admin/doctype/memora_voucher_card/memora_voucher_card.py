@@ -7,9 +7,9 @@ from frappe.model.document import Document
 VALID_TRANSITIONS = {
 	"Available": {"Allocated", "Void", "Expired"},
 	"Allocated": {"Redeemed", "Void", "Expired", "Available"},  # Available = return
-	"Redeemed": set(),   # Terminal
-	"Void": set(),       # Terminal
-	"Expired": set(),    # Terminal
+	"Redeemed": set(),  # Terminal
+	"Void": set(),  # Terminal
+	"Expired": set(),  # Terminal
 }
 
 

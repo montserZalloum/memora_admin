@@ -60,9 +60,7 @@ def generate_monthly_invoices():
 		frappe.logger().info(f"Consignment billing {month_label}: No consignment cards to invoice")
 		return
 
-	frappe.logger().info(
-		f"Consignment billing {month_label}: Found {len(cards)} card(s) to invoice"
-	)
+	frappe.logger().info(f"Consignment billing {month_label}: Found {len(cards)} card(s) to invoice")
 
 	invoiced_count = 0
 	error_count = 0
@@ -94,11 +92,13 @@ def generate_monthly_invoices():
 					commission_value=commission_value,
 				)
 
-				items.append({
-					"description": f"Consignment - Batch {batch_name} ({month_label})",
-					"qty": card_count,
-					"rate": result["net_per_card"],
-				})
+				items.append(
+					{
+						"description": f"Consignment - Batch {batch_name} ({month_label})",
+						"qty": card_count,
+						"rate": result["net_per_card"],
+					}
+				)
 
 				all_card_names.extend([c["name"] for c in batch_cards])
 				batch_count += 1

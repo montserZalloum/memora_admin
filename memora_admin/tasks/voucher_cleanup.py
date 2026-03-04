@@ -40,26 +40,20 @@ def cleanup_expired_exports():
 
 			if not file_name:
 				# File doc missing but URL set -- clear the stale reference
-				frappe.db.set_value(
-					"Memora Voucher Batch", batch_data.name, "encrypted_file_url", ""
-				)
+				frappe.db.set_value("Memora Voucher Batch", batch_data.name, "encrypted_file_url", "")
 				continue
 
 			creation = frappe.db.get_value("File", file_name, "creation")
 			if creation and creation < cutoff:
 				frappe.delete_doc("File", file_name, ignore_permissions=True)
-				frappe.db.set_value(
-					"Memora Voucher Batch", batch_data.name, "encrypted_file_url", ""
-				)
+				frappe.db.set_value("Memora Voucher Batch", batch_data.name, "encrypted_file_url", "")
 				deleted_count += 1
 				frappe.logger().info(
 					f"Deleted expired export for batch {batch_data.name} (created {creation})"
 				)
 
 		except Exception:
-			frappe.log_error(
-				title=f"Voucher cleanup failed for batch {batch_data.name}"
-			)
+			frappe.log_error(title=f"Voucher cleanup failed for batch {batch_data.name}")
 
 	if deleted_count:
 		frappe.db.commit()

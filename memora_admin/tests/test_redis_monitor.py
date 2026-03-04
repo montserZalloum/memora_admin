@@ -11,7 +11,7 @@ Tests:
 Uses unittest.mock.patch for Redis client and frappe.logger().
 """
 
-from unittest.mock import patch, MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
@@ -47,10 +47,12 @@ def _make_mock_redis(
 
 	mock_r.info = MagicMock(side_effect=info_side_effect)
 	mock_r.llen = MagicMock(return_value=buffer_len)
-	mock_r.scard = MagicMock(side_effect=lambda key: {
-		"memora:dirty:wallets": dirty_wallets,
-		"memora:dirty:progress": dirty_progress,
-	}.get(key, 0))
+	mock_r.scard = MagicMock(
+		side_effect=lambda key: {
+			"memora:dirty:wallets": dirty_wallets,
+			"memora:dirty:progress": dirty_progress,
+		}.get(key, 0)
+	)
 	mock_r.dbsize = MagicMock(return_value=total_keys)
 
 	return mock_r
@@ -68,6 +70,7 @@ class TestRedisMonitor(FrappeTestCase):
 		mock_logger = MagicMock()
 		with patch("memora_admin.tasks.redis_monitor.logger", mock_logger):
 			from memora_admin.tasks.redis_monitor import monitor_redis_health
+
 			monitor_redis_health()
 
 		# Verify INFO was called with metrics in the message string
@@ -88,6 +91,7 @@ class TestRedisMonitor(FrappeTestCase):
 		mock_logger = MagicMock()
 		with patch("memora_admin.tasks.redis_monitor.logger", mock_logger):
 			from memora_admin.tasks.redis_monitor import monitor_redis_health
+
 			monitor_redis_health()
 
 		# Should have a WARNING call about memory
@@ -104,6 +108,7 @@ class TestRedisMonitor(FrappeTestCase):
 		mock_logger = MagicMock()
 		with patch("memora_admin.tasks.redis_monitor.logger", mock_logger):
 			from memora_admin.tasks.redis_monitor import monitor_redis_health
+
 			monitor_redis_health()
 
 		mock_logger.warning.assert_called()
@@ -119,6 +124,7 @@ class TestRedisMonitor(FrappeTestCase):
 		mock_logger = MagicMock()
 		with patch("memora_admin.tasks.redis_monitor.logger", mock_logger):
 			from memora_admin.tasks.redis_monitor import monitor_redis_health
+
 			monitor_redis_health()
 
 		mock_logger.warning.assert_called()
@@ -134,6 +140,7 @@ class TestRedisMonitor(FrappeTestCase):
 		mock_logger = MagicMock()
 		with patch("memora_admin.tasks.redis_monitor.logger", mock_logger):
 			from memora_admin.tasks.redis_monitor import monitor_redis_health
+
 			monitor_redis_health()
 
 		mock_logger.critical.assert_called()
@@ -149,6 +156,7 @@ class TestRedisMonitor(FrappeTestCase):
 		mock_logger = MagicMock()
 		with patch("memora_admin.tasks.redis_monitor.logger", mock_logger):
 			from memora_admin.tasks.redis_monitor import monitor_redis_health
+
 			monitor_redis_health()
 
 		mock_logger.warning.assert_not_called()
@@ -164,6 +172,7 @@ class TestRedisMonitor(FrappeTestCase):
 		mock_logger = MagicMock()
 		with patch("memora_admin.tasks.redis_monitor.logger", mock_logger):
 			from memora_admin.tasks.redis_monitor import monitor_redis_health
+
 			# Should not raise
 			monitor_redis_health()
 

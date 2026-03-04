@@ -99,9 +99,7 @@ class TestFullKeyLoss:
 
 	async def test_get_my_rank_after_flush_returns_unranked(self, lb_svc, redis_client):
 		"""After flush, get_my_rank returns unranked response."""
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-FL-ME", xp_amount=500, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-FL-ME", xp_amount=500, plan_id=self.PLAN)
 
 		# Delete all lb + lbmeta keys
 		for pattern in ("memora:lb:*", "memora:lbmeta:*"):
@@ -116,18 +114,14 @@ class TestFullKeyLoss:
 	async def test_recovery_after_flush(self, lb_svc, redis_client):
 		"""New XP updates after flush rebuild rankings organically."""
 		# Initial data
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-FL-REC", xp_amount=500, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-FL-REC", xp_amount=500, plan_id=self.PLAN)
 
 		# Flush all lb + lbmeta keys
 		for pattern in ("memora:lb:*", "memora:lbmeta:*"):
 			await _scan_delete(redis_client, pattern)
 
 		# New updates rebuild
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-FL-REC", xp_amount=200, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-FL-REC", xp_amount=200, plan_id=self.PLAN)
 
 		result = await lb_svc.get_my_rank("PLAYER-TEST-FL-REC", "daily", plan_id=self.PLAN)
 		# Only 200 XP (not 700) — historical 500 is lost. See FINDING-13.
@@ -145,9 +139,7 @@ class TestPartialKeyLoss:
 
 		See FINDING-14: This is a normal state after daily TTL expires.
 		"""
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-PL-001", xp_amount=100, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-PL-001", xp_amount=100, plan_id=self.PLAN)
 
 		# Delete only daily keys (lb + lbmeta)
 		for pattern in ("memora:lb:daily:*", "memora:lbmeta:daily:*"):
@@ -165,9 +157,7 @@ class TestPartialKeyLoss:
 
 	async def test_weekly_lost_daily_intact(self, lb_svc, redis_client):
 		"""Weekly key deleted but daily survives."""
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-PL-002", xp_amount=100, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-PL-002", xp_amount=100, plan_id=self.PLAN)
 
 		# Delete only weekly keys (lb + lbmeta)
 		for pattern in ("memora:lb:weekly:*", "memora:lbmeta:weekly:*"):
@@ -186,18 +176,14 @@ class TestPartialKeyLoss:
 		See FINDING-15: Plan keys have shorter TTL. This simulates
 		plan key expiry while global key is still alive.
 		"""
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-PL-003", xp_amount=100, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-PL-003", xp_amount=100, plan_id=self.PLAN)
 
 		# Delete only plan-scoped keys (lb + lbmeta)
 		for pattern in ("memora:lb:*:plan:*", "memora:lbmeta:*:plan:*"):
 			await _scan_delete(redis_client, pattern)
 
 		# Plan-scoped: empty
-		plan_result = await lb_svc.get_my_rank(
-			"PLAYER-TEST-PL-003", "daily", plan_id=self.PLAN
-		)
+		plan_result = await lb_svc.get_my_rank("PLAYER-TEST-PL-003", "daily", plan_id=self.PLAN)
 		assert plan_result["rank"] is None
 
 		# Global: intact
@@ -207,9 +193,7 @@ class TestPartialKeyLoss:
 
 	async def test_global_lost_plan_intact(self, lb_svc, redis_client):
 		"""Global key deleted but plan-scoped key survives."""
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-PL-004", xp_amount=100, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-PL-004", xp_amount=100, plan_id=self.PLAN)
 
 		# Delete only global keys (no :plan: in name) — lb + lbmeta
 		for prefix in ("memora:lb:daily:????-??-??", "memora:lbmeta:daily:????-??-??"):
@@ -224,9 +208,7 @@ class TestPartialKeyLoss:
 					break
 
 		# Plan-scoped: still works
-		plan_result = await lb_svc.get_my_rank(
-			"PLAYER-TEST-PL-004", "daily", plan_id=self.PLAN
-		)
+		plan_result = await lb_svc.get_my_rank("PLAYER-TEST-PL-004", "daily", plan_id=self.PLAN)
 		assert plan_result["rank"] == 1
 		assert plan_result["xp"] == 100
 
@@ -280,8 +262,10 @@ class TestSubjectKeyLoss:
 	async def test_subject_key_lost(self, lb_svc, redis_client):
 		"""Subject-filtered query returns empty when subject key is lost."""
 		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-SL-001", xp_amount=100,
-			subject_id="SUBJ-TEST-001", plan_id=self.PLAN,
+			"PLAYER-TEST-SL-001",
+			xp_amount=100,
+			subject_id="SUBJ-TEST-001",
+			plan_id=self.PLAN,
 		)
 
 		# Delete only subject-scoped keys (lb + lbmeta)
@@ -290,14 +274,18 @@ class TestSubjectKeyLoss:
 
 		# Subject query: empty
 		result = await lb_svc.get_my_rank(
-			"PLAYER-TEST-SL-001", "daily",
-			subject_id="SUBJ-TEST-001", plan_id=self.PLAN,
+			"PLAYER-TEST-SL-001",
+			"daily",
+			subject_id="SUBJ-TEST-001",
+			plan_id=self.PLAN,
 		)
 		assert result["rank"] is None
 
 		# Non-subject query: intact
 		result_global = await lb_svc.get_my_rank(
-			"PLAYER-TEST-SL-001", "daily", plan_id=self.PLAN,
+			"PLAYER-TEST-SL-001",
+			"daily",
+			plan_id=self.PLAN,
 		)
 		assert result_global["rank"] == 1
 		assert result_global["xp"] == 100
@@ -311,18 +299,14 @@ class TestNewUpdatesAfterPartialLoss:
 	async def test_new_xp_after_daily_loss_rebuilds_daily(self, lb_svc, redis_client):
 		"""New XP updates after daily key loss rebuild the daily leaderboard."""
 		# Initial: 100 XP
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-RCV-001", xp_amount=100, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-RCV-001", xp_amount=100, plan_id=self.PLAN)
 
 		# Lose daily keys (lb + lbmeta)
 		for pattern in ("memora:lb:daily:*", "memora:lbmeta:daily:*"):
 			await _scan_delete(redis_client, pattern)
 
 		# New update: 50 XP
-		await lb_svc.update_leaderboards(
-			"PLAYER-TEST-RCV-001", xp_amount=50, plan_id=self.PLAN
-		)
+		await lb_svc.update_leaderboards("PLAYER-TEST-RCV-001", xp_amount=50, plan_id=self.PLAN)
 
 		# Daily shows only 50 (the 100 is lost)
 		daily = await lb_svc.get_my_rank("PLAYER-TEST-RCV-001", "daily", plan_id=self.PLAN)
@@ -344,9 +328,7 @@ class TestPartialMetadataRollout:
 
 	PLAN = "PLAN-TEST-ROLLOUT"
 
-	async def test_write_to_existing_board_does_not_create_partial_index(
-		self, lb_svc, redis_client
-	):
+	async def test_write_to_existing_board_does_not_create_partial_index(self, lb_svc, redis_client):
 		"""Write path stays conservative; first read repairs the missing metadata."""
 		# Simulate pre-deploy board: 3 players seeded directly (no tier metadata)
 		key = lb_svc._get_plan_key("daily", self.PLAN)
@@ -362,9 +344,9 @@ class TestPartialMetadataRollout:
 		await lb_svc.update_leaderboards("REVIEW-C", xp_amount=5, plan_id=self.PLAN)
 
 		# Critical assertion: write path still does NOT create a partial index.
-		assert await redis_client.exists(tieridx_key) == 0, (
-			"tieridx was created on write to pre-existing board — partial index bug!"
-		)
+		assert (
+			await redis_client.exists(tieridx_key) == 0
+		), "tieridx was created on write to pre-existing board — partial index bug!"
 		assert await redis_client.exists(tiercnt_key) == 0
 
 		# First read should repair metadata and still return the correct rank.
@@ -374,9 +356,7 @@ class TestPartialMetadataRollout:
 		assert await redis_client.exists(tieridx_key) == 1
 		assert await redis_client.exists(tiercnt_key) == 1
 
-	async def test_new_player_on_existing_board_no_partial_index(
-		self, lb_svc, redis_client
-	):
+	async def test_new_player_on_existing_board_no_partial_index(self, lb_svc, redis_client):
 		"""A new member on an unindexed board still repairs on read, not write."""
 		key = lb_svc._get_plan_key("daily", self.PLAN)
 		await redis_client.zadd(key, {"EXISTING-A": 200, "EXISTING-B": 100})
@@ -449,9 +429,7 @@ class TestPartialMetadataRollout:
 		assert r_b["rank"] == 2  # 50 XP
 		assert r_c["rank"] == 3  # 15 XP
 
-	async def test_tiercnt_loss_repairs_on_read(
-		self, lb_svc, redis_client
-	):
+	async def test_tiercnt_loss_repairs_on_read(self, lb_svc, redis_client):
 		"""Single-key loss leaves writes conservative and repairs the pair on read."""
 		await lb_svc.update_leaderboards("CNT-A", xp_amount=100, plan_id=self.PLAN)
 		await lb_svc.update_leaderboards("CNT-B", xp_amount=50, plan_id=self.PLAN)
@@ -516,9 +494,7 @@ class TestPartialMetadataRollout:
 		assert await redis_client.exists(tieridx_key) == 1
 		assert await redis_client.exists(tiercnt_key) == 1
 
-	async def test_repair_retries_when_write_lands_before_publish(
-		self, lb_svc, redis_client, monkeypatch
-	):
+	async def test_repair_retries_when_write_lands_before_publish(self, lb_svc, redis_client, monkeypatch):
 		"""A write during repair must not let stale metadata overwrite the board."""
 		key = lb_svc._get_plan_key("daily", self.PLAN)
 		await redis_client.zadd(key, {"RACE-A": 100, "RACE-B": 50, "RACE-C": 10})

@@ -24,28 +24,28 @@ import inspect
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
+from memora_admin.memora_admin.api.allocation import (
+	approve_allocation,
+	fill_cards,
+	submit_allocation,
+)
+from memora_admin.memora_admin.api.voucher import preview_voucher, redeem_voucher
+from memora_admin.memora_admin.services.voucher.generator import compute_hmac
 from memora_admin.memora_admin.tests.voucher_fixtures import (
+	make_allocation,
 	make_batch,
 	make_customer,
 	make_player,
 	make_product_grant,
-	make_allocation,
 )
 from memora_admin.memora_admin.tests.voucher_helpers import (
 	fill_and_complete_allocation,
 	generate_batch_sync,
 	get_pins_from_export,
-	redeem_card_by_pin,
 	preview_card_by_pin,
+	redeem_card_by_pin,
 )
-from memora_admin.memora_admin.services.voucher.generator import compute_hmac
-from memora_admin.memora_admin.api.voucher import redeem_voucher, preview_voucher
-from memora_admin.memora_admin.api.allocation import (
-	fill_cards,
-	submit_allocation,
-	approve_allocation,
-)
+from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
 
 
 class TestSecurityGaps(VoucherTestCase):
@@ -63,19 +63,23 @@ class TestSecurityGaps(VoucherTestCase):
 		super().setUpClass()
 
 		# Create a subject to use in grant components
-		cls.subject = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
-		})
+		cls.subject = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
+			}
+		)
 		cls.subject.insert(ignore_permissions=True)
 
 		# Create product grant with grant components
 		cls.grant = make_product_grant(
 			season="SEAS-00027",
-			grant_components=[{
-				"target_doctype": "Memora Subject",
-				"target_name": cls.subject.name,
-			}],
+			grant_components=[
+				{
+					"target_doctype": "Memora Subject",
+					"target_name": cls.subject.name,
+				}
+			],
 		)
 
 		# Create batch with 20 cards (enough for all security tests)
@@ -247,10 +251,10 @@ class TestSecurityGaps(VoucherTestCase):
 		source = inspect.getsource(redeem_voucher)
 
 		# Verify try/except wrapping exists around subscription creation
-		self.assertIn('except Exception:', source)
+		self.assertIn("except Exception:", source)
 		# Verify subscription existence check before card revert (prevents double-dip)
-		self.assertIn('subs_exist', source)
-		self.assertIn('if not subs_exist:', source)
+		self.assertIn("subs_exist", source)
+		self.assertIn("if not subs_exist:", source)
 		# Verify card revert to Allocated in guarded branch
 		self.assertIn('"status": "Allocated"', source)
 		# Verify REDEMPTION_FAILED error code is returned on failure
@@ -266,25 +270,31 @@ class TestAllocationSecurityGaps(VoucherTestCase):
 		super().setUpClass()
 
 		# Create two subjects
-		cls.subject_a = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": f"Subject A {frappe.utils.random_string(8)}",
-		})
+		cls.subject_a = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": f"Subject A {frappe.utils.random_string(8)}",
+			}
+		)
 		cls.subject_a.insert(ignore_permissions=True)
 
-		cls.subject_b = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": f"Subject B {frappe.utils.random_string(8)}",
-		})
+		cls.subject_b = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": f"Subject B {frappe.utils.random_string(8)}",
+			}
+		)
 		cls.subject_b.insert(ignore_permissions=True)
 
 		# Create grant
 		cls.grant = make_product_grant(
 			season="SEAS-00027",
-			grant_components=[{
-				"target_doctype": "Memora Subject",
-				"target_name": cls.subject_a.name,
-			}],
+			grant_components=[
+				{
+					"target_doctype": "Memora Subject",
+					"target_name": cls.subject_a.name,
+				}
+			],
 		)
 
 		# Create batch with 5 cards

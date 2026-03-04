@@ -7,12 +7,13 @@ import pytest
 import redis.asyncio as redis
 from httpx import AsyncClient
 
-from fastapi_app.core.redis_keys import hierarchy_key, progress_key as _progress_key_fn, stats_key
+from fastapi_app.core.redis_keys import hierarchy_key, stats_key
+from fastapi_app.core.redis_keys import progress_key as _progress_key_fn
 from fastapi_app.tests.conftest import (
-	make_hierarchy_json,
-	seed_hierarchy,
-	seed_access_grants,
 	cleanup_player_keys,
+	make_hierarchy_json,
+	seed_access_grants,
+	seed_hierarchy,
 )
 
 # Mark all tests as async
@@ -276,9 +277,7 @@ class TestUnitDetail:
 
 		track_id = "TRK-TEST-001"
 		unit_id = "UNIT-TEST-001"
-		response = await client.get(
-			f"/api/v1/progress/{subject_id}/tracks/{track_id}/units/{unit_id}"
-		)
+		response = await client.get(f"/api/v1/progress/{subject_id}/tracks/{track_id}/units/{unit_id}")
 
 		assert response.status_code == 200
 		data = response.json()
@@ -484,9 +483,7 @@ class TestPartialStatsActivation:
 			"fastapi_app.services.progress.ProgressService.get_completed_bits",
 			new_callable=AsyncMock,
 		) as mock_get_bits:
-			response = await client.get(
-				f"/api/v1/progress/{subject_id}/tracks/{track_id}/units/{unit_id}"
-			)
+			response = await client.get(f"/api/v1/progress/{subject_id}/tracks/{track_id}/units/{unit_id}")
 
 			assert response.status_code == 200
 			mock_get_bits.assert_not_called()

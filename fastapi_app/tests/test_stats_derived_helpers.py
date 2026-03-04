@@ -16,7 +16,6 @@ from fastapi_app.models.progress import (
 	UnitInfo,
 )
 
-
 # --- Test fixtures (pure Python, no Redis) ---
 
 

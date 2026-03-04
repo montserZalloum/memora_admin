@@ -310,9 +310,7 @@ def compute_stats_from_hierarchy(
 			unit_total = 0
 
 			for topic in unit.topics:
-				topic_completed = sum(
-					1 for lesson in topic.lessons if lesson.bit_index in completed_bits
-				)
+				topic_completed = sum(1 for lesson in topic.lessons if lesson.bit_index in completed_bits)
 				topic_total = len(topic.lessons)
 
 				stats[f"{topic.topic_id}:completed"] = str(topic_completed)

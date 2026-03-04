@@ -90,7 +90,9 @@ class GlobalRateLimitMiddleware(BaseHTTPMiddleware):
 				logger.warning("rate_limit_redis_unavailable", path=path, ip=client_ip, fail_open=True)
 				return await call_next(request)
 			else:
-				logger.warning("rate_limit_redis_unavailable_closed", path=path, ip=client_ip, fail_open=False)
+				logger.warning(
+					"rate_limit_redis_unavailable_closed", path=path, ip=client_ip, fail_open=False
+				)
 				response = JSONResponse(
 					status_code=503,
 					content={

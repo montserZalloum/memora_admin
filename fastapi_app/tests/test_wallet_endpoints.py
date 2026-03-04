@@ -1,9 +1,10 @@
 """Tests for wallet endpoints."""
 
 import pytest
-from httpx import AsyncClient
 import redis.asyncio as redis
-from fastapi_app.tests.conftest import seed_wallet, cleanup_player_keys
+from httpx import AsyncClient
+
+from fastapi_app.tests.conftest import cleanup_player_keys, seed_wallet
 
 # Mark all tests as async
 pytestmark = pytest.mark.asyncio

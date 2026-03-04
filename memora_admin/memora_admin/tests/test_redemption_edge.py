@@ -22,7 +22,7 @@ Usage:
 import frappe
 from frappe.tests.utils import FrappeTestCase
 
-from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
+from memora_admin.memora_admin.api.voucher import preview_voucher, redeem_voucher
 from memora_admin.memora_admin.tests.voucher_fixtures import (
 	make_batch,
 	make_customer,
@@ -36,7 +36,7 @@ from memora_admin.memora_admin.tests.voucher_helpers import (
 	preview_card_by_pin,
 	redeem_card_by_pin,
 )
-from memora_admin.memora_admin.api.voucher import preview_voucher, redeem_voucher
+from memora_admin.memora_admin.tests.voucher_test_base import VoucherTestCase
 
 
 class TestRedemptionErrorCodes(VoucherTestCase):
@@ -48,19 +48,23 @@ class TestRedemptionErrorCodes(VoucherTestCase):
 		super().setUpClass()
 
 		# Create a subject to use in grant components
-		cls.subject = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
-		})
+		cls.subject = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
+			}
+		)
 		cls.subject.insert(ignore_permissions=True)
 
 		# Create product grant with grant components
 		cls.grant = make_product_grant(
 			season="SEAS-00027",
-			grant_components=[{
-				"target_doctype": "Memora Subject",
-				"target_name": cls.subject.name,
-			}],
+			grant_components=[
+				{
+					"target_doctype": "Memora Subject",
+					"target_name": cls.subject.name,
+				}
+			],
 		)
 
 		# Create batch with 10 cards
@@ -220,9 +224,7 @@ class TestRedemptionErrorCodes(VoucherTestCase):
 
 		# Manually set card status to Void
 		frappe.db.set_value("Memora Voucher Card", card_name, "status", "Void")
-		frappe.db.set_value(
-			"Memora Voucher Card", card_name, "void_reason", "Test void for edge case"
-		)
+		frappe.db.set_value("Memora Voucher Card", card_name, "void_reason", "Test void for edge case")
 		frappe.db.commit()
 
 		result = redeem_card_by_pin(
@@ -409,19 +411,23 @@ class TestRedemptionAtomicity(VoucherTestCase):
 		super().setUpClass()
 
 		# Create a subject to use in grant components
-		cls.subject = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
-		})
+		cls.subject = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
+			}
+		)
 		cls.subject.insert(ignore_permissions=True)
 
 		# Create product grant with grant components
 		cls.grant = make_product_grant(
 			season="SEAS-00027",
-			grant_components=[{
-				"target_doctype": "Memora Subject",
-				"target_name": cls.subject.name,
-			}],
+			grant_components=[
+				{
+					"target_doctype": "Memora Subject",
+					"target_name": cls.subject.name,
+				}
+			],
 		)
 
 		# Create batch with 10 cards
@@ -646,19 +652,23 @@ class TestPreviewVoucher(VoucherTestCase):
 		super().setUpClass()
 
 		# Create a subject to use in grant components
-		cls.subject = frappe.get_doc({
-			"doctype": "Memora Subject",
-			"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
-		})
+		cls.subject = frappe.get_doc(
+			{
+				"doctype": "Memora Subject",
+				"subject_title": f"Test Subject {frappe.utils.random_string(8)}",
+			}
+		)
 		cls.subject.insert(ignore_permissions=True)
 
 		# Create product grant with grant components
 		cls.grant = make_product_grant(
 			season="SEAS-00027",
-			grant_components=[{
-				"target_doctype": "Memora Subject",
-				"target_name": cls.subject.name,
-			}],
+			grant_components=[
+				{
+					"target_doctype": "Memora Subject",
+					"target_name": cls.subject.name,
+				}
+			],
 		)
 
 		# Create batch with 10 cards

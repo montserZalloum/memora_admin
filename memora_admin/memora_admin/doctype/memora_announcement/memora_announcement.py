@@ -44,8 +44,10 @@ class MemoraAnnouncement(Document):
 			self.effective_end_date = self.end_date
 		elif self.duration_type == "Fixed Duration" and self.is_published:
 			was_published = (
-				self._doc_before_save and self._doc_before_save.is_published
-			) if self._doc_before_save else False
+				(self._doc_before_save and self._doc_before_save.is_published)
+				if self._doc_before_save
+				else False
+			)
 
 			if not was_published:
 				# First time publishing: compute effective dates from today

@@ -6,11 +6,11 @@ Tests the fail_open parameter on GlobalRateLimitMiddleware:
 - Normal operation (Redis available) → 200 with rate limit headers
 """
 
-import pytest
 from unittest.mock import patch
 
-from httpx import AsyncClient, ASGITransport
+import pytest
 from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 

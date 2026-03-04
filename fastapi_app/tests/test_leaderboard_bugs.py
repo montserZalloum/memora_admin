@@ -15,6 +15,8 @@ import pytest
 
 from fastapi_app.core.redis_keys import (
 	lb_weekly_plan_key,
+)
+from fastapi_app.core.redis_keys import (
 	session_key as _session_key_fn,
 )
 from fastapi_app.core.security import create_access_token
@@ -91,7 +93,10 @@ class TestLeaderboardFixes:
 
 		try:
 			resp = await _make_authed_request(
-				app_client, redis_client, players[0][0], self.PLAN_ID,
+				app_client,
+				redis_client,
+				players[0][0],
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly?limit=3",
 			)
 			assert resp.status_code == 200
@@ -110,7 +115,10 @@ class TestLeaderboardFixes:
 
 		try:
 			resp = await _make_authed_request(
-				app_client, redis_client, players[0][0], self.PLAN_ID,
+				app_client,
+				redis_client,
+				players[0][0],
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly?limit=3&offset=3",
 			)
 			assert resp.status_code == 200
@@ -129,7 +137,10 @@ class TestLeaderboardFixes:
 
 		try:
 			resp = await _make_authed_request(
-				app_client, redis_client, players[0][0], self.PLAN_ID,
+				app_client,
+				redis_client,
+				players[0][0],
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly?offset=100",
 			)
 			assert resp.status_code == 200
@@ -147,7 +158,10 @@ class TestLeaderboardFixes:
 
 		try:
 			resp = await _make_authed_request(
-				app_client, redis_client, players[0][0], self.PLAN_ID,
+				app_client,
+				redis_client,
+				players[0][0],
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly",
 			)
 			assert resp.status_code == 200
@@ -171,7 +185,10 @@ class TestLeaderboardFixes:
 
 		try:
 			resp = await _make_authed_request(
-				app_client, redis_client, players[0][0], self.PLAN_ID,
+				app_client,
+				redis_client,
+				players[0][0],
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly",
 			)
 			assert resp.status_code == 200
@@ -200,7 +217,10 @@ class TestLeaderboardFixes:
 
 		try:
 			resp = await _make_authed_request(
-				app_client, redis_client, players[0][0], self.PLAN_ID,
+				app_client,
+				redis_client,
+				players[0][0],
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly",
 			)
 			assert resp.status_code == 200
@@ -224,7 +244,10 @@ class TestLeaderboardFixes:
 
 		try:
 			resp = await _make_authed_request(
-				app_client, redis_client, players[0][0], self.PLAN_ID,
+				app_client,
+				redis_client,
+				players[0][0],
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly?offset=2&limit=2",
 			)
 			assert resp.status_code == 200
@@ -250,7 +273,10 @@ class TestLeaderboardFixes:
 
 		try:
 			resp = await _make_authed_request(
-				app_client, redis_client, "PLAYER-TEST-LB-ME1", self.PLAN_ID,
+				app_client,
+				redis_client,
+				"PLAYER-TEST-LB-ME1",
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly/me",
 			)
 			assert resp.status_code == 200
@@ -284,12 +310,18 @@ class TestLeaderboardFixes:
 		try:
 			# Get top leaderboard
 			resp_top = await _make_authed_request(
-				app_client, redis_client, "PLAYER-TEST-LB-D", self.PLAN_ID,
+				app_client,
+				redis_client,
+				"PLAYER-TEST-LB-D",
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly",
 			)
 			# Get my rank (as player D)
 			resp_me = await _make_authed_request(
-				app_client, redis_client, "PLAYER-TEST-LB-D", self.PLAN_ID,
+				app_client,
+				redis_client,
+				"PLAYER-TEST-LB-D",
+				self.PLAN_ID,
 				"/api/v1/leaderboard/weekly/me",
 			)
 

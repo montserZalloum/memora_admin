@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import logging
 
-
 import frappe
 
 from fastapi_app.core.redis_keys import GAME_SESSION_SCAN_PATTERN
@@ -123,10 +122,12 @@ def _do_session_cleanup() -> tuple[int, int, list]:
 				# This is an orphaned key that needs cleanup
 				r.delete(key)
 				removed += 1
-				orphaned_keys.append({
-					"key": key_str,
-					"reason": "no_ttl",
-				})
+				orphaned_keys.append(
+					{
+						"key": key_str,
+						"reason": "no_ttl",
+					}
+				)
 				logger.warning(f"Removed session key without TTL: {key_str}")
 
 			# ttl == -2 means key doesn't exist (race condition with natural expiry)

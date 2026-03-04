@@ -36,7 +36,9 @@ class TestRateLimiter:
 			assert allowed is True, f"Request {i+1} should be allowed"
 
 		# 11th request should be blocked
-		allowed, retry_after, limit_type = await rate_limiter.check_rate_limit(TEST_IP, "new-account@example.com")
+		allowed, retry_after, limit_type = await rate_limiter.check_rate_limit(
+			TEST_IP, "new-account@example.com"
+		)
 
 		assert allowed is False, "11th request should be blocked"
 		assert retry_after > 0, "Should have retry_after value"

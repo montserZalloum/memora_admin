@@ -2,9 +2,9 @@
 
 import json
 import time
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi_app.core.redis_keys import global_ratelimit_key, session_key
 from fastapi_app.services.review import ReviewService
@@ -171,7 +171,9 @@ class TestFailOpen:
 # Valid request bodies for write endpoints
 REVIEW_BODY = {"items": [{"item_id": "ITEM-TEST-001", "fail_count": 0}]}
 SESSION_START_BODY = {"lesson_id": "LESSON-TEST-001", "subject_id": "SUB-TEST-001"}
-SESSION_END_BODY = {"stages": [{"stage_id": "STG-001", "time_spent": 1000, "completed_at": "2026-02-22T00:00:00"}]}
+SESSION_END_BODY = {
+	"stages": [{"stage_id": "STG-001", "time_spent": 1000, "completed_at": "2026-02-22T00:00:00"}]
+}
 
 
 class TestReviewsPerPlayerRateLimit:
@@ -478,7 +480,4 @@ class TestRateLimitBenchmark:
 		keys.append(global_ratelimit_key("bench-warmup"))
 		await redis_client.delete(*keys)
 
-		assert p99 < 2.0, (
-			f"Rate limit check p99={p99:.2f}ms exceeds 2ms target "
-			f"(median={median:.2f}ms)"
-		)
+		assert p99 < 2.0, f"Rate limit check p99={p99:.2f}ms exceeds 2ms target " f"(median={median:.2f}ms)"

@@ -38,11 +38,13 @@ def on_product_grant_changed(doc, method):
 	# 2. Pubsub notification for FastAPI sidecar
 	r.publish(
 		cache_invalidation_channel(),
-		json.dumps({
-			"type": "catalog",
-			"plan_id": plan_id,
-			"timestamp": str(frappe.utils.now()),
-		}),
+		json.dumps(
+			{
+				"type": "catalog",
+				"plan_id": plan_id,
+				"timestamp": str(frappe.utils.now()),
+			}
+		),
 	)
 
 	frappe.logger().info(f"Catalog cache invalidated for plan {plan_id}")

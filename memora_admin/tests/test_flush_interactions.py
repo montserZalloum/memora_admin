@@ -11,10 +11,11 @@ import json
 from unittest.mock import patch
 
 import frappe
+
 from fastapi_app.core.redis_keys import interaction_buffer_key
+from memora_admin.tasks.sync import flush_interaction_buffer
 from memora_admin.tests.sync_test_base import SyncTestCase
 from memora_admin.tests.voucher_fixtures import make_player
-from memora_admin.tasks.sync import flush_interaction_buffer
 
 
 class TestFlushInteractionBuffer(SyncTestCase):
@@ -58,14 +59,16 @@ class TestFlushInteractionBuffer(SyncTestCase):
 			topics = frappe.db.get_list("Memora Topic", limit=1)
 
 			if units and topics:
-				lesson_doc = frappe.get_doc({
-					"doctype": "Memora Lesson",
-					"name": f"TEST-LES-{self.player_id[:8]}",
-					"topic": topics[0]["name"],
-					"unit": units[0]["name"],
-					"title": "Test Lesson",
-					"description": "Test lesson for interaction buffer tests",
-				})
+				lesson_doc = frappe.get_doc(
+					{
+						"doctype": "Memora Lesson",
+						"name": f"TEST-LES-{self.player_id[:8]}",
+						"topic": topics[0]["name"],
+						"unit": units[0]["name"],
+						"title": "Test Lesson",
+						"description": "Test lesson for interaction buffer tests",
+					}
+				)
 				try:
 					lesson_doc.insert(ignore_permissions=True)
 					self.lesson_id = lesson_doc.name
@@ -110,9 +113,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		# Push 3 valid interactions
 		for i in range(3):
 			self._push_interaction(
-				self._make_interaction(
-					event_type="Completed" if i % 2 == 0 else "Started"
-				)
+				self._make_interaction(event_type="Completed" if i % 2 == 0 else "Started")
 			)
 
 		# Call flush_interaction_buffer
@@ -245,9 +246,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		- Assert: Buffer still has 3 items (nothing trimmed)
 		"""
 		for i in range(3):
-			self._push_interaction(
-				self._make_interaction(stage_id=f"STG-{i+1}")
-			)
+			self._push_interaction(self._make_interaction(stage_id=f"STG-{i+1}"))
 
 		original_sql = frappe.db.sql
 

@@ -15,7 +15,6 @@ from datetime import date, datetime, timedelta, timezone
 
 from fsrs import Card, Rating, Scheduler, State
 
-
 # ---------------------------------------------------------------------------
 # Group 1: Ceiling + Floor clamp logic (pure datetime arithmetic)
 # ---------------------------------------------------------------------------

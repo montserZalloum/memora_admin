@@ -14,6 +14,7 @@ class RateLimitExceeded(Exception):
 	def __init__(self, retry_after: int):
 		self.retry_after = retry_after
 
+
 # Lua script: atomic INCR + conditional EXPIRE + TTL retrieval
 # Returns {count, ttl} in a single round-trip
 GLOBAL_RATE_LIMIT_SCRIPT = """

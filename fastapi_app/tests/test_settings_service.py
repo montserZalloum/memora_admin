@@ -64,9 +64,7 @@ class TestCacheMiss:
 		assert result.replay_xp == 75
 
 		# Assert: Frappe called
-		mock_frappe.call.assert_called_once_with(
-			"memora_admin.api.settings.get_gamification_settings"
-		)
+		mock_frappe.call.assert_called_once_with("memora_admin.api.settings.get_gamification_settings")
 
 		# Assert: cached in Redis with TTL
 		cached = await redis_client.get(SETTINGS_CACHE_KEY)
@@ -96,7 +94,9 @@ class TestCacheMiss:
 class TestFrappeUnavailable:
 	"""Frappe unavailable returns defaults."""
 
-	async def test_tc_set_03_frappe_unavailable_returns_defaults(self, settings_svc, redis_client, mock_frappe):
+	async def test_tc_set_03_frappe_unavailable_returns_defaults(
+		self, settings_svc, redis_client, mock_frappe
+	):
 		"""TC-SET-03: Frappe unavailable returns GamificationSettings defaults."""
 		# Setup: Frappe returns None
 		mock_frappe.call.return_value = None

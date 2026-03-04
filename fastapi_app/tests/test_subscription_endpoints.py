@@ -5,6 +5,7 @@ Tests verify subscriptions endpoint:
 
 Reference: contracts/endpoint-test-contracts.md §8
 """
+
 import pytest
 
 

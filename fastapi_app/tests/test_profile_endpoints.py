@@ -8,6 +8,7 @@ Tests verify all profile endpoints:
 
 Reference: contracts/endpoint-test-contracts.md §4
 """
+
 from unittest.mock import AsyncMock, patch
 
 import pytest

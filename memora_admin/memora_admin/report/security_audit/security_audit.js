@@ -27,7 +27,8 @@ frappe.query_reports["Security Audit"] = {
 			fieldname: "failure_type",
 			label: __("Failure Type"),
 			fieldtype: "Select",
-			options: "\nInvalid PIN\nAlready Redeemed\nExpired\nVoid\nNot Allocated\nBatch Inactive\nSeason Inactive\nRate Limited",
+			options:
+				"\nInvalid PIN\nAlready Redeemed\nExpired\nVoid\nNot Allocated\nBatch Inactive\nSeason Inactive\nRate Limited",
 		},
 	],
 };

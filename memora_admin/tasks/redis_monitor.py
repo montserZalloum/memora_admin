@@ -52,20 +52,29 @@ def monitor_redis_health():
 		# Always log INFO with all metrics (inline in message for Frappe log visibility)
 		logger.info(
 			"redis_monitor used_mb=%.2f max_mb=%.2f memory_pct=%.1f buffer=%d dirty_wallets=%d dirty_progress=%d keys=%d",
-			used_mb, max_mb, memory_pct, buffer_len, dirty_wallets, dirty_progress, total_keys,
+			used_mb,
+			max_mb,
+			memory_pct,
+			buffer_len,
+			dirty_wallets,
+			dirty_progress,
+			total_keys,
 		)
 
 		# Threshold-based alerting
 		if memory_pct > 80:
 			logger.warning(
 				"redis_memory_high used_mb=%.2f max_mb=%.2f memory_pct=%.1f",
-				used_mb, max_mb, memory_pct,
+				used_mb,
+				max_mb,
+				memory_pct,
 			)
 
 		if dirty_wallets > 1000 or dirty_progress > 1000:
 			logger.warning(
 				"redis_sync_falling_behind dirty_wallets=%d dirty_progress=%d",
-				dirty_wallets, dirty_progress,
+				dirty_wallets,
+				dirty_progress,
 			)
 
 		if buffer_len > 10000:

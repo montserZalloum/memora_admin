@@ -6,6 +6,7 @@ Tests verify voucher endpoints:
 
 Reference: contracts/endpoint-test-contracts.md §9
 """
+
 import pytest
 
 from fastapi_app.core.redis_keys import voucher_fail_player_key

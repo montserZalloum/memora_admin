@@ -2,7 +2,6 @@
 
 from pydantic import BaseModel, Field
 
-
 # --- Token models (used by all auth flows) ---
 
 

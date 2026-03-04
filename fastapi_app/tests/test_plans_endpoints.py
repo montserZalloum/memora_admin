@@ -5,6 +5,7 @@ Tests verify plans endpoint:
 
 Reference: contracts/endpoint-test-contracts.md §3
 """
+
 import pytest
 
 

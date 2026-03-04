@@ -77,6 +77,8 @@ def create_purchase_request(
 	)
 	trx.insert(ignore_permissions=True)
 
-	frappe.logger().info(f"Purchase request {trx.name} created for player {player_id}, grant {product_grant_id}")
+	frappe.logger().info(
+		f"Purchase request {trx.name} created for player {player_id}, grant {product_grant_id}"
+	)
 
 	return {"name": trx.name, "status": "Pending Approval"}

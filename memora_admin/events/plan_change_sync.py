@@ -18,37 +18,39 @@ from memora_admin.utils.redis_connection import get_memora_redis
 
 
 def on_player_profile_plan_changed(doc, method):
-    """Invalidate player session when plan field changes.
+	"""Invalidate player session when plan field changes.
 
-    Per CONTEXT.md:
-    - Immediate invalidation, player must re-login
-    - No graceful transition needed
+	Per CONTEXT.md:
+	- Immediate invalidation, player must re-login
+	- No graceful transition needed
 
-    Uses two-pronged invalidation (direct delete + pubsub),
-    matching the established pattern in catalog_sync.py.
-    """
-    # Only act if plan field actually changed
-    if not doc.has_value_changed("plan"):
-        return
+	Uses two-pronged invalidation (direct delete + pubsub),
+	matching the established pattern in catalog_sync.py.
+	"""
+	# Only act if plan field actually changed
+	if not doc.has_value_changed("plan"):
+		return
 
-    # Invalidate cached season_seq (Frappe-side cache)
-    invalidate_player_season_seq(doc.name)
+	# Invalidate cached season_seq (Frappe-side cache)
+	invalidate_player_season_seq(doc.name)
 
-    r = get_memora_redis()
+	r = get_memora_redis()
 
-    # 1. Direct delete: invalidate session + player_plan cache immediately
-    # Key pattern matches SessionService: memora:session:{player_id}
-    sk = session_key(doc.name)
-    ppk = player_plan_key(doc.name)
-    r.delete(sk, ppk)
+	# 1. Direct delete: invalidate session + player_plan cache immediately
+	# Key pattern matches SessionService: memora:session:{player_id}
+	sk = session_key(doc.name)
+	ppk = player_plan_key(doc.name)
+	r.delete(sk, ppk)
 
-    # 2. Pubsub: notify FastAPI in-process caches
-    invalidation_msg = json.dumps({
-        "type": "session",
-        "player_id": doc.name,
-        "reason": "plan_changed",
-        "timestamp": time.time(),
-    })
-    r.publish(cache_invalidation_channel(), invalidation_msg)
+	# 2. Pubsub: notify FastAPI in-process caches
+	invalidation_msg = json.dumps(
+		{
+			"type": "session",
+			"player_id": doc.name,
+			"reason": "plan_changed",
+			"timestamp": time.time(),
+		}
+	)
+	r.publish(cache_invalidation_channel(), invalidation_msg)
 
-    frappe.logger().info(f"Session + player_plan cache invalidated for {doc.name} due to plan change")
+	frappe.logger().info(f"Session + player_plan cache invalidated for {doc.name} due to plan change")

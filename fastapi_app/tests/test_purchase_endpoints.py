@@ -5,6 +5,7 @@ Tests verify purchase endpoint:
 
 Reference: contracts/endpoint-test-contracts.md §2
 """
+
 import pytest
 
 from fastapi_app.core.redis_keys import pending_key as _pending_key_fn

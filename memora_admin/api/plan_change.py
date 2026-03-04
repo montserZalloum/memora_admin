@@ -192,27 +192,29 @@ def execute_plan_change(player_id: str, new_plan_id: str) -> dict:
 	now = datetime.now().replace(tzinfo=None)
 
 	# 6. Insert history record
-	history = frappe.get_doc({
-		"doctype": "Memora Player Plan History",
-		"player": player_id,
-		"previous_plan": player.plan,
-		"previous_grade": player.grade,
-		"previous_major": player.major,
-		"previous_season": player.season,
-		"new_plan": new_plan_id,
-		"new_grade": plan.grade,
-		"new_major": plan.major,
-		"new_season": plan.season,
-		"trigger_reason": trigger_reason,
-		"snapshot_total_xp": snapshot_total_xp,
-		"snapshot_current_streak": snapshot_current_streak,
-		"snapshot_total_lessons": snapshot_total_lessons,
-		"snapshot_total_time_min": snapshot_total_time_min,
-		"snapshot_subscriptions_json": json.dumps(snapshot_subscriptions),
-		"snapshot_progress_json": json.dumps(snapshot_progress),
-		"snapshot_memory_states": snapshot_memory_states,
-		"changed_at": now,
-	})
+	history = frappe.get_doc(
+		{
+			"doctype": "Memora Player Plan History",
+			"player": player_id,
+			"previous_plan": player.plan,
+			"previous_grade": player.grade,
+			"previous_major": player.major,
+			"previous_season": player.season,
+			"new_plan": new_plan_id,
+			"new_grade": plan.grade,
+			"new_major": plan.major,
+			"new_season": plan.season,
+			"trigger_reason": trigger_reason,
+			"snapshot_total_xp": snapshot_total_xp,
+			"snapshot_current_streak": snapshot_current_streak,
+			"snapshot_total_lessons": snapshot_total_lessons,
+			"snapshot_total_time_min": snapshot_total_time_min,
+			"snapshot_subscriptions_json": json.dumps(snapshot_subscriptions),
+			"snapshot_progress_json": json.dumps(snapshot_progress),
+			"snapshot_memory_states": snapshot_memory_states,
+			"changed_at": now,
+		}
+	)
 	history.insert(ignore_permissions=True)
 
 	# 7. Delete all subscriptions

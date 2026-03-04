@@ -136,7 +136,11 @@ frappe.ui.form.on("Memora Admin Filter", {
 
 	test_filter_btn(frm) {
 		let wrapper = frm.fields_dict.test_results_html.$wrapper;
-		wrapper.html('<div style="text-align:center;padding:20px;"><span class="loading-text">' + __("Loading...") + "</span></div>");
+		wrapper.html(
+			'<div style="text-align:center;padding:20px;"><span class="loading-text">' +
+				__("Loading...") +
+				"</span></div>"
+		);
 
 		frappe.call({
 			method: "memora_admin.memora_admin.doctype.memora_admin_filter.memora_admin_filter.test_filter",

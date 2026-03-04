@@ -423,8 +423,11 @@ async def get_subject_tracks(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
 		stats = await stats_service.get_or_recompute(
-			user_id=user.sub, subject_id=subject, version=hierarchy.version,
-			content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+			user_id=user.sub,
+			subject_id=subject,
+			version=hierarchy.version,
+			content_hash=hierarchy.content_hash,
+			completed_bits=completed_bits,
 			hierarchy=hierarchy,
 		)
 
@@ -533,8 +536,11 @@ async def get_track_detail(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
 		stats = await stats_service.get_or_recompute(
-			user_id=user.sub, subject_id=subject, version=hierarchy.version,
-			content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+			user_id=user.sub,
+			subject_id=subject,
+			version=hierarchy.version,
+			content_hash=hierarchy.content_hash,
+			completed_bits=completed_bits,
 			hierarchy=hierarchy,
 		)
 
@@ -669,8 +675,11 @@ async def get_unit_detail(
 			user.sub, subject, hierarchy.bit_range, hierarchy.version
 		)
 		stats = await stats_service.get_or_recompute(
-			user_id=user.sub, subject_id=subject, version=hierarchy.version,
-			content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+			user_id=user.sub,
+			subject_id=subject,
+			version=hierarchy.version,
+			content_hash=hierarchy.content_hash,
+			completed_bits=completed_bits,
 			hierarchy=hierarchy,
 		)
 
@@ -688,9 +697,7 @@ async def get_unit_detail(
 	topics_progress = []
 	for topic_idx, topic in enumerate(unit_info.topics):
 		if use_stats_path:
-			topic_unlocked = _is_topic_unlocked_from_stats(
-				track_idx, unit_idx, topic_idx, hierarchy, stats
-			)
+			topic_unlocked = _is_topic_unlocked_from_stats(track_idx, unit_idx, topic_idx, hierarchy, stats)
 		else:
 			topic_unlocked = _is_topic_unlocked(track_idx, unit_idx, topic_idx, hierarchy, completed_bits)
 
@@ -870,8 +877,11 @@ async def get_subject_progress(
 			version=hierarchy.version,
 		)
 		stats = await stats_service.get_or_recompute(
-			user_id=user.sub, subject_id=subject, version=hierarchy.version,
-			content_hash=hierarchy.content_hash, completed_bits=completed_bits,
+			user_id=user.sub,
+			subject_id=subject,
+			version=hierarchy.version,
+			content_hash=hierarchy.content_hash,
+			completed_bits=completed_bits,
 			hierarchy=hierarchy,
 		)
 

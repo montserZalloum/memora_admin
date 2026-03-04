@@ -7,8 +7,9 @@ Tests cover:
 - US5 (FR-015): Full prepaid invoice flow end-to-end
 """
 
-import frappe
 from decimal import Decimal
+
+import frappe
 
 from memora_admin.memora_admin.tests.voucher_fixtures import (
 	make_batch,
@@ -39,9 +40,7 @@ class TestCreateInvoice(VoucherTestCase):
 		cls.customer = make_customer(commission_type="Percentage", commission_value="10")
 
 		# Create and complete allocation (triggers invoice creation)
-		cls.allocation = fill_and_complete_allocation(
-			cls.batch.name, cls.customer.name, quantity=5
-		)
+		cls.allocation = fill_and_complete_allocation(cls.batch.name, cls.customer.name, quantity=5)
 
 		# Reload allocation to get sales_invoice link
 		cls.allocation.reload()
@@ -86,9 +85,7 @@ class TestCreateCreditNote(VoucherTestCase):
 		cls.customer = make_customer(commission_type="Percentage", commission_value="10")
 
 		# Complete original allocation (creates invoice)
-		cls.original_allocation = fill_and_complete_allocation(
-			cls.batch.name, cls.customer.name, quantity=5
-		)
+		cls.original_allocation = fill_and_complete_allocation(cls.batch.name, cls.customer.name, quantity=5)
 		cls.original_allocation.reload()
 		cls.original_invoice_name = cls.original_allocation.sales_invoice
 
@@ -97,6 +94,7 @@ class TestCreateCreditNote(VoucherTestCase):
 
 		# Step 3: Create return allocation
 		from memora_admin.memora_admin.tests.voucher_fixtures import make_allocation
+
 		cls.return_allocation = make_allocation(
 			batch=cls.batch.name,
 			customer=cls.customer.name,
@@ -106,19 +104,19 @@ class TestCreateCreditNote(VoucherTestCase):
 
 		# Step 4: Fill return allocation with the same cards
 		from memora_admin.memora_admin.api.allocation import fill_cards
+
 		# Use the fill_cards API with specific card names
 		for card_name in card_names:
 			cls.return_allocation.append("allocation_cards", {"voucher_card": card_name})
 		cls.return_allocation.save(ignore_permissions=True)
 
 		# Step 5: Submit and complete return allocation
-		from memora_admin.memora_admin.api.allocation import submit_allocation, approve_allocation
+		from memora_admin.memora_admin.api.allocation import approve_allocation, submit_allocation
+
 		submit_allocation(cls.return_allocation.name)
 
 		# Check if approval needed
-		requires_approval = frappe.db.get_value(
-			"Customer", cls.customer.name, "voucher_requires_approval"
-		)
+		requires_approval = frappe.db.get_value("Customer", cls.customer.name, "voucher_requires_approval")
 		if requires_approval:
 			approve_allocation(cls.return_allocation.name)
 

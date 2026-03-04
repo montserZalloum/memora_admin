@@ -227,8 +227,12 @@ async def seed():
 		s_exists = await str_redis.exists(s_key)
 		print(f"  {s_key} — {'exists (unexpected!)' if s_exists else 'empty (cold-start ready)'}")
 
-		print(f"\nSeeded {len(SUBJECTS)} subjects x {TOTAL_LESSONS:,} lessons = {len(SUBJECTS) * TOTAL_LESSONS:,} total lessons")
-		print(f"Seeded bitmaps for {len(PLAYER_IDS)} players x {len(SUBJECTS)} subjects ({COMPLETION_RATE:.0%} completion)")
+		print(
+			f"\nSeeded {len(SUBJECTS)} subjects x {TOTAL_LESSONS:,} lessons = {len(SUBJECTS) * TOTAL_LESSONS:,} total lessons"
+		)
+		print(
+			f"Seeded bitmaps for {len(PLAYER_IDS)} players x {len(SUBJECTS)} subjects ({COMPLETION_RATE:.0%} completion)"
+		)
 		print(f"Seeded access grants for {len(PLAYER_IDS)} players ({len(SUBJECTS)} LOAD-* subjects each)")
 
 	finally:

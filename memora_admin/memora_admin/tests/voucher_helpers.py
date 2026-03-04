@@ -11,26 +11,27 @@ Provides helper functions to execute common multi-step test operations:
 
 import csv
 import io
+
 import frappe
 
-from memora_admin.memora_admin.api.voucher import (
-	generate_cards_job,
-	redeem_voucher,
-	export_for_print,
-	preview_voucher,
-)
 from memora_admin.memora_admin.api.allocation import (
+	approve_allocation,
 	fill_cards,
 	submit_allocation,
-	approve_allocation,
+)
+from memora_admin.memora_admin.api.voucher import (
+	export_for_print,
+	generate_cards_job,
+	preview_voucher,
+	redeem_voucher,
 )
 from memora_admin.memora_admin.services.voucher.generator import compute_hmac
 from memora_admin.memora_admin.tests.voucher_fixtures import make_allocation
 
-
 # ─────────────────────────────────────────────────────────────────────────────
 # T012: generate_batch_sync() helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def generate_batch_sync(batch_name: str) -> None:
 	"""Generate cards synchronously by calling generate_cards_job() directly.
@@ -65,6 +66,7 @@ def generate_batch_sync(batch_name: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 # T013: get_card_statuses() helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def get_card_statuses(batch_name: str) -> dict[str, int]:
 	"""Get card status counts for a batch.
@@ -105,6 +107,7 @@ def get_card_statuses(batch_name: str) -> dict[str, int]:
 # ─────────────────────────────────────────────────────────────────────────────
 # T014: fill_and_complete_allocation() helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def fill_and_complete_allocation(
 	batch_name: str,
@@ -173,6 +176,7 @@ def fill_and_complete_allocation(
 # T014b: get_pins_from_export() helper
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def get_pins_from_export(batch_name: str) -> dict[str, str]:
 	"""Extract serial_no → plaintext PIN mapping from batch export.
 
@@ -215,6 +219,7 @@ def get_pins_from_export(batch_name: str) -> dict[str, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 # T015: redeem_card_by_pin() helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def redeem_card_by_pin(
 	pin: str,
@@ -262,6 +267,7 @@ def redeem_card_by_pin(
 # T015b: preview_card_by_pin() helper
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def preview_card_by_pin(pin: str, player_id: str) -> dict:
 	"""Preview a voucher card using plaintext PIN.
 
@@ -300,6 +306,7 @@ def preview_card_by_pin(pin: str, player_id: str) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # T016: assert_batch_counters() helper
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def assert_batch_counters(
 	test_case,

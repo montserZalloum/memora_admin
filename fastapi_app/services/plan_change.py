@@ -175,9 +175,7 @@ class PlanChangeService:
 		except Exception as e:
 			logger.warning("pre_cleanup_error", error=str(e), player_id=player_id)
 
-	async def _call_frappe_api(
-		self, player_id: str, new_plan_id: str
-	) -> PlanChangeResult | PlanChangeError:
+	async def _call_frappe_api(self, player_id: str, new_plan_id: str) -> PlanChangeResult | PlanChangeError:
 		"""Call Frappe whitelisted API for atomic DB operations."""
 		result = await self.frappe.call(
 			"memora_admin.api.plan_change.execute_plan_change",
@@ -282,12 +280,14 @@ class PlanChangeService:
 		import json
 
 		try:
-			msg = json.dumps({
-				"type": "plan_changed",
-				"player_id": player_id,
-				"reason": "plan_changed",
-				"timestamp": time.time(),
-			})
+			msg = json.dumps(
+				{
+					"type": "plan_changed",
+					"player_id": player_id,
+					"reason": "plan_changed",
+					"timestamp": time.time(),
+				}
+			)
 			await self.redis.publish(cache_invalidation_channel(), msg)
 		except Exception as e:
 			logger.warning("publish_invalidation_error", error=str(e), player_id=player_id)

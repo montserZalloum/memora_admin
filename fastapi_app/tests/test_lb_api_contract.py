@@ -38,6 +38,8 @@ import pytest
 from fastapi_app.core.redis_keys import (
 	lb_daily_plan_key,
 	lb_weekly_plan_key,
+)
+from fastapi_app.core.redis_keys import (
 	session_key as _session_key_fn,
 )
 from fastapi_app.core.security import create_access_token
@@ -129,7 +131,10 @@ class TestLeaderboardResponseSchema:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, players[0][0], self.PLAN,
+			app_client,
+			redis_client,
+			players[0][0],
+			self.PLAN,
 			"/api/v1/leaderboard/daily",
 		)
 		assert resp.status_code == 200
@@ -148,7 +153,10 @@ class TestLeaderboardResponseSchema:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-SCH-ENT", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-SCH-ENT",
+			self.PLAN,
 			"/api/v1/leaderboard/daily",
 		)
 		data = resp.json()
@@ -184,7 +192,10 @@ class TestMyRankResponseSchema:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-MESCH-002", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-MESCH-002",
+			self.PLAN,
 			"/api/v1/leaderboard/daily/me",
 		)
 		assert resp.status_code == 200
@@ -208,7 +219,10 @@ class TestMyRankResponseSchema:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-MESCH-NONE", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-MESCH-NONE",
+			self.PLAN,
 			"/api/v1/leaderboard/daily/me",
 		)
 		data = resp.json()
@@ -228,7 +242,10 @@ class TestMyRankResponseSchema:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-MESCH-B", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-MESCH-B",
+			self.PLAN,
 			"/api/v1/leaderboard/daily/me",
 		)
 		data = resp.json()
@@ -248,23 +265,21 @@ class TestAPISortingCorrectness:
 		import random
 
 		random.seed(42)
-		players = [
-			(f"PLAYER-TEST-SORT-{i:03d}", random.randint(1, 10000))
-			for i in range(20)
-		]
+		players = [(f"PLAYER-TEST-SORT-{i:03d}", random.randint(1, 10000)) for i in range(20)]
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, players[0][0], self.PLAN,
+			app_client,
+			redis_client,
+			players[0][0],
+			self.PLAN,
 			"/api/v1/leaderboard/daily",
 		)
 		data = resp.json()
 		xps = [e["xp"] for e in data["entries"]]
 
 		for i in range(1, len(xps)):
-			assert xps[i] <= xps[i - 1], (
-				f"Not sorted at position {i}: {xps[i-1]} → {xps[i]}"
-			)
+			assert xps[i] <= xps[i - 1], f"Not sorted at position {i}: {xps[i-1]} → {xps[i]}"
 
 
 @pytest.mark.asyncio
@@ -285,12 +300,18 @@ class TestAPIRankConsistency:
 
 		# Get top (as player D)
 		resp_top = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-CON-D", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-CON-D",
+			self.PLAN,
 			"/api/v1/leaderboard/weekly",
 		)
 		# Get me (as player D)
 		resp_me = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-CON-D", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-CON-D",
+			self.PLAN,
 			"/api/v1/leaderboard/weekly/me",
 		)
 
@@ -315,7 +336,10 @@ class TestAPIRankConsistency:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-DENSE-A", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-DENSE-A",
+			self.PLAN,
 			"/api/v1/leaderboard/daily",
 		)
 		data = resp.json()
@@ -338,7 +362,10 @@ class TestAPIPagination:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, players[0][0], self.PLAN,
+			app_client,
+			redis_client,
+			players[0][0],
+			self.PLAN,
 			"/api/v1/leaderboard/daily?limit=5",
 		)
 		data = resp.json()
@@ -351,7 +378,10 @@ class TestAPIPagination:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, players[0][0], self.PLAN,
+			app_client,
+			redis_client,
+			players[0][0],
+			self.PLAN,
 			"/api/v1/leaderboard/daily?offset=5&limit=5",
 		)
 		data = resp.json()
@@ -365,7 +395,10 @@ class TestAPIPagination:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, players[0][0], self.PLAN,
+			app_client,
+			redis_client,
+			players[0][0],
+			self.PLAN,
 			"/api/v1/leaderboard/daily?offset=100",
 		)
 		data = resp.json()
@@ -384,7 +417,10 @@ class TestAPIPagination:
 		await _seed_plan_leaderboard(redis_client, self.PLAN, players, lb_type="daily")
 
 		resp = await _authed_request(
-			app_client, redis_client, players[0][0], self.PLAN,
+			app_client,
+			redis_client,
+			players[0][0],
+			self.PLAN,
 			"/api/v1/leaderboard/daily?offset=2&limit=3",
 		)
 		data = resp.json()
@@ -417,7 +453,10 @@ class TestAPIPlanIsolation:
 
 		# Plan A player sees only Plan A
 		resp_a = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-ISO-A1", self.PLAN_A,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-ISO-A1",
+			self.PLAN_A,
 			"/api/v1/leaderboard/daily",
 		)
 		data_a = resp_a.json()
@@ -428,7 +467,10 @@ class TestAPIPlanIsolation:
 
 		# Plan B player sees only Plan B
 		resp_b = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-ISO-B1", self.PLAN_B,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-ISO-B1",
+			self.PLAN_B,
 			"/api/v1/leaderboard/daily",
 		)
 		data_b = resp_b.json()
@@ -457,7 +499,10 @@ class TestAPISubjectFilter:
 		await redis_client.expire(key_global, 3600)
 
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-SUBJ-A", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-SUBJ-A",
+			self.PLAN,
 			"/api/v1/leaderboard/weekly?subject_id=SUBJ-API-001",
 		)
 		data = resp.json()
@@ -479,7 +524,10 @@ class TestAPIEdgeCases:
 	async def test_empty_leaderboard_200(self, app_client, redis_client, mock_frappe):
 		"""Empty leaderboard returns 200 with empty entries."""
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-EDGE-001", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-EDGE-001",
+			self.PLAN,
 			"/api/v1/leaderboard/daily",
 		)
 		assert resp.status_code == 200
@@ -494,7 +542,10 @@ class TestAPIEdgeCases:
 
 		# Top
 		resp_top = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-EDGE-SOLO", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-EDGE-SOLO",
+			self.PLAN,
 			"/api/v1/leaderboard/daily",
 		)
 		data_top = resp_top.json()
@@ -504,7 +555,10 @@ class TestAPIEdgeCases:
 
 		# Me
 		resp_me = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-EDGE-SOLO", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-EDGE-SOLO",
+			self.PLAN,
 			"/api/v1/leaderboard/daily/me",
 		)
 		data_me = resp_me.json()
@@ -515,7 +569,10 @@ class TestAPIEdgeCases:
 	async def test_limit_max_100(self, app_client, redis_client, mock_frappe):
 		"""?limit=200 is clamped/rejected (FastAPI validation: le=100)."""
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-EDGE-LIM", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-EDGE-LIM",
+			self.PLAN,
 			"/api/v1/leaderboard/daily?limit=200",
 		)
 		assert resp.status_code == 422  # Validation error
@@ -523,7 +580,10 @@ class TestAPIEdgeCases:
 	async def test_offset_max_1000(self, app_client, redis_client, mock_frappe):
 		"""?offset=2000 is clamped/rejected (FastAPI validation: le=1000)."""
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-EDGE-OFF", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-EDGE-OFF",
+			self.PLAN,
 			"/api/v1/leaderboard/daily?offset=2000",
 		)
 		assert resp.status_code == 422
@@ -531,7 +591,10 @@ class TestAPIEdgeCases:
 	async def test_negative_limit_rejected(self, app_client, redis_client, mock_frappe):
 		"""?limit=-1 is rejected."""
 		resp = await _authed_request(
-			app_client, redis_client, "PLAYER-TEST-EDGE-NEG", self.PLAN,
+			app_client,
+			redis_client,
+			"PLAYER-TEST-EDGE-NEG",
+			self.PLAN,
 			"/api/v1/leaderboard/daily?limit=-1",
 		)
 		assert resp.status_code == 422

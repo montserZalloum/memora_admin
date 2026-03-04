@@ -80,17 +80,13 @@ class TestDailyKeyIsolation:
 		with patch("fastapi_app.services.leaderboard.datetime") as mock_dt:
 			mock_dt.now.return_value = yesterday_15
 			mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-			await lb_svc.update_leaderboards(
-				"PLAYER-TEST-YEST", xp_amount=100, plan_id=self.PLAN
-			)
+			await lb_svc.update_leaderboards("PLAYER-TEST-YEST", xp_amount=100, plan_id=self.PLAN)
 
 		# Patch datetime.now for "today" update
 		with patch("fastapi_app.services.leaderboard.datetime") as mock_dt:
 			mock_dt.now.return_value = today_10
 			mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-			await lb_svc.update_leaderboards(
-				"PLAYER-TEST-TODAY", xp_amount=200, plan_id=self.PLAN
-			)
+			await lb_svc.update_leaderboards("PLAYER-TEST-TODAY", xp_amount=200, plan_id=self.PLAN)
 
 		# Verify keys are separate
 		yesterday_key = lb_daily_plan_key(yesterday_str, self.PLAN)
@@ -120,16 +116,12 @@ class TestDailyKeyIsolation:
 		with patch("fastapi_app.services.leaderboard.datetime") as mock_dt:
 			mock_dt.now.return_value = late_night
 			mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-			await lb_svc.update_leaderboards(
-				"PLAYER-TEST-2359", xp_amount=50, plan_id=self.PLAN
-			)
+			await lb_svc.update_leaderboards("PLAYER-TEST-2359", xp_amount=50, plan_id=self.PLAN)
 
 		with patch("fastapi_app.services.leaderboard.datetime") as mock_dt:
 			mock_dt.now.return_value = midnight
 			mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-			await lb_svc.update_leaderboards(
-				"PLAYER-TEST-0000", xp_amount=50, plan_id=self.PLAN
-			)
+			await lb_svc.update_leaderboards("PLAYER-TEST-0000", xp_amount=50, plan_id=self.PLAN)
 
 		# Must be on different keys
 		key_2359 = lb_daily_plan_key(late_date, self.PLAN)
@@ -172,9 +164,9 @@ class TestWeeklyBoundary:
 		fri_days_since_fri = (fri_weekday - 5) % 7
 		fri_friday = (friday_0000 - timedelta(days=fri_days_since_fri)).strftime("%Y-%m-%d")
 
-		assert thu_friday != fri_friday, (
-			f"Thursday and Friday should be in different weeks: {thu_friday} vs {fri_friday}"
-		)
+		assert (
+			thu_friday != fri_friday
+		), f"Thursday and Friday should be in different weeks: {thu_friday} vs {fri_friday}"
 
 	async def test_weekly_accumulation_within_week(self, lb_svc, redis_client):
 		"""XP earned on Monday and Wednesday within the same Islamic week accumulates."""
@@ -200,16 +192,12 @@ class TestWeeklyBoundary:
 		with patch("fastapi_app.services.leaderboard.datetime") as mock_dt:
 			mock_dt.now.return_value = monday_10
 			mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-			await lb_svc.update_leaderboards(
-				"PLAYER-TEST-WKACC", xp_amount=100, plan_id=self.PLAN
-			)
+			await lb_svc.update_leaderboards("PLAYER-TEST-WKACC", xp_amount=100, plan_id=self.PLAN)
 
 		with patch("fastapi_app.services.leaderboard.datetime") as mock_dt:
 			mock_dt.now.return_value = wednesday_10
 			mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-			await lb_svc.update_leaderboards(
-				"PLAYER-TEST-WKACC", xp_amount=200, plan_id=self.PLAN
-			)
+			await lb_svc.update_leaderboards("PLAYER-TEST-WKACC", xp_amount=200, plan_id=self.PLAN)
 
 		weekly_key = lb_weekly_plan_key(friday_str, self.PLAN)
 		score = await redis_client.zscore(weekly_key, "PLAYER-TEST-WKACC")
@@ -245,8 +233,10 @@ class TestNoMidnightSplit:
 			mock_dt.now.return_value = thursday_2359
 			mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
 			await lb_svc.update_leaderboards(
-				"PLAYER-TEST-SNAP", xp_amount=100,
-				subject_id="SUBJ-TEST-001", plan_id=self.PLAN,
+				"PLAYER-TEST-SNAP",
+				xp_amount=100,
+				subject_id="SUBJ-TEST-001",
+				plan_id=self.PLAN,
 			)
 
 		# Verify all keys use the same date snapshot
@@ -309,9 +299,7 @@ class TestDSTTransition:
 		with patch("fastapi_app.services.leaderboard.datetime") as mock_dt:
 			mock_dt.now.return_value = spring_forward
 			mock_dt.side_effect = lambda *a, **kw: datetime(*a, **kw)
-			await lb_svc.update_leaderboards(
-				"PLAYER-TEST-DST-SF", xp_amount=50, plan_id=self.PLAN
-			)
+			await lb_svc.update_leaderboards("PLAYER-TEST-DST-SF", xp_amount=50, plan_id=self.PLAN)
 
 		daily_key = lb_daily_plan_key(date_str, self.PLAN)
 		score = await redis_client.zscore(daily_key, "PLAYER-TEST-DST-SF")
@@ -335,8 +323,7 @@ class TestDSTTransition:
 		date_after = after_fb.strftime("%Y-%m-%d")
 
 		assert date_before == date_after, (
-			"Fall-back should not change the date: "
-			f"before={date_before}, after={date_after}"
+			"Fall-back should not change the date: " f"before={date_before}, after={date_after}"
 		)
 
 

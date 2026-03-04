@@ -10,8 +10,8 @@ from typing import TYPE_CHECKING
 import redis.asyncio as redis
 import structlog
 
-from fastapi_app.core.config import Settings
 from fastapi_app.core.coalesce import CoalescingLockPool
+from fastapi_app.core.config import Settings
 from fastapi_app.core.redis_keys import practice_hierarchy_meta_key, practice_session_key
 from fastapi_app.models.practice import (
 	PracticeBatchResponse,
@@ -263,9 +263,7 @@ class PracticeService:
 				# In free-only mode, skip units that are neither free
 				# themselves nor contain any free topics
 				if free_only and not unit_is_free:
-					has_free_topic = any(
-						t.topic_id in free_topics_set or t.is_free for t in unit.topics
-					)
+					has_free_topic = any(t.topic_id in free_topics_set or t.is_free for t in unit.topics)
 					if not has_free_topic:
 						continue
 
@@ -673,11 +671,7 @@ class PracticeService:
 		raw_batch_ids = session.get(batch_items_key)
 		raw_schema_version = session.get("schema_version")
 		try:
-			schema_version = (
-				int(raw_schema_version)
-				if raw_schema_version is not None
-				else 1
-			)
+			schema_version = int(raw_schema_version) if raw_schema_version is not None else 1
 		except (TypeError, ValueError):
 			schema_version = 1
 		is_legacy_session = schema_version < PRACTICE_SESSION_SCHEMA_VERSION
@@ -769,11 +763,13 @@ class PracticeService:
 		accuracy = round(correct_count / total_count * 100, 1) if total_count > 0 else 0.0
 
 		# Cache the result in the submitted marker so duplicates return identical response
-		cached_payload = json.dumps({
-			"correct_count": correct_count,
-			"total_count": total_count,
-			"accuracy_percent": accuracy,
-		})
+		cached_payload = json.dumps(
+			{
+				"correct_count": correct_count,
+				"total_count": total_count,
+				"accuracy_percent": accuracy,
+			}
+		)
 
 		# Set submitted marker in session hash + reset TTL
 		pipe = self.redis.pipeline()

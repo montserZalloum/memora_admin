@@ -126,7 +126,9 @@ def get_due_items(player_id: str, subject_id: str, limit: int = 0) -> dict:
 		content_json = None
 		if row.content_json:
 			try:
-				content_json = json.loads(row.content_json) if isinstance(row.content_json, str) else row.content_json
+				content_json = (
+					json.loads(row.content_json) if isinstance(row.content_json, str) else row.content_json
+				)
 			except (json.JSONDecodeError, TypeError):
 				content_json = None
 

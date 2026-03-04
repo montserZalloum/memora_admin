@@ -271,7 +271,7 @@ async def _handle_notification(message: dict, app_state: Any) -> None:
 		if not channel.startswith("memora:notify:"):
 			return
 
-		user_id = channel[len("memora:notify:"):]
+		user_id = channel[len("memora:notify:") :]
 
 		data = message.get("data", b"")
 		if isinstance(data, bytes):

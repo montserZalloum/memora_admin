@@ -19,7 +19,11 @@ from fastapi_app.core.redis_keys import (
 	dirty_progress_key,
 	dirty_wallets_key,
 	interaction_buffer_key,
+)
+from fastapi_app.core.redis_keys import (
 	progress_key as _progress_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	wallet_key as _wallet_key_fn,
 )
 
@@ -100,14 +104,16 @@ class SyncTestCase(FrappeTestCase):
 		Returns:
 			wallet_name: Auto-generated wallet document name
 		"""
-		wallet_doc = frappe.get_doc({
-			"doctype": "Memora Player Wallet",
-			"player": player_name,
-			"total_xp": 0,
-			"current_streak": 0,
-			"dirty_flag": 0,
-			"status": "Active",
-		})
+		wallet_doc = frappe.get_doc(
+			{
+				"doctype": "Memora Player Wallet",
+				"player": player_name,
+				"total_xp": 0,
+				"current_streak": 0,
+				"dirty_flag": 0,
+				"status": "Active",
+			}
+		)
 		wallet_doc.insert(ignore_permissions=True)
 		return wallet_doc.name
 
@@ -124,10 +130,13 @@ class SyncTestCase(FrappeTestCase):
 		"""
 		# Create wallet hash
 		wkey = _wallet_key_fn(player_id)
-		self.r.hset(wkey, mapping={
-			"xp": str(xp),
-			"streak": str(streak),
-		})
+		self.r.hset(
+			wkey,
+			mapping={
+				"xp": str(xp),
+				"streak": str(streak),
+			},
+		)
 		self._cleanup_keys.append(wkey)
 
 		# Add to dirty set

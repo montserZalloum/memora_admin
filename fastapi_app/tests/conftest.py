@@ -10,19 +10,30 @@ import pytest
 import redis.asyncio as redis
 from httpx import AsyncClient
 
+import fastapi_app.core.config as config_module
+
 # CRITICAL: Override settings BEFORE any app import
 # This prevents lru_cache from caching the production settings
 from fastapi_app.core.config import Settings, get_settings
 from fastapi_app.core.redis_keys import (
 	access_key as _access_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	game_session_key as _game_session_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	gamification_settings_key,
-	hierarchy_key as _hierarchy_key_fn,
 	registration_options_key,
+)
+from fastapi_app.core.redis_keys import (
+	hierarchy_key as _hierarchy_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	session_key as _session_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	wallet_key as _wallet_key_fn,
 )
-import fastapi_app.core.config as config_module
 
 _test_settings = Settings(
 	redis_url="redis://127.0.0.1:13001",
@@ -46,10 +57,11 @@ get_settings.cache_clear()
 config_module.get_settings = lambda: _test_settings
 
 # NOW safe to import app and other dependencies
+from httpx import ASGITransport
+
+from fastapi_app.api.deps import get_frappe_client, get_redis
 from fastapi_app.core.security import create_access_token
 from fastapi_app.main import app
-from fastapi_app.api.deps import get_redis, get_frappe_client
-from httpx import ASGITransport
 
 
 @pytest.fixture
@@ -104,19 +116,25 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 	"""
 	# Reset global state so each test gets a clean slate
 	import fastapi_app.api.deps as deps_module
+
 	deps_module._frappe_client = None
 	deps_module._session_fid_cache.clear()
 	# Clear process-local caches to prevent order-dependent stale data
 	from fastapi_app.services.hierarchy import _local_hierarchy_cache
+
 	_local_hierarchy_cache.clear()
 	import fastapi_app.services.hierarchy as hierarchy_module
+
 	hierarchy_module._free_content_subjects_cache = None
 	from fastapi_app.services.access import _grants_cache, _plan_subjects_cache
+
 	_grants_cache.clear()
 	_plan_subjects_cache.clear()
 	from fastapi_app.services.stats import _stats_local_cache
+
 	_stats_local_cache.clear()
 	from fastapi_app.services.progress import _progress_exists_cache
+
 	_progress_exists_cache.clear()
 
 	yield

@@ -33,11 +33,13 @@ async def warmup():
 			)
 			if resp.status_code == 200:
 				data = resp.json()
-				tokens.append({
-					"token": data["access_token"],
-					"player_id": data.get("player_id", ""),
-					"device_id": device_id,
-				})
+				tokens.append(
+					{
+						"token": data["access_token"],
+						"player_id": data.get("player_id", ""),
+						"device_id": device_id,
+					}
+				)
 				print(f"  {creds['mobile']} OK")
 			else:
 				print(f"  {creds['mobile']} FAILED ({resp.status_code}): {resp.text[:100]}")

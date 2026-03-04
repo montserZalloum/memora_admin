@@ -7,7 +7,6 @@ import pytest
 from fastapi_app.core.redis_keys import daily_xp_key, lb_archive_daily_key
 from fastapi_app.services.profile_page import AMMAN_TZ, ProfilePageService
 
-
 pytestmark = pytest.mark.asyncio
 
 

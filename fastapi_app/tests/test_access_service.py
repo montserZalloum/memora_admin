@@ -1,7 +1,8 @@
 """Tests for AccessService - player access grant management via Redis."""
 
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
 
 from fastapi_app.core.redis_keys import access_key, plan_free_subjects_key
 from fastapi_app.services.access import AccessService
@@ -156,7 +157,9 @@ class TestHydration:
 		members = await redis_client.smembers(key)
 		assert members == {TEST_SUBJECT_KEY, TEST_TRACK_KEY}
 
-	async def test_hydration_no_client_logs_warning(self, redis_client, test_prefix, access_service_no_frappe):
+	async def test_hydration_no_client_logs_warning(
+		self, redis_client, test_prefix, access_service_no_frappe
+	):
 		"""Hydration gracefully skips when no FrappeClient."""
 		# Call hydration with no frappe client
 		await access_service_no_frappe.ensure_hydrated(TEST_PLAYER)

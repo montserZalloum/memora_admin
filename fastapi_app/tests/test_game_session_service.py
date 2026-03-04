@@ -2,6 +2,7 @@
 """Tests for GameSessionService — session lifecycle with Lua scripts."""
 
 import json
+
 import pytest
 import redis.asyncio as redis
 
@@ -94,9 +95,7 @@ class TestStartSession:
 		)
 		assert stored_session_id_str == session_id_b, "Only second session should exist"
 
-	async def test_tc_gs_03_get_returns_game_session(
-		self, game_session_service: GameSessionService
-	):
+	async def test_tc_gs_03_get_returns_game_session(self, game_session_service: GameSessionService):
 		"""TC-GS-03: Get active session returns GameSession model."""
 		# Start a session
 		session_id = await game_session_service.start_session(
@@ -116,9 +115,7 @@ class TestStartSession:
 		assert session.subject_id == TEST_SUBJECT, "subject_id should match"
 		assert session.device_id == TEST_DEVICE, "device_id should match"
 
-	async def test_tc_gs_04_get_returns_none_when_no_session(
-		self, game_session_service: GameSessionService
-	):
+	async def test_tc_gs_04_get_returns_none_when_no_session(self, game_session_service: GameSessionService):
 		"""TC-GS-04: Get active session returns None when no session exists."""
 		session = await game_session_service.get_active_session("USER-NONEXISTENT")
 		assert session is None, "Should return None for non-existent user"
@@ -181,7 +178,9 @@ class TestCompleteSession:
 		assert bit_value == 1, "Progress bit at index 5 should be set"
 
 		# Verify dirty set contains member
-		is_dirty = await redis_client.sismember(DIRTY_PROGRESS_KEY, f"{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}")
+		is_dirty = await redis_client.sismember(
+			DIRTY_PROGRESS_KEY, f"{TEST_USER}:{TEST_SUBJECT}:v{TEST_VERSION}"
+		)
 		assert is_dirty == 1, "Dirty set should contain progress member"
 
 		# Verify interaction buffer received the JSON
@@ -257,8 +256,6 @@ class TestCompleteSession:
 		assert len(interactions) == 2, "Should have 2 interactions in buffer"
 
 		# Verify interaction content
-		interaction_strs = [
-			i.decode() if isinstance(i, bytes) else i for i in interactions
-		]
+		interaction_strs = [i.decode() if isinstance(i, bytes) else i for i in interactions]
 		assert '{"stage":"S1"}' in interaction_strs, "S1 interaction should be in buffer"
 		assert '{"stage":"S2"}' in interaction_strs, "S2 interaction should be in buffer"

@@ -21,7 +21,6 @@ from fastapi_app.tests.conftest import (
 	test_prefix,
 )
 
-
 HEALTH_URL = "/api/v1/health/redis"
 
 EXPECTED_FIELDS = {
@@ -90,7 +89,9 @@ async def test_degraded_when_buffer_large(app_client, redis_client, test_prefix)
 
 	try:
 		# Patch the key function to point to our test key
-		with patch("fastapi_app.api.v1.endpoints.health.interaction_buffer_key", return_value=test_buffer_key):
+		with patch(
+			"fastapi_app.api.v1.endpoints.health.interaction_buffer_key", return_value=test_buffer_key
+		):
 			resp = await app_client.get(HEALTH_URL)
 			assert resp.status_code == 200
 			data = resp.json()
@@ -125,8 +126,8 @@ async def test_degraded_when_dirty_sets_large(app_client, redis_client, test_pre
 @pytest.mark.asyncio
 async def test_unhealthy_503_when_redis_unreachable(app_client):
 	"""Returns 503 with unhealthy status when Redis is unreachable."""
-	from fastapi_app.main import app
 	from fastapi_app.api.deps import get_redis
+	from fastapi_app.main import app
 
 	# Save original override before replacing
 	original_override = app.dependency_overrides.get(get_redis)

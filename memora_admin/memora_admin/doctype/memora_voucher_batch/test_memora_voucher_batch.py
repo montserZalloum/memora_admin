@@ -8,6 +8,7 @@ import re
 from unittest.mock import patch
 
 import frappe
+
 from memora_admin.memora_admin.api.voucher import (
 	MAX_BATCH_QUANTITY,
 	export_for_print,

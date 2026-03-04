@@ -218,7 +218,7 @@ window.MemoraAdminFilter = (function () {
 
 		// Build cache key
 		const parent_level = PARENT_FIELD[level];
-		const parent_value = parent_level ? (state.selections[parent_level] || "") : "";
+		const parent_value = parent_level ? state.selections[parent_level] || "" : "";
 		const cache_key = level + ":" + parent_value;
 
 		// Check cache
@@ -414,7 +414,9 @@ window.MemoraAdminFilter = (function () {
 
 		if (parts.length > 0) {
 			container.append(
-				`<div class="memora-picker-breadcrumb">${parts.map(frappe.utils.escape_html).join(" &rsaquo; ")}</div>`
+				`<div class="memora-picker-breadcrumb">${parts
+					.map(frappe.utils.escape_html)
+					.join(" &rsaquo; ")}</div>`
 			);
 		}
 	}

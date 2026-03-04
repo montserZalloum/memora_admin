@@ -93,7 +93,9 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 	for grant in grants:
 		item_name = item_map.get(grant.item_code)
 		if not item_name:
-			frappe.logger().warning(f"Item not found for item_code={grant.item_code}, skipping grant {grant.name}")
+			frappe.logger().warning(
+				f"Item not found for item_code={grant.item_code}, skipping grant {grant.name}"
+			)
 			continue
 
 		price = price_map.get(grant.item_code)
@@ -111,31 +113,39 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 					alias_title = subject_title_map.get(comp.target_name)
 					notes = None
 
-				subjects.append({
-					"subject_id": comp.target_name,
-					"alias_title": alias_title,
-					"notes": notes,
-				})
+				subjects.append(
+					{
+						"subject_id": comp.target_name,
+						"alias_title": alias_title,
+						"notes": notes,
+					}
+				)
 
 			elif comp.target_doctype == "Memora Track":
 				track = track_map.get(comp.target_name)
 				if track:
-					tracks.append({
-						"track_id": comp.target_name,
-						"track_title": track.track_title,
-						"subject_id": track.subject,
-						"description": track.description or None,
-						"image": track.image or None,
-					})
+					tracks.append(
+						{
+							"track_id": comp.target_name,
+							"track_title": track.track_title,
+							"subject_id": track.subject,
+							"description": track.description or None,
+							"image": track.image or None,
+						}
+					)
 				else:
-					frappe.logger().warning(f"Track not found: {comp.target_name}, skipping component in grant {grant.name}")
+					frappe.logger().warning(
+						f"Track not found: {comp.target_name}, skipping component in grant {grant.name}"
+					)
 
-		products.append({
-			"product_grant_id": grant.name,
-			"bundle_name": item_name,
-			"price": float(price) if price else 0.0,
-			"subjects": subjects,
-			"tracks": tracks,
-		})
+		products.append(
+			{
+				"product_grant_id": grant.name,
+				"bundle_name": item_name,
+				"price": float(price) if price else 0.0,
+				"subjects": subjects,
+				"tracks": tracks,
+			}
+		)
 
 	return products

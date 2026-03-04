@@ -11,8 +11,8 @@ Uses a module-level cached client to avoid creating a new connection pool
 on every call (prevents file descriptor exhaustion under load).
 """
 
-import redis
 import frappe
+import redis
 
 _client: redis.Redis | None = None
 _client_url: str | None = None

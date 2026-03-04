@@ -2,11 +2,12 @@
 
 import json
 from datetime import datetime
+
 import pytest
 
 from fastapi_app.core.redis_keys import plan_manifest_key
-from fastapi_app.services.plan import PlanService
 from fastapi_app.models.plan import PlanManifest, PlanSubject
+from fastapi_app.services.plan import PlanService
 
 # Test constants
 TEST_PLAN = "PLAN-TEST-PLN-001"
@@ -47,7 +48,9 @@ class TestCacheHit:
 class TestCacheMiss:
 	"""Cache miss fetches from Frappe and caches result."""
 
-	async def test_tc_pln_02_cache_miss_fetches_and_caches(self, plan_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_pln_02_cache_miss_fetches_and_caches(
+		self, plan_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-PLN-02: Cache miss - fetches from Frappe and caches."""
 		# Setup: configure mock
 		manifest_dict = {

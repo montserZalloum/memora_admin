@@ -1,9 +1,12 @@
 """Tests for CatalogService - Product catalog per-plan caching."""
 
 import json
+
 import pytest
 
-from fastapi_app.core.redis_keys import access_key as _access_key_fn, catalog_key, pending_key as _pending_key_fn
+from fastapi_app.core.redis_keys import access_key as _access_key_fn
+from fastapi_app.core.redis_keys import catalog_key
+from fastapi_app.core.redis_keys import pending_key as _pending_key_fn
 from fastapi_app.models.catalog import CatalogProduct, CatalogSubject
 from fastapi_app.services.catalog import CatalogService
 
@@ -33,7 +36,9 @@ def _make_test_product(grant_id: str, subject_ids: list[str]) -> dict:
 class TestCacheHit:
 	"""Cache hit returns cached catalog without Frappe call."""
 
-	async def test_tc_cat_01_cache_hit_no_frappe_call(self, catalog_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_cat_01_cache_hit_no_frappe_call(
+		self, catalog_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-CAT-01: Cache hit - Frappe NOT called."""
 		# Setup: pre-seed catalog in Redis
 		products = [
@@ -57,7 +62,9 @@ class TestCacheHit:
 class TestCacheMiss:
 	"""Cache miss fetches from Frappe and caches result."""
 
-	async def test_tc_cat_02_cache_miss_fetches_and_caches(self, catalog_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_cat_02_cache_miss_fetches_and_caches(
+		self, catalog_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-CAT-02: Cache miss - fetches from Frappe and caches."""
 		# Setup: configure mock
 		products = [_make_test_product(TEST_PRODUCT_1, ["MATH"])]

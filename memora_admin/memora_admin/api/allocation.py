@@ -129,9 +129,7 @@ def submit_allocation(allocation_name: str) -> dict:
 				frappe.ValidationError,
 			)
 
-	requires_approval = frappe.db.get_value(
-		"Customer", alloc.customer, "voucher_requires_approval"
-	)
+	requires_approval = frappe.db.get_value("Customer", alloc.customer, "voucher_requires_approval")
 
 	if requires_approval:
 		alloc.status = "Pending Approval"
@@ -166,8 +164,7 @@ def approve_allocation(allocation_name: str) -> dict:
 
 	if alloc.status != "Pending Approval":
 		frappe.throw(
-			f"Can only approve allocations in 'Pending Approval' status. "
-			f"Current status: {alloc.status}",
+			f"Can only approve allocations in 'Pending Approval' status. " f"Current status: {alloc.status}",
 			frappe.ValidationError,
 		)
 
@@ -196,8 +193,7 @@ def reject_allocation(allocation_name: str, reject_reason: str = "") -> dict:
 
 	if alloc.status != "Pending Approval":
 		frappe.throw(
-			f"Can only reject allocations in 'Pending Approval' status. "
-			f"Current status: {alloc.status}",
+			f"Can only reject allocations in 'Pending Approval' status. " f"Current status: {alloc.status}",
 			frappe.ValidationError,
 		)
 

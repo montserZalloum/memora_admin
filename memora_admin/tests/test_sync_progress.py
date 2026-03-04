@@ -5,12 +5,15 @@ Tests verify that progress bitmaps are correctly synced from Redis to MariaDB,
 including happy path, edge cases, and error handling.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import frappe
-from fastapi_app.core.redis_keys import dirty_progress_key, progress_key as _progress_key_fn
+
+from fastapi_app.core.redis_keys import dirty_progress_key
+from fastapi_app.core.redis_keys import progress_key as _progress_key_fn
+from memora_admin.tasks.sync import sync_dirty_progress
 from memora_admin.tests.sync_test_base import SyncTestCase
 from memora_admin.tests.voucher_fixtures import make_player
-from memora_admin.tasks.sync import sync_dirty_progress
 
 
 class TestSyncDirtyProgress(SyncTestCase):
@@ -41,12 +44,14 @@ class TestSyncDirtyProgress(SyncTestCase):
 			self.subject_id = existing_subject
 		else:
 			# Create a minimal subject if none exists
-			subject_doc = frappe.get_doc({
-				"doctype": "Memora Subject",
-				"subject_name": f"TestSubject-{self._test_id}",
-				"subject_ar": "موضوع الاختبار",
-				"is_premium": 0,
-			})
+			subject_doc = frappe.get_doc(
+				{
+					"doctype": "Memora Subject",
+					"subject_name": f"TestSubject-{self._test_id}",
+					"subject_ar": "موضوع الاختبار",
+					"is_premium": 0,
+				}
+			)
 			subject_doc.insert(ignore_permissions=True)
 			self.subject_id = subject_doc.name
 
@@ -71,7 +76,9 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self.assertIsNotNone(bitmap_bytes, "Bitmap should be set in Redis")
 
 		# Mock _get_subject_lesson_count to return 10
-		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}):
+		with patch(
+			"memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}
+		):
 			# Run sync
 			sync_dirty_progress()
 
@@ -79,7 +86,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		progress = frappe.db.get_value(
 			"Memora Structure Progress",
 			{"player": self.player_id, "subject": self.subject_id},
-			["passed_lessons_bitset", "completion_percentage"]
+			["passed_lessons_bitset", "completion_percentage"],
 		)
 
 		self.assertIsNotNone(progress, "Structure Progress record should be created")
@@ -108,8 +115,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		"""
 		# Ensure no existing record
 		existing = frappe.db.exists(
-			"Memora Structure Progress",
-			{"player": self.player_id, "subject": self.subject_id}
+			"Memora Structure Progress", {"player": self.player_id, "subject": self.subject_id}
 		)
 		if existing:
 			frappe.delete_doc("Memora Structure Progress", existing)
@@ -118,14 +124,15 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self._seed_redis_progress(self.player_id, self.subject_id, 1, [0])
 
 		# Mock _get_subject_lesson_count to return 5
-		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 5}):
+		with patch(
+			"memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 5}
+		):
 			# Run sync
 			sync_dirty_progress()
 
 		# Verify record was created
 		progress_exists = frappe.db.exists(
-			"Memora Structure Progress",
-			{"player": self.player_id, "subject": self.subject_id}
+			"Memora Structure Progress", {"player": self.player_id, "subject": self.subject_id}
 		)
 		self.assertTrue(progress_exists, "New Structure Progress record should be created")
 
@@ -133,7 +140,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		bitset = frappe.db.get_value(
 			"Memora Structure Progress",
 			{"player": self.player_id, "subject": self.subject_id},
-			"passed_lessons_bitset"
+			"passed_lessons_bitset",
 		)
 		self.assertIsNotNone(bitset, "passed_lessons_bitset should be set")
 		self.assertNotEqual(bitset, "", "passed_lessons_bitset should not be empty")
@@ -150,20 +157,22 @@ class TestSyncDirtyProgress(SyncTestCase):
 		"""
 		# Create existing record with initial bitset "00"
 		initial_bitset = "00"
-		existing_progress = frappe.get_doc({
-			"doctype": "Memora Structure Progress",
-			"player": self.player_id,
-			"subject": self.subject_id,
-			"passed_lessons_bitset": initial_bitset,
-			"completion_percentage": 0,
-		})
+		existing_progress = frappe.get_doc(
+			{
+				"doctype": "Memora Structure Progress",
+				"player": self.player_id,
+				"subject": self.subject_id,
+				"passed_lessons_bitset": initial_bitset,
+				"completion_percentage": 0,
+			}
+		)
 		existing_progress.insert(ignore_permissions=True)
 
 		# Verify initial state
 		initial_record = frappe.db.get_value(
 			"Memora Structure Progress",
 			{"player": self.player_id, "subject": self.subject_id},
-			"passed_lessons_bitset"
+			"passed_lessons_bitset",
 		)
 		self.assertEqual(initial_record, initial_bitset, f"Initial bitset should be '{initial_bitset}'")
 
@@ -172,7 +181,9 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self._seed_redis_progress(self.player_id, self.subject_id, 1, [0, 1, 2])
 
 		# Mock _get_subject_lesson_count to return 10
-		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}):
+		with patch(
+			"memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}
+		):
 			# Run sync
 			sync_dirty_progress()
 
@@ -180,7 +191,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		updated_bitset = frappe.db.get_value(
 			"Memora Structure Progress",
 			{"player": self.player_id, "subject": self.subject_id},
-			"passed_lessons_bitset"
+			"passed_lessons_bitset",
 		)
 		self.assertEqual(updated_bitset, "e0", f"Expected hex 'e0' (bits 0,1,2 set), got '{updated_bitset}'")
 
@@ -207,7 +218,9 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self._seed_redis_progress(self.player_id, self.subject_id, 1, [0])
 
 		# Mock _get_subject_lesson_count
-		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}):
+		with patch(
+			"memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}
+		):
 			# Run sync - should not crash
 			try:
 				sync_dirty_progress()
@@ -216,8 +229,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 
 		# Verify valid member was processed (record created)
 		valid_exists = frappe.db.exists(
-			"Memora Structure Progress",
-			{"player": self.player_id, "subject": self.subject_id}
+			"Memora Structure Progress", {"player": self.player_id, "subject": self.subject_id}
 		)
 		self.assertTrue(valid_exists, "Valid member should be processed and record created")
 
@@ -249,7 +261,9 @@ class TestSyncDirtyProgress(SyncTestCase):
 		self.assertIsNone(bitmap_bytes, "Bitmap should not exist")
 
 		# Mock _get_subject_lesson_count to return 10
-		with patch("memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}):
+		with patch(
+			"memora_admin.tasks.sync._batch_get_subject_lesson_counts", return_value={self.subject_id: 10}
+		):
 			# Run sync
 			sync_dirty_progress()
 
@@ -257,7 +271,7 @@ class TestSyncDirtyProgress(SyncTestCase):
 		progress = frappe.db.get_value(
 			"Memora Structure Progress",
 			{"player": self.player_id, "subject": self.subject_id},
-			["passed_lessons_bitset", "completion_percentage"]
+			["passed_lessons_bitset", "completion_percentage"],
 		)
 
 		self.assertIsNotNone(progress, "Structure Progress record should be created")

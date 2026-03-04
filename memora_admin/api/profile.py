@@ -17,8 +17,10 @@ import redis as _redis
 
 from fastapi_app.core.redis_keys import mastery_key
 from memora_admin.api.utils import (
-	get_player_season_seq as _get_player_season_seq,
 	_MASTERY_COUNTER_TTL,
+)
+from memora_admin.api.utils import (
+	get_player_season_seq as _get_player_season_seq,
 )
 from memora_admin.utils.redis_connection import get_memora_redis
 

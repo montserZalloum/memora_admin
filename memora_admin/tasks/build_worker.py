@@ -20,7 +20,8 @@ from datetime import datetime, timezone
 import frappe
 from frappe.utils import now_datetime
 
-from fastapi_app.core.redis_keys import build_retry_key as _build_retry_key_fn, cache_invalidation_channel
+from fastapi_app.core.redis_keys import build_retry_key as _build_retry_key_fn
+from fastapi_app.core.redis_keys import cache_invalidation_channel
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,9 @@ def _process_single_build(build: dict):
 			build_doc.error_message = "No files generated - plan may not exist or have no content"
 			_finalize_build(build_doc)
 			_clear_retry_count(build_name)
-			_send_notification(target_name, success=False, error="No files generated", target_type=target_type)
+			_send_notification(
+				target_name, success=False, error="No files generated", target_type=target_type
+			)
 			return
 
 		# Upload to CDN
@@ -130,7 +133,9 @@ def _process_single_build(build: dict):
 			# Purge CDN cache for published files + orphans (best-effort, never fails build)
 			_purge_cdn_cache(files, extra_filenames=orphaned_filenames)
 
-			logger.info(f"Build {build_name} completed successfully for plan {target_name}, {len(files)} files published")
+			logger.info(
+				f"Build {build_name} completed successfully for plan {target_name}, {len(files)} files published"
+			)
 		else:
 			# Upload failed - attempt requeue
 			_requeue_build(build_doc)
@@ -180,11 +185,13 @@ def _notify_cache_invalidation(target_id: str, target_type: str = "Memora Academ
 	"""
 	channel = cache_invalidation_channel()
 
-	message = json.dumps({
-		"type": "plan",
-		"plan_id": target_id,
-		"timestamp": datetime.now(timezone.utc).isoformat(),
-	})
+	message = json.dumps(
+		{
+			"type": "plan",
+			"plan_id": target_id,
+			"timestamp": datetime.now(timezone.utc).isoformat(),
+		}
+	)
 
 	try:
 		frappe.cache.publish(channel, message)
@@ -194,7 +201,9 @@ def _notify_cache_invalidation(target_id: str, target_type: str = "Memora Academ
 		logger.error(f"Failed to publish cache invalidation: {e}")
 
 
-def _send_notification(target_id: str, success: bool, error: str | None = None, target_type: str = "Memora Academic Plan"):
+def _send_notification(
+	target_id: str, success: bool, error: str | None = None, target_type: str = "Memora Academic Plan"
+):
 	"""
 	Send Frappe realtime notification for build completion.
 
@@ -231,7 +240,9 @@ def _send_notification(target_id: str, success: bool, error: str | None = None, 
 			message=message,
 			after_commit=True,
 		)
-		logger.debug(f"Sent build notification for {entity_type} {target_id}: {'success' if success else 'failure'}")
+		logger.debug(
+			f"Sent build notification for {entity_type} {target_id}: {'success' if success else 'failure'}"
+		)
 	except Exception as e:
 		logger.error(f"Failed to send realtime notification: {e}")
 
@@ -297,7 +308,9 @@ def _requeue_build(build_doc):
 		build_doc.error_message = f"Max retries ({MAX_RETRIES}) exceeded"
 		_clear_retry_count(build_name)
 		target_type = build_doc.target_type or "Memora Academic Plan"
-		_send_notification(build_doc.target_name, success=False, error="Max retries exceeded", target_type=target_type)
+		_send_notification(
+			build_doc.target_name, success=False, error="Max retries exceeded", target_type=target_type
+		)
 		logger.error(f"Build {build_name} failed after {MAX_RETRIES} retries")
 
 

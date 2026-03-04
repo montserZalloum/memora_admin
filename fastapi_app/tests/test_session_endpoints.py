@@ -1,6 +1,7 @@
 """Tests for game session endpoints."""
 
 import json
+
 import pytest
 import redis.asyncio as redis
 from httpx import AsyncClient
@@ -10,16 +11,18 @@ from fastapi_app.core.redis_keys import (
 	freeze_key,
 	gamification_settings_key,
 	hierarchy_key,
+)
+from fastapi_app.core.redis_keys import (
 	progress_key as _progress_key_fn,
 )
 from fastapi_app.tests.conftest import (
+	cleanup_player_keys,
 	make_hierarchy_json,
-	seed_hierarchy,
-	seed_game_session,
 	seed_access_grants,
+	seed_game_session,
+	seed_hierarchy,
 	seed_settings,
 	seed_wallet,
-	cleanup_player_keys,
 )
 
 # Mark all tests as async

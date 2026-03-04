@@ -3,10 +3,10 @@
 import pytest
 from fastapi import HTTPException
 
-from fastapi_app.services.purchase import PurchaseService
-from fastapi_app.services.frappe_client import FrappeAPIError
 from fastapi_app.core.redis_keys import pending_key as _pending_key_fn
 from fastapi_app.models.purchase import PurchaseRequest
+from fastapi_app.services.frappe_client import FrappeAPIError
+from fastapi_app.services.purchase import PurchaseService
 
 # Test constants
 TEST_USER = "USER-TEST-PUR-001"
@@ -43,7 +43,9 @@ class TestSuccessfulPurchase:
 		mock_frappe.call.return_value = {"name": "TXN-001"}
 
 		# Action: submit purchase
-		req = PurchaseRequest(product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof")
+		req = PurchaseRequest(
+			product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof"
+		)
 		result = await purchase_svc.submit_purchase(TEST_USER, TEST_PLAN, req)
 
 		# Assert: success (no exception)
@@ -68,7 +70,9 @@ class TestDuplicateInRedis:
 		await redis_client.sadd(pk, TEST_PRODUCT)
 
 		# Action & Assert: raises 409
-		req = PurchaseRequest(product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof")
+		req = PurchaseRequest(
+			product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof"
+		)
 		with pytest.raises(HTTPException) as exc_info:
 			await purchase_svc.submit_purchase(TEST_USER, TEST_PLAN, req)
 
@@ -88,7 +92,9 @@ class TestDuplicateFromFrappe:
 		mock_frappe.call.side_effect = error
 
 		# Action & Assert: raises 409
-		req = PurchaseRequest(product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof")
+		req = PurchaseRequest(
+			product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof"
+		)
 		with pytest.raises(HTTPException) as exc_info:
 			await purchase_svc.submit_purchase(TEST_USER, TEST_PLAN, req)
 
@@ -105,7 +111,9 @@ class TestNotFoundError:
 		mock_frappe.call.side_effect = error
 
 		# Action & Assert: raises 404
-		req = PurchaseRequest(product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof")
+		req = PurchaseRequest(
+			product_grant_id=TEST_PRODUCT, payment_method="credit_card", payment_proof_url="http://proof"
+		)
 		with pytest.raises(HTTPException) as exc_info:
 			await purchase_svc.submit_purchase(TEST_USER, TEST_PLAN, req)
 

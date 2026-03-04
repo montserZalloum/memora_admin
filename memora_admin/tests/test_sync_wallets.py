@@ -5,12 +5,15 @@ Tests verify that wallet data is correctly synced from Redis to MariaDB,
 including happy path, edge cases, and error handling.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import frappe
-from fastapi_app.core.redis_keys import dirty_wallets_key, wallet_key as _wallet_key_fn
+
+from fastapi_app.core.redis_keys import dirty_wallets_key
+from fastapi_app.core.redis_keys import wallet_key as _wallet_key_fn
+from memora_admin.tasks.sync import sync_dirty_wallets
 from memora_admin.tests.sync_test_base import SyncTestCase
 from memora_admin.tests.voucher_fixtures import make_player
-from memora_admin.tasks.sync import sync_dirty_wallets
 
 
 class TestSyncDirtyWallets(SyncTestCase):
@@ -66,7 +69,9 @@ class TestSyncDirtyWallets(SyncTestCase):
 
 		# Verify DB was updated
 		xp_value = frappe.db.get_value("Memora Player Wallet", {"player": self.player_id}, "total_xp")
-		streak_value = frappe.db.get_value("Memora Player Wallet", {"player": self.player_id}, "current_streak")
+		streak_value = frappe.db.get_value(
+			"Memora Player Wallet", {"player": self.player_id}, "current_streak"
+		)
 
 		self.assertEqual(xp_value, 500)
 		self.assertEqual(streak_value, 3)
@@ -115,7 +120,9 @@ class TestSyncDirtyWallets(SyncTestCase):
 			(player3_id, 300, 3),
 		]:
 			xp_value = frappe.db.get_value("Memora Player Wallet", {"player": player_id}, "total_xp")
-			streak_value = frappe.db.get_value("Memora Player Wallet", {"player": player_id}, "current_streak")
+			streak_value = frappe.db.get_value(
+				"Memora Player Wallet", {"player": player_id}, "current_streak"
+			)
 			self.assertEqual(xp_value, expected_xp, f"XP mismatch for {player_id}")
 			self.assertEqual(streak_value, expected_streak, f"Streak mismatch for {player_id}")
 
@@ -243,7 +250,9 @@ class TestSyncDirtyWallets(SyncTestCase):
 		self._seed_redis_wallet(player3_id, xp=300, streak=3)
 
 		# Mock _batch_update_wallets to raise — simulates chunk-level DB failure
-		with patch("memora_admin.tasks.sync._batch_update_wallets", side_effect=Exception("DB error on batch update")):
+		with patch(
+			"memora_admin.tasks.sync._batch_update_wallets", side_effect=Exception("DB error on batch update")
+		):
 			sync_dirty_wallets()
 
 		# All 3 players should remain in dirty set (chunk failed, no SREMs)
@@ -266,14 +275,12 @@ class TestSyncDirtyWallets(SyncTestCase):
 		- Assert: dirty_flag is now 0
 		"""
 		# Set wallet dirty_flag to 1
-		frappe.db.set_value(
-			"Memora Player Wallet",
-			{"player": self.player_id},
-			{"dirty_flag": 1}
-		)
+		frappe.db.set_value("Memora Player Wallet", {"player": self.player_id}, {"dirty_flag": 1})
 
 		# Verify dirty_flag is 1 before sync
-		dirty_flag_before = frappe.db.get_value("Memora Player Wallet", {"player": self.player_id}, "dirty_flag")
+		dirty_flag_before = frappe.db.get_value(
+			"Memora Player Wallet", {"player": self.player_id}, "dirty_flag"
+		)
 		self.assertEqual(dirty_flag_before, 1)
 
 		# Seed Redis wallet
@@ -283,7 +290,9 @@ class TestSyncDirtyWallets(SyncTestCase):
 		sync_dirty_wallets()
 
 		# Verify dirty_flag is now 0
-		dirty_flag_after = frappe.db.get_value("Memora Player Wallet", {"player": self.player_id}, "dirty_flag")
+		dirty_flag_after = frappe.db.get_value(
+			"Memora Player Wallet", {"player": self.player_id}, "dirty_flag"
+		)
 		self.assertEqual(dirty_flag_after, 0, "dirty_flag should be cleared after sync")
 
 	def test_sync_log_created(self):
@@ -302,11 +311,6 @@ class TestSyncDirtyWallets(SyncTestCase):
 
 		# Verify Sync Log was created
 		sync_log_exists = frappe.db.exists(
-			"Memora Sync Log",
-			{
-				"sync_type": "Wallet",
-				"records_processed": 1,
-				"status": "Success"
-			}
+			"Memora Sync Log", {"sync_type": "Wallet", "records_processed": 1, "status": "Success"}
 		)
 		self.assertTrue(sync_log_exists, "Memora Sync Log with sync_type='Wallet' should be created")

@@ -43,13 +43,16 @@ class MemoraSeason(Document):
 		partition_name = f"p_season_{seq}"
 
 		# Check if partition already exists (idempotent)
-		exists = frappe.db.sql("""
+		exists = frappe.db.sql(
+			"""
 			SELECT 1 FROM INFORMATION_SCHEMA.PARTITIONS
 			WHERE TABLE_SCHEMA = DATABASE()
 			AND TABLE_NAME = 'tabMemora Memory State'
 			AND PARTITION_NAME = %s
 			LIMIT 1
-		""", (partition_name,))
+		""",
+			(partition_name,),
+		)
 
 		if exists:
 			print(f"[after_insert] Partition {partition_name} already exists, skipping")

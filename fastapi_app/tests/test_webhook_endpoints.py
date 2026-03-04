@@ -5,6 +5,7 @@ Tests verify webhook endpoint:
 
 Reference: contracts/endpoint-test-contracts.md §10
 """
+
 import pytest
 
 from fastapi_app.core.redis_keys import webhook_idempotency_key

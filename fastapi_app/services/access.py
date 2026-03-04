@@ -8,7 +8,9 @@ import redis.asyncio as redis
 import structlog
 from cachetools import TTLCache
 
-from fastapi_app.core.redis_keys import ACCESS_KEY_TTL, access_key as _access_key_fn, plan_free_subjects_key as _plan_free_subjects_key_fn
+from fastapi_app.core.redis_keys import ACCESS_KEY_TTL
+from fastapi_app.core.redis_keys import access_key as _access_key_fn
+from fastapi_app.core.redis_keys import plan_free_subjects_key as _plan_free_subjects_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:

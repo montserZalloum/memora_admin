@@ -43,11 +43,13 @@ def on_player_profile_updated(doc, method):
 	r.set(redis_key, json.dumps(profile_data), ex=CACHE_TTL)
 
 	# 2. Pubsub: notify FastAPI in-process caches
-	invalidation_msg = json.dumps({
-		"type": "profile",
-		"player_id": doc.name,
-		"timestamp": time.time(),
-	})
+	invalidation_msg = json.dumps(
+		{
+			"type": "profile",
+			"player_id": doc.name,
+			"timestamp": time.time(),
+		}
+	)
 	r.publish(cache_invalidation_channel(), invalidation_msg)
 
 	frappe.logger().info(f"Profile {doc.name} synced to Redis")

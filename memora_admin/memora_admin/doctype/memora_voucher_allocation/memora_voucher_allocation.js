@@ -107,10 +107,10 @@ frappe.ui.form.on("Memora Voucher Allocation", {
 				__("Approve"),
 				function () {
 					frappe.confirm(
-						__(
-							"Approve this allocation? {0} cards will be allocated to {1}.",
-							[frm.doc.allocation_cards.length, frm.doc.customer]
-						),
+						__("Approve this allocation? {0} cards will be allocated to {1}.", [
+							frm.doc.allocation_cards.length,
+							frm.doc.customer,
+						]),
 						function () {
 							frappe.call({
 								method: "memora_admin.memora_admin.api.allocation.approve_allocation",

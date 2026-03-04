@@ -2,63 +2,71 @@
 // For license information, please see license.txt
 
 frappe.ui.form.on("Memora Player Profile", {
-	refresh: function(frm) {
+	refresh: function (frm) {
 		if (frm.is_new()) return;
 
-		frm.add_custom_button(__("Grant Access"), function() {
-			show_grant_dialog(frm);
-		}, __("Actions"));
+		frm.add_custom_button(
+			__("Grant Access"),
+			function () {
+				show_grant_dialog(frm);
+			},
+			__("Actions")
+		);
 
-		frm.add_custom_button(__("Reset Password"), function() {
-			let dialog = new frappe.ui.Dialog({
-				title: __("Reset Player Password"),
-				fields: [
-					{
-						fieldname: "new_password",
-						fieldtype: "Password",
-						label: __("New Password"),
-						reqd: 1,
-						description: __("Minimum 8 characters"),
-					},
-					{
-						fieldname: "confirm_password",
-						fieldtype: "Password",
-						label: __("Confirm Password"),
-						reqd: 1,
-					},
-				],
-				primary_action_label: __("Reset Password"),
-				primary_action: function(values) {
-					if (values.new_password !== values.confirm_password) {
-						frappe.msgprint(__("Passwords do not match"));
-						return;
-					}
-					if (values.new_password.length < 8) {
-						frappe.msgprint(__("Password must be at least 8 characters"));
-						return;
-					}
-					frappe.call({
-						method: "memora_admin.api.auth.set_player_password",
-						args: {
-							player_name: frm.doc.name,
-							new_password: values.new_password,
+		frm.add_custom_button(
+			__("Reset Password"),
+			function () {
+				let dialog = new frappe.ui.Dialog({
+					title: __("Reset Player Password"),
+					fields: [
+						{
+							fieldname: "new_password",
+							fieldtype: "Password",
+							label: __("New Password"),
+							reqd: 1,
+							description: __("Minimum 8 characters"),
 						},
-						freeze: true,
-						freeze_message: __("Resetting password..."),
-						callback: function(r) {
-							if (r.message && r.message.success) {
-								dialog.hide();
-								frappe.show_alert({
-									message: __("Password reset. Player will be logged out."),
-									indicator: "green",
-								});
-							}
+						{
+							fieldname: "confirm_password",
+							fieldtype: "Password",
+							label: __("Confirm Password"),
+							reqd: 1,
 						},
-					});
-				},
-			});
-			dialog.show();
-		}, __("Actions"));
+					],
+					primary_action_label: __("Reset Password"),
+					primary_action: function (values) {
+						if (values.new_password !== values.confirm_password) {
+							frappe.msgprint(__("Passwords do not match"));
+							return;
+						}
+						if (values.new_password.length < 8) {
+							frappe.msgprint(__("Password must be at least 8 characters"));
+							return;
+						}
+						frappe.call({
+							method: "memora_admin.api.auth.set_player_password",
+							args: {
+								player_name: frm.doc.name,
+								new_password: values.new_password,
+							},
+							freeze: true,
+							freeze_message: __("Resetting password..."),
+							callback: function (r) {
+								if (r.message && r.message.success) {
+									dialog.hide();
+									frappe.show_alert({
+										message: __("Password reset. Player will be logged out."),
+										indicator: "green",
+									});
+								}
+							},
+						});
+					},
+				});
+				dialog.show();
+			},
+			__("Actions")
+		);
 
 		frm.set_df_property("authorized_devices", "read_only", 1);
 
@@ -78,11 +86,11 @@ function sync_devices(frm) {
 	frappe.call({
 		method: "memora_admin.api.devices.sync_devices_from_redis",
 		args: { player_name: frm.doc.name },
-		callback: function(r) {
+		callback: function (r) {
 			var devices = r.message || [];
 			// Clear and repopulate child table client-side (no reload_doc)
 			frm.clear_table("authorized_devices");
-			devices.forEach(function(device) {
+			devices.forEach(function (device) {
 				frm.add_child("authorized_devices", {
 					device_id: device.device_id || "",
 					device_name: device.device_name || "",
@@ -96,7 +104,7 @@ function sync_devices(frm) {
 			frm.refresh_field("authorized_devices");
 			add_remove_buttons(frm);
 		},
-		error: function() {
+		error: function () {
 			frm.__devices_fetched = false;
 			frappe.msgprint({
 				title: __("Device Sync Failed"),
@@ -112,7 +120,7 @@ function add_remove_buttons(frm) {
 
 	// Remove existing buttons to prevent duplicates on re-render
 	grid.wrapper.find(".btn-remove-device").remove();
-	grid.grid_rows.forEach(function(grid_row) {
+	grid.grid_rows.forEach(function (grid_row) {
 		if (!grid_row.doc || !grid_row.doc.device_id) {
 			return;
 		}
@@ -124,11 +132,11 @@ function add_remove_buttons(frm) {
 			'<button class="btn btn-xs btn-danger btn-remove-device" style="margin: 2px 4px;">'
 		).text(__("Remove"));
 
-		btn.on("click", function(e) {
+		btn.on("click", function (e) {
 			e.stopPropagation();
 			frappe.confirm(
 				__("Remove {0}? Player will be logged out immediately.", [device_display]),
-				function() {
+				function () {
 					frappe.call({
 						method: "memora_admin.api.devices.remove_device",
 						args: {
@@ -137,7 +145,7 @@ function add_remove_buttons(frm) {
 						},
 						freeze: true,
 						freeze_message: __("Removing device..."),
-						callback: function(r) {
+						callback: function (r) {
 							if (r.message && r.message.success) {
 								frappe.show_alert({
 									message: __("Device removed successfully"),
@@ -152,7 +160,7 @@ function add_remove_buttons(frm) {
 								});
 							}
 						},
-						error: function() {
+						error: function () {
 							frappe.show_alert({
 								message: __("Failed to remove device"),
 								indicator: "red",
@@ -174,14 +182,13 @@ function add_remove_buttons(frm) {
 function show_grant_dialog(frm) {
 	// Get default expiration from season
 	if (frm.doc.season) {
-		frappe.db.get_value("Memora Season", frm.doc.season, "end_date")
-			.then(r => {
-				let default_expires = null;
-				if (r.message && r.message.end_date) {
-					default_expires = r.message.end_date;
-				}
-				open_dialog(frm, default_expires);
-			});
+		frappe.db.get_value("Memora Season", frm.doc.season, "end_date").then((r) => {
+			let default_expires = null;
+			if (r.message && r.message.end_date) {
+				default_expires = r.message.end_date;
+			}
+			open_dialog(frm, default_expires);
+		});
 	} else {
 		open_dialog(frm, null);
 	}
@@ -194,7 +201,9 @@ function open_dialog(frm, default_expires) {
 			{
 				fieldname: "info",
 				fieldtype: "HTML",
-				options: `<p>${__("Grant access to content for player")} <strong>${frm.doc.display_name || frm.doc.name}</strong></p>
+				options: `<p>${__("Grant access to content for player")} <strong>${
+					frm.doc.display_name || frm.doc.name
+				}</strong></p>
 				          <p class="text-muted">${__("Access key format: SUB-{subject} or TRK-{track}")}</p>`,
 			},
 			{
@@ -214,7 +223,7 @@ function open_dialog(frm, default_expires) {
 			},
 		],
 		primary_action_label: __("Grant Access"),
-		primary_action: function(values) {
+		primary_action: function (values) {
 			create_subscription(frm, values, dialog);
 		},
 	});
@@ -236,7 +245,7 @@ function create_subscription(frm, values, dialog) {
 		},
 		freeze: true,
 		freeze_message: __("Granting access..."),
-		callback: function(r) {
+		callback: function (r) {
 			if (r.message) {
 				dialog.hide();
 				frappe.show_alert({
@@ -247,10 +256,12 @@ function create_subscription(frm, values, dialog) {
 				frm.reload_doc();
 			}
 		},
-		error: function(r) {
+		error: function (r) {
 			// Handle duplicate subscription error gracefully
-			if (r.exc_type === "DuplicateEntryError" ||
-				(r._server_messages && r._server_messages.includes("already exists"))) {
+			if (
+				r.exc_type === "DuplicateEntryError" ||
+				(r._server_messages && r._server_messages.includes("already exists"))
+			) {
 				frappe.show_alert({
 					message: __("Player already has this access"),
 					indicator: "orange",

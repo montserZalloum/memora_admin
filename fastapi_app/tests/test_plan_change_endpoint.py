@@ -19,11 +19,11 @@ alone does not intercept this call path.
 """
 
 import time
+from unittest.mock import AsyncMock
 
 import pytest
 import redis.asyncio as redis
 from httpx import AsyncClient
-from unittest.mock import AsyncMock
 
 import fastapi_app.api.deps as deps_module
 from fastapi_app.core.redis_keys import (

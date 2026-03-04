@@ -59,12 +59,11 @@ def expire_season_cards():
 			affected = frappe.db.sql("SELECT ROW_COUNT()")[0][0]
 			if affected:
 				total_expired += affected
-				frappe.logger().info(
-					f"Season expiration: {affected} card(s) expired in batch {batch_name}"
-				)
+				frappe.logger().info(f"Season expiration: {affected} card(s) expired in batch {batch_name}")
 
 			# Recount batch counters and check auto-close condition
 			from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close
+
 			recount_result = recount_and_maybe_close(batch_name)
 			if recount_result["closed"]:
 				frappe.logger().info(f"Batch {batch_name} auto-closed during expiration")

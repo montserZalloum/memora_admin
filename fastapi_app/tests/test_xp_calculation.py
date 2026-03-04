@@ -4,8 +4,14 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from fastapi_app.core.level_config import (
+	DEFAULT_LEVEL_CONFIG,
+	LevelConfig,
+	calculate_level,
+	get_level_config,
+	get_threshold,
+)
 from fastapi_app.services.wallet import calculate_xp_award
-from fastapi_app.core.level_config import DEFAULT_LEVEL_CONFIG, LevelConfig, calculate_level, get_level_config, get_threshold
 
 
 class TestXpCalculation:
@@ -244,12 +250,14 @@ class TestLevelConfigCacheResilience:
 		import json
 
 		mock_redis = AsyncMock()
-		mock_redis.get.return_value = json.dumps({
-			"a": 100,
-			"b": 25,
-			"max_level": 20,
-			"titles": {"1": "Novice", "2": "Apprentice"},
-		})
+		mock_redis.get.return_value = json.dumps(
+			{
+				"a": 100,
+				"b": 25,
+				"max_level": 20,
+				"titles": {"1": "Novice", "2": "Apprentice"},
+			}
+		)
 
 		config = await get_level_config(mock_redis)
 

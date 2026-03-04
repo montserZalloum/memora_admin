@@ -8,9 +8,9 @@ VALID_TRANSITIONS = {
 	"Draft": {"Pending Approval", "Approved", "Cancelled"},
 	"Pending Approval": {"Approved", "Rejected"},
 	"Approved": {"Completed"},
-	"Rejected": set(),     # Terminal
-	"Completed": set(),    # Terminal
-	"Cancelled": set(),    # Terminal
+	"Rejected": set(),  # Terminal
+	"Completed": set(),  # Terminal
+	"Cancelled": set(),  # Terminal
 }
 
 
@@ -161,11 +161,12 @@ class MemoraVoucherAllocation(Document):
 
 	def _update_batch_counters(self):
 		"""Recount allocated cards for the batch and update allocated_count."""
-		allocated_count = frappe.db.count(
-			"Memora Voucher Card", {"batch": self.batch, "status": "Allocated"}
-		)
+		allocated_count = frappe.db.count("Memora Voucher Card", {"batch": self.batch, "status": "Allocated"})
 		frappe.db.set_value(
-			"Memora Voucher Batch", self.batch, "allocated_count", allocated_count,
+			"Memora Voucher Batch",
+			self.batch,
+			"allocated_count",
+			allocated_count,
 			update_modified=True,
 		)
 
@@ -174,6 +175,9 @@ class MemoraVoucherAllocation(Document):
 		batch_status = frappe.db.get_value("Memora Voucher Batch", self.batch, "status")
 		if batch_status == "Generated":
 			frappe.db.set_value(
-				"Memora Voucher Batch", self.batch, "status", "Active",
+				"Memora Voucher Batch",
+				self.batch,
+				"status",
+				"Active",
 				update_modified=True,
 			)

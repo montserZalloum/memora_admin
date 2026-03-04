@@ -52,18 +52,20 @@ def get_active_announcements() -> list[dict]:
 		# Map display_frequency to API format (lowercase, underscored)
 		freq = (ann.display_frequency or "always").lower().replace(" ", "_")
 
-		result.append({
-			"id": ann.name,
-			"title_ar": ann.title_ar,
-			"title_en": ann.title_en,
-			"body_ar": ann.body_ar,
-			"body_en": ann.body_en,
-			"target_audience": "all" if ann.target_audience == "All Players" else "specific_plans",
-			"target_plans": plans_by_ann.get(ann.name, []),
-			"display_frequency": freq,
-			"effective_start_date": str(ann.effective_start_date) if ann.effective_start_date else None,
-			"effective_end_date": str(ann.effective_end_date) if ann.effective_end_date else None,
-			"created_at": str(ann.creation),
-		})
+		result.append(
+			{
+				"id": ann.name,
+				"title_ar": ann.title_ar,
+				"title_en": ann.title_en,
+				"body_ar": ann.body_ar,
+				"body_en": ann.body_en,
+				"target_audience": "all" if ann.target_audience == "All Players" else "specific_plans",
+				"target_plans": plans_by_ann.get(ann.name, []),
+				"display_frequency": freq,
+				"effective_start_date": str(ann.effective_start_date) if ann.effective_start_date else None,
+				"effective_end_date": str(ann.effective_end_date) if ann.effective_end_date else None,
+				"created_at": str(ann.creation),
+			}
+		)
 
 	return result

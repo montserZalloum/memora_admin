@@ -2,6 +2,7 @@
 """Tests for DeviceService — device registration with fingerprint matching."""
 
 import uuid
+
 import pytest
 import redis.asyncio as redis
 
@@ -133,15 +134,10 @@ class TestRegisterDevice:
 		assert len(device_fields_old) == 0, "Old device should be removed"
 
 		# Verify new device_id is in Redis
-		device_fields_new = [
-			f for f in (await redis_client.hgetall(key)).keys()
-			if device_id_2 in str(f)
-		]
+		device_fields_new = [f for f in (await redis_client.hgetall(key)).keys() if device_id_2 in str(f)]
 		assert len(device_fields_new) >= 5, "New device should be registered"
 
-	async def test_tc_ds_04_max_devices_exceeded_returns_limit_exceeded(
-		self, device_service: DeviceService
-	):
+	async def test_tc_ds_04_max_devices_exceeded_returns_limit_exceeded(self, device_service: DeviceService):
 		"""TC-DS-04: Max devices exceeded returns success=False status='limit_exceeded'."""
 		# Register MAX_DEVICES (3) different devices with distinct UAs
 		distinct_uas = [TEST_USER_AGENT_IPHONE, TEST_USER_AGENT_CHROME, TEST_USER_AGENT_ANDROID]
@@ -158,9 +154,7 @@ class TestRegisterDevice:
 
 		# Try to register 4th device (should fail)
 		device_id_4 = str(uuid.uuid4())
-		firefox_ua = (
-			"Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0"
-		)
+		firefox_ua = "Mozilla/5.0 (X11; Linux x86_64; rv:121.0) Gecko/20100101 Firefox/121.0"
 		result = await device_service.register_device(
 			user_id=TEST_USER,
 			device_id=device_id_4,
@@ -231,9 +225,7 @@ class TestDeviceManagement:
 		fields_after = [f for f in (await redis_client.hgetall(key)).keys() if device_id in str(f)]
 		assert len(fields_after) == 0, "All device fields should be deleted"
 
-	async def test_tc_ds_07_validate_device_returns_true_for_registered(
-		self, device_service: DeviceService
-	):
+	async def test_tc_ds_07_validate_device_returns_true_for_registered(self, device_service: DeviceService):
 		"""TC-DS-07: Validate device returns True for registered device."""
 		device_id = str(uuid.uuid4())
 
@@ -250,9 +242,7 @@ class TestDeviceManagement:
 
 		assert is_valid is True, "Registered device should be valid"
 
-	async def test_tc_ds_08_validate_device_returns_false_for_unknown(
-		self, device_service: DeviceService
-	):
+	async def test_tc_ds_08_validate_device_returns_false_for_unknown(self, device_service: DeviceService):
 		"""TC-DS-08: Validate device returns False for unknown device."""
 		unknown_device_id = str(uuid.uuid4())
 

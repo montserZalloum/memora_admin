@@ -5,6 +5,7 @@ Tests verify catalog endpoint:
 
 Reference: contracts/endpoint-test-contracts.md §1
 """
+
 import json
 
 import pytest

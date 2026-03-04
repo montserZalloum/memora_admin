@@ -2,6 +2,7 @@
 """Tests for OTPService — OTP verification with rate limiting and cooldown."""
 
 import json
+
 import pytest
 import redis.asyncio as redis
 from fastapi import HTTPException
@@ -285,9 +286,7 @@ class TestPasswordReset:
 		self, otp_service: OTPService, redis_client: redis.Redis, test_prefix: str
 	):
 		"""TC-OTP-08: Create password reset stores OTP in Redis."""
-		await otp_service.create_password_reset(
-			mobile=TEST_MOBILE, ip_address=TEST_IP, phone_exists=True
-		)
+		await otp_service.create_password_reset(mobile=TEST_MOBILE, ip_address=TEST_IP, phone_exists=True)
 
 		# Verify reset state is stored
 		raw = await redis_client.get(reset_otp_key(TEST_MOBILE))
@@ -301,9 +300,7 @@ class TestPasswordReset:
 		self, otp_service: OTPService, redis_client: redis.Redis, test_prefix: str
 	):
 		"""TC-OTP-09: Anti-enumeration silently skips when phone_exists=False."""
-		await otp_service.create_password_reset(
-			mobile="9999999999", ip_address=TEST_IP, phone_exists=False
-		)
+		await otp_service.create_password_reset(mobile="9999999999", ip_address=TEST_IP, phone_exists=False)
 
 		# Verify no reset state is stored
 		exists = await redis_client.exists(reset_otp_key("9999999999"))
@@ -317,9 +314,7 @@ class TestPasswordReset:
 		self, otp_service: OTPService, redis_client: redis.Redis, test_prefix: str
 	):
 		"""TC-OTP-10: Verify password reset OTP returns single-use token with 900s TTL."""
-		await otp_service.create_password_reset(
-			mobile=TEST_MOBILE, ip_address=TEST_IP, phone_exists=True
-		)
+		await otp_service.create_password_reset(mobile=TEST_MOBILE, ip_address=TEST_IP, phone_exists=True)
 
 		# Verify correct OTP
 		token = await otp_service.verify_password_reset_otp(TEST_MOBILE, "1111")
@@ -340,9 +335,7 @@ class TestPasswordReset:
 		self, otp_service: OTPService, redis_client: redis.Redis, test_prefix: str
 	):
 		"""TC-OTP-11: Validate reset token consumed on first use, second call raises 401."""
-		await otp_service.create_password_reset(
-			mobile=TEST_MOBILE, ip_address=TEST_IP, phone_exists=True
-		)
+		await otp_service.create_password_reset(mobile=TEST_MOBILE, ip_address=TEST_IP, phone_exists=True)
 
 		token = await otp_service.verify_password_reset_otp(TEST_MOBILE, "1111")
 

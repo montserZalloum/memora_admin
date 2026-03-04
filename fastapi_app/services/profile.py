@@ -57,9 +57,7 @@ class ProfileService:
 			avatar="default_avatar",
 		)
 
-	async def get_profiles_batch(
-		self, player_ids: list[str]
-	) -> dict[str, PlayerProfile]:
+	async def get_profiles_batch(self, player_ids: list[str]) -> dict[str, PlayerProfile]:
 		"""Batch fetch profiles using Redis pipeline.
 
 		Per RESEARCH.md:
@@ -121,9 +119,7 @@ class ProfileService:
 
 		return profiles
 
-	async def _fetch_from_frappe_batch(
-		self, player_ids: list[str]
-	) -> dict[str, PlayerProfile]:
+	async def _fetch_from_frappe_batch(self, player_ids: list[str]) -> dict[str, PlayerProfile]:
 		"""Fetch profiles from Frappe API and cache them.
 
 		Per RESEARCH.md:

@@ -15,15 +15,15 @@ from load_tests import config
 from load_tests.helpers import api_delete, api_get, api_post, api_put
 
 # --- Startup config validation (fail fast before Locust spawns users) ---
-assert getattr(config, "TEST_PLAYERS", None), (
-	"No test players configured — copy config.example.py to config.py and add player credentials"
-)
-assert getattr(config, "TEST_SUBJECTS", None), (
-	"No test subjects configured — add at least one subject ID to config.TEST_SUBJECTS"
-)
-assert getattr(config, "TEST_LESSONS", None), (
-	"No test lessons configured — add at least one lesson entry to config.TEST_LESSONS"
-)
+assert getattr(
+	config, "TEST_PLAYERS", None
+), "No test players configured — copy config.example.py to config.py and add player credentials"
+assert getattr(
+	config, "TEST_SUBJECTS", None
+), "No test subjects configured — add at least one subject ID to config.TEST_SUBJECTS"
+assert getattr(
+	config, "TEST_LESSONS", None
+), "No test lessons configured — add at least one lesson entry to config.TEST_LESSONS"
 
 
 def _pick_subject():
@@ -71,7 +71,9 @@ def _mutations_enabled():
 
 
 def _admin_enabled():
-	return bool(getattr(config, "ENABLE_ADMIN_ENDPOINTS", False) and getattr(config, "ADMIN_CREDENTIALS", None))
+	return bool(
+		getattr(config, "ENABLE_ADMIN_ENDPOINTS", False) and getattr(config, "ADMIN_CREDENTIALS", None)
+	)
 
 
 def _webhooks_enabled():

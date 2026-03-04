@@ -5,7 +5,8 @@ Tests verify that the function returns a properly configured Redis client
 and handles fallback from redis_memora to redis_cache config keys.
 """
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
+
 import frappe
 from frappe.tests.utils import FrappeTestCase
 

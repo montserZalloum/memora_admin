@@ -195,10 +195,15 @@ def on_plan_updated(doc, method):
 
 			rebuild_plan_free_subjects(plan_id)
 			r = get_memora_redis()
-			r.publish(cache_invalidation_channel(), json.dumps({
-				"type": "plan_subjects",
-				"plan_id": plan_id,
-			}))
+			r.publish(
+				cache_invalidation_channel(),
+				json.dumps(
+					{
+						"type": "plan_subjects",
+						"plan_id": plan_id,
+					}
+				),
+			)
 		except Exception as e:
 			frappe.log_error(
 				f"Failed to sync plan free subjects for {plan_id}: {e}",
@@ -339,11 +344,13 @@ def _invalidate_hierarchy_cache(subject_id: str):
 		# 2. Pubsub notification for FastAPI sidecar
 		r.publish(
 			cache_invalidation_channel(),
-			json.dumps({
-				"type": "hierarchy",
-				"subject_id": subject_id,
-				"timestamp": str(frappe.utils.now()),
-			}),
+			json.dumps(
+				{
+					"type": "hierarchy",
+					"subject_id": subject_id,
+					"timestamp": str(frappe.utils.now()),
+				}
+			),
 		)
 
 		frappe.logger().info(f"Hierarchy cache invalidated for subject {subject_id}")
@@ -417,11 +424,13 @@ def _invalidate_catalog_cache(plan_id: str):
 		# 2. Pubsub notification for FastAPI sidecar
 		r.publish(
 			cache_invalidation_channel(),
-			json.dumps({
-				"type": "catalog",
-				"plan_id": plan_id,
-				"timestamp": str(frappe.utils.now()),
-			}),
+			json.dumps(
+				{
+					"type": "catalog",
+					"plan_id": plan_id,
+					"timestamp": str(frappe.utils.now()),
+				}
+			),
 		)
 
 		frappe.logger().info(f"Catalog cache invalidated for plan {plan_id}")
@@ -469,7 +478,7 @@ def on_plan_overrider_changed(doc, method):
 			}
 		)
 		build_queue.insert(ignore_permissions=True)
-		
+
 	except Exception as e:
 		cache.delete_value(debounce_key)
 		frappe.log_error(

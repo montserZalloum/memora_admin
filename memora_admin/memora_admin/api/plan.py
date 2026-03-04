@@ -4,6 +4,7 @@ Provides fallback data source for FastAPI when CDN files not yet generated.
 """
 
 import json
+
 import frappe
 
 

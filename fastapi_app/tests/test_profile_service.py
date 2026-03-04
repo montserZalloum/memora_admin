@@ -1,6 +1,7 @@
 """Tests for ProfileService - Player profile batch caching."""
 
 import json
+
 import pytest
 
 from fastapi_app.core.redis_keys import profile_key
@@ -31,7 +32,9 @@ def _make_test_profile(player_id: str, display_name: str = None) -> dict:
 class TestBatchCacheHit:
 	"""Batch cache hit returns cached profiles without Frappe call."""
 
-	async def test_tc_prf_01_batch_cache_hit_no_frappe_call(self, profile_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_prf_01_batch_cache_hit_no_frappe_call(
+		self, profile_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-PRF-01: Batch cache hit - Frappe NOT called."""
 		# Setup: pre-seed 2 profiles in Redis
 		key1 = profile_key(TEST_PLAYER_1)
@@ -56,7 +59,9 @@ class TestBatchCacheHit:
 class TestPartialCacheMiss:
 	"""Partial cache miss fetches missing from Frappe."""
 
-	async def test_tc_prf_02_partial_miss_frappe_called_for_missing(self, profile_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_prf_02_partial_miss_frappe_called_for_missing(
+		self, profile_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-PRF-02: Partial miss - Frappe called for missing."""
 		# Setup: pre-seed only PLAYER_1
 		key1 = profile_key(TEST_PLAYER_1)
@@ -90,7 +95,9 @@ class TestPartialCacheMiss:
 class TestFullMissWithFallback:
 	"""Full cache miss applies fallback for still-missing profiles."""
 
-	async def test_tc_prf_03_fallback_for_missing_profiles(self, profile_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_prf_03_fallback_for_missing_profiles(
+		self, profile_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-PRF-03: Fallback when Frappe returns insufficient data."""
 		# Setup: Frappe returns only 1 profile for 2 requests
 		mock_frappe.call.return_value = [_make_test_profile(TEST_PLAYER_1, "Player 1")]

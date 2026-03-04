@@ -34,8 +34,7 @@ def queue_manual_build(subject_id: str) -> dict:
 	build_queue.insert(ignore_permissions=True)
 
 	frappe.logger().info(
-		f"Manual build queued: {build_queue.name} for subject {subject_id} "
-		f"by {frappe.session.user}"
+		f"Manual build queued: {build_queue.name} for subject {subject_id} " f"by {frappe.session.user}"
 	)
 
 	return {"success": True, "build_id": build_queue.name}

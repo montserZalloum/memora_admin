@@ -130,8 +130,7 @@ class TestBitmapDecodeFullByteCoverage:
 		bit_range = 256 * 8  # 2048 bits
 		result = await svc.get_completed_bits(TEST_USER, TEST_SUBJECT, bit_range=bit_range)
 		assert result == expected, (
-			f"Lossless round-trip failed: "
-			f"missing={expected - result}, extra={result - expected}"
+			f"Lossless round-trip failed: " f"missing={expected - result}, extra={result - expected}"
 		)
 
 
@@ -183,10 +182,10 @@ class TestBitmapDecodeChunked:
 
 		# Place one bit in each chunk
 		expected = {
-			0,                         # first bit of chunk 0
-			bits_per_chunk - 1,        # last bit of chunk 0
-			bits_per_chunk,            # first bit of chunk 1
-			bits_per_chunk * 2 + 50,   # middle of chunk 2
+			0,  # first bit of chunk 0
+			bits_per_chunk - 1,  # last bit of chunk 0
+			bits_per_chunk,  # first bit of chunk 1
+			bits_per_chunk * 2 + 50,  # middle of chunk 2
 		}
 		for bit in expected:
 			await redis_client.setbit(_key(), bit, 1)

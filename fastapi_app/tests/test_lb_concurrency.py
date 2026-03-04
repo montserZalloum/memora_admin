@@ -74,10 +74,7 @@ class TestConcurrentSamePlayer:
 		"""
 		player = "PLAYER-TEST-CONC-001"
 
-		tasks = [
-			lb_svc.update_leaderboards(player, xp_amount=10, plan_id=self.PLAN)
-			for _ in range(100)
-		]
+		tasks = [lb_svc.update_leaderboards(player, xp_amount=10, plan_id=self.PLAN) for _ in range(100)]
 		await asyncio.gather(*tasks)
 
 		result = await lb_svc.get_my_rank(player, "daily", plan_id=self.PLAN)
@@ -89,16 +86,11 @@ class TestConcurrentSamePlayer:
 		xp_values = [random.randint(1, 100) for _ in range(200)]
 		expected_total = sum(xp_values)
 
-		tasks = [
-			lb_svc.update_leaderboards(player, xp_amount=xp, plan_id=self.PLAN)
-			for xp in xp_values
-		]
+		tasks = [lb_svc.update_leaderboards(player, xp_amount=xp, plan_id=self.PLAN) for xp in xp_values]
 		await asyncio.gather(*tasks)
 
 		result = await lb_svc.get_my_rank(player, "daily", plan_id=self.PLAN)
-		assert result["xp"] == expected_total, (
-			f"Expected {expected_total} XP, got {result['xp']}"
-		)
+		assert result["xp"] == expected_total, f"Expected {expected_total} XP, got {result['xp']}"
 
 	async def test_concurrent_with_subject_id(self, lb_svc, redis_client):
 		"""Concurrent updates with subject_id don't lose subject-scoped XP."""
@@ -106,18 +98,14 @@ class TestConcurrentSamePlayer:
 		subject = "SUBJ-TEST-001"
 
 		tasks = [
-			lb_svc.update_leaderboards(
-				player, xp_amount=5, subject_id=subject, plan_id=self.PLAN
-			)
+			lb_svc.update_leaderboards(player, xp_amount=5, subject_id=subject, plan_id=self.PLAN)
 			for _ in range(100)
 		]
 		await asyncio.gather(*tasks)
 
 		# Check both global and subject-scoped
 		result_global = await lb_svc.get_my_rank(player, "daily", plan_id=self.PLAN)
-		result_subject = await lb_svc.get_my_rank(
-			player, "daily", subject_id=subject, plan_id=self.PLAN
-		)
+		result_subject = await lb_svc.get_my_rank(player, "daily", subject_id=subject, plan_id=self.PLAN)
 
 		assert result_global["xp"] == 500
 		assert result_subject["xp"] == 500
@@ -132,19 +120,14 @@ class TestConcurrentMultiplePlayers:
 		"""100 different players update concurrently — each gets correct XP."""
 		players = [(f"PLAYER-TEST-MULTI-{i:04d}", 10 * (i + 1)) for i in range(100)]
 
-		tasks = [
-			lb_svc.update_leaderboards(pid, xp_amount=xp, plan_id=self.PLAN)
-			for pid, xp in players
-		]
+		tasks = [lb_svc.update_leaderboards(pid, xp_amount=xp, plan_id=self.PLAN) for pid, xp in players]
 		await asyncio.gather(*tasks)
 
 		# Verify each player's score
 		key = lb_svc._get_plan_key("daily", self.PLAN)
 		for pid, expected_xp in players:
 			score = await redis_client.zscore(key, pid)
-			assert int(score) == expected_xp, (
-				f"{pid}: expected {expected_xp}, got {int(score)}"
-			)
+			assert int(score) == expected_xp, f"{pid}: expected {expected_xp}, got {int(score)}"
 
 		# Verify total count
 		zcard = await redis_client.zcard(key)
@@ -152,15 +135,9 @@ class TestConcurrentMultiplePlayers:
 
 	async def test_ranking_after_concurrent_updates(self, lb_svc, redis_client):
 		"""Dense ranking is correct after concurrent multi-player updates."""
-		players = [
-			(f"PLAYER-TEST-RANK-{i:04d}", (50 - i) * 10)
-			for i in range(50)
-		]
+		players = [(f"PLAYER-TEST-RANK-{i:04d}", (50 - i) * 10) for i in range(50)]
 
-		tasks = [
-			lb_svc.update_leaderboards(pid, xp_amount=xp, plan_id=self.PLAN)
-			for pid, xp in players
-		]
+		tasks = [lb_svc.update_leaderboards(pid, xp_amount=xp, plan_id=self.PLAN) for pid, xp in players]
 		await asyncio.gather(*tasks)
 
 		top = await lb_svc.get_top("daily", limit=50, plan_id=self.PLAN)
@@ -171,10 +148,7 @@ class TestConcurrentMultiplePlayers:
 
 	async def test_concurrent_mixed_operations(self, lb_svc, redis_client):
 		"""Concurrent updates + reads don't cause errors. See FINDING-11."""
-		players = [
-			(f"PLAYER-TEST-MIX-{i:04d}", 10 * (i + 1))
-			for i in range(50)
-		]
+		players = [(f"PLAYER-TEST-MIX-{i:04d}", 10 * (i + 1)) for i in range(50)]
 
 		# First seed all players
 		for pid, xp in players:
@@ -205,10 +179,7 @@ class TestConcurrentTieFormation:
 		"""50 players all getting 100 XP concurrently → all tied at rank 1."""
 		players = [f"PLAYER-TEST-TIE-{i:04d}" for i in range(50)]
 
-		tasks = [
-			lb_svc.update_leaderboards(pid, xp_amount=100, plan_id=self.PLAN)
-			for pid in players
-		]
+		tasks = [lb_svc.update_leaderboards(pid, xp_amount=100, plan_id=self.PLAN) for pid in players]
 		await asyncio.gather(*tasks)
 
 		top = await lb_svc.get_top("daily", limit=50, plan_id=self.PLAN)
@@ -217,30 +188,23 @@ class TestConcurrentTieFormation:
 
 	async def test_concurrent_updates_then_rank_check(self, lb_svc, redis_client):
 		"""Concurrent updates followed by concurrent rank checks."""
-		players_xp = {
-			f"PLAYER-TEST-RC-{i:04d}": random.randint(1, 500)
-			for i in range(100)
-		}
+		players_xp = {f"PLAYER-TEST-RC-{i:04d}": random.randint(1, 500) for i in range(100)}
 
 		# Concurrent updates
 		update_tasks = [
-			lb_svc.update_leaderboards(pid, xp_amount=xp, plan_id=self.PLAN)
-			for pid, xp in players_xp.items()
+			lb_svc.update_leaderboards(pid, xp_amount=xp, plan_id=self.PLAN) for pid, xp in players_xp.items()
 		]
 		await asyncio.gather(*update_tasks)
 
 		# Concurrent rank checks
-		rank_tasks = [
-			lb_svc.get_my_rank(pid, "daily", plan_id=self.PLAN)
-			for pid in players_xp
-		]
+		rank_tasks = [lb_svc.get_my_rank(pid, "daily", plan_id=self.PLAN) for pid in players_xp]
 		results = await asyncio.gather(*rank_tasks)
 
 		# Verify all results are valid
 		for pid, result in zip(players_xp.keys(), results):
-			assert result["xp"] == players_xp[pid], (
-				f"{pid}: expected {players_xp[pid]} XP, got {result['xp']}"
-			)
+			assert (
+				result["xp"] == players_xp[pid]
+			), f"{pid}: expected {players_xp[pid]} XP, got {result['xp']}"
 			assert result["rank"] is not None
 			assert result["rank"] >= 1
 			assert result["total_players"] == 100
@@ -259,10 +223,7 @@ class TestPipelineAtomicity:
 		"""
 		player = "PLAYER-TEST-PIPE-001"
 
-		tasks = [
-			lb_svc.update_leaderboards(player, xp_amount=10, plan_id=self.PLAN)
-			for _ in range(50)
-		]
+		tasks = [lb_svc.update_leaderboards(player, xp_amount=10, plan_id=self.PLAN) for _ in range(50)]
 		await asyncio.gather(*tasks)
 
 		# Global key
@@ -275,18 +236,13 @@ class TestPipelineAtomicity:
 
 		assert int(global_score) == 500
 		assert int(plan_score) == 500
-		assert global_score == plan_score, (
-			f"Global ({global_score}) and plan ({plan_score}) scores diverged!"
-		)
+		assert global_score == plan_score, f"Global ({global_score}) and plan ({plan_score}) scores diverged!"
 
 	async def test_daily_and_weekly_consistent(self, lb_svc, redis_client):
 		"""Daily and weekly keys have same scores after concurrent updates."""
 		player = "PLAYER-TEST-PIPE-002"
 
-		tasks = [
-			lb_svc.update_leaderboards(player, xp_amount=7, plan_id=self.PLAN)
-			for _ in range(100)
-		]
+		tasks = [lb_svc.update_leaderboards(player, xp_amount=7, plan_id=self.PLAN) for _ in range(100)]
 		await asyncio.gather(*tasks)
 
 		daily_result = await lb_svc.get_my_rank(player, "daily", plan_id=self.PLAN)
@@ -318,8 +274,7 @@ class TestConcurrentBurstLoad:
 			for _ in range(200)
 		]
 		read_tasks = [
-			lb_svc.get_my_rank(random.choice(players), "daily", plan_id=self.PLAN)
-			for _ in range(50)
+			lb_svc.get_my_rank(random.choice(players), "daily", plan_id=self.PLAN) for _ in range(50)
 		]
 
 		all_tasks = update_tasks + read_tasks

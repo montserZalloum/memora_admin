@@ -8,9 +8,9 @@ Tests verify:
 """
 
 import json
+from uuid import uuid4
 
 import pytest
-from uuid import uuid4
 
 from fastapi_app.core.redis_keys import session_key as _session_key_fn
 from fastapi_app.core.security import create_access_token
@@ -140,9 +140,7 @@ class TestLeaderboardEndpoints:
 		from fastapi_app.services.leaderboard import LeaderboardService
 
 		lb_svc = LeaderboardService(redis_client)
-		await lb_svc.update_leaderboards(
-			player_id, xp_amount=50, plan_id="PLAN-TEST-001"
-		)
+		await lb_svc.update_leaderboards(player_id, xp_amount=50, plan_id="PLAN-TEST-001")
 
 		resp = await client.get("/api/v1/leaderboard/daily")
 		assert resp.status_code == 200

@@ -109,7 +109,7 @@ fixtures = [
 	{
 		"dt": "Default Workspace Sidebar",
 		"filters": [["name", "in", ["Memora", "Memora Library"]]],
-	}
+	},
 ]
 
 # before_app_install = "memora_admin.utils.before_app_install"

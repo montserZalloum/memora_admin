@@ -1,8 +1,7 @@
 """Plan Change endpoints — plan browsing and execution."""
 
-from fastapi import APIRouter, HTTPException, status
-
 import structlog
+from fastapi import APIRouter, HTTPException, status
 
 from fastapi_app.api.deps import CurrentUser, PlanChangeServiceDep
 from fastapi_app.models.plan_change import (

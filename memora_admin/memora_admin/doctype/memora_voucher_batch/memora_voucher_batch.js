@@ -26,7 +26,9 @@ frappe.ui.form.on("Memora Voucher Batch", {
 				__("Generate Cards"),
 				function () {
 					frappe.confirm(
-						__("Generate {0} cards for this batch? This cannot be undone.", [frm.doc.quantity]),
+						__("Generate {0} cards for this batch? This cannot be undone.", [
+							frm.doc.quantity,
+						]),
 						function () {
 							frappe.call({
 								method: "memora_admin.memora_admin.api.voucher.generate_batch",
@@ -34,7 +36,9 @@ frappe.ui.form.on("Memora Voucher Batch", {
 								callback: function (r) {
 									if (r.message && r.message.status === "enqueued") {
 										frappe.show_alert({
-											message: __("Card generation has been queued. You will be notified when complete."),
+											message: __(
+												"Card generation has been queued. You will be notified when complete."
+											),
 											indicator: "blue",
 										});
 									}
@@ -93,10 +97,9 @@ frappe.ui.form.on("Memora Voucher Batch", {
 								callback: function (r) {
 									if (r.message) {
 										frappe.show_alert({
-											message: __(
-												"{0} cards voided. Batch closed.",
-												[r.message.voided_count]
-											),
+											message: __("{0} cards voided. Batch closed.", [
+												r.message.voided_count,
+											]),
 											indicator: "orange",
 										});
 										frm.reload_doc();
@@ -115,7 +118,11 @@ frappe.ui.form.on("Memora Voucher Batch", {
 		}
 
 		// Direct Activate button: non-Sale batches in Generated status
-		if (frm.doc.batch_purpose && frm.doc.batch_purpose !== "Sale" && frm.doc.status === "Generated") {
+		if (
+			frm.doc.batch_purpose &&
+			frm.doc.batch_purpose !== "Sale" &&
+			frm.doc.status === "Generated"
+		) {
 			frm.add_custom_button(
 				__("Direct Activate"),
 				function () {
@@ -131,7 +138,9 @@ frappe.ui.form.on("Memora Voucher Batch", {
 								callback: function (r) {
 									if (r.message) {
 										frappe.show_alert({
-											message: __("{0} cards activated.", [r.message.activated_count]),
+											message: __("{0} cards activated.", [
+												r.message.activated_count,
+											]),
 											indicator: "green",
 										});
 										frm.reload_doc();
@@ -161,7 +170,9 @@ frappe.ui.form.on("Memora Voucher Batch", {
 			if (data.batch_name === frm.doc.name) {
 				frappe.msgprint({
 					title: __("Generation Failed"),
-					message: __("Card generation failed for this batch. Check Error Log for details."),
+					message: __(
+						"Card generation failed for this batch. Check Error Log for details."
+					),
 					indicator: "red",
 				});
 			}

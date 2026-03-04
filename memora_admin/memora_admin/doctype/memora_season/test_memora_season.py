@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import frappe
 from frappe.tests.utils import FrappeTestCase
-from frappe.utils import today, add_days, random_string
+from frappe.utils import add_days, random_string, today
 
 TEST_PREFIX = "ZTest Season "
 
@@ -67,6 +67,7 @@ class TestMemoraSeason(FrappeTestCase):
 	def test_season_seq_explicit_value_respected(self):
 		"""Programmatic creation with explicit season_seq must keep that value."""
 		from memora_admin.memora_admin.doctype.memora_season.memora_season import _get_next_season_seq
+
 		next_seq = _get_next_season_seq()
 		explicit_seq = next_seq + 2
 		doc = self._make_season(season_seq=explicit_seq)

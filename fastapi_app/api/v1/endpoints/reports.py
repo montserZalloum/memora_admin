@@ -32,7 +32,10 @@ async def submit_content_report(
 	if body.screenshot_base64 and not body.screenshot_filename:
 		raise HTTPException(
 			status_code=status.HTTP_400_BAD_REQUEST,
-			detail={"code": "MISSING_FILENAME", "message": "screenshot_filename is required when screenshot_base64 is provided"},
+			detail={
+				"code": "MISSING_FILENAME",
+				"message": "screenshot_filename is required when screenshot_base64 is provided",
+			},
 		)
 
 	if body.screenshot_base64 and len(body.screenshot_base64) > MAX_SCREENSHOT_BASE64_SIZE:
@@ -88,7 +91,10 @@ async def submit_content_report(
 			pass
 		raise HTTPException(
 			status_code=status.HTTP_502_BAD_GATEWAY,
-			detail={"code": "REPORT_CREATION_FAILED", "message": "Failed to create report. Please try again."},
+			detail={
+				"code": "REPORT_CREATION_FAILED",
+				"message": "Failed to create report. Please try again.",
+			},
 		)
 
 	logger.info("content_report_submitted", player=player_id, report=result.get("name"))

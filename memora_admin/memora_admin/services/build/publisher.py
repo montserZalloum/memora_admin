@@ -148,10 +148,12 @@ def _flatten_files(files: list[dict[str, Any]]) -> list[dict[str, Any]]:
 			continue
 
 		# Add this file (copy only filename and content)
-		result.append({
-			"filename": file_dict["filename"],
-			"content": file_dict["content"],
-		})
+		result.append(
+			{
+				"filename": file_dict["filename"],
+				"content": file_dict["content"],
+			}
+		)
 
 		# Recursively flatten children if present
 		if "children" in file_dict and isinstance(file_dict["children"], list):

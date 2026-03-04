@@ -66,11 +66,14 @@ class TestTopPlayer:
 		await _cleanup(redis_client)
 		svc = LeaderboardService(redis_client)
 
-		await _seed(redis_client, {
-			"LUA-TOP-A": 500,
-			"LUA-TOP-B": 300,
-			"LUA-TOP-C": 100,
-		})
+		await _seed(
+			redis_client,
+			{
+				"LUA-TOP-A": 500,
+				"LUA-TOP-B": 300,
+				"LUA-TOP-C": 100,
+			},
+		)
 
 		result = await svc.get_my_rank("LUA-TOP-A", "weekly", plan_id=PLAN)
 		assert result["rank"] == 1
@@ -83,12 +86,15 @@ class TestTopPlayer:
 		await _cleanup(redis_client)
 		svc = LeaderboardService(redis_client)
 
-		await _seed(redis_client, {
-			"LUA-TOP-A": 500,
-			"LUA-TOP-B": 300,
-			"LUA-TOP-C": 100,
-			"LUA-TOP-D": 50,
-		})
+		await _seed(
+			redis_client,
+			{
+				"LUA-TOP-A": 500,
+				"LUA-TOP-B": 300,
+				"LUA-TOP-C": 100,
+				"LUA-TOP-D": 50,
+			},
+		)
 
 		result = await svc.get_my_rank("LUA-TOP-A", "weekly", neighbor_count=2, plan_id=PLAN)
 		# Window: positions 0..2 → A(500), B(300), C(100)
@@ -117,13 +123,16 @@ class TestBottomPlayer:
 		await _cleanup(redis_client)
 		svc = LeaderboardService(redis_client)
 
-		await _seed(redis_client, {
-			"LUA-BOT-A": 500,
-			"LUA-BOT-B": 300,
-			"LUA-BOT-C": 300,
-			"LUA-BOT-D": 100,
-			"LUA-BOT-E": 10,
-		})
+		await _seed(
+			redis_client,
+			{
+				"LUA-BOT-A": 500,
+				"LUA-BOT-B": 300,
+				"LUA-BOT-C": 300,
+				"LUA-BOT-D": 100,
+				"LUA-BOT-E": 10,
+			},
+		)
 
 		result = await svc.get_my_rank("LUA-BOT-E", "weekly", plan_id=PLAN)
 		# Distinct tiers above 10: {500, 300, 100} = 3
@@ -137,12 +146,15 @@ class TestBottomPlayer:
 		await _cleanup(redis_client)
 		svc = LeaderboardService(redis_client)
 
-		await _seed(redis_client, {
-			"LUA-BOT-A": 500,
-			"LUA-BOT-B": 300,
-			"LUA-BOT-C": 100,
-			"LUA-BOT-D": 10,
-		})
+		await _seed(
+			redis_client,
+			{
+				"LUA-BOT-A": 500,
+				"LUA-BOT-B": 300,
+				"LUA-BOT-C": 100,
+				"LUA-BOT-D": 10,
+			},
+		)
 
 		result = await svc.get_my_rank("LUA-BOT-D", "weekly", neighbor_count=2, plan_id=PLAN)
 		ranks = {n["player_id"]: n["rank"] for n in result["neighbors"]}
@@ -215,13 +227,16 @@ class TestNeighborWindowMultipleTiers:
 		svc = LeaderboardService(redis_client)
 
 		# 5 distinct tiers, 1 player each
-		await _seed(redis_client, {
-			"LUA-SPAN-A": 500,
-			"LUA-SPAN-B": 400,
-			"LUA-SPAN-C": 300,  # target player
-			"LUA-SPAN-D": 200,
-			"LUA-SPAN-E": 100,
-		})
+		await _seed(
+			redis_client,
+			{
+				"LUA-SPAN-A": 500,
+				"LUA-SPAN-B": 400,
+				"LUA-SPAN-C": 300,  # target player
+				"LUA-SPAN-D": 200,
+				"LUA-SPAN-E": 100,
+			},
+		)
 
 		result = await svc.get_my_rank("LUA-SPAN-C", "weekly", neighbor_count=2, plan_id=PLAN)
 		assert result["rank"] == 3
@@ -240,14 +255,17 @@ class TestNeighborWindowMultipleTiers:
 		await _cleanup(redis_client)
 		svc = LeaderboardService(redis_client)
 
-		await _seed(redis_client, {
-			"LUA-WINTIE-A": 500,
-			"LUA-WINTIE-B": 500,  # tie with A
-			"LUA-WINTIE-C": 300,
-			"LUA-WINTIE-D": 300,  # target (tied with C)
-			"LUA-WINTIE-E": 100,
-			"LUA-WINTIE-F": 100,  # tie with E
-		})
+		await _seed(
+			redis_client,
+			{
+				"LUA-WINTIE-A": 500,
+				"LUA-WINTIE-B": 500,  # tie with A
+				"LUA-WINTIE-C": 300,
+				"LUA-WINTIE-D": 300,  # target (tied with C)
+				"LUA-WINTIE-E": 100,
+				"LUA-WINTIE-F": 100,  # tie with E
+			},
+		)
 
 		result = await svc.get_my_rank("LUA-WINTIE-D", "weekly", neighbor_count=2, plan_id=PLAN)
 		# Tiers above 300: {500} = 1 tier → rank 2
@@ -517,11 +535,14 @@ class TestNeighborIsMeFlag:
 		await _cleanup(redis_client)
 		svc = LeaderboardService(redis_client)
 
-		await _seed(redis_client, {
-			"LUA-ME-A": 500,
-			"LUA-ME-B": 300,
-			"LUA-ME-C": 100,
-		})
+		await _seed(
+			redis_client,
+			{
+				"LUA-ME-A": 500,
+				"LUA-ME-B": 300,
+				"LUA-ME-C": 100,
+			},
+		)
 
 		result = await svc.get_my_rank("LUA-ME-B", "weekly", neighbor_count=2, plan_id=PLAN)
 		me_flags = [n for n in result["neighbors"] if n["is_me"]]

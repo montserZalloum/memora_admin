@@ -187,7 +187,9 @@ class TestPartialStats:
 		await redis_client.expire(key, 3600)
 
 		result = await stats_svc.get_partial_stats(
-			TEST_USER, TEST_SUBJECT, TEST_VERSION,
+			TEST_USER,
+			TEST_SUBJECT,
+			TEST_VERSION,
 			fields=["_content_hash", "TRACK-001:completed", "TRACK-001:total"],
 		)
 
@@ -204,7 +206,9 @@ class TestPartialStats:
 	async def test_partial_stats_returns_none_when_key_missing(self, stats_svc):
 		"""Returns None when the stats key doesn't exist."""
 		result = await stats_svc.get_partial_stats(
-			"NONEXIST-USER", TEST_SUBJECT, TEST_VERSION,
+			"NONEXIST-USER",
+			TEST_SUBJECT,
+			TEST_VERSION,
 			fields=["completed", "total"],
 		)
 		assert result is None
@@ -216,7 +220,9 @@ class TestPartialStats:
 		await redis_client.expire(key, 3600)
 
 		result = await stats_svc.get_partial_stats(
-			TEST_USER, TEST_SUBJECT, TEST_VERSION,
+			TEST_USER,
+			TEST_SUBJECT,
+			TEST_VERSION,
 			fields=["completed", "NONEXIST-FIELD", "total"],
 		)
 
@@ -231,7 +237,9 @@ class TestPartialStats:
 		await redis_client.expire(key, 3600)
 
 		result = await stats_svc.get_partial_stats(
-			TEST_USER, TEST_SUBJECT, TEST_VERSION,
+			TEST_USER,
+			TEST_SUBJECT,
+			TEST_VERSION,
 			fields=["NONEXIST-A", "NONEXIST-B"],
 		)
 		assert result is None
@@ -312,8 +320,12 @@ class TestGetOrRecompute:
 
 		# get_or_recompute should return cached stats (fast path)
 		result = await stats_svc.get_or_recompute(
-			user_id=TEST_USER, subject_id=TEST_SUBJECT, version=TEST_VERSION,
-			content_hash="match123", completed_bits=completed_bits, hierarchy=hierarchy,
+			user_id=TEST_USER,
+			subject_id=TEST_SUBJECT,
+			version=TEST_VERSION,
+			content_hash="match123",
+			completed_bits=completed_bits,
+			hierarchy=hierarchy,
 		)
 
 		assert result["_content_hash"] == "match123"
@@ -332,8 +344,12 @@ class TestGetOrRecompute:
 
 		# get_or_recompute with new hash should recompute
 		result = await stats_svc.get_or_recompute(
-			user_id=TEST_USER, subject_id=TEST_SUBJECT, version=TEST_VERSION,
-			content_hash="newhash", completed_bits=completed_bits, hierarchy=new_hierarchy,
+			user_id=TEST_USER,
+			subject_id=TEST_SUBJECT,
+			version=TEST_VERSION,
+			content_hash="newhash",
+			completed_bits=completed_bits,
+			hierarchy=new_hierarchy,
 		)
 
 		assert result["_content_hash"] == "newhash"
@@ -347,8 +363,12 @@ class TestGetOrRecompute:
 
 		# No pre-seeded data — cache miss
 		result = await stats_svc.get_or_recompute(
-			user_id=TEST_USER, subject_id=TEST_SUBJECT, version=TEST_VERSION,
-			content_hash="fresh01", completed_bits=completed_bits, hierarchy=hierarchy,
+			user_id=TEST_USER,
+			subject_id=TEST_SUBJECT,
+			version=TEST_VERSION,
+			content_hash="fresh01",
+			completed_bits=completed_bits,
+			hierarchy=hierarchy,
 		)
 
 		assert result["_content_hash"] == "fresh01"
@@ -378,7 +398,9 @@ class TestTTLJitter:
 			assert 1 <= ttl <= StatsService.CACHE_TTL + StatsService.JITTER_RANGE
 
 		# With 20 samples and 120s jitter range, it's extremely unlikely all are identical
-		assert len(set(ttls)) > 1, f"Expected TTL variation from jitter, but all TTLs were identical: {ttls[0]}"
+		assert (
+			len(set(ttls)) > 1
+		), f"Expected TTL variation from jitter, but all TTLs were identical: {ttls[0]}"
 
 
 class TestSemaphoreTimeoutDegradation:
@@ -404,8 +426,12 @@ class TestSemaphoreTimeoutDegradation:
 
 			# get_or_recompute should timeout on semaphore but still return valid stats
 			result = await stats_svc.get_or_recompute(
-				user_id=TEST_USER, subject_id=TEST_SUBJECT, version=TEST_VERSION,
-				content_hash="timeout01", completed_bits=completed_bits, hierarchy=hierarchy,
+				user_id=TEST_USER,
+				subject_id=TEST_SUBJECT,
+				version=TEST_VERSION,
+				content_hash="timeout01",
+				completed_bits=completed_bits,
+				hierarchy=hierarchy,
 			)
 
 			# Should have valid stats despite semaphore timeout

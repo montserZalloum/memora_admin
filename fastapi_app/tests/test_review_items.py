@@ -202,7 +202,12 @@ class TestEnrichedReviewItems:
 					"question_text": "Hello ___",
 					"choices": [],
 					"correct_choice": None,
-					"content_json": {"blank_from": 6, "blank_to": 9, "correct_word": "world", "distractors": []},
+					"content_json": {
+						"blank_from": 6,
+						"blank_to": 9,
+						"correct_word": "world",
+						"distractors": [],
+					},
 				},
 				{
 					"item_id": "uuid-orphan",

@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 
-
 import frappe
 
 from fastapi_app.core.redis_keys import WALLET_SCAN_PATTERN

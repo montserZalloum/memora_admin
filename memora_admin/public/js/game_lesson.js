@@ -713,9 +713,7 @@ function open_information_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 		let text = d.get_value("info_text") || "";
 
 		// Drop highlights that fell out of bounds after a text edit
-		highlights = highlights.filter(
-			(h) => h.from >= 0 && h.to <= text.length && h.from < h.to
-		);
+		highlights = highlights.filter((h) => h.from >= 0 && h.to <= text.length && h.from < h.to);
 
 		// Sort by start position
 		let sorted = [...highlights].sort((a, b) => a.from - b.from);
@@ -749,8 +747,7 @@ function open_information_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 			'<div class="info-preview-text" style="padding:15px;border:1px solid #d1d8dd;' +
 			"border-radius:4px;min-height:80px;line-height:2.2;font-size:15px;" +
 			'direction:rtl;white-space:pre-wrap;user-select:text;">' +
-			(html ||
-				'<span style="color:#8d99a6;">اكتب النص أعلاه لتظهر المعاينة</span>') +
+			(html || '<span style="color:#8d99a6;">اكتب النص أعلاه لتظهر المعاينة</span>') +
 			"</div>" +
 			'<div class="info-add-hl-tip" style="display:none;position:absolute;' +
 			"background:#171717;color:#fff;padding:6px 14px;border-radius:6px;" +
@@ -980,9 +977,7 @@ function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 		let text = d.get_value("fill_text") || "";
 
 		// Drop blanks that fell out of bounds after a text edit
-		blanks = blanks.filter(
-			(b) => b.from >= 0 && b.to <= text.length && b.from < b.to
-		);
+		blanks = blanks.filter((b) => b.from >= 0 && b.to <= text.length && b.from < b.to);
 
 		// Sort by start position
 		let sorted = [...blanks].sort((a, b) => a.from - b.from);
@@ -1017,8 +1012,7 @@ function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 			'<div class="fill-preview-text" style="padding:15px;border:1px solid #d1d8dd;' +
 			"border-radius:4px;min-height:80px;line-height:2.2;font-size:15px;" +
 			'direction:rtl;white-space:pre-wrap;user-select:text;">' +
-			(html ||
-				'<span style="color:#8d99a6;">اكتب النص أعلاه لتظهر المعاينة</span>') +
+			(html || '<span style="color:#8d99a6;">اكتب النص أعلاه لتظهر المعاينة</span>') +
 			"</div>" +
 			'<div class="fill-add-bl-tip" style="display:none;position:absolute;' +
 			"background:#171717;color:#fff;padding:6px 14px;border-radius:6px;" +
@@ -1192,7 +1186,10 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 						fd.append("docname", frm.docname || "new-doc");
 						fd.append("is_private", "0");
 						// auto-optimize images >200 KB (Frappe resizes to 1920×1080, quality 85%)
-						if (s.pending_file.size > 200 * 1024 && !s.pending_file.type.includes("svg")) {
+						if (
+							s.pending_file.size > 200 * 1024 &&
+							!s.pending_file.type.includes("svg")
+						) {
 							fd.append("optimize", true);
 						}
 						$.ajax({
@@ -1240,8 +1237,8 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 				let preview = s.text
 					? _esc(s.text.substring(0, 22)) + (s.text.length > 22 ? "…" : "")
 					: s.preview_url
-						? "🖼️ صورة"
-						: "";
+					? "🖼️ صورة"
+					: "";
 				return (
 					'<div class="story-tab" data-idx="' +
 					i +
@@ -1270,29 +1267,29 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 		// image area: show preview+remove button OR drop zone
 		let imgHtml = cur.preview_url
 			? '<div style="position:relative;display:inline-block;max-width:100%;">' +
-				'<img src="' +
-				_esc(cur.preview_url) +
-				'" style="max-width:100%;max-height:220px;border-radius:8px;display:block;' +
-				'object-fit:contain;border:1px solid #e0e0e0;" onerror="this.style.display=\'none\'">' +
-				'<button class="story-img-remove" ' +
-				'style="position:absolute;top:6px;left:6px;background:rgba(220,53,69,.85);color:#fff;' +
-				'border:none;border-radius:50%;width:26px;height:26px;font-size:16px;line-height:26px;' +
-				'cursor:pointer;text-align:center;" title="إزالة الصورة">×</button>' +
-				(cur.pending_file
+			  '<img src="' +
+			  _esc(cur.preview_url) +
+			  '" style="max-width:100%;max-height:220px;border-radius:8px;display:block;' +
+			  'object-fit:contain;border:1px solid #e0e0e0;" onerror="this.style.display=\'none\'">' +
+			  '<button class="story-img-remove" ' +
+			  'style="position:absolute;top:6px;left:6px;background:rgba(220,53,69,.85);color:#fff;' +
+			  "border:none;border-radius:50%;width:26px;height:26px;font-size:16px;line-height:26px;" +
+			  'cursor:pointer;text-align:center;" title="إزالة الصورة">×</button>' +
+			  (cur.pending_file
 					? '<div style="font-size:11px;color:#888;margin-top:5px;">📎 ' +
-						_esc(cur.pending_file.name) +
-						" — سيتم الرفع عند الحفظ</div>"
+					  _esc(cur.pending_file.name) +
+					  " — سيتم الرفع عند الحفظ</div>"
 					: "") +
-				"</div>"
+			  "</div>"
 			: '<label class="story-upload-label" ' +
-				'style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
-				"border:2px dashed #d1d8dd;border-radius:8px;padding:28px 20px;cursor:pointer;" +
-				'color:#8d99a6;min-height:90px;transition:border-color .15s,background .15s;">' +
-				'<span style="font-size:30px;margin-bottom:6px;">🖼️</span>' +
-				'<span style="font-size:13px;font-weight:500;">اضغط لاختيار صورة</span>' +
-				'<span style="font-size:11px;margin-top:3px;color:#b0bec5;">PNG، JPG، GIF — اختياري</span>' +
-				'<input class="story-file-input" type="file" accept="image/*" style="display:none;">' +
-				"</label>";
+			  'style="display:flex;flex-direction:column;align-items:center;justify-content:center;' +
+			  "border:2px dashed #d1d8dd;border-radius:8px;padding:28px 20px;cursor:pointer;" +
+			  'color:#8d99a6;min-height:90px;transition:border-color .15s,background .15s;">' +
+			  '<span style="font-size:30px;margin-bottom:6px;">🖼️</span>' +
+			  '<span style="font-size:13px;font-weight:500;">اضغط لاختيار صورة</span>' +
+			  '<span style="font-size:11px;margin-top:3px;color:#b0bec5;">PNG، JPG، GIF — اختياري</span>' +
+			  '<input class="story-file-input" type="file" accept="image/*" style="display:none;">' +
+			  "</label>";
 
 		$w.html(
 			'<div style="display:flex;min-height:430px;direction:rtl;border:1px solid #e0e0e0;border-radius:6px;overflow:hidden;">' +
@@ -1414,7 +1411,8 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 			// if replacing an existing server file, queue it for deletion
 			if (s.image_name) filesToDelete.push(s.image_name);
 			// revoke old blob URL to free memory
-			if (s.preview_url && s.preview_url.startsWith("blob:")) URL.revokeObjectURL(s.preview_url);
+			if (s.preview_url && s.preview_url.startsWith("blob:"))
+				URL.revokeObjectURL(s.preview_url);
 			s.image_url = "";
 			s.image_name = "";
 			s.pending_file = file;
@@ -1447,8 +1445,8 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 				let preview = val
 					? val.substring(0, 22) + (val.length > 22 ? "…" : "")
 					: steps[activeIdx] && steps[activeIdx].preview_url
-						? "🖼️ صورة"
-						: "فارغة";
+					? "🖼️ صورة"
+					: "فارغة";
 				$w.find('.story-tab[data-idx="' + activeIdx + '"] div:last-child').text(preview);
 			}, 300)
 		);
@@ -1509,7 +1507,12 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 					}),
 			};
 
-			frappe.model.set_value(cdt, cdn, "config_json", JSON.stringify(config_payload, null, 2));
+			frappe.model.set_value(
+				cdt,
+				cdn,
+				"config_json",
+				JSON.stringify(config_payload, null, 2)
+			);
 			d.hide();
 			frappe.show_alert({ message: "تم حفظ القصة", indicator: "green" });
 		},

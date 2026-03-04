@@ -22,7 +22,6 @@ import frappe
 import redis
 
 from fastapi_app.core.redis_keys import LB_PREFIX, profile_key, task_ran_key
-from memora_admin.utils.redis_connection import get_memora_redis
 from memora_admin.tasks.task_utils import (
 	AMMAN_TZ,
 	TASK_DURATION,
@@ -31,6 +30,7 @@ from memora_admin.tasks.task_utils import (
 	log_task_run,
 	notify_admins,
 )
+from memora_admin.utils.redis_connection import get_memora_redis
 
 logger = logging.getLogger(__name__)
 
@@ -157,11 +157,13 @@ def _do_warm_cache(r: redis.Redis) -> int:
 	pipe = r.pipeline()
 	for p in profiles:
 		key = profile_key(p.name)
-		data = json.dumps({
-			"player_id": p.name,
-			"display_name": p.display_name or "",
-			"avatar": p.avatar or "default_avatar",
-		})
+		data = json.dumps(
+			{
+				"player_id": p.name,
+				"display_name": p.display_name or "",
+				"avatar": p.avatar or "default_avatar",
+			}
+		)
 		pipe.set(key, data, ex=CACHE_TTL)
 	pipe.execute()
 

@@ -1,683 +1,439 @@
-# FastAPI App Performance + Maintainability Audit
+# `fastapi_app/` Performance + Maintainability Audit
 
-Date: 2026-03-04
-Scope: `fastapi_app/`
+## Scope And Baseline
 
-## Baseline
-
-- Test baseline: `pytest fastapi_app/tests -q`
-  - Result: `615 passed`, `10 failed`, `43.04s`
-  - Current failures cluster in:
-    - leaderboard rank correctness (`fastapi_app/services/leaderboard.py`)
-    - raw Redis fast-path instability in progress/session flows (`fastapi_app/services/progress.py`)
-    - settings cache hydration miss path (`fastapi_app/services/settings.py`, `fastapi_app/services/hydration.py`)
-- Lint baseline: `ruff check fastapi_app`
-  - Result: `468` findings
-  - Most are style/import issues, but a few highlight real cleanup targets (`zip(..., strict=...)`, unused unpacked values, repeated dependency factories).
+- Scope reviewed: the full `fastapi_app/` tree (`api/`, `services/`, `models/`, `core/`, `middleware/`, `tests/`).
+- Test baseline: `pytest fastapi_app/tests/ -v` passed (`628 passed in 47.36s`).
+- Lint baseline: `pre-commit run --all-files` does not pass cleanly today, but the failures are repo-wide and mostly outside `fastapi_app/` (YAML, Ruff, ESLint, formatting). Treat that as repository debt, not a FastAPI regression signal.
+- Blocking I/O review: no obvious synchronous `requests`, file I/O, or `time.sleep()` calls were found inside async request paths. The code is already using async Redis and `httpx.AsyncClient`. The biggest remaining costs are extra network round-trips, repeated cache-aside code, and a few expensive Redis scans.
 
 ## 1. Architecture Map
 
-### Runtime Flow
+### Dependency Flow
 
-1. `fastapi_app/main.py:34-186`
-   - Lifespan builds Redis pools, a shared `FrappeClient`, selected long-lived services, WebSocket manager, and pub/sub listeners.
-   - Middleware chain is `CORSMiddleware` -> `RequestIDMiddleware` -> `GlobalRateLimitMiddleware` (last added runs first).
-2. `fastapi_app/api/deps.py:60-566`
-   - Shared dependencies provide:
-     - Redis clients (`get_redis`, `get_redis_raw`)
-     - auth (`get_current_user`, `require_admin`)
-     - per-request service construction
-     - season/content gating
-     - per-player rate limiting
-3. Endpoint modules call service-layer orchestration.
-4. Service layer is Redis-first and uses Frappe HTTP as the external source of truth and write-through boundary.
-5. MariaDB is never accessed directly by FastAPI; it is reached through Frappe whitelisted methods or Frappe REST endpoints.
+`FastAPI router -> shared deps in fastapi_app/api/deps.py -> per-feature service objects -> Redis + Frappe HTTP APIs -> MariaDB/Redis on the Frappe side`
 
-### Shared Infrastructure
+There is no local repository layer. `fastapi_app` talks directly to:
 
-- Redis
-  - Primary online state store: sessions, progress bitmaps, stats hashes, access sets, wallets, leaderboards, caches, buffers.
-  - Key entrypoints: `fastapi_app/core/redis.py:11-53`, `fastapi_app/core/redis_keys.py`
-- Frappe HTTP
-  - Generic client: `fastapi_app/services/frappe_client.py:19-154`
-  - Admin auth-specific client: `fastapi_app/services/frappe.py:18-208`
-- Hydration / cache fill control
-  - `fastapi_app/services/hydration.py:1-118`
-- Pub/Sub + WebSockets
-  - `fastapi_app/core/pubsub.py`, `fastapi_app/core/ws_manager.py:17-179`, `fastapi_app/api/v1/endpoints/notifications.py:22-85`
+- Redis for hot-path state, caching, rate limits, leaderboards, sessions, and pub/sub.
+- Frappe HTTP endpoints through `FrappeClient` (`fastapi_app/services/frappe_client.py`) and `FrappeAuthService` (`fastapi_app/services/frappe.py`).
+- MariaDB only indirectly, through Frappe whitelisted methods and SQL proxy methods such as `memora_admin.api.practice.execute_practice_query`.
 
-### Endpoint Inventory (54 HTTP + 1 WebSocket)
+### Shared Dependencies
 
-| Area | Routes | Primary deps/services | Main backing stores |
+| Dependency | Purpose | Main locations |
+| --- | --- | --- |
+| `CurrentUser` | JWT auth + Redis-backed single-session validation | `fastapi_app/api/deps.py:81-176` |
+| `RequireAdmin` | Admin-only guard | `fastapi_app/api/deps.py:184-194` |
+| `ActiveSeasonDep` | Season gate for gameplay/review mutations | `fastapi_app/api/deps.py:449-464` |
+| `require_rate_limit(scope)` | Per-player Redis-backed rate limiting | `fastapi_app/api/deps.py:422-443` |
+| `RedisClient` / `get_redis()` | Shared Redis access via app pool | `fastapi_app/api/deps.py:60-79` |
+| `get_frappe_client()` | Shared app-level Frappe API client singleton | `fastapi_app/api/deps.py:279-294` |
+| Service deps (`*ServiceDep`) | Thin factories over Redis + Frappe | `fastapi_app/api/deps.py:200-406` |
+
+### Endpoint Inventory
+
+| Router | Routes | Primary deps | Primary downstreams |
 | --- | --- | --- | --- |
-| `health` | `GET /health/live`, `/health/ready`, `/health/redis` | `RedisClient` | Redis |
-| `announcements` | `GET /announcements/` | `AnnouncementServiceDep` | Redis cache, Frappe |
-| `auth` | `POST /auth/player/login`, `/admin/login`, `/refresh`, `GET /registration-options`, `POST /player/register`, `/player/register/verify`, `/player/register/resend`, `/player/password-reset/request`, `/verify`, `/confirm` | direct `RedisClient`, `SettingsDep`, `get_frappe_client`, `SessionService`, `DeviceService`, `OTPService`, `WalletService`, `SettingsService` | Redis, Frappe, WS manager |
-| `catalog` | `GET /catalog/` | `CurrentUser`, `CatalogServiceDep` | Redis, Frappe |
-| `purchase` | `POST /purchase/` | `CurrentUser`, `PurchaseServiceDep` | Redis, Frappe |
-| `access` | `POST /access/grants`, `DELETE /access/grants`, `GET /access/grants/{player_id}` | `RequireAdmin`, `AccessServiceDep` | Redis, Frappe hydrate |
-| `leaderboard` | `GET /leaderboard/{lb_type}`, `GET /leaderboard/{lb_type}/me` | `LeaderboardServiceDep`, `ProfileServiceDep` | Redis |
-| `plans` | `GET /plans/{plan_id}/manifest` | `PlanService` | Redis, Frappe |
-| `plan_change` | `POST /plans/change`, `GET /plans/available` | `PlanChangeServiceDep` | Redis, Frappe |
-| `progress` | `GET /progress/`, `/{subject}/tracks`, `/{subject}/tracks/{track_id}`, `/{subject}/tracks/{track_id}/units/{unit_id}`, `/{subject}/topics/{topic_id}/lessons`, `/{subject}` | `ProgressServiceDep`, `HierarchyServiceDep`, `AccessServiceDep`, `StatsServiceDep` | Redis, Frappe hydrate |
-| `practice` | `GET /practice/hierarchy`, `POST /practice/start`, `POST /practice/submit`, `POST /practice/continue` | `PracticeServiceDep`, `CurrentUser`, `ActiveSeasonDep` | Redis, Frappe |
-| `sessions` | `GET /sessions/current`, `POST /sessions/start`, `POST /sessions/end` | `GameSessionServiceDep`, `HierarchyServiceDep`, `AccessServiceDep`, `WalletServiceDep`, `LeaderboardServiceDep`, `SettingsServiceDep`, `ProgressServiceDep`, `StatsServiceDep` | Redis, Frappe hydrate |
-| `settings` | `GET /settings/gamification` | `SettingsServiceDep` | Redis, Frappe |
-| `subscriptions` | `GET /subscriptions` | `CurrentUser`, `AccessServiceDep` | Redis |
-| `wallet` | `GET /wallet`, `GET /wallet/{player_id}` | `CurrentUser` / `RequireAdmin`, `WalletServiceDep` | Redis, Frappe hydrate |
-| `reviews` | `GET /reviews`, `GET /reviews/{subject}`, `POST /reviews/{subject}/submit` | `ReviewServiceDep`, `WalletServiceDep`, `LeaderboardServiceDep`, `ActiveSeasonDep` | Redis, Frappe |
-| `profile` | `GET /profile`, `/stats`, `/mastery`, `/activity`, `PUT /avatar`, `POST /logout` | `ProfilePageServiceDep` | Redis, Frappe |
-| `reports` | `POST /reports` | `CurrentUser`, `RedisClient` | Redis buffer, Frappe |
-| `voucher` | `POST /voucher/preview`, `POST /voucher/redeem` | `CurrentUser`, `VoucherServiceDep` | Redis, Frappe |
-| `webhooks` | `POST /webhooks/payment` | direct Redis + background retry flow | Redis, Frappe |
-| `notifications` | `WS /notifications/ws` | app-state `ConnectionManager` | JWT decode, Redis pub/sub |
+| `health.py` | `GET /health/live`, `GET /health/ready`, `GET /health/redis` | `RedisClient` (ready/redis) | Redis only |
+| `announcements.py` | `GET /announcements/` | `CurrentUser`, `AnnouncementServiceDep` | Redis cache, Frappe announcements API |
+| `auth.py` | `POST /auth/player/login`, `POST /auth/admin/login`, `POST /auth/refresh`, `GET /auth/registration-options`, `POST /auth/player/register`, `POST /auth/player/register/verify`, `POST /auth/player/register/resend`, `POST /auth/player/password-reset/request`, `POST /auth/player/password-reset/verify`, `POST /auth/player/password-reset/confirm` | `RedisClient`, `SettingsDep`, app state `ConnectionManager` | Redis sessions, OTP state, devices, wallet, Frappe auth/profile APIs |
+| `catalog.py` | `GET /catalog/` | `CurrentUser`, `CatalogServiceDep` | Redis cache, Redis sets, Frappe catalog API |
+| `purchase.py` | `POST /purchase/` | `CurrentUser`, `PurchaseServiceDep` | Redis pending set, Frappe purchase API |
+| `access.py` | `POST /access/grants`, `DELETE /access/grants`, `GET /access/grants/{player_id}` | `RequireAdmin`, `AccessServiceDep` | Redis grant sets |
+| `leaderboard.py` | `GET /leaderboard/{lb_type}`, `GET /leaderboard/{lb_type}/me` | `CurrentUser`, `LeaderboardServiceDep`, `ProfileServiceDep` | Redis ZSETs + metadata, Redis profile cache, Frappe profile batch API |
+| `plans.py` | `GET /plans/{plan_id}` | `PlanService` via `Depends(get_plan_service)` | Redis cache, Frappe plan API |
+| `progress.py` | `GET /progress/`, `GET /progress/{subject}/tracks`, `GET /progress/{subject}/tracks/{track_id}`, `GET /progress/{subject}/tracks/{track_id}/units/{unit_id}`, `GET /progress/{subject}/topics/{topic_id}/lessons`, `GET /progress/{subject}` | `CurrentUser`, `HierarchyServiceDep`, `AccessServiceDep`, `ProgressServiceDep`, `StatsServiceDep` | Redis hierarchy cache, progress bitmaps, stats hashes, Frappe hierarchy hydration |
+| `sessions.py` | `GET /sessions/current`, `POST /sessions/start`, `POST /sessions/end` | `CurrentUser`, `ActiveSeasonDep`, multiple service deps, per-player rate limit | Redis sessions, progress, wallet, leaderboard, hierarchy cache, Frappe only via hydrated services |
+| `settings.py` | `GET /settings/gamification` | `SettingsServiceDep` | Redis cache, Frappe settings API |
+| `subscriptions.py` | `GET /subscriptions` | `CurrentUser`, `AccessServiceDep` | Redis access sets |
+| `wallet.py` | `GET /wallet`, `GET /wallet/{player_id}` | `CurrentUser`, `RequireAdmin`, `WalletServiceDep` | Redis wallet, Frappe wallet hydration |
+| `webhooks.py` | `POST /webhooks/payment` | `RedisClient`, `BackgroundTasks` | Redis idempotency + queue, Frappe grants/subscriptions APIs |
+| `notifications.py` | `WS /notifications/ws` | WebSocket JWT parse, app state `ConnectionManager` | Redis pub/sub listener, in-memory websocket manager |
+| `reviews.py` | `GET /reviews`, `GET /reviews/{subject}`, `POST /reviews/{subject}/submit` | `CurrentUser`, `ActiveSeasonDep`, `ReviewServiceDep`, `WalletServiceDep`, `LeaderboardServiceDep`, per-player rate limit | Redis review overview cache, Frappe review APIs, Redis wallet/ZSETs |
+| `profile.py` | `GET /profile`, `GET /profile/stats`, `GET /profile/mastery`, `GET /profile/activity`, `PUT /profile/avatar`, `POST /profile/logout` | `CurrentUser`, `ProfilePageServiceDep` | Redis wallet/profile/mastery/activity caches, Frappe profile APIs |
+| `reports.py` | `POST /reports` | `CurrentUser`, `RedisClient` | Redis cooldown, Frappe report API |
+| `voucher.py` | `POST /voucher/preview`, `POST /voucher/redeem` | `CurrentUser`, `VoucherServiceDep` | Redis rate-limit keys, Frappe voucher APIs |
+| `practice.py` | `GET /practice/hierarchy`, `POST /practice/start`, `POST /practice/submit`, `POST /practice/continue` | `CurrentUser`, `ActiveSeasonDep`, `PracticeServiceDep`, per-player rate limit | Redis practice session, hierarchy cache, progress bitmaps, Frappe SQL proxy methods |
+| `plan_change.py` | `POST /plans/change`, `GET /plans/available` | `CurrentUser`, `PlanChangeServiceDep` | Redis freeze/cooldown/cache cleanup, Frappe plan-change API |
 
 ## 2. Top Issues (Prioritized)
 
-Scoring key:
-- Impact: 1 low, 5 high
-- Effort: 1 low, 5 high
-- Risk: 1 low, 5 high
-- Priority = `(Impact x (6 - Effort) x (6 - Risk))`
+Scoring uses `Impact x Ease x Safety` on a 1-5 scale, where higher is better. `Ease=5` means low effort. `Safety=5` means low rollout risk.
 
-| Priority | Issue | Impact | Effort | Risk | Evidence |
-| --- | --- | --- | --- | --- | --- |
-| 100 | Leaderboard `/me` trusts stale tier metadata and returns incorrect dense ranks / `xp_to_next` | 5 | 2 | 1 | `fastapi_app/services/leaderboard.py:480-519`; failing tests in `test_leaderboard_bugs.py`, `test_leaderboard_diagnostic.py` |
-| 80 | Progress raw-Redis fast path is not fail-safe; when the raw client/pool is invalid, progress and session endpoints can 500 | 5 | 2 | 2 | `fastapi_app/services/progress.py:250-283`; `fastapi_app/api/deps.py:65-74`; failing tests in `test_progress_endpoints.py`, `test_session_endpoints.py` |
-| 80 | `FrappeClient` logs full request payloads at `info`, including large SQL strings and parameter arrays on hot paths | 4 | 1 | 1 | `fastapi_app/services/frappe_client.py:63-80`; large payload sources in `fastapi_app/services/practice.py:1034-1045, 1261-1290, 1415-1435, 1460-1466` |
-| 64 | Progress endpoints duplicate the same hierarchy/access/stats fallback pipeline four times, increasing drift and branch cost in the hottest read surface | 4 | 3 | 2 | `fastapi_app/api/v1/endpoints/progress.py:387-457, 502-583, 635-715, 838-961` |
-| 64 | Settings hydration can suppress valid cache rehydration after an empty/failed fill and currently fails baseline tests | 4 | 2 | 2 | `fastapi_app/services/settings.py:49-72`; `fastapi_app/services/hydration.py:112-117`; failing `test_settings_service.py::test_tc_set_02_cache_miss_fetches_and_caches` |
-| 48 | Frappe timeout policy is too coarse (single 30s total timeout, no pool timeout / no selective retries), which keeps coroutines occupied too long under upstream slowness | 4 | 3 | 3 | `fastapi_app/services/frappe_client.py:31-43`; `fastapi_app/core/config.py:79-82` |
-| 36 | Auth and registration reimplement the same player sign-in orchestration twice, adding drift and wasted maintenance on a user-facing hot path | 3 | 2 | 2 | `fastapi_app/api/v1/endpoints/auth.py:92-231` and `fastapi_app/api/v1/endpoints/auth.py:466-629` |
+| Score | Issue | Evidence | Why it matters | How to measure |
+| --- | --- | --- | --- | --- |
+| `100` | `PracticeService` is wired to the slow bitmap path even though the app already has a raw Redis pool | `fastapi_app/api/deps.py:369-385`, especially `ProgressService(... raw_redis=None)` at `:377`; raw fast path lives at `fastapi_app/services/progress.py:216-329`; `PracticeService` uses it in `fastapi_app/services/practice.py:456-474` | `GET /practice/hierarchy` and completed-filter practice flows pay multi-command `BITFIELD` work instead of a single binary-safe `GET`. This is a direct, hot-path latency penalty on read-heavy practice endpoints. | Benchmark `/api/v1/practice/hierarchy?subject_id=...&filter=completed` with large bitmaps. Track Redis commands/request, p50/p95, and CPU. Expect fewer Redis commands and lower p95. |
+| `80` | `ProfileService` truncates cache misses above 50 IDs instead of chunking them | `fastapi_app/services/profile.py:138-150` truncates; `fastapi_app/api/v1/endpoints/leaderboard.py:35-36` allows `limit<=100`, and `:77-92` depends on batch profile enrichment | On a cold/partial cache miss, top-100 leaderboard pages silently downgrade the second half of profiles to fallback identities. It also guarantees repeated misses for the dropped IDs on future requests. | Warm-cache clear profile keys, then hit `/api/v1/leaderboard/daily?limit=100`. Compare fallback profile count, Frappe batch calls, and p95 before/after chunking. |
+| `64` | `FrappeAuthService` still uses per-request HTTP client construction and bypasses the shared pooled `FrappeClient` pattern | `fastapi_app/services/frappe.py:37-205` creates `httpx.AsyncClient` via `async with` in every public method; `fastapi_app/api/v1/endpoints/auth.py:273-275` constructs a new `FrappeAuthService` per admin login; shared pooled client already exists in `fastapi_app/services/frappe_client.py:20-45` | Admin login and any future auth lookups lose cross-request connection reuse, pay more TCP/TLS setup cost, and maintain a second network abstraction that drifts from the shared client’s timeout/limits policy. | Run a focused admin-login load test (`POST /api/v1/auth/admin/login`) with Frappe available. Compare outbound connect count, p95 latency, and timeout rate before/after pooling. |
+| `60` | Plan change cleanup is O(total matching keys) and scans global leaderboard space on every plan change | `fastapi_app/services/plan_change.py:145-176` scans progress keys; `:205-265` scans six player key patterns plus every `memora:lb:*` leaderboard key | Plan change is not frequent, but when it runs it can block a request on global keyspace scans. The worst-case cost grows with total cached content and total leaderboard keys, not just one player’s data. | Add timing around `PlanChangeService.execute()` plus counters for `scan_calls`, `keys_deleted`, `zrem_calls`. Run plan change against a seeded Redis dataset and compare p95/p99 duration pre/post cleanup indexing. |
+| `48` | Cache-aside JSON logic is repeated in several services with inconsistent hydration guarantees | `fastapi_app/api/v1/endpoints/auth.py:388-405`, `fastapi_app/services/announcements.py:21-37`, `fastapi_app/services/review.py:28-50`, `fastapi_app/services/catalog.py:39-77`, `fastapi_app/services/plan.py:49-84` | The repetition increases drift: some paths decode bytes, some do not; some coalesce misses, others do not; some cache empty results, others do not. That raises both maintenance cost and risk of thundering-herd regressions. | Track cache-hit ratio, miss fan-out (upstream Frappe calls per miss burst), and code size before/after extracting a common helper. Expect lower duplicated code and fewer concurrent identical misses. |
 
-### Why these are first
+### High-Value Non-Issues
 
-- The first three already show up as either failing tests or clear hot-path overhead.
-- All of them can be validated with existing tests plus a focused benchmark.
-- None require API contract changes; they either fix broken behavior or reduce internal overhead.
+- `sessions.end_session` is already well optimized for a hot write path, using Lua plus pipelining (`fastapi_app/api/v1/endpoints/sessions.py:202-422`).
+- `progress` endpoints already prefer stats hashes over full bitmap decode when the hash is fresh (`fastapi_app/api/v1/endpoints/progress.py:312-329`, `:413-429`, `:523-539`, `:659-675`, `:846-860`).
+- No evidence yet justifies switching to `orjson`; JSON serialization is not the primary bottleneck visible in this codebase today.
 
 ## 3. Duplication Table
 
 | Pattern | Locations (file:line) | Proposed abstraction | Expected gain | Effort |
 | --- | --- | --- | --- | --- |
-| Progress access + stats-first fallback + bitmap fallback | `fastapi_app/api/v1/endpoints/progress.py:387-457`, `502-583`, `635-715`, `838-961` | Add `ProgressReadContext` loader in service layer: resolve hierarchy, access, partial/full stats, and `completed_bits` once | Remove ~150-220 repeated lines; cut repeated branch logic in 4 endpoints; benchmark target: lower `p95` for `/progress/*` by 5-10% under mixed hot/cold cache | Medium |
-| Unlock helper logic duplicated in endpoint layer and service layer | `fastapi_app/api/v1/endpoints/progress.py:77-247`; `fastapi_app/services/unlock.py:11-111` | Reuse `services.unlock` or move all unlock reads into one shared module that handles both bitmap and stats modes | Reduce behavioral drift risk; validation metric: same unlock tests + add one shared helper test file | Low |
-| Player sign-in flow (device registration, wallet read, WS kick, session create, token build) | `fastapi_app/api/v1/endpoints/auth.py:162-231`; `fastapi_app/api/v1/endpoints/auth.py:556-629` | Extract `complete_player_sign_in(...)` helper/service | Remove ~70 duplicated lines; benchmark target: after adding one internal `asyncio.gather`, reduce login `p95` by 1 Redis RTT equivalent | Low |
-| Cache-aside JSON patterns (`GET` -> `json.loads` -> Frappe -> `json.dumps`) | `fastapi_app/services/announcements.py:21-37`, `fastapi_app/services/catalog.py:37-78`, `fastapi_app/services/review.py:28-50`, `fastapi_app/services/plan.py:38-85`, `fastapi_app/api/v1/endpoints/auth.py:382-400` | Shared `JsonCacheLoader` helper with optional TTL, parser, and empty-result policy | Reduce repeated cache policy bugs; measurable by LOC drop and fewer divergent cache semantics in review | Medium |
-| Frappe-backed service factory boilerplate | `fastapi_app/api/deps.py:200-406` | Generic dependency factory or app-state service registry (`get_service(name)`) | Remove ~120+ lines of constructor duplication; lower per-request object allocation count; benchmark via `tracemalloc` allocations/request | Medium |
-| Client IP extraction | `fastapi_app/api/v1/endpoints/auth.py:45-51`; `fastapi_app/middleware/rate_limit.py:31-39` | Shared `network.py` helper | Remove drift in proxy handling; validation: one unit test for `X-Forwarded-For` parsing | Low |
-| Atomic INCR+EXPIRE rate-limit scripts | `fastapi_app/services/global_rate_limit.py:17-76`; `fastapi_app/services/rate_limit.py:9-87`; `fastapi_app/services/voucher.py:18-126` | Shared Redis script wrapper returning `(count, ttl)` | Reduce duplicate Lua maintenance; blocked-path benchmark: remove one extra `TTL` RTT in login limiter | Medium |
+| Client IP extraction duplicated three times | `fastapi_app/api/v1/endpoints/auth.py:46-52`, `fastapi_app/api/v1/endpoints/voucher.py:40-45`, `fastapi_app/middleware/rate_limit.py:31-39` | `fastapi_app/core/request_meta.py::get_client_ip(request)` | One trust model for `X-Forwarded-For`, less drift, easier security review | Low |
+| Fixed-window `INCR` + conditional `EXPIRE` Lua duplicated | `fastapi_app/services/rate_limit.py:11-17`, `fastapi_app/services/otp.py:30-37`, `fastapi_app/services/voucher.py:28-35` | Shared script registry in `fastapi_app/core/redis_scripts.py` | Fewer script copies, one place to tune TTL semantics and error handling | Low |
+| Cache-aside JSON get/set repeated with minor variations | `fastapi_app/api/v1/endpoints/auth.py:388-405`, `fastapi_app/services/announcements.py:21-37`, `fastapi_app/services/review.py:28-50`, `fastapi_app/services/catalog.py:39-77`, `fastapi_app/services/plan.py:49-84` | `get_or_fill_json()` helper with serializer, TTL, and optional miss coalescing | Less duplicate code, fewer cache miss race regressions, easier instrumentation | Medium |
+| Unlock/completion tree traversal duplicated | `fastapi_app/services/unlock.py:11-23`, `fastapi_app/api/v1/endpoints/progress.py:44-101`, `fastapi_app/api/v1/endpoints/progress.py:199-247` | `fastapi_app/services/progress_tree.py` for shared tree math | Lower maintenance risk, consistent unlock semantics, simpler tests | Medium |
+| Practice SQL selection logic split between batched and legacy code paths | `fastapi_app/services/practice.py:1227-1294`, `fastapi_app/services/practice.py:1377-1446` | Shared SQL builder plus one selector strategy wrapper | Easier query tuning, simpler rollout cleanup, less divergence in filters | Medium |
+| Repeated Frappe “does phone exist?” lookup in auth flows | `fastapi_app/api/v1/endpoints/auth.py:439-455`, `fastapi_app/api/v1/endpoints/auth.py:615-629`, `fastapi_app/api/v1/endpoints/auth.py:666-681` | `AuthLookupService.check_phone_exists()` | One error-handling policy, easier per-endpoint timing and caching if added later | Low |
 
-## 4. Performance Review
+## 4. Quick Wins (1-2 Days)
 
-### Hot Paths
+- Pass `raw_redis` into `PracticeService` so practice endpoints use the existing single-GET bitmap decoder instead of the fallback `BITFIELD` path.
+- Replace profile batch truncation with deterministic chunking in `ProfileService`; keep chunking sequential to protect Frappe from sudden fan-out.
+- Add request timing middleware and Frappe RPC timing logs before changing performance-sensitive code. This gives a reliable before/after baseline.
+- Centralize client-IP parsing and the shared rate-limit Lua script to cut obvious duplication with near-zero behavioral risk.
 
-#### A. Progress read endpoints
+## 5. Mid Refactors (About 1 Week)
 
-- Files:
-  - `fastapi_app/api/v1/endpoints/progress.py`
-  - `fastapi_app/services/progress.py`
-  - `fastapi_app/services/stats.py`
-  - `fastapi_app/services/hierarchy.py`
-- Current strengths:
-  - stats-first caching
-  - Redis pipelines for lesson bit reads
-  - local TTL caches in hierarchy/stats
-- Current risks:
-  - duplicated fallback logic increases drift risk and branch cost
-  - raw Redis fast path is treated as mandatory once configured, even though it is only an optimization
-  - repeated full-tree scans for track/unit/topic lookup remain in handler code
+- Pool `FrappeAuthService` the same way `FrappeClient` is pooled, and align timeout/connection-limit policy across both.
+- Extract a shared cache helper for cache-aside JSON reads; use `SettingsService` as the durability/coalescing reference implementation.
+- Replace `BaseHTTPMiddleware` in `RequestIDMiddleware` and `GlobalRateLimitMiddleware` with lightweight ASGI middleware. Both run on every request (`fastapi_app/middleware/request_id.py:11-22`, `fastapi_app/middleware/rate_limit.py:42-127`), so per-request overhead compounds.
+- Consolidate progress-tree helpers so unlock rules only live in one place.
 
-#### B. Practice session flow
+## 6. Bigger Bets (Optional)
 
-- Files:
-  - `fastapi_app/services/practice.py`
-- Current strengths:
-  - batched topic candidate selection (`_select_candidates_for_topics`)
-  - Redis session hash + pipelines
-- Current risks:
-  - very large SQL strings and param arrays are passed through `FrappeClient.call()`, which currently logs full payloads
-  - session state serializes several large JSON arrays into Redis hash fields (`fastapi_app/services/practice.py:557-570`, `828-832`, `895-904`)
-  - completed-mode scans still require full hierarchy traversal
+- Stop scanning the full leaderboard namespace during plan change. Maintain a per-player index of leaderboard memberships, or move the expensive cleanup to an async background task.
+- Remove the legacy per-topic practice selection fallback once production telemetry shows the batched selector is stable. That eliminates the N+1 SQL fallback path entirely.
+- Introduce OpenTelemetry only after request and Frappe timing logs identify the few endpoints worth tracing deeply. Tracing everything first will add overhead without focus.
 
-#### C. Session end / XP award flow
-
-- Files:
-  - `fastapi_app/api/v1/endpoints/sessions.py:188-445`
-  - `fastapi_app/services/game_session.py`
-  - `fastapi_app/services/wallet.py`
-  - `fastapi_app/services/leaderboard.py`
-- Current strengths:
-  - Redis Lua combines session delete + progress set + dirty queueing
-  - pipelined XP and stats writes
-- Current risks:
-  - the fallback call to `progress_service.get_completed_bits()` on cold stats path inherits the raw-Redis failure mode
-  - leaderboard rank metadata bugs mean write path and read path can diverge
-
-#### D. External Frappe traffic
-
-- Files:
-  - `fastapi_app/services/frappe_client.py`
-  - `fastapi_app/services/frappe.py`
-- Current risks:
-  - no split connect/read/pool timeouts
-  - no retry policy for safe reads
-  - payload logging is too expensive on hot SQL-heavy calls
-  - `FrappeAuthService` recreates an `httpx.AsyncClient` per call (`fastapi_app/services/frappe.py:53, 156, 187`)
-
-### Blocking I/O / Async Safety
-
-- No obvious synchronous `requests`, `time.sleep`, or file reads were found in request paths.
-- Real async safety risk is resource ownership:
-  - `fastapi_app/api/deps.py:65-74` constructs a raw Redis client from an app-state pool that is not treated as optional when used.
-  - When that client/pool is invalid for the current loop, the request fails instead of degrading to the existing BITFIELD fallback.
-
-### Serialization / Validation Overhead
-
-- `FrappeClient._call_method()` logs full `kwargs` before every request (`fastapi_app/services/frappe_client.py:63`).
-  - For practice SQL calls this means serializing:
-    - full SQL text
-    - long `params` arrays
-  - This creates avoidable CPU work and excessive log volume.
-- Cache-aside services repeatedly do `json.loads` / `json.dumps` on large payloads.
-  - This is acceptable for now, but the policy is duplicated and inconsistent.
-
-### Query / Data-Shaping Risks
-
-- Practice service still constructs large `IN (...)` SQL queries against Frappe:
-  - `fastapi_app/services/practice.py:1025-1045`
-  - `fastapi_app/services/practice.py:1240-1290`
-  - `fastapi_app/services/practice.py:1397-1435`
-- These are already better than N+1 query loops, but they should remain under explicit size guardrails.
-- Plan change cleanup scans all leaderboard keys (`fastapi_app/services/plan_change.py:247-264`).
-  - This is acceptable at low volume, but it is O(total leaderboard keys) and becomes expensive as subject and date cardinality grow.
-
-## 5. Instrumentation & Measurement Plan
+## 7. Instrumentation And Measurement Plan
 
 ### Minimal Instrumentation
 
-1. Add endpoint timing middleware
-   - Record:
-     - route template
-     - method
-     - status code
-     - elapsed ms
-     - request id
-   - Emit a structured log or metrics counter/histogram.
-   - Recommended implementation: pure ASGI middleware, not another `BaseHTTPMiddleware`.
+1. Add request timing middleware:
+   - Log `path`, `method`, `status_code`, `duration_ms`, `request_id`.
+   - Apply before business middleware so total request time is visible.
+2. Add Frappe timing in `FrappeClient._call_method()`:
+   - Log `method`, `status_code`, `duration_ms`, `timeout_hit`, `arg_keys`.
+   - This is the closest useful proxy for MariaDB timing because `fastapi_app` does not hold a local DB connection.
+3. Add explicit timers around:
+   - `PracticeService.get_practice_hierarchy()`
+   - `ProfileService.get_profiles_batch()`
+   - `PlanChangeService.execute()`
+4. Optional next step:
+   - Add OpenTelemetry spans around request handling and Frappe RPC calls only after the timing logs show stable hotspots.
 
-2. Add Redis timing wrappers for hot paths
-   - Start with:
-     - `HierarchyService.get_hierarchy`
-     - `StatsService.get_stats` / `get_partial_stats` / `get_or_recompute`
-     - `ProgressService.get_completed_bits`
-     - `LeaderboardService.get_top` / `get_my_rank`
-   - Emit:
-     - redis command group
-     - elapsed ms
-     - cache hit/miss path
+### Benchmark Scenarios
 
-3. Add Frappe timing in `FrappeClient._call_method`
-   - Record:
-     - method name
-     - status code
-     - elapsed ms
-     - payload size summary, not raw payload
+| Scenario | Tool | Command / setup | Metrics |
+| --- | --- | --- | --- |
+| Practice hierarchy, warm cache, large bitmap | `hey` or existing `load_tests/` user flow | Seed a player with a dense subject bitmap, then hit `GET /api/v1/practice/hierarchy?subject_id=...&filter=completed` | p50/p95/p99, Redis commands per request, CPU |
+| Leaderboard top 100 with cold profile cache | `hey` | Clear relevant profile keys, then hit `GET /api/v1/leaderboard/daily?limit=100` | p50/p95, fallback profile count, Frappe batch calls |
+| Admin login auth path | `hey` | Repeated `POST /api/v1/auth/admin/login` against a reachable Frappe instance | p50/p95/p99, outbound connect count, timeout/error rate |
+| Plan change on large Redis dataset | `locust` or a targeted script | Seed progress/stat/mastery keys and leaderboard keys, then invoke `POST /api/v1/plans/change` | total duration, `SCAN` count, keys touched, p95 |
+| Middleware overhead | `hey` | Compare a lightweight route before/after ASGI middleware conversion | p50/p95, throughput, CPU |
 
-4. Optional tracing
-   - Add OpenTelemetry spans only after the timing middleware is in place.
-   - Span boundaries:
-     - request
-     - Frappe call
-     - Redis hot-path call groups
+### Verification Rules
 
-### Before / After Benchmark Plan
+- Always measure both warm-cache and cold-cache behavior.
+- Capture request latency and upstream call volume together; latency alone will hide shifted work.
+- Define rollback thresholds before rollout. Example: if p95 worsens by more than 5% or error rate increases, revert.
 
-Use the same scenarios before and after each change.
+## 8. Proposed Code Changes (PR-Ready Diffs)
 
-Tools:
-- `hey` for quick HTTP latency/RPS
-- `locust` for mixed-user flows (already aligned with repo practices)
-- existing `pytest` tests as correctness gates
+These patches are intentionally low-risk and do not change request or response contracts.
 
-Core scenarios:
+### Patch A: Use Raw Redis Fast Path In Practice
 
-1. Progress read mix
-   - 70% `GET /api/v1/progress/{subject}`
-   - 20% `GET /api/v1/progress/{subject}/tracks/{track_id}`
-   - 10% `GET /api/v1/progress/{subject}/topics/{topic_id}/lessons`
-   - Metrics:
-     - `p50`, `p95`, `p99`
-     - RPS
-     - 5xx rate
-     - Redis ops/request
+**Why**
 
-2. Practice continue
-   - `POST /api/v1/practice/continue`
-   - Metrics:
-     - `p50`, `p95`, `p99`
-     - Frappe call ms
-     - log bytes/request
-     - CPU %
+`PracticeService` is already calling `ProgressService.get_completed_bits()`, but the dependency factory forces `raw_redis=None`, so the service always falls back to chunked `BITFIELD`.
 
-3. Leaderboard read
-   - `GET /api/v1/leaderboard/weekly`
-   - `GET /api/v1/leaderboard/weekly/me`
-   - Metrics:
-     - correctness (rank consistency against `get_top`)
-     - `p95`
-     - Redis commands/request
-
-4. Auth login
-   - `POST /api/v1/auth/player/login`
-   - Metrics:
-     - `p95`
-     - device registration failures
-     - Frappe call ms
-     - WS kick ms
-
-Pass/fail targets for the recommended changes:
-- No API schema or status-code regressions.
-- No new failing tests.
-- Measurable reduction in one of:
-  - latency
-  - log volume
-  - 5xx rate
-  - Redis round-trips
-  - code-path duplication / branch count
-
-## 6. Quick Wins (1-2 Days)
-
-1. Make `ProgressService` raw bitmap reads fail open
-   - Files: `fastapi_app/services/progress.py:250-254`
-   - Why: the raw client is an optimization, but today it can take endpoints down.
-   - Measure:
-     - rerun the currently failing progress/session tests
-     - compare 5xx rate on progress/session endpoints under forced raw-client failure
-
-2. Stop logging full `FrappeClient` payloads at `info`
-   - Files: `fastapi_app/services/frappe_client.py:63-80`
-   - Why: this is hot-path CPU and log I/O on practice flows.
-   - Measure:
-     - bytes written per request in `practice/start` and `practice/continue`
-     - CPU % under the same load
-
-3. Repair/validate leaderboard tier metadata before trusting it
-   - Files: `fastapi_app/services/leaderboard.py:478-519`
-   - Why: current baseline has rank correctness failures.
-   - Measure:
-     - rerun leaderboard failing tests
-     - compare `GET /leaderboard/{type}` vs `/me` rank agreement for seeded fixtures
-
-4. Fix settings hydration empty-fill behavior
-   - Files: `fastapi_app/services/settings.py:49-72`, `fastapi_app/services/hydration.py:112-117`
-   - Why: baseline failure and repeated fallback to defaults.
-   - Measure:
-     - rerun `test_settings_service.py`
-     - confirm cache key is written on first miss
-
-## 7. Mid Refactors (About 1 Week)
-
-1. Move progress read orchestration into a shared service helper
-   - Collapse repeated hierarchy/access/stats fallback logic into one loader object.
-   - Measure:
-     - endpoint handler LOC reduction
-     - reduced branch count
-     - `p95` for progress endpoints
-
-2. Extract player sign-in orchestration from auth endpoints
-   - One helper for:
-     - settings read
-     - device registration
-     - wallet hydration
-     - WS session kick
-     - session creation
-     - token assembly
-   - Measure:
-     - duplicated LOC removed
-     - identical auth endpoint test pass rate
-     - login `p95`
-
-3. Unify cache-aside loaders
-   - Reuse `guarded_hydrate` more consistently and centralize empty-result policy.
-   - Measure:
-     - LOC removed
-     - cache hit/miss logs become standardized
-
-4. Replace `BaseHTTPMiddleware` with pure ASGI middleware for request ID / rate limiting
-   - Files: `fastapi_app/middleware/request_id.py`, `fastapi_app/middleware/rate_limit.py`
-   - Measure:
-     - `hey -z 30s` against `/api/v1/health/live` and `/api/v1/catalog/`
-     - compare RPS and task allocations
-
-## 8. Bigger Bets (Optional)
-
-1. Add lazy lookup indexes to `SubjectHierarchy`
-   - Add cached maps for `track_id`, `unit_id`, `topic_id`, and `lesson_id`.
-   - Use them in progress and practice instead of repeated tree scans.
-   - Measure:
-     - micro-benchmark lookup latency
-     - `p95` on deep progress routes with large hierarchies
-
-2. Split Frappe timeout policy and add selective retries
-   - Example:
-     - short connect timeout
-     - bounded pool timeout
-     - one retry for idempotent reads only
-   - Measure:
-     - p95 under injected upstream latency
-     - event-loop concurrency under upstream stalls
-
-3. Replace leaderboard-key scans in plan change cleanup with an index of touched leaderboards per player
-   - Current cleanup is O(total leaderboard keys).
-   - Measure:
-     - plan change runtime before/after with synthetic high leaderboard-key counts
-
-## 9. Proposed Code Changes (PR-Ready Patches)
-
-### Patch 1: Make Raw Progress Reads Fail Open
-
-Rationale:
-- Fixes current request failures without changing the response contract.
-- Keeps the raw-GET path as an optimization only.
-
-How to measure:
-- Re-run:
-  - `pytest fastapi_app/tests/test_progress_endpoints.py -q`
-  - `pytest fastapi_app/tests/test_session_endpoints.py -q`
-- Add a targeted test that forces `_get_completed_bits_raw()` to raise and assert the BITFIELD path still returns 200.
-
-Risk:
-- Slightly slower fallback when the raw path is unhealthy.
-
-Rollback:
-- Revert the try/except wrapper.
+**Diff**
 
 ```diff
-diff --git a/fastapi_app/services/progress.py b/fastapi_app/services/progress.py
+diff --git a/fastapi_app/api/deps.py b/fastapi_app/api/deps.py
 @@
--        if self._raw_redis is not None:
--            return await self._get_completed_bits_raw(key, bit_range, num_bytes)
-+        if self._raw_redis is not None:
-+            try:
-+                return await self._get_completed_bits_raw(key, bit_range, num_bytes)
-+            except Exception as e:
-+                logger.warning(
-+                    "progress_raw_read_failed_falling_back",
-+                    key=key,
-+                    bit_range=bit_range,
-+                    error=str(e),
-+                )
- 
-         # Fallback: chunked BITFIELD (for contexts without raw client)
-         return await self._get_completed_bits_bitfield(key, bit_range, num_bytes)
+ async def get_practice_service(
+     redis_client: RedisClient,
++    raw_redis: Annotated[redis.Redis | None, Depends(get_redis_raw)],
+     settings: SettingsDep,
+ ) -> PracticeService:
+     """Get PracticeService with all required dependencies."""
+     frappe_client = await get_frappe_client()
+     hierarchy_service = HierarchyService(redis_client, frappe_client)
+     access_service = AccessService(redis_client, frappe_client=frappe_client)
+-    progress_service = ProgressService(redis_client, frappe_client=frappe_client, raw_redis=None)
++    progress_service = ProgressService(
++        redis_client,
++        frappe_client=frappe_client,
++        raw_redis=raw_redis,
++    )
+     return PracticeService(
+         redis_client,
+         frappe_client,
+         settings,
+         hierarchy_service,
+         access_service,
+         progress_service,
+     )
 ```
 
-### Patch 2: Validate Leaderboard Tier Metadata Before Using It
+**How To Measure**
 
-Rationale:
-- Current read path trusts metadata if the keys merely exist.
-- Baseline tests show that stale or incomplete metadata returns wrong ranks.
+- Benchmark `GET /api/v1/practice/hierarchy?subject_id=...&filter=completed`.
+- Compare Redis commands per request and p95 latency.
+- Expected result: lower Redis command count and lower p95 on completed-filter practice views.
 
-How to measure:
-- Re-run the failing leaderboard tests.
-- Add a seed that creates a leaderboard ZSET without metadata and verify `get_my_rank()` repairs and returns the same dense rank as `get_top()`.
+**Risk**
 
-Risk:
-- One small extra Redis read on `/leaderboard/{type}/me`.
+- Very low. The raw path already exists and is used elsewhere.
 
-Rollback:
-- Remove the additional validation and go back to existence-only checks.
+**Rollback**
+
+- Revert the dependency signature and pass `raw_redis=None` again.
+
+### Patch B: Chunk Profile Fetches Instead Of Truncating At 50
+
+**Why**
+
+`ProfileService` currently drops any cache misses beyond `MAX_FRAPPE_BATCH`, which causes fallback identities on valid leaderboard rows and guarantees repeated misses.
+
+**Diff**
 
 ```diff
-diff --git a/fastapi_app/services/leaderboard.py b/fastapi_app/services/leaderboard.py
+diff --git a/fastapi_app/services/profile.py b/fastapi_app/services/profile.py
 @@
--            tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(key)
-+            tieridx_key, tiercnt_key = lbmeta_keys_from_lb_key(key)
-+            version_key = self._tiermeta_version_key(tiercnt_key)
- 
-             pipe = self.redis.pipeline()
-             pipe.zrange(key, start, stop, desc=True, withscores=True)
-             pipe.exists(tieridx_key)
-             pipe.exists(tiercnt_key)
-+            pipe.exists(version_key)
-+            pipe.hvals(tiercnt_key)
-             pipe.zcount(tieridx_key, f"({xp}", "+inf")
-             pipe.zrangebyscore(tieridx_key, f"({xp}", "+inf", withscores=True, start=0, num=1)
--            neighbors_raw, tieridx_exists, tiercnt_exists, idx_distinct_above, min_above_entries = await pipe.execute()
-+            (
-+                neighbors_raw,
-+                tieridx_exists,
-+                tiercnt_exists,
-+                version_exists,
-+                tier_counts_raw,
-+                idx_distinct_above,
-+                min_above_entries,
-+            ) = await pipe.execute()
- 
--            if tieridx_exists and tiercnt_exists:
-+            tier_count_sum = sum(int(v) for v in tier_counts_raw or [])
-+            metadata_healthy = (
-+                tieridx_exists
-+                and tiercnt_exists
-+                and version_exists
-+                and tier_count_sum == total
+-        # Limit batch size per RESEARCH.md pitfall
+-        batch = player_ids[: self.MAX_FRAPPE_BATCH]
+-        if len(player_ids) > self.MAX_FRAPPE_BATCH:
+-            logger.warning(
+-                "profile_batch_truncated",
+-                requested=len(player_ids),
+-                fetched=self.MAX_FRAPPE_BATCH,
+-            )
+-
+-        try:
+-            result = await self.frappe.call(
+-                "memora_admin.api.profile.get_profiles_batch",
+-                {"player_ids": batch},
+-            )
+-        except Exception as e:
+-            logger.error("profile_frappe_fetch_error", error=str(e))
+-            return {}
+-
+-        if not result:
+-            return {}
++        batches = [
++            player_ids[i : i + self.MAX_FRAPPE_BATCH]
++            for i in range(0, len(player_ids), self.MAX_FRAPPE_BATCH)
++        ]
++        results: list[dict] = []
++        if len(batches) > 1:
++            logger.info(
++                "profile_batch_chunked",
++                requested=len(player_ids),
++                chunks=len(batches),
++                chunk_size=self.MAX_FRAPPE_BATCH,
 +            )
 +
-+            if metadata_healthy:
-                 # Indexed path: O(log T) via tier index ZSET.
-                 distinct_above = idx_distinct_above
-                 min_above = int(min_above_entries[0][1]) if min_above_entries else -1
-                 fallback_used = False
-                 repair_used = False
-             else:
-                 repair_used = await self._repair_tier_metadata_for_key(key)
++        for batch in batches:
++            try:
++                batch_result = await self.frappe.call(
++                    "memora_admin.api.profile.get_profiles_batch",
++                    {"player_ids": batch},
++                )
++            except Exception as e:
++                logger.error("profile_frappe_fetch_error", error=str(e), batch_size=len(batch))
++                continue
++            if batch_result:
++                results.extend(batch_result)
++
++        if not results:
++            return {}
+@@
+-        for item in result:
++        for item in results:
 ```
 
-### Patch 3: Stop Logging Full Frappe Payloads on Hot Paths
+**How To Measure**
 
-Rationale:
-- `PracticeService` sends large SQL strings and param arrays through `FrappeClient.call()`.
-- Logging `args=kwargs` at `info` serializes those large payloads on every call.
+- Clear profile cache, then hit `GET /api/v1/leaderboard/daily?limit=100`.
+- Compare fallback profile count, p95 latency, and number of Frappe batch calls.
+- Expected result: no dropped profiles; one extra upstream call only when the miss set exceeds 50.
 
-How to measure:
-- Run a fixed `practice/continue` load test before/after.
-- Compare:
-  - log bytes/request
-  - CPU %
-  - `p95`
+**Risk**
 
-Risk:
-- Lower observability for payload contents in normal logs.
+- Low. The response contract is unchanged.
 
-Rollback:
-- Restore the old logging line.
+**Rollback**
+
+- Restore the truncation logic if Frappe cannot tolerate chunked misses.
+
+### Patch C: Add Minimal Request And Frappe Timing
+
+**Why**
+
+The code already has several optimized paths. Before taking larger refactors, add instrumentation that shows where latency is actually coming from.
+
+**Diff**
 
 ```diff
+diff --git a/fastapi_app/middleware/request_metrics.py b/fastapi_app/middleware/request_metrics.py
+new file mode 100644
+--- /dev/null
++++ b/fastapi_app/middleware/request_metrics.py
+@@
++import time
++
++import structlog
++from starlette.requests import Request
++
++logger = structlog.get_logger()
++
++
++class RequestMetricsMiddleware:
++    def __init__(self, app):
++        self.app = app
++
++    async def __call__(self, scope, receive, send):
++        if scope["type"] != "http":
++            await self.app(scope, receive, send)
++            return
++
++        start = time.perf_counter()
++        status_code = 500
++
++        async def send_wrapper(message):
++            nonlocal status_code
++            if message["type"] == "http.response.start":
++                status_code = message["status"]
++            await send(message)
++
++        try:
++            await self.app(scope, receive, send_wrapper)
++        finally:
++            duration_ms = round((time.perf_counter() - start) * 1000, 2)
++            request = Request(scope)
++            logger.info(
++                "http_request_timed",
++                method=request.method,
++                path=request.url.path,
++                status_code=status_code,
++                duration_ms=duration_ms,
++            )
+diff --git a/fastapi_app/main.py b/fastapi_app/main.py
+@@
+-from fastapi_app.middleware.request_id import RequestIDMiddleware
++from fastapi_app.middleware.request_id import RequestIDMiddleware
++from fastapi_app.middleware.request_metrics import RequestMetricsMiddleware
+@@
++app.add_middleware(RequestMetricsMiddleware)
 diff --git a/fastapi_app/services/frappe_client.py b/fastapi_app/services/frappe_client.py
 @@
--        logger.info("frappe_api_call", method=method, args=kwargs)
-+        logger.debug(
-+            "frappe_api_call",
+-import httpx
++import time
++
++import httpx
+@@
+-        response = await client.post(url, json=kwargs)
++        started = time.perf_counter()
++        response = await client.post(url, json=kwargs)
++        duration_ms = round((time.perf_counter() - started) * 1000, 2)
++        logger.info(
++            "frappe_api_timed",
 +            method=method,
-+            arg_keys=sorted(kwargs.keys()),
-+            sql_length=len(kwargs.get("sql", "")) if isinstance(kwargs.get("sql"), str) else 0,
-+            params_count=len(kwargs.get("params", [])) if isinstance(kwargs.get("params"), list) else 0,
++            status_code=response.status_code,
++            duration_ms=duration_ms,
 +        )
 ```
 
-### Patch 4: Make Hydration Sentinel Conditional for Settings
+**How To Measure**
 
-Rationale:
-- The current pattern can leave the cache empty and still mark the key as recently hydrated.
-- This matches the failing settings cache-miss baseline.
+- Compare p50/p95/p99 latency before and after each later optimization.
+- Track `frappe_api_timed.duration_ms` distribution to distinguish app latency from upstream latency.
 
-How to measure:
-- Re-run `pytest fastapi_app/tests/test_settings_service.py -q`
-- Add an assertion that the settings cache key exists immediately after the first successful miss.
+**Risk**
 
-Risk:
-- Small signature change in `guarded_hydrate`.
+- Low. Logging volume increases; sample logs if traffic is very high.
 
-Rollback:
-- Revert to the old `Awaitable[None]` contract.
+**Rollback**
 
-```diff
-diff --git a/fastapi_app/services/hydration.py b/fastapi_app/services/hydration.py
-@@
--    hydrate_fn: Callable[[], Awaitable[None]],
-+    hydrate_fn: Callable[[], Awaitable[bool]],
-@@
--            async with sem:
--                await hydrate_fn()
-+            async with sem:
-+                wrote_data = await hydrate_fn()
-     finally:
--        await redis_client.set(sentinel_key, "1", ex=sentinel_ttl)
-+        if not locals().get("wrote_data", False):
-+            await redis_client.set(sentinel_key, "1", ex=sentinel_ttl)
-         await redis_client.delete(lock_key)
-diff --git a/fastapi_app/services/settings.py b/fastapi_app/services/settings.py
-@@
--    async def _hydrate_from_frappe(self) -> None:
-+    async def _hydrate_from_frappe(self) -> bool:
-@@
--            return
-+            return False
-@@
--            return
-+            return False
-@@
-         await self.redis.set(
-             gamification_settings_key(),
-             settings.model_dump_json(),
-         )
-@@
-         logger.info(
-             "settings_cached",
-             base_xp=settings.base_lesson_xp,
-             replay_xp=settings.replay_xp,
-             max_streak=settings.max_streak_multiplier_percent,
-         )
-+        return True
-```
+- Remove the middleware and timing log lines.
 
-### Patch 5: Extract Player Sign-In Finalization
+### Patch D: Centralize Client IP Parsing
 
-Rationale:
-- `player_login()` and `player_register_verify()` repeat the same device-registration, wallet-read, WS-kick, session-create, and token-build flow.
-- A shared helper removes drift and makes it easy to parallelize the independent wallet read and WebSocket kick.
+**Why**
 
-How to measure:
-- Re-run `pytest fastapi_app/tests/test_auth_endpoints.py -q`
-- Compare login `p95` before/after with a fixed `POST /api/v1/auth/player/login` load.
+The same `X-Forwarded-For` parsing logic exists in three places. Centralizing it removes drift and makes it easier to harden or extend later.
 
-Risk:
-- Low-to-moderate because both public auth flows depend on the shared helper.
-
-Rollback:
-- Inline the helper back into the two handlers.
+**Diff**
 
 ```diff
+diff --git a/fastapi_app/core/request_meta.py b/fastapi_app/core/request_meta.py
+new file mode 100644
+--- /dev/null
++++ b/fastapi_app/core/request_meta.py
+@@
++from starlette.requests import Request
++
++
++def get_client_ip(request: Request) -> str:
++    forwarded = request.headers.get("X-Forwarded-For")
++    if forwarded:
++        return forwarded.split(",")[0].strip()
++    return request.client.host if request.client else "unknown"
 diff --git a/fastapi_app/api/v1/endpoints/auth.py b/fastapi_app/api/v1/endpoints/auth.py
 @@
-+import asyncio
+-from fastapi_app.core.redis_keys import registration_options_key
++from fastapi_app.core.redis_keys import registration_options_key
++from fastapi_app.core.request_meta import get_client_ip
 @@
-+async def _complete_player_sign_in(
-+    *,
-+    request: Request,
-+    redis: RedisClient,
-+    settings: SettingsDep,
-+    frappe_client,
-+    profile: dict,
-+    player_id: str,
-+    device_id: str,
-+    season_id: str,
-+) -> PlayerLoginResponse | JSONResponse:
-+    settings_service = SettingsService(redis, frappe_client)
-+    game_settings = await settings_service.get_gamification_settings()
-+
-+    device_service = DeviceService(redis)
-+    device_result = await device_service.register_device(
-+        user_id=player_id,
-+        device_id=device_id,
-+        user_agent=request.headers.get("User-Agent", "Unknown"),
-+        max_devices=game_settings.max_devices_per_player,
-+        platform_hint=request.headers.get("X-Platform"),
-+    )
-+    if not device_result.success:
-+        return JSONResponse(
-+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-+            content={
-+                "code": "DEVICE_LIMIT_EXCEEDED",
-+                "message": f"Device limit reached ({device_result.current_count}/{device_result.max_count}). Contact support to manage your devices.",
-+            },
-+        )
-+
-+    wallet_service = WalletService(redis, frappe_client=frappe_client)
-+    wallet, _ = await asyncio.gather(
-+        wallet_service.get_wallet(player_id),
-+        _force_kick_old_sessions(request, player_id),
-+    )
-+
-+    session_service = SessionService(redis)
-+    family_id = await session_service.create_session(
-+        player_id,
-+        plan_id=profile["plan"],
-+        ttl_days=game_settings.session_timeout_days,
-+        season_id=season_id,
-+    )
-+    evict_session_cache(player_id)
-+
-+    return PlayerLoginResponse(
-+        access_token=create_access_token(
-+            user_id=player_id,
-+            mobile=profile["mobile"],
-+            plan_id=profile["plan"],
-+            display_name=profile.get("display_name", ""),
-+            family_id=family_id,
-+            season_id=season_id,
-+            expires_delta=timedelta(minutes=settings.jwt_access_token_expire_minutes),
-+        ),
-+        refresh_token=create_refresh_token(
-+            user_id=player_id,
-+            family_id=family_id,
-+            expires_delta=timedelta(days=game_settings.session_timeout_days),
-+        ),
-+        profile=LoginProfile(
-+            display_name=profile.get("display_name", ""),
-+            avatar=profile.get("avatar") or "default_avatar",
-+            xp=wallet.get("xp", 0),
-+        ),
-+    )
+-def _get_client_ip(request: Request) -> str:
+-    ...
+-
+ ...
+-    client_ip = _get_client_ip(request)
++    client_ip = get_client_ip(request)
+diff --git a/fastapi_app/api/v1/endpoints/voucher.py b/fastapi_app/api/v1/endpoints/voucher.py
 @@
-+    return await _complete_player_sign_in(
-+        request=request,
-+        redis=redis,
-+        settings=settings,
-+        frappe_client=frappe_client,
-+        profile=profile,
-+        player_id=player_id,
-+        device_id=device_id,
-+        season_id=profile.get("season", ""),
-+    )
++from fastapi_app.core.request_meta import get_client_ip
 @@
-+    return await _complete_player_sign_in(
-+        request=request,
-+        redis=redis,
-+        settings=settings,
-+        frappe_client=frappe_client,
-+        profile=profile,
-+        player_id=player_id,
-+        device_id=device_id,
-+        season_id=season,
-+    )
+-def _get_client_ip(request: Request) -> str:
+-    ...
+-
+ ...
+-    client_ip = _get_client_ip(request)
++    client_ip = get_client_ip(request)
+diff --git a/fastapi_app/middleware/rate_limit.py b/fastapi_app/middleware/rate_limit.py
+@@
++from fastapi_app.core.request_meta import get_client_ip
+@@
+-def _extract_client_ip(request: Request) -> str:
+-    ...
+-
+ ...
+-        client_ip = _extract_client_ip(request)
++        client_ip = get_client_ip(request)
 ```
 
-## 10. Top 5 Next Steps
+**How To Measure**
 
-1. Fix `LeaderboardService.get_my_rank()` metadata validation first, because it is already returning wrong ranks and breaking tests.
-2. Make `ProgressService.get_completed_bits()` fail open to BITFIELD when the raw optimization path breaks.
-3. Reduce `FrappeClient` payload logging immediately; it is low-risk and should improve hot-path CPU and log volume.
-4. Fix the settings hydration sentinel behavior so cache misses can repopulate correctly.
-5. After the correctness fixes, extract the shared player sign-in helper and then move on to the bigger progress read refactor.
+- No direct latency win is expected. Verify via existing endpoint tests and a small smoke test behind a proxy.
+- Primary win is correctness and easier future instrumentation.
+
+**Risk**
+
+- Low, but proxy behavior should be revalidated in staging.
+
+**Rollback**
+
+- Inline the helper again if proxy-specific behavior needs divergence.
+
+## 9. Top 5 Next Steps
+
+1. Ship Patch A (`raw_redis` in practice) first. It is the cleanest immediate latency win on an already hot endpoint family.
+2. Ship Patch B (profile chunking) next. It fixes a real user-visible degradation on leaderboard pages without changing any contract.
+3. Ship Patch C before deeper refactors so future work is measured, not guessed.
+4. Use the new timings to decide whether pooled `FrappeAuthService` is worth immediate work in your environment.
+5. Schedule the plan-change cleanup redesign only after the low-risk wins are in, because it has the highest implementation surface area.

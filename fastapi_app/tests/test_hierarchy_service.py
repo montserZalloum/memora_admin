@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from fastapi_app.core.redis_keys import hierarchy_key, practice_hierarchy_meta_key, subjects_with_free_content_key
+from fastapi_app.core.redis_keys import (
+	hierarchy_key,
+	practice_hierarchy_meta_key,
+	subjects_with_free_content_key,
+)
 from fastapi_app.models.progress import LessonInfo, SubjectHierarchy, TopicInfo, TrackInfo, UnitInfo
 from fastapi_app.services.hierarchy import HierarchyService, _hierarchy_fill_locks, _local_hierarchy_cache
 
@@ -51,7 +55,9 @@ def _make_test_hierarchy() -> SubjectHierarchy:
 class TestCacheHit:
 	"""Cache hit returns cached hierarchy without Frappe call."""
 
-	async def test_tc_hir_01_cache_hit_no_frappe_call(self, hierarchy_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_hir_01_cache_hit_no_frappe_call(
+		self, hierarchy_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-HIR-01: Cache hit - Frappe NOT called."""
 		# Setup: pre-seed hierarchy in Redis
 		hierarchy = _make_test_hierarchy()
@@ -72,7 +78,9 @@ class TestCacheHit:
 class TestCacheMiss:
 	"""Cache miss fetches from Frappe and caches result."""
 
-	async def test_tc_hir_02_cache_miss_fetches_and_caches(self, hierarchy_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_hir_02_cache_miss_fetches_and_caches(
+		self, hierarchy_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-HIR-02: Cache miss - fetches from Frappe and caches."""
 		# Setup: configure mock
 		hierarchy_dict = _make_test_hierarchy().model_dump()
@@ -135,7 +143,9 @@ class TestLocalCache:
 		assert result2.subject_id == TEST_SUBJECT
 		assert call_count == 0, f"Expected 0 Redis get calls on cache hit, got {call_count}"
 
-	async def test_local_cache_ttl_expiry_refetches_from_redis(self, hierarchy_svc, redis_client, test_prefix):
+	async def test_local_cache_ttl_expiry_refetches_from_redis(
+		self, hierarchy_svc, redis_client, test_prefix
+	):
 		"""T006: After LOCAL_TTL expires, get_hierarchy() re-fetches from Redis."""
 		# Setup: pre-seed hierarchy in Redis
 		hierarchy = _make_test_hierarchy()
@@ -200,7 +210,9 @@ class TestInvalidation:
 class TestFreeContent:
 	"""Cache miss updates free content set."""
 
-	async def test_tc_hir_04_free_content_set_updated(self, hierarchy_svc, redis_client, test_prefix, mock_frappe):
+	async def test_tc_hir_04_free_content_set_updated(
+		self, hierarchy_svc, redis_client, test_prefix, mock_frappe
+	):
 		"""TC-HIR-04: Cache miss with free content updates set."""
 		# Setup: hierarchy with free content using free_units array
 		hierarchy = _make_test_hierarchy()
@@ -299,7 +311,9 @@ class TestHierarchyFillCoalescing:
 class TestMetaFillCoalescing:
 	"""T017: Cache-fill coalescing for PracticeService._load_hierarchy_meta."""
 
-	async def test_concurrent_meta_misses_trigger_single_frappe_call(self, redis_client, test_prefix, mock_frappe):
+	async def test_concurrent_meta_misses_trigger_single_frappe_call(
+		self, redis_client, test_prefix, mock_frappe
+	):
 		"""5 concurrent _load_hierarchy_meta() calls fire only 1 Frappe call."""
 		from fastapi_app.services.practice import PracticeService, _meta_fill_locks
 

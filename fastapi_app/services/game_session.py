@@ -9,7 +9,8 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.constants import DIRTY_PROGRESS_KEY, GAME_SESSION_TTL, INTERACTION_BUFFER_KEY
-from fastapi_app.core.redis_keys import game_session_key as _game_session_key_fn, progress_key as _progress_key_fn
+from fastapi_app.core.redis_keys import game_session_key as _game_session_key_fn
+from fastapi_app.core.redis_keys import progress_key as _progress_key_fn
 from fastapi_app.models.game_session import GameSession
 
 logger = structlog.get_logger()

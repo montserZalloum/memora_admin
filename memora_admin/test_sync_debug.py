@@ -6,93 +6,97 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+
 def main():
-    """Manually test the interaction buffer flush"""
-    try:
-        import frappe
-        from memora_admin.utils.redis_connection import get_memora_redis
+	"""Manually test the interaction buffer flush"""
+	try:
+		import frappe
 
-        logger.info("=" * 70)
-        logger.info("MANUAL SYNC TEST")
-        logger.info("=" * 70)
+		from memora_admin.utils.redis_connection import get_memora_redis
 
-        # Get Redis connection (dedicated Memora instance)
-        r = get_memora_redis()
+		logger.info("=" * 70)
+		logger.info("MANUAL SYNC TEST")
+		logger.info("=" * 70)
 
-        INTERACTION_BUFFER_KEY = "memora:buffer:interactions"
-        BATCH_SIZE = 1000
+		# Get Redis connection (dedicated Memora instance)
+		r = get_memora_redis()
 
-        # Get batch of items
-        items = r.lrange(INTERACTION_BUFFER_KEY, 0, BATCH_SIZE - 1)
-        logger.info(f"\nFound {len(items)} items in Redis buffer")
+		INTERACTION_BUFFER_KEY = "memora:buffer:interactions"
+		BATCH_SIZE = 1000
 
-        if not items:
-            logger.info("No interactions to flush")
-            return
+		# Get batch of items
+		items = r.lrange(INTERACTION_BUFFER_KEY, 0, BATCH_SIZE - 1)
+		logger.info(f"\nFound {len(items)} items in Redis buffer")
 
-        count = len(items)
-        inserted = 0
-        errors = []
+		if not items:
+			logger.info("No interactions to flush")
+			return
 
-        for i, item_bytes in enumerate(items[:3]):  # Test only first 3
-            try:
-                # Parse JSON
-                item_str = item_bytes.decode() if isinstance(item_bytes, bytes) else item_bytes
-                item = json.loads(item_str)
+		count = len(items)
+		inserted = 0
+		errors = []
 
-                logger.info(f"\nProcessing item {i+1}:")
-                logger.info(f"  Player: {item['player']}")
-                logger.info(f"  Lesson: {item['lesson']}")
-                logger.info(f"  Stage ID: {item.get('stage_id', 'N/A')}")
+		for i, item_bytes in enumerate(items[:3]):  # Test only first 3
+			try:
+				# Parse JSON
+				item_str = item_bytes.decode() if isinstance(item_bytes, bytes) else item_bytes
+				item = json.loads(item_str)
 
-                # Check if player exists
-                player_exists = frappe.db.exists("Memora Player Profile", item["player"])
-                logger.info(f"  Player exists in DB: {bool(player_exists)}")
+				logger.info(f"\nProcessing item {i+1}:")
+				logger.info(f"  Player: {item['player']}")
+				logger.info(f"  Lesson: {item['lesson']}")
+				logger.info(f"  Stage ID: {item.get('stage_id', 'N/A')}")
 
-                # Check if lesson exists
-                lesson_exists = frappe.db.exists("Memora Lesson", item["lesson"])
-                logger.info(f"  Lesson exists in DB: {bool(lesson_exists)}")
+				# Check if player exists
+				player_exists = frappe.db.exists("Memora Player Profile", item["player"])
+				logger.info(f"  Player exists in DB: {bool(player_exists)}")
 
-                # Try to insert
-                logger.info(f"  Creating doc...")
-                doc = frappe.get_doc({
-                    "doctype": "Memora Interaction Log",
-                    "player": item["player"],
-                    "lesson": item["lesson"],
-                    "stage_id": str(item.get("stage_id", "")),
-                    "event_type": item.get("event_type", "Completed"),
-                    "time_spent": item.get("time_spent", 0),
-                    "errors_count": item.get("errors_count", 0),
-                    "timestamp": item.get("timestamp", datetime.now().isoformat()),
-                    "client_metadata": json.dumps(item.get("metadata", {})),
-                })
+				# Check if lesson exists
+				lesson_exists = frappe.db.exists("Memora Lesson", item["lesson"])
+				logger.info(f"  Lesson exists in DB: {bool(lesson_exists)}")
 
-                logger.info(f"  Inserting...")
-                result = doc.insert(ignore_permissions=True)
-                logger.info(f"  ✓ SUCCESS: {result}")
-                inserted += 1
+				# Try to insert
+				logger.info(f"  Creating doc...")
+				doc = frappe.get_doc(
+					{
+						"doctype": "Memora Interaction Log",
+						"player": item["player"],
+						"lesson": item["lesson"],
+						"stage_id": str(item.get("stage_id", "")),
+						"event_type": item.get("event_type", "Completed"),
+						"time_spent": item.get("time_spent", 0),
+						"errors_count": item.get("errors_count", 0),
+						"timestamp": item.get("timestamp", datetime.now().isoformat()),
+						"client_metadata": json.dumps(item.get("metadata", {})),
+					}
+				)
 
-            except Exception as e:
-                logger.error(f"  ✗ FAILED: {e}", exc_info=True)
-                errors.append(str(e))
+				logger.info(f"  Inserting...")
+				result = doc.insert(ignore_permissions=True)
+				logger.info(f"  ✓ SUCCESS: {result}")
+				inserted += 1
 
-        # Now try to commit
-        logger.info(f"\nCommitting database changes...")
-        try:
-            frappe.db.commit()
-            logger.info("✓ Commit successful")
-        except Exception as e:
-            logger.error(f"✗ Commit failed: {e}", exc_info=True)
+			except Exception as e:
+				logger.error(f"  ✗ FAILED: {e}", exc_info=True)
+				errors.append(str(e))
 
-        logger.info(f"\n" + "=" * 70)
-        logger.info(f"RESULT: {inserted} inserted, {len(errors)} errors")
-        logger.info("=" * 70)
+		# Now try to commit
+		logger.info(f"\nCommitting database changes...")
+		try:
+			frappe.db.commit()
+			logger.info("✓ Commit successful")
+		except Exception as e:
+			logger.error(f"✗ Commit failed: {e}", exc_info=True)
 
-        if errors:
-            logger.error("Errors:")
-            for err in errors:
-                logger.error(f"  - {err}")
+		logger.info(f"\n" + "=" * 70)
+		logger.info(f"RESULT: {inserted} inserted, {len(errors)} errors")
+		logger.info("=" * 70)
 
-    except Exception as e:
-        logger.error(f"Fatal error: {e}", exc_info=True)
-        raise
+		if errors:
+			logger.error("Errors:")
+			for err in errors:
+				logger.error(f"  - {err}")
+
+	except Exception as e:
+		logger.error(f"Fatal error: {e}", exc_info=True)
+		raise

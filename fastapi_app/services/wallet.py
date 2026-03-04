@@ -10,7 +10,8 @@ import redis.asyncio as redis
 import structlog
 
 from fastapi_app.core.constants import DIRTY_WALLETS_KEY
-from fastapi_app.core.redis_keys import WALLET_KEY_TTL, wallet_key as _wallet_key_fn
+from fastapi_app.core.redis_keys import WALLET_KEY_TTL
+from fastapi_app.core.redis_keys import wallet_key as _wallet_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
 
 if TYPE_CHECKING:

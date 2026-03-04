@@ -10,10 +10,11 @@ Tests verify:
 Uses real Redis + mock FrappeClient following project test patterns.
 """
 
+from unittest.mock import AsyncMock
+
 import pytest
 import redis.asyncio as redis
 from httpx import AsyncClient
-from unittest.mock import AsyncMock
 
 import fastapi_app.api.deps as deps_module
 
@@ -126,7 +127,9 @@ class TestAvailablePlansEndpoint:
 		mock_frappe.call.assert_awaited_once()
 		call_args = mock_frappe.call.call_args
 		assert call_args[0][0] == "memora_admin.api.plan_change.get_available_plans"
-		params = call_args[1].get("params") or call_args[0][1] if len(call_args[0]) > 1 else call_args[1]["params"]
+		params = (
+			call_args[1].get("params") or call_args[0][1] if len(call_args[0]) > 1 else call_args[1]["params"]
+		)
 		assert "current_plan_id" in params
 
 	async def test_empty_plans_returns_empty_response(

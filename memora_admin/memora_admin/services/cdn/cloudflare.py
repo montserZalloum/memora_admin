@@ -47,10 +47,7 @@ class CloudflarePurgeService:
 			return True
 
 		# Construct full CDN URLs from relative filenames
-		urls = [
-			f"{self._cdn_base_url}/files/cdn/{fn.lstrip('/')}"
-			for fn in filenames
-		]
+		urls = [f"{self._cdn_base_url}/files/cdn/{fn.lstrip('/')}" for fn in filenames]
 
 		all_success = True
 		for i in range(0, len(urls), _BATCH_SIZE):
@@ -93,7 +90,10 @@ class CloudflarePurgeService:
 					logger.error(
 						f"Cloudflare purge failed (4xx, no retry): status={resp.status_code} errors={errors}"
 					)
-					_log_error("CDN Purge Failed (4xx)", f"status={resp.status_code} errors={errors} payload={payload}")
+					_log_error(
+						"CDN Purge Failed (4xx)",
+						f"status={resp.status_code} errors={errors} payload={payload}",
+					)
 					return False
 
 				if resp.status_code == 200:
@@ -106,7 +106,9 @@ class CloudflarePurgeService:
 						return True
 					# 200 but success=false — treat as retryable
 					errors = data.get("errors", [])
-					logger.warning(f"Cloudflare purge returned success=false (attempt {attempt + 1}): {errors}")
+					logger.warning(
+						f"Cloudflare purge returned success=false (attempt {attempt + 1}): {errors}"
+					)
 				else:
 					# 5xx or unexpected status — log and retry
 					logger.warning(
@@ -129,6 +131,7 @@ def _log_error(title: str, message: str) -> None:
 	"""Log to Frappe Error Log, silently ignore if Frappe is unavailable."""
 	try:
 		import frappe
+
 		frappe.log_error(title=title, message=message)
 	except Exception:
 		logger.error(f"{title}: {message}")

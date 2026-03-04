@@ -105,17 +105,19 @@ def _extract_question(config: dict, stage_type: str) -> list[dict]:
 	if not representative_item_id:
 		return []
 
-	return [{
-		"item_id": representative_item_id,
-		"stage_type": stage_type,
-		"question_text": question_text,
-		"choice_1": choices[0] if len(choices) > 0 else None,
-		"choice_2": choices[1] if len(choices) > 1 else None,
-		"choice_3": choices[2] if len(choices) > 2 else None,
-		"choice_4": choices[3] if len(choices) > 3 else None,
-		"correct_choice": correct_idx,
-		"content_json": None,
-	}]
+	return [
+		{
+			"item_id": representative_item_id,
+			"stage_type": stage_type,
+			"question_text": question_text,
+			"choice_1": choices[0] if len(choices) > 0 else None,
+			"choice_2": choices[1] if len(choices) > 1 else None,
+			"choice_3": choices[2] if len(choices) > 2 else None,
+			"choice_4": choices[3] if len(choices) > 3 else None,
+			"correct_choice": correct_idx,
+			"content_json": None,
+		}
+	]
 
 
 def _extract_fill_blank(config: dict, stage_type: str) -> list[dict]:
@@ -139,22 +141,26 @@ def _extract_fill_blank(config: dict, stage_type: str) -> list[dict]:
 		blank_to = blank.get("to", 0)
 		correct_word = text[blank_from:blank_to] if text else ""
 
-		items.append({
-			"item_id": item_id,
-			"stage_type": stage_type,
-			"question_text": text,
-			"choice_1": None,
-			"choice_2": None,
-			"choice_3": None,
-			"choice_4": None,
-			"correct_choice": None,
-			"content_json": json.dumps({
-				"blank_from": blank_from,
-				"blank_to": blank_to,
-				"correct_word": correct_word,
-				"distractors": distractors,
-			}),
-		})
+		items.append(
+			{
+				"item_id": item_id,
+				"stage_type": stage_type,
+				"question_text": text,
+				"choice_1": None,
+				"choice_2": None,
+				"choice_3": None,
+				"choice_4": None,
+				"correct_choice": None,
+				"content_json": json.dumps(
+					{
+						"blank_from": blank_from,
+						"blank_to": blank_to,
+						"correct_word": correct_word,
+						"distractors": distractors,
+					}
+				),
+			}
+		)
 	return items
 
 
@@ -173,20 +179,24 @@ def _extract_matching(config: dict, stage_type: str) -> list[dict]:
 		item_id = pair.get("item_id")
 		if not item_id:
 			continue
-		items.append({
-			"item_id": item_id,
-			"stage_type": stage_type,
-			"question_text": instruction,
-			"choice_1": None,
-			"choice_2": None,
-			"choice_3": None,
-			"choice_4": None,
-			"correct_choice": None,
-			"content_json": json.dumps({
-				"left": pair.get("left", ""),
-				"right": pair.get("right", ""),
-			}),
-		})
+		items.append(
+			{
+				"item_id": item_id,
+				"stage_type": stage_type,
+				"question_text": instruction,
+				"choice_1": None,
+				"choice_2": None,
+				"choice_3": None,
+				"choice_4": None,
+				"correct_choice": None,
+				"content_json": json.dumps(
+					{
+						"left": pair.get("left", ""),
+						"right": pair.get("right", ""),
+					}
+				),
+			}
+		)
 	return items
 
 
@@ -206,17 +216,19 @@ def _extract_mindmap(config: dict, stage_type: str) -> list[dict]:
 				continue
 			item_id = node.get("item_id")
 			if item_id:
-				items.append({
-					"item_id": item_id,
-					"stage_type": stage_type,
-					"question_text": instruction,
-					"choice_1": None,
-					"choice_2": None,
-					"choice_3": None,
-					"choice_4": None,
-					"correct_choice": None,
-					"content_json": json.dumps(node),
-				})
+				items.append(
+					{
+						"item_id": item_id,
+						"stage_type": stage_type,
+						"question_text": instruction,
+						"choice_1": None,
+						"choice_2": None,
+						"choice_3": None,
+						"choice_4": None,
+						"correct_choice": None,
+						"content_json": json.dumps(node),
+					}
+				)
 			_walk(node.get("children"))
 
 	_walk(config.get("children"))
@@ -232,17 +244,22 @@ def _extract_generic(config: dict, stage_type: str) -> list[dict]:
 
 	# Check for top-level item_id
 	if config.get("item_id"):
-		items.append({
-			"item_id": config["item_id"],
-			"stage_type": stage_type,
-			"question_text": config.get("text") or config.get("question") or config.get("instruction") or "",
-			"choice_1": None,
-			"choice_2": None,
-			"choice_3": None,
-			"choice_4": None,
-			"correct_choice": None,
-			"content_json": json.dumps(config),
-		})
+		items.append(
+			{
+				"item_id": config["item_id"],
+				"stage_type": stage_type,
+				"question_text": config.get("text")
+				or config.get("question")
+				or config.get("instruction")
+				or "",
+				"choice_1": None,
+				"choice_2": None,
+				"choice_3": None,
+				"choice_4": None,
+				"correct_choice": None,
+				"content_json": json.dumps(config),
+			}
+		)
 		return items
 
 	# Search common list fields for item_ids
@@ -255,17 +272,22 @@ def _extract_generic(config: dict, stage_type: str) -> list[dict]:
 				continue
 			item_id = entry.get("item_id")
 			if item_id:
-				items.append({
-					"item_id": item_id,
-					"stage_type": stage_type,
-					"question_text": config.get("text") or config.get("question") or config.get("instruction") or "",
-					"choice_1": None,
-					"choice_2": None,
-					"choice_3": None,
-					"choice_4": None,
-					"correct_choice": None,
-					"content_json": json.dumps(entry),
-				})
+				items.append(
+					{
+						"item_id": item_id,
+						"stage_type": stage_type,
+						"question_text": config.get("text")
+						or config.get("question")
+						or config.get("instruction")
+						or "",
+						"choice_1": None,
+						"choice_2": None,
+						"choice_3": None,
+						"choice_4": None,
+						"correct_choice": None,
+						"content_json": json.dumps(entry),
+					}
+				)
 
 	return items
 
@@ -342,9 +364,17 @@ def sync_review_items(lesson_doc) -> dict:
 		"Memora Review Item",
 		filters={"lesson": lesson_name},
 		fields=[
-			"name", "item_id", "stage_id", "stage_type",
-			"question_text", "choice_1", "choice_2", "choice_3", "choice_4",
-			"correct_choice", "content_json",
+			"name",
+			"item_id",
+			"stage_id",
+			"stage_type",
+			"question_text",
+			"choice_1",
+			"choice_2",
+			"choice_3",
+			"choice_4",
+			"correct_choice",
+			"content_json",
 		],
 	)
 	existing_by_id = {r.item_id: r for r in existing}
@@ -370,17 +400,22 @@ def sync_review_items(lesson_doc) -> dict:
 				or (ex.content_json or "") != (item_data["content_json"] or "")
 			)
 			if changed:
-				frappe.db.set_value("Memora Review Item", item_id, {
-					"stage_id": item_data["stage_id"],
-					"stage_type": item_data["stage_type"],
-					"question_text": item_data["question_text"],
-					"choice_1": item_data["choice_1"],
-					"choice_2": item_data["choice_2"],
-					"choice_3": item_data["choice_3"],
-					"choice_4": item_data["choice_4"],
-					"correct_choice": item_data["correct_choice"],
-					"content_json": item_data["content_json"],
-				}, update_modified=True)
+				frappe.db.set_value(
+					"Memora Review Item",
+					item_id,
+					{
+						"stage_id": item_data["stage_id"],
+						"stage_type": item_data["stage_type"],
+						"question_text": item_data["question_text"],
+						"choice_1": item_data["choice_1"],
+						"choice_2": item_data["choice_2"],
+						"choice_3": item_data["choice_3"],
+						"choice_4": item_data["choice_4"],
+						"correct_choice": item_data["correct_choice"],
+						"content_json": item_data["content_json"],
+					},
+					update_modified=True,
+				)
 				updated += 1
 		else:
 			# Create new item
@@ -513,5 +548,7 @@ def resync_all_review_items():
 			print(f"  {lesson_name}: deleted={result['deleted']}")
 
 	frappe.db.commit()
-	print(f"\nResync complete: {len(lessons)} lessons processed, "
-		  f"{total_created} created, {total_deleted} duplicates removed")
+	print(
+		f"\nResync complete: {len(lessons)} lessons processed, "
+		f"{total_created} created, {total_deleted} duplicates removed"
+	)

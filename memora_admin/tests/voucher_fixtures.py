@@ -6,12 +6,12 @@ to produce unique, non-colliding documents.
 """
 
 import frappe
-from frappe.utils import today, add_days, random_string
-
+from frappe.utils import add_days, random_string, today
 
 # ─────────────────────────────────────────────────────────────────────────────
 # T003: make_season() factory
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def make_season(
 	season_title: str | None = None,
@@ -39,6 +39,7 @@ def make_season(
 		# Generate unique sequence number to avoid constraint violations
 		import hashlib
 		import time
+
 		unique_suffix = hashlib.md5(f"{time.time()}{random_string(8)}".encode()).hexdigest()[:6]
 		season_seq = int(unique_suffix, 16) % 10000 + 1
 
@@ -48,14 +49,16 @@ def make_season(
 	if end_date is None:
 		end_date = add_days(start_date, 365)
 
-	doc = frappe.get_doc({
-		"doctype": "Memora Season",
-		"season_title": season_title,
-		"season_seq": season_seq,
-		"start_date": start_date,
-		"end_date": end_date,
-		"is_published": 1 if is_published else 0,
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Season",
+			"season_title": season_title,
+			"season_seq": season_seq,
+			"start_date": start_date,
+			"end_date": end_date,
+			"is_published": 1 if is_published else 0,
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -63,6 +66,7 @@ def make_season(
 # ─────────────────────────────────────────────────────────────────────────────
 # T004: Internal helpers _make_grade() and _make_major()
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _make_grade(grade_title: str | None = None):
 	"""Create a Memora Grade document (internal helper).
@@ -76,10 +80,12 @@ def _make_grade(grade_title: str | None = None):
 	if grade_title is None:
 		grade_title = f"Test Grade {random_string(8)}"
 
-	doc = frappe.get_doc({
-		"doctype": "Memora Grade",
-		"grade_title": grade_title,
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Grade",
+			"grade_title": grade_title,
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -96,10 +102,12 @@ def _make_major(major_title: str | None = None):
 	if major_title is None:
 		major_title = f"Test Major {random_string(8)}"
 
-	doc = frappe.get_doc({
-		"doctype": "Memora Major",
-		"major_title": major_title,
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Major",
+			"major_title": major_title,
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -107,6 +115,7 @@ def _make_major(major_title: str | None = None):
 # ─────────────────────────────────────────────────────────────────────────────
 # T005: Internal helper _make_plan()
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def _make_plan(grade: str | None = None, season: str | None = None):
 	"""Create a Memora Academic Plan document (internal helper).
@@ -128,12 +137,14 @@ def _make_plan(grade: str | None = None, season: str | None = None):
 	if season is None:
 		season = make_season().name
 
-	doc = frappe.get_doc({
-		"doctype": "Memora Academic Plan",
-		"plan_name": f"Test Plan {random_string(8)}",
-		"grade": grade,
-		"season": season,
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Academic Plan",
+			"plan_name": f"Test Plan {random_string(8)}",
+			"grade": grade,
+			"season": season,
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -141,6 +152,7 @@ def _make_plan(grade: str | None = None, season: str | None = None):
 # ─────────────────────────────────────────────────────────────────────────────
 # T006: make_product_grant() factory
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def make_product_grant(
 	item_code: str = "MEMORA-VOUCHER-CARD",
@@ -173,18 +185,22 @@ def make_product_grant(
 	components = []
 	if grant_components:
 		for component in grant_components:
-			components.append({
-				"target_doctype": component["target_doctype"],
-				"target_name": component["target_name"],
-			})
+			components.append(
+				{
+					"target_doctype": component["target_doctype"],
+					"target_name": component["target_name"],
+				}
+			)
 
-	doc = frappe.get_doc({
-		"doctype": "Memora Product Grant",
-		"item_code": item_code,
-		"plan": plan,
-		"is_published": 1 if is_published else 0,
-		"grant_components": components,
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Product Grant",
+			"item_code": item_code,
+			"plan": plan,
+			"is_published": 1 if is_published else 0,
+			"grant_components": components,
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -192,6 +208,7 @@ def make_product_grant(
 # ─────────────────────────────────────────────────────────────────────────────
 # T007: make_customer() factory
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def make_customer(
 	customer_name: str | None = None,
@@ -214,11 +231,13 @@ def make_customer(
 		customer_name = f"Test Library {random_string(8)}"
 
 	# Create Customer doc with standard fields
-	doc = frappe.get_doc({
-		"doctype": "Customer",
-		"customer_name": customer_name,
-		"customer_type": "Company",
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Customer",
+			"customer_name": customer_name,
+			"customer_type": "Company",
+		}
+	)
 	doc.insert(ignore_permissions=True)
 
 	# Set voucher-specific custom fields via db.set_value()
@@ -254,6 +273,7 @@ def make_customer(
 # T008: make_batch() factory
 # ─────────────────────────────────────────────────────────────────────────────
 
+
 def make_batch(
 	batch_name: str | None = None,
 	quantity: int = 10,
@@ -284,19 +304,23 @@ def make_batch(
 	batch_grants = []
 	if grants:
 		for grant_name in grants:
-			batch_grants.append({
-				"product_grant": grant_name,
-			})
+			batch_grants.append(
+				{
+					"product_grant": grant_name,
+				}
+			)
 
-	doc = frappe.get_doc({
-		"doctype": "Memora Voucher Batch",
-		"batch_name": batch_name,
-		"quantity": quantity,
-		"pin_length": pin_length,
-		"face_value": face_value,
-		"status": status,
-		"batch_grants": batch_grants,
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Voucher Batch",
+			"batch_name": batch_name,
+			"quantity": quantity,
+			"pin_length": pin_length,
+			"face_value": face_value,
+			"status": status,
+			"batch_grants": batch_grants,
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -304,6 +328,7 @@ def make_batch(
 # ─────────────────────────────────────────────────────────────────────────────
 # T009: make_player() factory
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def make_player(
 	display_name: str | None = None,
@@ -347,16 +372,18 @@ def make_player(
 	if plan is None:
 		plan = _make_plan(grade=grade, season=season).name
 
-	doc = frappe.get_doc({
-		"doctype": "Memora Player Profile",
-		"display_name": display_name,
-		"plan": plan,
-		"grade": grade,
-		"major": major,
-		"season": season,
-		"avatar": "pre",
-		"mobile": mobile or f"20{str(abs(hash(random_string(16))))[:10]}",
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Player Profile",
+			"display_name": display_name,
+			"plan": plan,
+			"grade": grade,
+			"major": major,
+			"season": season,
+			"avatar": "pre",
+			"mobile": mobile or f"20{str(abs(hash(random_string(16))))[:10]}",
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 
@@ -364,6 +391,7 @@ def make_player(
 # ─────────────────────────────────────────────────────────────────────────────
 # T010: make_allocation() factory
 # ─────────────────────────────────────────────────────────────────────────────
+
 
 def make_allocation(
 	batch: str,
@@ -382,14 +410,16 @@ def make_allocation(
 	Returns:
 		Saved Memora Voucher Allocation document in Draft status.
 	"""
-	doc = frappe.get_doc({
-		"doctype": "Memora Voucher Allocation",
-		"batch": batch,
-		"customer": customer,
-		"allocation_type": allocation_type,
-		"sale_model": sale_model,
-		"status": "Draft",
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Voucher Allocation",
+			"batch": batch,
+			"customer": customer,
+			"allocation_type": allocation_type,
+			"sale_model": sale_model,
+			"status": "Draft",
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	return doc
 

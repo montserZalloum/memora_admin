@@ -5,6 +5,7 @@ Tests verify settings endpoint:
 
 Reference: contracts/endpoint-test-contracts.md §7
 """
+
 import pytest
 
 

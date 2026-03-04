@@ -33,10 +33,12 @@ def _invalidate_announcements_cache():
 		# 2. Pubsub notification for FastAPI sidecar
 		r.publish(
 			cache_invalidation_channel(),
-			json.dumps({
-				"type": "announcements",
-				"timestamp": str(frappe.utils.now()),
-			}),
+			json.dumps(
+				{
+					"type": "announcements",
+					"timestamp": str(frappe.utils.now()),
+				}
+			),
 		)
 
 		frappe.logger().info("Announcements cache invalidated")

@@ -11,13 +11,15 @@ Reference: specs/025-practice-arena/contracts/practice-api.md
 
 import json
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
-from uuid import uuid4
 
 import fastapi_app.api.deps as deps_module
 from fastapi_app.core.redis_keys import (
 	access_key as _access_key_fn,
+)
+from fastapi_app.core.redis_keys import (
 	practice_hierarchy_meta_key,
 	practice_session_key,
 )
@@ -96,7 +98,13 @@ def _is_select_query(sql: str) -> bool:
 	return "ROW_NUMBER() OVER" in sql or "SELECT ri.item_id" in sql
 
 
-def _mock_select_rows(sql: str, sql_params: list, by_topic: dict[str, list[dict]], all_item_ids: set[str], default_questions: list[dict]) -> list[dict]:
+def _mock_select_rows(
+	sql: str,
+	sql_params: list,
+	by_topic: dict[str, list[dict]],
+	all_item_ids: set[str],
+	default_questions: list[dict],
+) -> list[dict]:
 	"""Return mock selection rows for either SQL shape."""
 	limit = sql_params[-1] if sql_params else 20
 	selected_topics = [p for p in sql_params if isinstance(p, str) and p in by_topic]
@@ -1154,11 +1162,7 @@ class TestAllSeenWarning:
 					)
 				elif "SELECT item_id" in sql:
 					requested_ids = set(sql_params or [])
-					return [
-						{"item_id": q["item_id"]}
-						for q in questions
-						if q["item_id"] in requested_ids
-					]
+					return [{"item_id": q["item_id"]} for q in questions if q["item_id"] in requested_ids]
 			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
 				return None
 			return None
@@ -1241,11 +1245,13 @@ class TestAllSeenWarning:
 				"submitted_0": "1",
 				"accessible_lessons": json.dumps(["LESSON-A"]),
 				"selected_topics": json.dumps([TOPIC_ID]),
-				"served_item_ids": json.dumps([
-					current_questions[0]["item_id"],
-					current_questions[1]["item_id"],
-					stale_deleted_id,
-				]),
+				"served_item_ids": json.dumps(
+					[
+						current_questions[0]["item_id"],
+						current_questions[1]["item_id"],
+						stale_deleted_id,
+					]
+				),
 				"subject_id": SUBJECT_ID,
 			},
 		)
@@ -1433,7 +1439,9 @@ class TestDuplicatePayloadTamper:
 			{"item_id": questions[1]["item_id"], "is_correct": True},
 			{"item_id": questions[2]["item_id"], "is_correct": False},
 		]
-		resp1 = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": original_results})
+		resp1 = await client.post(
+			"/api/v1/practice/submit", json={"batch_seq": 0, "results": original_results}
+		)
 		assert resp1.status_code == 200
 		d1 = resp1.json()
 		assert d1["correct_count"] == 2
@@ -1442,7 +1450,9 @@ class TestDuplicatePayloadTamper:
 
 		# Tampered: flip all to correct
 		tampered_results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
-		resp2 = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": tampered_results})
+		resp2 = await client.post(
+			"/api/v1/practice/submit", json={"batch_seq": 0, "results": tampered_results}
+		)
 		assert resp2.status_code == 200
 		d2 = resp2.json()
 		assert d2["is_duplicate"] is True
@@ -1461,7 +1471,9 @@ class TestDuplicatePayloadTamper:
 class TestLegacySessionCompat:
 	"""Sessions created before the per-batch schema change must not crash."""
 
-	async def test_legacy_submitted_marker_returns_computed_stats(self, authed_client, redis_client, mock_frappe):
+	async def test_legacy_submitted_marker_returns_computed_stats(
+		self, authed_client, redis_client, mock_frappe
+	):
 		"""Old sessions stored submitted_0='1' (not JSON). Should recompute stats from payload."""
 		client, token, player_id, family_id = authed_client
 		questions = _make_question_rows(4, topic_id=TOPIC_ID)
@@ -1500,7 +1512,9 @@ class TestLegacySessionCompat:
 		assert data["total_count"] == 4
 		assert data["accuracy_percent"] == 50.0
 
-	async def test_legacy_session_no_batch_key_skips_validation(self, authed_client, redis_client, mock_frappe):
+	async def test_legacy_session_no_batch_key_skips_validation(
+		self, authed_client, redis_client, mock_frappe
+	):
 		"""Old sessions without schema_version + batch_0_item_ids skip validation."""
 		client, token, player_id, family_id = authed_client
 		questions = _make_question_rows(3, topic_id=TOPIC_ID)
@@ -1662,8 +1676,20 @@ def _make_mixed_free_paid_hierarchy(subject_id=SUBJECT_ID):
 								"is_linear": False,
 								"is_free": False,
 								"lessons": [
-									{"lesson_id": "LESSON-PAID-001", "bit_index": 0, "xp": 10, "max_hearts": 3, "is_reviewable": True},
-									{"lesson_id": "LESSON-PAID-002", "bit_index": 1, "xp": 10, "max_hearts": 3, "is_reviewable": True},
+									{
+										"lesson_id": "LESSON-PAID-001",
+										"bit_index": 0,
+										"xp": 10,
+										"max_hearts": 3,
+										"is_reviewable": True,
+									},
+									{
+										"lesson_id": "LESSON-PAID-002",
+										"bit_index": 1,
+										"xp": 10,
+										"max_hearts": 3,
+										"is_reviewable": True,
+									},
 								],
 							},
 							{
@@ -1671,8 +1697,20 @@ def _make_mixed_free_paid_hierarchy(subject_id=SUBJECT_ID):
 								"is_linear": False,
 								"is_free": True,
 								"lessons": [
-									{"lesson_id": "LESSON-FREE-001", "bit_index": 2, "xp": 10, "max_hearts": 3, "is_reviewable": True},
-									{"lesson_id": "LESSON-FREE-002", "bit_index": 3, "xp": 10, "max_hearts": 3, "is_reviewable": True},
+									{
+										"lesson_id": "LESSON-FREE-001",
+										"bit_index": 2,
+										"xp": 10,
+										"max_hearts": 3,
+										"is_reviewable": True,
+									},
+									{
+										"lesson_id": "LESSON-FREE-002",
+										"bit_index": 3,
+										"xp": 10,
+										"max_hearts": 3,
+										"is_reviewable": True,
+									},
 								],
 							},
 						],
@@ -1706,7 +1744,9 @@ class TestFreeContentHierarchyVisibility:
 		assert track["has_access"] is True
 		assert len(track["units"]) > 0
 
-	async def test_mixed_track_hierarchy_only_shows_free_topics(self, authed_client, redis_client, mock_frappe):
+	async def test_mixed_track_hierarchy_only_shows_free_topics(
+		self, authed_client, redis_client, mock_frappe
+	):
 		"""In a mixed paid/free track, hierarchy only exposes the free topic."""
 		client, token, player_id, family_id = authed_client
 
@@ -1737,7 +1777,9 @@ class TestFreeContentHierarchyVisibility:
 		assert FREE_TOPIC in topic_ids
 		assert PAID_TOPIC not in topic_ids
 
-	async def test_mixed_track_start_only_includes_free_lessons(self, authed_client, redis_client, mock_frappe):
+	async def test_mixed_track_start_only_includes_free_lessons(
+		self, authed_client, redis_client, mock_frappe
+	):
 		"""In a mixed paid/free track, start_session only includes free topic lessons."""
 		client, token, player_id, family_id = authed_client
 

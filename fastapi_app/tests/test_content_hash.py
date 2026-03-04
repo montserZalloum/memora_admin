@@ -73,7 +73,12 @@ def _make_unit(unit_id: str, topics: list, is_free: bool = False, is_linear: boo
 
 
 def _make_track(track_id: str, units: list, is_linear: bool = True, is_sold_separately: bool = False) -> dict:
-	return {"track_id": track_id, "is_linear": is_linear, "is_sold_separately": is_sold_separately, "units": units}
+	return {
+		"track_id": track_id,
+		"is_linear": is_linear,
+		"is_sold_separately": is_sold_separately,
+		"units": units,
+	}
 
 
 def _simple_hierarchy() -> dict:
@@ -152,9 +157,7 @@ class TestStructuralSensitivity:
 		h_before = _compute_content_hash(original)
 
 		modified = _simple_hierarchy()
-		modified["tracks"][0]["units"][0]["topics"][0]["lessons"].append(
-			_make_lesson("LSN-003", bit_index=2)
-		)
+		modified["tracks"][0]["units"][0]["topics"][0]["lessons"].append(_make_lesson("LSN-003", bit_index=2))
 		h_after = _compute_content_hash(modified)
 		assert h_before != h_after
 

@@ -115,20 +115,22 @@ def log_task_run(
 	duration = (now - started).total_seconds()
 
 	# Create Task Run Log document
-	doc = frappe.get_doc({
-		"doctype": "Memora Task Run Log",
-		"task_name": task_name,
-		"run_date": get_amman_today(),
-		"started_at": started,
-		"completed_at": now,
-		"duration_sec": duration,
-		"status": status,
-		"processed_count": processed,
-		"failed_count": failed,
-		"error_message": error_message,
-		"failed_details": json.dumps(failed_details) if failed_details else None,
-		"triggered_by": triggered_by,
-	})
+	doc = frappe.get_doc(
+		{
+			"doctype": "Memora Task Run Log",
+			"task_name": task_name,
+			"run_date": get_amman_today(),
+			"started_at": started,
+			"completed_at": now,
+			"duration_sec": duration,
+			"status": status,
+			"processed_count": processed,
+			"failed_count": failed,
+			"error_message": error_message,
+			"failed_details": json.dumps(failed_details) if failed_details else None,
+			"triggered_by": triggered_by,
+		}
+	)
 	doc.insert(ignore_permissions=True)
 	frappe.db.commit()
 

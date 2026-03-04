@@ -8,6 +8,7 @@ Tests verify admin-only CRUD endpoints:
 
 Reference: contracts/endpoint-test-contracts.md §6
 """
+
 import json
 
 import pytest

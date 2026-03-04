@@ -16,14 +16,14 @@ directly -- same pattern as test_practice.py and test_review_items.py.
 
 import asyncio
 import json
-
-import pytest
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
-import fastapi_app.api.deps as deps_module
-from httpx import AsyncClient, ASGITransport
+import pytest
+from httpx import ASGITransport, AsyncClient
 
+import fastapi_app.api.deps as deps_module
+from fastapi_app.api.deps import get_redis
 from fastapi_app.core.redis_keys import (
 	access_key,
 	daily_xp_key,
@@ -47,7 +47,6 @@ from fastapi_app.core.redis_keys import (
 )
 from fastapi_app.core.security import create_access_token
 from fastapi_app.main import app
-from fastapi_app.api.deps import get_redis
 
 pytestmark = pytest.mark.asyncio
 
@@ -200,9 +199,9 @@ class TestPlanChangeConcurrency:
 			for resp in responses:
 				if resp.status_code == 409:
 					detail = resp.json().get("detail", {})
-					assert detail.get("error") == "PLAN_CHANGE_IN_PROGRESS", (
-						f"Expected PLAN_CHANGE_IN_PROGRESS error, got: {detail}"
-					)
+					assert (
+						detail.get("error") == "PLAN_CHANGE_IN_PROGRESS"
+					), f"Expected PLAN_CHANGE_IN_PROGRESS error, got: {detail}"
 
 			# Verify the success response has correct shape
 			for resp in responses:
@@ -214,9 +213,9 @@ class TestPlanChangeConcurrency:
 					assert body["new_plan_id"] == "PLAN-NEW"
 
 			# Verify Frappe was called exactly once (only the winner calls it)
-			assert mock_frappe.call.call_count == 1, (
-				f"Expected Frappe called exactly 1 time, got {mock_frappe.call.call_count}"
-			)
+			assert (
+				mock_frappe.call.call_count == 1
+			), f"Expected Frappe called exactly 1 time, got {mock_frappe.call.call_count}"
 
 		finally:
 			self._teardown_deps()
@@ -281,37 +280,25 @@ class TestPlanChangeConcurrency:
 
 			# 1. Freeze key MUST be released (deleted by _release_freeze in finally block)
 			freeze_exists = await redis_client.exists(freeze_key(player_id))
-			assert freeze_exists == 0, (
-				"Freeze key should be released after plan change completes"
-			)
+			assert freeze_exists == 0, "Freeze key should be released after plan change completes"
 
 			# 2. Cooldown key MUST exist (set by the winner after success)
 			cooldown_ts = await redis_client.get(plan_change_ts_key(player_id))
-			assert cooldown_ts is not None, (
-				"Cooldown timestamp should be set after successful plan change"
-			)
+			assert cooldown_ts is not None, "Cooldown timestamp should be set after successful plan change"
 			# Verify TTL is set (approximately 24h = 86400s, allow some margin)
 			cooldown_ttl = await redis_client.ttl(plan_change_ts_key(player_id))
-			assert cooldown_ttl > 86000, (
-				f"Cooldown TTL should be ~86400s, got {cooldown_ttl}"
-			)
+			assert cooldown_ttl > 86000, f"Cooldown TTL should be ~86400s, got {cooldown_ttl}"
 
 			# 3. Session key should be deleted by post-cleanup
 			session_exists = await redis_client.exists(session_key(player_id))
-			assert session_exists == 0, (
-				"Session key should be deleted by post-cleanup"
-			)
+			assert session_exists == 0, "Session key should be deleted by post-cleanup"
 
 			# 4. Wallet should be deleted by post-cleanup
 			wallet_exists = await redis_client.exists(wallet_key(player_id))
-			assert wallet_exists == 0, (
-				"Wallet key should be deleted by post-cleanup"
-			)
+			assert wallet_exists == 0, "Wallet key should be deleted by post-cleanup"
 
 			# 5. Frappe called exactly once
-			assert call_count == 1, (
-				f"Frappe should have been called exactly once, got {call_count}"
-			)
+			assert call_count == 1, f"Frappe should have been called exactly once, got {call_count}"
 
 			# 6. Exactly 1 success, 9 conflicts (sanity check)
 			status_codes = [r.status_code for r in responses]
@@ -340,12 +327,14 @@ class TestPlanChangeConcurrency:
 			)
 
 			# Mock Frappe success
-			mock_frappe.call = AsyncMock(return_value={
-				"status": "ok",
-				"history_id": "PLHIST-00001",
-				"previous_plan": "PLAN-OLD",
-				"trigger_reason": "Player Request",
-			})
+			mock_frappe.call = AsyncMock(
+				return_value={
+					"status": "ok",
+					"history_id": "PLHIST-00001",
+					"previous_plan": "PLAN-OLD",
+					"trigger_reason": "Player Request",
+				}
+			)
 
 			self._setup_deps(redis_client, mock_frappe)
 
@@ -357,9 +346,9 @@ class TestPlanChangeConcurrency:
 					json={"new_plan_id": "PLAN-NEW-3"},
 					headers={"Authorization": f"Bearer {token}"},
 				)
-				assert resp1.status_code == 200, (
-					f"First request should succeed, got {resp1.status_code}: {resp1.json()}"
-				)
+				assert (
+					resp1.status_code == 200
+				), f"First request should succeed, got {resp1.status_code}: {resp1.json()}"
 
 				# Re-seed session (post-cleanup deletes it, so second request would fail auth)
 				await redis_client.set(
@@ -373,9 +362,9 @@ class TestPlanChangeConcurrency:
 					json={"new_plan_id": "PLAN-NEW-4"},
 					headers={"Authorization": f"Bearer {token}"},
 				)
-				assert resp2.status_code == 429, (
-					f"Second request should be blocked by cooldown (429), got {resp2.status_code}"
-				)
+				assert (
+					resp2.status_code == 429
+				), f"Second request should be blocked by cooldown (429), got {resp2.status_code}"
 				detail = resp2.json().get("detail", {})
 				assert detail.get("error") == "COOLDOWN_ACTIVE"
 				assert "retry_after" in detail
@@ -402,11 +391,13 @@ class TestPlanChangeConcurrency:
 			)
 
 			# Mock Frappe returning an error (e.g., invalid plan)
-			mock_frappe.call = AsyncMock(return_value={
-				"status": "error",
-				"code": "INVALID_PLAN",
-				"message": "Plan does not exist.",
-			})
+			mock_frappe.call = AsyncMock(
+				return_value={
+					"status": "error",
+					"code": "INVALID_PLAN",
+					"message": "Plan does not exist.",
+				}
+			)
 
 			self._setup_deps(redis_client, mock_frappe)
 
@@ -421,15 +412,11 @@ class TestPlanChangeConcurrency:
 
 			# Freeze key MUST be released even after error
 			freeze_exists = await redis_client.exists(freeze_key(player_id))
-			assert freeze_exists == 0, (
-				"Freeze key should be released even after Frappe error"
-			)
+			assert freeze_exists == 0, "Freeze key should be released even after Frappe error"
 
 			# No cooldown set (change failed)
 			cooldown_exists = await redis_client.exists(plan_change_ts_key(player_id))
-			assert cooldown_exists == 0, (
-				"Cooldown should NOT be set after a failed plan change"
-			)
+			assert cooldown_exists == 0, "Cooldown should NOT be set after a failed plan change"
 
 		finally:
 			self._teardown_deps()
@@ -477,9 +464,7 @@ class TestPlanChangeConcurrency:
 
 			# Freeze key MUST be released even after exception
 			freeze_exists = await redis_client.exists(freeze_key(player_id))
-			assert freeze_exists == 0, (
-				"Freeze key should be released even after Frappe exception"
-			)
+			assert freeze_exists == 0, "Freeze key should be released even after Frappe exception"
 
 		finally:
 			self._teardown_deps()

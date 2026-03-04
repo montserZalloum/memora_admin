@@ -145,7 +145,6 @@ def _lookup_memory_state(player: str, item_id: str, season_seq: int) -> dict | N
 	return rows[0] if rows else None
 
 
-
 def _update_memory_state(
 	name: int,
 	season_seq: int,
@@ -545,4 +544,3 @@ def process_fsrs_reviews():
 	# Commit all DB changes
 	if processed > 0:
 		frappe.db.commit()
-
