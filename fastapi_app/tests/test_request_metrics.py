@@ -1,11 +1,12 @@
 """Tests for RequestMetricsMiddleware - request timing instrumentation."""
 
+from unittest.mock import patch
+
 import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from starlette.requests import Request
 from starlette.responses import JSONResponse
-from unittest.mock import patch
 
 from fastapi_app.middleware.request_metrics import RequestMetricsMiddleware
 

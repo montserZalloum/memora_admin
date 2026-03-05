@@ -96,11 +96,14 @@ def get_plan_free_subjects(plan_id: str) -> list[str]:
 	Returns:
 	    List of subject IDs that are non-premium in this plan
 	"""
-	return frappe.get_all(
-		"Memora Plan Subject",
-		filters={"parent": plan_id, "is_premium": 0},
-		pluck="subject",
-	) or []
+	return (
+		frappe.get_all(
+			"Memora Plan Subject",
+			filters={"parent": plan_id, "is_premium": 0},
+			pluck="subject",
+		)
+		or []
+	)
 
 
 @frappe.whitelist(allow_guest=False)

@@ -95,9 +95,7 @@ class HierarchyService:
 		# Try Redis cache
 		cached = await self.redis.get(key)
 		if cached:
-			if cached == _MISSING_HIERARCHY_SENTINEL or cached == _MISSING_HIERARCHY_SENTINEL.encode(
-				"utf-8"
-			):
+			if cached == _MISSING_HIERARCHY_SENTINEL or cached == _MISSING_HIERARCHY_SENTINEL.encode("utf-8"):
 				return None
 			hierarchy = SubjectHierarchy.model_validate_json(cached)
 			# Sweep expired entries then store in local cache

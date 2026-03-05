@@ -173,7 +173,7 @@ REVIEW_BODY = {"items": [{"item_id": "ITEM-TEST-001", "fail_count": 0}]}
 SESSION_START_BODY = {"lesson_id": "LESSON-TEST-001", "subject_id": "SUB-TEST-001"}
 SESSION_END_BODY = {
 	"session_id": "SESSION-RATE-LIMIT-001",
-	"stages": [{"stage_id": "STG-001", "time_spent": 1000, "completed_at": "2026-02-22T00:00:00"}]
+	"stages": [{"stage_id": "STG-001", "time_spent": 1000, "completed_at": "2026-02-22T00:00:00"}],
 }
 
 

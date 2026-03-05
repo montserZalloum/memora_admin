@@ -177,16 +177,12 @@ def _make_frappe_handler(questions=None, valid_item_ids=None, topic_counts=None)
 
 			if params.get("session_started_at"):
 				scoped_item_ids = {
-					q["item_id"]
-					for topic_id in selected_counts
-					for q in by_topic.get(topic_id, [])
+					q["item_id"] for topic_id in selected_counts for q in by_topic.get(topic_id, [])
 				}
 				excluded_ids = session_seen_ids & scoped_item_ids
 			else:
 				excluded_ids = {
-					item_id
-					for item_id in params.get("served_item_ids", [])
-					if item_id in all_item_ids
+					item_id for item_id in params.get("served_item_ids", []) if item_id in all_item_ids
 				}
 
 			candidate_rows = _mock_select_candidates(
@@ -209,9 +205,7 @@ def _make_frappe_handler(questions=None, valid_item_ids=None, topic_counts=None)
 			if params.get("session_started_at"):
 				selected_topics = params.get("topic_ids") or list(inferred_counts.keys())
 				scoped_item_ids = {
-					q["item_id"]
-					for topic_id in selected_topics
-					for q in by_topic.get(topic_id, [])
+					q["item_id"] for topic_id in selected_topics for q in by_topic.get(topic_id, [])
 				}
 				params["served_item_ids"] = list(session_seen_ids & scoped_item_ids)
 			return _mock_select_candidates(params, by_topic, all_item_ids, questions)
@@ -222,9 +216,7 @@ def _make_frappe_handler(questions=None, valid_item_ids=None, topic_counts=None)
 			return [iid for iid in valid if not requested_ids or iid in requested_ids]
 		elif method == "memora_admin.api.practice.upsert_practice_results":
 			accepted_ids = [
-				result.get("item_id")
-				for result in (params or {}).get("results", [])
-				if result.get("item_id")
+				result.get("item_id") for result in (params or {}).get("results", []) if result.get("item_id")
 			]
 			session_seen_ids.update(accepted_ids)
 			return accepted_ids
@@ -450,7 +442,9 @@ class TestPracticeStart:
 		assert resp.status_code == 503
 		assert resp.json()["detail"]["code"] == "PRACTICE_SELECTION_UNAVAILABLE"
 
-	async def test_start_reuses_cached_scope_counts_on_repeat_scope(self, authed_client, redis_client, mock_frappe):
+	async def test_start_reuses_cached_scope_counts_on_repeat_scope(
+		self, authed_client, redis_client, mock_frappe
+	):
 		"""A repeated start for the same resolved scope should skip batch prep recounts."""
 		client, token, player_id, family_id = authed_client
 
@@ -563,7 +557,9 @@ class TestPracticeSubmit:
 		questions = await _start_session(client, redis_client, mock_frappe, player_id)
 		results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
 
-		resp = await client.post("/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results})
+		resp = await client.post(
+			"/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results}
+		)
 
 		assert resp.status_code == 200
 		data = resp.json()
@@ -581,8 +577,12 @@ class TestPracticeSubmit:
 		questions = await _start_session(client, redis_client, mock_frappe, player_id)
 		results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
 
-		resp1 = await client.post("/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results})
-		resp2 = await client.post("/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results})
+		resp1 = await client.post(
+			"/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results}
+		)
+		resp2 = await client.post(
+			"/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results}
+		)
 
 		assert resp1.status_code == 200
 		assert resp2.status_code == 200

@@ -315,7 +315,10 @@ class PlanChangeService:
 			params={"current_plan_id": current_plan_id},
 		)
 		if not result or not isinstance(result, dict):
-			_local_available_plans_cache[current_plan_id] = ([], time.monotonic() + _LOCAL_AVAILABLE_PLANS_TTL)
+			_local_available_plans_cache[current_plan_id] = (
+				[],
+				time.monotonic() + _LOCAL_AVAILABLE_PLANS_TTL,
+			)
 			return []
 		plans = result.get("plans", [])
 		_local_available_plans_cache[current_plan_id] = (plans, time.monotonic() + _LOCAL_AVAILABLE_PLANS_TTL)

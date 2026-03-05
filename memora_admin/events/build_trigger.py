@@ -624,9 +624,7 @@ def _cascade_delete_plan_subjects(subject_id: str):
 			return
 
 		frappe.db.delete("Memora Plan Subject", {"subject": subject_id})
-		frappe.logger().info(
-			f"Cascade-deleted {count} Plan Subject row(s) for deleted subject {subject_id}"
-		)
+		frappe.logger().info(f"Cascade-deleted {count} Plan Subject row(s) for deleted subject {subject_id}")
 	except Exception as e:
 		frappe.log_error(
 			f"Failed to cascade-delete Plan Subject rows for {subject_id}: {e}",

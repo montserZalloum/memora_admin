@@ -425,7 +425,7 @@ def upsert_practice_results(player_id: str, results: list[dict], seen_at: str) -
 	values_parts = []
 	params = []
 	accepted_ids: list[str] = []
-	for result in (results or []):
+	for result in results or []:
 		item_id = result.get("item_id")
 		if not item_id:
 			continue

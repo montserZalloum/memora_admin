@@ -65,8 +65,7 @@ class DailyXP(BaseModel):
 class WeeklyActivityResponse(BaseModel):
 	"""Weekly activity chart data."""
 
-	subject: str | None = None
-	week_start: str  # Monday YYYY-MM-DD
+	week_start: str  # YYYY-MM-DD (start of 7-day window)
 	days: list[DailyXP]
 	total_xp: int
 

@@ -55,7 +55,6 @@ from fastapi_app.core.redis_keys import (
 )
 from memora_admin.events import access_sync, build_trigger
 
-
 # =============================================================================
 # Doc factories — minimal SimpleNamespace objects mirroring real DocTypes
 # =============================================================================
@@ -480,9 +479,7 @@ class TestOnContentUpdated:
 	@patch("memora_admin.events.build_trigger._remove_subject_from_plan_free_subjects")
 	@patch("memora_admin.events.build_trigger.frappe")
 	@patch("memora_admin.utils.redis_connection.get_memora_redis")
-	def test_subject_trash_calls_remove_from_free_subjects(
-		self, mock_get_redis, mock_frappe, mock_remove
-	):
+	def test_subject_trash_calls_remove_from_free_subjects(self, mock_get_redis, mock_frappe, mock_remove):
 		"""TC-OCU-13: Subject on_trash → _remove_subject_from_plan_free_subjects called."""
 		mock_redis = MagicMock()
 		mock_get_redis.return_value = mock_redis
@@ -518,9 +515,7 @@ class TestOnContentUpdated:
 		mock_get_redis.return_value = mock_redis
 		_setup_build_trigger_frappe(mock_frappe)
 		call_order = []
-		mock_frappe.get_doc.side_effect = lambda *a, **kw: (
-			call_order.append("get_doc") or MagicMock()
-		)
+		mock_frappe.get_doc.side_effect = lambda *a, **kw: (call_order.append("get_doc") or MagicMock())
 		mock_cascade.side_effect = lambda *a: call_order.append("cascade")
 
 		build_trigger.on_content_updated(_subject("SUBJ-001"), "on_trash")
@@ -557,9 +552,7 @@ class TestCascadeDeletePlanSubjects:
 
 		build_trigger._cascade_delete_plan_subjects("SUBJ-001")
 
-		mock_frappe.db.delete.assert_called_once_with(
-			"Memora Plan Subject", {"subject": "SUBJ-001"}
-		)
+		mock_frappe.db.delete.assert_called_once_with("Memora Plan Subject", {"subject": "SUBJ-001"})
 
 	@patch("memora_admin.events.build_trigger.frappe")
 	def test_no_rows_skips_delete(self, mock_frappe):
@@ -646,12 +639,8 @@ class TestCancelPendingBuilds:
 		mock_get_redis.return_value = MagicMock()
 		mock_frappe.logger.return_value = MagicMock()
 		call_order = []
-		mock_frappe.get_all.side_effect = lambda *a, **kw: (
-			call_order.append("cancel") or []
-		)
-		mock_storage.delete_directory.side_effect = lambda *a: (
-			call_order.append("storage_delete") or True
-		)
+		mock_frappe.get_all.side_effect = lambda *a, **kw: (call_order.append("cancel") or [])
+		mock_storage.delete_directory.side_effect = lambda *a: (call_order.append("storage_delete") or True)
 
 		build_trigger.on_plan_deleted(
 			SimpleNamespace(doctype="Memora Academic Plan", name="PLAN-001"), "on_trash"
@@ -842,9 +831,7 @@ class TestOnPlanSubjectChanged:
 		mock_get_redis.return_value = mock_redis
 		_setup_build_trigger_frappe(mock_frappe)
 
-		build_trigger.on_plan_subject_changed(
-			_plan_subject_doc("PLAN-001", "SUBJ-001"), "on_update"
-		)
+		build_trigger.on_plan_subject_changed(_plan_subject_doc("PLAN-001", "SUBJ-001"), "on_update")
 
 		deleted_keys = [c[0][0] for c in mock_redis.delete.call_args_list]
 		assert hierarchy_key("SUBJ-001") in deleted_keys
@@ -857,9 +844,7 @@ class TestOnPlanSubjectChanged:
 		mock_get_redis.return_value = mock_redis
 		_setup_build_trigger_frappe(mock_frappe)
 
-		build_trigger.on_plan_subject_changed(
-			_plan_subject_doc("PLAN-001", "SUBJ-001"), "on_update"
-		)
+		build_trigger.on_plan_subject_changed(_plan_subject_doc("PLAN-001", "SUBJ-001"), "on_update")
 
 		deleted_keys = [c[0][0] for c in mock_redis.delete.call_args_list]
 		assert catalog_key("PLAN-001") in deleted_keys
@@ -872,9 +857,7 @@ class TestOnPlanSubjectChanged:
 		mock_get_redis.return_value = mock_redis
 		_setup_build_trigger_frappe(mock_frappe)
 
-		build_trigger.on_plan_subject_changed(
-			_plan_subject_doc("PLAN-001", "SUBJ-001"), "on_update"
-		)
+		build_trigger.on_plan_subject_changed(_plan_subject_doc("PLAN-001", "SUBJ-001"), "on_update")
 
 		mock_frappe.get_doc.assert_called_once()
 		call_kwargs = mock_frappe.get_doc.call_args[0][0]
@@ -1045,9 +1028,7 @@ class TestSubscriptionLifecycle:
 		mock_redis = MagicMock()
 		mock_get_redis.return_value = mock_redis
 		with patch("memora_admin.events.access_sync.frappe"):
-			access_sync.on_subscription_deleted(
-				_subscription("PLAYER-00001", "SUB-MATH"), "on_trash"
-			)
+			access_sync.on_subscription_deleted(_subscription("PLAYER-00001", "SUB-MATH"), "on_trash")
 
 		mock_redis.srem.assert_called_once_with(access_key("PLAYER-00001"), "SUB-MATH")
 
@@ -1057,9 +1038,7 @@ class TestSubscriptionLifecycle:
 		mock_redis = MagicMock()
 		mock_get_redis.return_value = mock_redis
 		with patch("memora_admin.events.access_sync.frappe"):
-			access_sync.on_subscription_deleted(
-				_subscription("PLAYER-00001", "SUB-MATH"), "on_trash"
-			)
+			access_sync.on_subscription_deleted(_subscription("PLAYER-00001", "SUB-MATH"), "on_trash")
 
 		mock_redis.publish.assert_called_once()
 		data = json.loads(mock_redis.publish.call_args[0][1])
@@ -1330,9 +1309,7 @@ class TestOnPlanDeleted:
 	@patch("memora_admin.utils.redis_connection.get_memora_redis")
 	@patch("memora_admin.memora_admin.services.cdn.utils.get_purge_service")
 	@patch("memora_admin.memora_admin.services.build.storage.get_storage_backend")
-	def test_purges_cdn_files_for_plan(
-		self, mock_get_storage, mock_get_purge, mock_get_redis, mock_frappe
-	):
+	def test_purges_cdn_files_for_plan(self, mock_get_storage, mock_get_purge, mock_get_redis, mock_frappe):
 		"""TC-OPD-02: CDN purge issued for all files listed in plans/{plan_id}/."""
 		file_keys = ["plans/PLAN-001/manifest.json", "plans/PLAN-001/subjects/SUBJ-001.json"]
 		mock_storage, mock_redis = self._setup(mock_get_storage, mock_get_redis, file_keys)
@@ -1363,9 +1340,7 @@ class TestOnPlanDeleted:
 	@patch("memora_admin.utils.redis_connection.get_memora_redis")
 	@patch("memora_admin.memora_admin.services.cdn.utils.get_purge_service")
 	@patch("memora_admin.memora_admin.services.build.storage.get_storage_backend")
-	def test_deletes_all_plan_redis_keys(
-		self, mock_get_storage, mock_get_purge, mock_get_redis, mock_frappe
-	):
+	def test_deletes_all_plan_redis_keys(self, mock_get_storage, mock_get_purge, mock_get_redis, mock_frappe):
 		"""TC-OPD-04: catalog, manifest, free_subjects, and debounce keys all deleted."""
 		mock_storage, mock_redis = self._setup(mock_get_storage, mock_get_redis)
 		mock_frappe.logger.return_value = MagicMock()
@@ -1420,9 +1395,7 @@ class TestOnPlanDeleted:
 	@patch("memora_admin.utils.redis_connection.get_memora_redis")
 	@patch("memora_admin.memora_admin.services.cdn.utils.get_purge_service")
 	@patch("memora_admin.memora_admin.services.build.storage.get_storage_backend")
-	def test_redis_error_is_swallowed(
-		self, mock_get_storage, mock_get_purge, mock_get_redis, mock_frappe
-	):
+	def test_redis_error_is_swallowed(self, mock_get_storage, mock_get_purge, mock_get_redis, mock_frappe):
 		"""TC-OPD-07: Redis failure is logged and does not propagate."""
 		mock_storage, _ = self._setup(mock_get_storage, mock_get_redis)
 		mock_get_redis.side_effect = Exception("Redis down")

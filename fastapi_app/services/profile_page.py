@@ -198,17 +198,16 @@ class ProfilePageService:
 			"total_xp": total_xp,
 		}
 
-	async def get_weekly_activity(self, player_id: str, subject_id: str | None = None) -> dict:
+	async def get_weekly_activity(self, player_id: str) -> dict:
 		"""Get weekly activity: XP per day for the last 7 days ending today.
 
 		Uses Redis pipeline with 7 ZSCORE calls (single round-trip).
 
 		Args:
 			player_id: Player's user ID.
-			subject_id: Optional subject filter.
 
 		Returns:
-			Dict with subject, week_start, days (list of {date, day_name, xp}), total_xp.
+			Dict with week_start, days (list of {date, day_name, xp}), total_xp.
 		"""
 		# Get today at midnight in Amman timezone
 		now = datetime.now(AMMAN_TZ)
@@ -224,7 +223,7 @@ class ProfilePageService:
 		for i in range(7):
 			day = week_start + timedelta(days=i)
 			date_str = day.strftime("%Y-%m-%d")
-			pipe.zscore(lb_daily_key(date_str, subject_id), player_id)
+			pipe.zscore(lb_daily_key(date_str, None), player_id)
 			days.append(
 				{
 					"date": date_str,
@@ -242,7 +241,7 @@ class ProfilePageService:
 		if archive_indices:
 			archive_pipe = self.redis.pipeline()
 			for i in archive_indices:
-				archive_pipe.zscore(lb_archive_daily_key(days[i]["date"], subject_id), player_id)
+				archive_pipe.zscore(lb_archive_daily_key(days[i]["date"], None), player_id)
 			archive_scores = await archive_pipe.execute()
 			for j, i in enumerate(archive_indices):
 				if archive_scores[j] is not None:
@@ -250,15 +249,17 @@ class ProfilePageService:
 
 		# Phase 3: Per-player daily XP summary hash (Redis, MariaDB-backed).
 		# Covers past days still missing after Phase 1 + Phase 2 (e.g. after Redis data loss).
-		# Never backfill today from daily_xp: that hash is per-player, not subject-scoped.
 		still_missing = [
 			i for i, score in enumerate(scores) if score is None and days[i]["date"] != today_str
 		]
 		if still_missing:
 			daily_xp_key = _daily_xp_key_fn(player_id)
 			daily_xp_data = await self.redis.hgetall(daily_xp_key)
-			if not daily_xp_data:
-				# Cache miss — recover from MariaDB via Frappe
+			# Check if hash is missing ANY of the dates we need (partial population after eviction)
+			missing_dates = {days[i]["date"] for i in still_missing}
+			hash_has_gaps = not daily_xp_data or not missing_dates.issubset(daily_xp_data.keys())
+			if hash_has_gaps:
+				# Recover from MariaDB and merge into hash (preserving any existing entries)
 				try:
 					frappe_result = await self.frappe.call(
 						"memora_admin.api.profile.get_player_daily_xp_json",
@@ -272,15 +273,17 @@ class ProfilePageService:
 				except (json.JSONDecodeError, TypeError):
 					restored = {}
 				if restored:
-					# Repopulate hash in Redis with 8-day TTL
+					# Merge MariaDB data into Redis hash (HSETNX = keep Redis values on conflict)
 					pipe3 = self.redis.pipeline()
 					for d, v in restored.items():
-						pipe3.hset(daily_xp_key, d, v)
+						pipe3.hsetnx(daily_xp_key, d, v)
 					pipe3.expire(daily_xp_key, 8 * 86400)
 					await pipe3.execute()
-					daily_xp_data = {
-						(k.decode() if isinstance(k, bytes) else k): str(v) for k, v in restored.items()
-					}
+					# Build merged view: MariaDB as base, Redis overwrites
+					merged = {str(k): str(v) for k, v in restored.items()}
+					for k, v in daily_xp_data.items():
+						merged[k if isinstance(k, str) else k.decode()] = v if isinstance(v, str) else str(v)
+					daily_xp_data = merged
 			for i in still_missing:
 				key = days[i]["date"]
 				val = daily_xp_data.get(key)
@@ -294,7 +297,6 @@ class ProfilePageService:
 			total_xp += xp
 
 		return {
-			"subject": subject_id,
 			"week_start": week_start.strftime("%Y-%m-%d"),
 			"days": days,
 			"total_xp": total_xp,

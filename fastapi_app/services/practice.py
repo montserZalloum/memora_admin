@@ -19,9 +19,9 @@ from fastapi_app.core.config import Settings
 from fastapi_app.core.redis_keys import (
 	practice_hierarchy_meta_key,
 	practice_scope_cache_key,
-	practice_session_lock_key,
-	practice_session_key,
 	practice_served_items_key,
+	practice_session_key,
+	practice_session_lock_key,
 )
 from fastapi_app.models.practice import (
 	PracticeBatchResponse,
@@ -418,7 +418,12 @@ class PracticeService:
 		if topic_counts and session_total_available <= 0:
 			session_total_available = sum(topic_counts.values())
 
-		return batch_response, bool(payload.get("all_seen_mode", False)), topic_counts, session_total_available
+		return (
+			batch_response,
+			bool(payload.get("all_seen_mode", False)),
+			topic_counts,
+			session_total_available,
+		)
 
 	@staticmethod
 	def _parse_cached_submit_and_continue(
@@ -1082,7 +1087,11 @@ class PracticeService:
 
 		if schema_version >= PRACTICE_SESSION_SCHEMA_VERSION and not session_all_seen_mode:
 			prefetched_batch: tuple[dict[str, int], list[dict], int] | None = None
-			if self.config.practice_batched_topic_select_enabled and session_started_at and cached_topic_counts:
+			if (
+				self.config.practice_batched_topic_select_enabled
+				and session_started_at
+				and cached_topic_counts
+			):
 				cached_quotas = _compute_topic_quotas(cached_topic_counts, batch_size)
 				total_available = cached_total_available
 				if cached_quotas:
@@ -1117,7 +1126,11 @@ class PracticeService:
 				elif total_available == 0:
 					used_session_exclusion = True
 
-			if not used_session_exclusion and self.config.practice_batched_topic_select_enabled and session_started_at:
+			if (
+				not used_session_exclusion
+				and self.config.practice_batched_topic_select_enabled
+				and session_started_at
+			):
 				prefetched_batch = await self._prepare_batched_question_data(
 					player_id=player_id,
 					subject_id=subject_id,
@@ -1477,11 +1490,15 @@ class PracticeService:
 				upsert_ms = round((time.perf_counter() - upsert_started) * 1000, 2)
 				if accepted_result is None:
 					accepted_ids = {item_id for item_id in submitted_ids if item_id}
-				elif isinstance(accepted_result, list) and accepted_result and isinstance(
-					accepted_result[0], dict
+				elif (
+					isinstance(accepted_result, list)
+					and accepted_result
+					and isinstance(accepted_result[0], dict)
 				):
 					accepted_ids = {
-						row["item_id"] for row in accepted_result if isinstance(row, dict) and row.get("item_id")
+						row["item_id"]
+						for row in accepted_result
+						if isinstance(row, dict) and row.get("item_id")
 					}
 				else:
 					accepted_ids = {item_id for item_id in accepted_result if item_id}
@@ -1523,7 +1540,9 @@ class PracticeService:
 				cached_total_available = self._parse_session_counter(raw_total_available)
 				if cached_topic_counts and cached_total_available <= 0:
 					cached_total_available = sum(cached_topic_counts.values())
-				next_session_served_count = self._parse_session_counter(raw_session_served_count) + total_count
+				next_session_served_count = (
+					self._parse_session_counter(raw_session_served_count) + total_count
+				)
 				try:
 					(
 						prefetched_batch,
