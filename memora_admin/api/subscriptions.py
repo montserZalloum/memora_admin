@@ -85,6 +85,53 @@ def get_player_access_keys(player_id: str) -> list[str]:
 
 
 @frappe.whitelist(allow_guest=False)
+def get_plan_free_subjects(plan_id: str) -> list[str]:
+	"""Get non-premium subject IDs for a plan from MariaDB.
+
+	Used by FastAPI AccessService to hydrate plan free_subjects set after cache flush.
+
+	Args:
+	    plan_id: Plan docname (e.g., "PLAN-00572")
+
+	Returns:
+	    List of subject IDs that are non-premium in this plan
+	"""
+	return frappe.get_all(
+		"Memora Plan Subject",
+		filters={"parent": plan_id, "is_premium": 0},
+		pluck="subject",
+	) or []
+
+
+@frappe.whitelist(allow_guest=False)
+def get_season_data(season_id: str) -> dict | None:
+	"""Get season metadata from MariaDB for cache hydration.
+
+	Used by FastAPI SeasonService to hydrate Redis after cache flush.
+
+	Args:
+	    season_id: Season docname (e.g., "SEAS-00635")
+
+	Returns:
+	    Dict with season fields, or None if not found
+	"""
+	season = frappe.db.get_value(
+		"Memora Season",
+		season_id,
+		["is_published", "start_date", "end_date", "season_seq"],
+		as_dict=True,
+	)
+	if not season:
+		return None
+	return {
+		"is_published": bool(season.is_published),
+		"start_date": str(season.start_date),
+		"end_date": str(season.end_date),
+		"season_seq": str(season.season_seq),
+	}
+
+
+@frappe.whitelist(allow_guest=False)
 def get_player_progress(player_id: str, subject_id: str) -> dict | None:
 	"""Get player's progress bitmap from MariaDB.
 

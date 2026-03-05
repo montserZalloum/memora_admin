@@ -180,6 +180,12 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Practice Log table setup failed: {e}")
 
+	# Practice query indexes (keep after Practice Log table creation)
+	try:
+		_ensure_practice_query_indexes()
+	except Exception as e:
+		print(f"[after_migrate] Practice query indexes setup failed: {e}")
+
 
 def _ensure_uuid_polyfill_functions():
 	"""Create UUID_TO_BIN and BIN_TO_UUID polyfill stored functions.
@@ -614,7 +620,8 @@ def _ensure_practice_log_table():
 	This is NOT a Frappe DocType — it's a raw SQL table managed via setup.py,
 	following the Memory State precedent for high-volume tables (~500M rows).
 
-	Idempotent: uses CREATE TABLE IF NOT EXISTS.
+	Idempotent: uses CREATE TABLE IF NOT EXISTS. Existing installs get any
+	additional indexes via _ensure_practice_query_indexes().
 	"""
 	frappe.db.sql_ddl("""
 		CREATE TABLE IF NOT EXISTS `tabMemora Practice Log` (
@@ -628,7 +635,8 @@ def _ensure_practice_log_table():
 			`correct_count` INT UNSIGNED NOT NULL DEFAULT 0,
 			PRIMARY KEY (`id`),
 			UNIQUE KEY `uq_player_item` (`player_id`, `item_id`),
-			KEY `idx_item_id` (`item_id`)
+			KEY `idx_item_id` (`item_id`),
+			KEY `idx_player_seen_item` (`player_id`, `last_seen_at`, `item_id`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 	""")
 
@@ -675,3 +683,45 @@ def _ensure_hot_table_indexes():
 				CREATE INDEX `{index_name}` ON `{table}` {columns}
 			""")
 			print(f"[after_migrate] Created INDEX {index_name} on {table}")
+
+
+def _ensure_practice_query_indexes():
+	"""Backfill composite indexes that keep practice selection queries fast.
+
+	Practice now excludes "seen in current session" items server-side using
+	Practice Log.last_seen_at. These indexes keep both the Review Item scope
+	filter and the Practice Log time-window lookup index-backed.
+	"""
+	tables = set(frappe.db.get_tables())
+
+	indexes = [
+		("tabMemora Review Item", "idx_practice_scope", "(subject, topic, lesson)"),
+		(
+			"tabMemora Practice Log",
+			"idx_player_seen_item",
+			"(player_id, last_seen_at, item_id)",
+		),
+	]
+
+	for table, index_name, columns in indexes:
+		if table not in tables:
+			continue
+
+		existing = frappe.db.sql(
+			"""
+			SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+			WHERE TABLE_SCHEMA = DATABASE()
+			AND TABLE_NAME = %s
+			AND INDEX_NAME = %s
+			LIMIT 1
+		""",
+			(table, index_name),
+		)
+
+		if existing:
+			continue
+
+		frappe.db.sql_ddl(f"""
+			CREATE INDEX `{index_name}` ON `{table}` {columns}
+		""")
+		print(f"[after_migrate] Created INDEX {index_name} on {table}")

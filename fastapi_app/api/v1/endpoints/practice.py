@@ -8,18 +8,22 @@ from fastapi_app.api.deps import ActiveSeasonDep, CurrentUser, PracticeServiceDe
 from fastapi_app.models.practice import (
 	PracticeBatchResponse,
 	PracticeHierarchyResponse,
+	PracticeSubmitAndContinueResponse,
 	PracticeSubmitResponse,
 	StartPracticeRequest,
 	SubmitPracticeRequest,
 )
 from fastapi_app.services.practice import (
 	BatchSeqMismatchError,
+	DuplicateBatchItemsError,
 	InvalidSessionStateError,
 	NoActiveSessionError,
 	NoItemsError,
 	OffBatchItemError,
 	PracticeAccessDenied,
 	PracticeHierarchyMetaUnavailableError,
+	PracticeSelectionUnavailableError,
+	PracticeSessionBusyError,
 	PracticeSubjectNotFoundError,
 	PreviousBatchNotSubmittedError,
 )
@@ -107,10 +111,28 @@ async def start_practice(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail={"code": "NO_ACCESS", "tracks": e.denied_tracks},
 		)
+	except PracticeSubjectNotFoundError:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail={"code": "SUBJECT_NOT_FOUND", "message": "Subject not found"},
+		)
 	except NoItemsError:
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail={"code": "NO_ITEMS", "message": "No reviewable items match the selected filters"},
+		)
+	except PracticeSelectionUnavailableError:
+		raise HTTPException(
+			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+			detail={
+				"code": "PRACTICE_SELECTION_UNAVAILABLE",
+				"message": "Practice questions are temporarily unavailable",
+			},
+		)
+	except PracticeSessionBusyError:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "SESSION_BUSY", "message": "Another practice request is in progress"},
 		)
 
 
@@ -146,10 +168,82 @@ async def submit_practice(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail={"code": "OFF_BATCH_ITEMS", "items": e.off_batch_ids[:5]},
 		)
+	except DuplicateBatchItemsError as e:
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			detail={"code": "DUPLICATE_RESULTS", "items": e.duplicate_ids[:5]},
+		)
 	except InvalidSessionStateError as e:
 		raise HTTPException(
 			status_code=status.HTTP_409_CONFLICT,
 			detail={"code": "INVALID_SESSION_STATE", "missing_field": e.missing_field},
+		)
+	except PracticeSessionBusyError:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "SESSION_BUSY", "message": "Another practice request is in progress"},
+		)
+
+
+@router.post(
+	"/submit-continue",
+	response_model=PracticeSubmitAndContinueResponse,
+	dependencies=[Depends(require_rate_limit("practice_submit"))],
+)
+async def submit_and_continue_practice(
+	body: SubmitPracticeRequest,
+	user: CurrentUser,
+	practice_service: PracticeServiceDep,
+) -> PracticeSubmitAndContinueResponse:
+	"""Submit the current batch and advance to the next batch in one request."""
+	try:
+		return await practice_service.submit_and_continue_batch(
+			player_id=user.sub,
+			batch_seq=body.batch_seq,
+			results=[r.model_dump() for r in body.results],
+		)
+	except NoActiveSessionError:
+		raise HTTPException(
+			status_code=status.HTTP_404_NOT_FOUND,
+			detail="NO_ACTIVE_SESSION",
+		)
+	except BatchSeqMismatchError as e:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "BATCH_SEQ_MISMATCH", "expected": e.expected, "received": e.received},
+		)
+	except OffBatchItemError as e:
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			detail={"code": "OFF_BATCH_ITEMS", "items": e.off_batch_ids[:5]},
+		)
+	except DuplicateBatchItemsError as e:
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			detail={"code": "DUPLICATE_RESULTS", "items": e.duplicate_ids[:5]},
+		)
+	except InvalidSessionStateError as e:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "INVALID_SESSION_STATE", "missing_field": e.missing_field},
+		)
+	except PreviousBatchNotSubmittedError as e:
+		raise HTTPException(
+			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+			detail={"code": "PREVIOUS_BATCH_NOT_SUBMITTED", "batch_seq": e.batch_seq},
+		)
+	except PracticeSelectionUnavailableError:
+		raise HTTPException(
+			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+			detail={
+				"code": "PRACTICE_SELECTION_UNAVAILABLE",
+				"message": "Practice questions are temporarily unavailable",
+			},
+		)
+	except PracticeSessionBusyError:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "SESSION_BUSY", "message": "Another practice request is in progress"},
 		)
 
 
@@ -176,4 +270,17 @@ async def continue_practice(
 		raise HTTPException(
 			status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
 			detail={"code": "PREVIOUS_BATCH_NOT_SUBMITTED", "batch_seq": e.batch_seq},
+		)
+	except PracticeSelectionUnavailableError:
+		raise HTTPException(
+			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+			detail={
+				"code": "PRACTICE_SELECTION_UNAVAILABLE",
+				"message": "Practice questions are temporarily unavailable",
+			},
+		)
+	except PracticeSessionBusyError:
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail={"code": "SESSION_BUSY", "message": "Another practice request is in progress"},
 		)

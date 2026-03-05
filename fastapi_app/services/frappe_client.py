@@ -122,6 +122,24 @@ class FrappeClient:
 		params = params or {}
 		return await self._call_method(method, **params)
 
+	async def warmup(self) -> None:
+		"""Best-effort startup warmup to open the first keepalive connection."""
+		client = await self._get_client()
+		started = time.perf_counter()
+		try:
+			response = await client.get("/api/method/ping", timeout=1.0)
+			duration_ms = round((time.perf_counter() - started) * 1000, 2)
+			if response.status_code == 200:
+				logger.info("frappe_api_warmed", duration_ms=duration_ms)
+				return
+			logger.warning(
+				"frappe_api_warmup_unexpected_status",
+				status_code=response.status_code,
+				duration_ms=duration_ms,
+			)
+		except Exception as e:
+			logger.warning("frappe_api_warmup_failed", error=str(e))
+
 	async def get_grant_keys(self, product_grant_id: str) -> list[str]:
 		"""
 		Get grant keys from Memora Product Grant.

@@ -8,7 +8,7 @@ import redis.asyncio as redis
 import structlog
 from cachetools import TTLCache
 
-from fastapi_app.core.redis_keys import ACCESS_KEY_TTL
+from fastapi_app.core.redis_keys import ACCESS_KEY_TTL, PLAN_FREE_SUBJECTS_TTL
 from fastapi_app.core.redis_keys import access_key as _access_key_fn
 from fastapi_app.core.redis_keys import plan_free_subjects_key as _plan_free_subjects_key_fn
 from fastapi_app.services.hydration import guarded_hydrate
@@ -181,9 +181,43 @@ class AccessService:
 		plan_subjects = await self.get_plan_free_subjects(plan_id)
 		return subject_id in plan_subjects
 
+	async def ensure_plan_hydrated(self, plan_id: str) -> None:
+		"""Hydrate plan free_subjects set from MariaDB if missing in Redis.
+
+		Called on cache miss in get_plan_free_subjects(). Mirrors ensure_hydrated()
+		for player access grants. Uses guarded_hydrate to prevent thundering herd.
+		"""
+		key = self._plan_free_subjects_key(plan_id)
+		if await self.redis.exists(key):
+			return
+
+		if not self.frappe:
+			logger.warning("plan_hydration_skipped", plan_id=plan_id, reason="no_frappe_client")
+			return
+
+		async def _do_hydrate() -> bool:
+			try:
+				subjects = await self.frappe.call(
+					"memora_admin.api.subscriptions.get_plan_free_subjects",
+					{"plan_id": plan_id},
+				)
+				if subjects:
+					await self.redis.sadd(key, *subjects)
+					await self.redis.expire(key, PLAN_FREE_SUBJECTS_TTL)
+					logger.info("plan_hydrated_from_mariadb", plan_id=plan_id, count=len(subjects))
+					return True
+				logger.debug("plan_hydration_empty", plan_id=plan_id)
+				return False
+			except Exception as e:
+				logger.error("plan_hydration_failed", plan_id=plan_id, error=str(e))
+				return False
+
+		await guarded_hydrate(self.redis, key, _do_hydrate)
+
 	async def get_plan_free_subjects(self, plan_id: str | None) -> set[str]:
 		"""Get subjects marked as non-premium in player's plan.
 		Uses local TTL cache (60s) — plans change very rarely.
+		Self-heals from MariaDB on cache miss.
 		"""
 		if not plan_id:
 			return set()
@@ -191,6 +225,8 @@ class AccessService:
 		if cached is not None:
 			return cached
 		key = self._plan_free_subjects_key(plan_id)
+		if not await self.redis.exists(key):
+			await self.ensure_plan_hydrated(plan_id)
 		members = await self.redis.smembers(key)
 		result = set(members)
 		_plan_subjects_cache[plan_id] = result

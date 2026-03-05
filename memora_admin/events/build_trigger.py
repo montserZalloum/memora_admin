@@ -14,6 +14,8 @@ from fastapi_app.core.redis_keys import (
 	cache_invalidation_channel,
 	catalog_key,
 	hierarchy_key,
+	plan_free_subjects_key,
+	plan_manifest_key,
 	plan_season_seq_key,
 )
 
@@ -54,8 +56,19 @@ def on_content_updated(doc, method):
 	if doc.doctype == "Memora Lesson" and method == "on_trash":
 		_delete_lesson_json(doc.name)
 
-	# Trigger builds for all plans that contain this subject
+	# GAP 2: When a subject is deleted directly, remove it from all plan free_subjects sets.
+	# on_plan_subject_changed handles child row deletion but not direct Subject DocType deletion.
+	if doc.doctype == "Memora Subject" and method == "on_trash":
+		_remove_subject_from_plan_free_subjects(doc.name)
+
+	# Trigger builds for all plans that contain this subject.
+	# Must run BEFORE cascade-deleting Plan Subject rows so the query still finds the plans.
 	_queue_plan_builds_for_subject(subject_id, doc)
+
+	# After queuing builds, cascade-delete orphaned Plan Subject rows so future builds
+	# and the 6-hour plan_sync task do not process a deleted subject.
+	if doc.doctype == "Memora Subject" and method == "on_trash":
+		_cascade_delete_plan_subjects(subject_id)
 
 
 # =============================================================================
@@ -313,6 +326,106 @@ def on_plan_subject_changed(doc, method):
 		)
 
 
+# =============================================================================
+# Plan Deletion Handler
+# =============================================================================
+
+
+def on_plan_deleted(doc, method):
+	"""
+	Clean up all storage and Redis state when an Academic Plan is deleted.
+
+	1. Cancels any pending/processing builds (prevents orphaned files post-deletion)
+	2. Deletes plans/{plan_id}/ directory from storage + CDN
+	3. Clears Redis keys: catalog, manifest, free_subjects, build debounce
+	4. Publishes cache invalidation to FastAPI sidecar
+
+	Best-effort: all operations are wrapped in try/except and logged on failure.
+	"""
+	plan_id = doc.name
+	_cancel_pending_builds(plan_id)
+	_delete_plan_directory(plan_id)
+	_delete_plan_redis_keys(plan_id)
+
+
+def _delete_plan_directory(plan_id: str):
+	"""Delete the plans/{plan_id}/ directory from storage and purge from CDN.
+
+	Lists files before deletion so we can issue targeted CDN purge requests.
+	Best-effort: errors are logged but never fail the deletion.
+	"""
+	plan_prefix = f"plans/{plan_id}"
+	file_keys: list[str] = []
+
+	try:
+		from memora_admin.memora_admin.services.build.storage import get_storage_backend
+
+		storage = get_storage_backend()
+		# Capture file list before deletion so CDN purge can reference them
+		file_keys = storage.list_directory(plan_prefix)
+		deleted = storage.delete_directory(plan_prefix)
+
+		if deleted:
+			frappe.logger().info(f"Deleted plan directory: {plan_prefix}/")
+		else:
+			frappe.logger().debug(f"Plan directory not found (already clean): {plan_prefix}/")
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to delete plan directory {plan_prefix}: {e}",
+			"Plan Directory Cleanup Error",
+		)
+
+	if not file_keys:
+		return
+
+	try:
+		from memora_admin.memora_admin.services.cdn.utils import get_purge_service
+
+		purge_service = get_purge_service()
+		if purge_service is not None:
+			purge_service.purge_files(file_keys)
+			frappe.logger().info(
+				f"CDN cache purged for deleted plan: {plan_prefix}/ ({len(file_keys)} files)"
+			)
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to purge CDN for plan {plan_prefix}: {e}",
+			"Plan CDN Purge Error",
+		)
+
+
+def _delete_plan_redis_keys(plan_id: str):
+	"""Delete all Redis keys for a deleted plan and publish cache invalidation.
+
+	Best-effort: errors are logged but never fail the deletion.
+	"""
+	import json
+
+	from memora_admin.utils.redis_connection import get_memora_redis
+
+	try:
+		r = get_memora_redis()
+
+		r.delete(
+			catalog_key(plan_id),
+			plan_manifest_key(plan_id),
+			plan_free_subjects_key(plan_id),
+			build_debounce_key(plan_id),
+		)
+
+		r.publish(
+			cache_invalidation_channel(),
+			json.dumps({"type": "catalog", "plan_id": plan_id}),
+		)
+
+		frappe.logger().info(f"Redis keys cleaned up for deleted plan {plan_id}")
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to clean up Redis keys for deleted plan {plan_id}: {e}",
+			"Plan Redis Cleanup Error",
+		)
+
+
 def _has_is_premium_changed(old_doc, doc) -> bool:
 	"""Compare is_premium across old and new plan_subjects child rows."""
 	if not old_doc:
@@ -484,4 +597,114 @@ def on_plan_overrider_changed(doc, method):
 		frappe.log_error(
 			f"Failed to queue build for plan {plan_id}: {e}",
 			"Build Trigger Error",
+		)
+
+
+# =============================================================================
+# GAP 2: Subject Deletion — Stale Plan free_subjects Sets
+# =============================================================================
+
+
+def _cascade_delete_plan_subjects(subject_id: str):
+	"""Delete all Plan Subject child rows that reference a deleted Subject.
+
+	Frappe does not cascade-delete child rows when a Link target is deleted.
+	Orphaned rows cause two problems:
+	  1. Future builds find them and regenerate empty JSON for the deleted subject.
+	  2. The 6-hour plan_sync task resurrects memora:plan:{plan}:free_subjects Redis keys.
+
+	Must be called AFTER _queue_plan_builds_for_subject() so builds are queued for the
+	right plans before the rows are removed.
+
+	Best-effort: errors are logged but never fail the deletion.
+	"""
+	try:
+		count = frappe.db.count("Memora Plan Subject", {"subject": subject_id})
+		if not count:
+			return
+
+		frappe.db.delete("Memora Plan Subject", {"subject": subject_id})
+		frappe.logger().info(
+			f"Cascade-deleted {count} Plan Subject row(s) for deleted subject {subject_id}"
+		)
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to cascade-delete Plan Subject rows for {subject_id}: {e}",
+			"Subject Deletion Cleanup Error",
+		)
+
+
+def _cancel_pending_builds(plan_id: str):
+	"""Cancel pending and processing builds for a deleted plan.
+
+	Prevents the build worker from running a build for a plan that no longer exists,
+	which would generate and upload empty JSON files creating new orphaned artifacts.
+
+	Uses status='Failed' (no 'Cancelled' status in the DocType) with a clear
+	error_message so admins know why the build was stopped.
+
+	Best-effort: errors are logged but never fail the deletion.
+	"""
+	try:
+		pending = frappe.get_all(
+			"Memora Build Queue",
+			filters={"target_name": plan_id, "status": ["in", ["Pending", "Processing"]]},
+			fields=["name"],
+		)
+
+		if not pending:
+			return
+
+		for build in pending:
+			frappe.db.set_value(
+				"Memora Build Queue",
+				build["name"],
+				{
+					"status": "Failed",
+					"error_message": f"Plan {plan_id} was deleted — build cancelled",
+				},
+			)
+
+		frappe.logger().info(f"Cancelled {len(pending)} pending build(s) for deleted plan {plan_id}")
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to cancel pending builds for plan {plan_id}: {e}",
+			"Plan Deletion Cleanup Error",
+		)
+
+
+def _remove_subject_from_plan_free_subjects(subject_id: str):
+	"""Remove a directly-deleted subject from all plan free_subjects Redis sets.
+
+	When a Memora Subject is trashed, its ID may linger in
+	memora:plan:{plan_id}:free_subjects sets for any plan that had it as free.
+	The on_plan_subject_changed handler covers Plan Subject child row deletion
+	but NOT direct Subject DocType deletion.
+
+	Best-effort: errors are logged but never fail the deletion.
+	"""
+	from memora_admin.utils.redis_connection import get_memora_redis
+
+	try:
+		plan_subjects = frappe.get_all(
+			"Memora Plan Subject",
+			filters={"subject": subject_id, "is_premium": 0},
+			fields=["parent"],
+		)
+
+		if not plan_subjects:
+			return
+
+		r = get_memora_redis()
+		for ps in plan_subjects:
+			plan_id = ps["parent"]
+			if plan_id:
+				r.srem(plan_free_subjects_key(plan_id), subject_id)
+				frappe.logger().info(
+					f"Removed deleted subject {subject_id} from plan {plan_id} free_subjects set"
+				)
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to remove deleted subject {subject_id} from plan free_subjects: {e}",
+			"Subject Deletion Cleanup Error",
 		)

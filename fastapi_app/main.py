@@ -56,6 +56,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 	frappe_client = FrappeClient()
 	app.state.frappe_client = frappe_client
 	set_frappe_client(frappe_client)
+	if settings.frappe_site != "test.local":
+		await frappe_client.warmup()
 
 	# Create HierarchyService instance
 	hierarchy_service = HierarchyService(

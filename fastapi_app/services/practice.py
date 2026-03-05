@@ -3,20 +3,31 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import time
+from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 import redis.asyncio as redis
 import structlog
+from redis.exceptions import LockError
 
 from fastapi_app.core.coalesce import CoalescingLockPool
 from fastapi_app.core.config import Settings
-from fastapi_app.core.redis_keys import practice_hierarchy_meta_key, practice_session_key
+from fastapi_app.core.redis_keys import (
+	practice_hierarchy_meta_key,
+	practice_scope_cache_key,
+	practice_session_lock_key,
+	practice_session_key,
+	practice_served_items_key,
+)
 from fastapi_app.models.practice import (
 	PracticeBatchResponse,
 	PracticeHierarchyResponse,
 	PracticeQuestion,
+	PracticeSubmitAndContinueResponse,
 	PracticeSubmitResponse,
 	PracticeTopicInfo,
 	PracticeTrackInfo,
@@ -33,7 +44,11 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 META_CACHE_TTL = 3600  # 1 hour — same as hierarchy cache
-PRACTICE_SESSION_SCHEMA_VERSION = 2
+PRACTICE_SESSION_SCHEMA_VERSION = 4
+PRACTICE_SCOPE_CACHE_TTL = 60
+PREFETCHED_NEXT_BATCH_FIELD = "prefetched_next_batch"
+SESSION_LOCK_TIMEOUT = 30
+SESSION_LOCK_BLOCKING_TIMEOUT = 5
 
 # Process-local per-key locks for practice metadata cache-fill coalescing.
 _meta_fill_locks = CoalescingLockPool(max_size=5_000)
@@ -66,6 +81,10 @@ class PracticeHierarchyMetaUnavailableError(Exception):
 
 class NoActiveSessionError(Exception):
 	"""Raised when no active practice session exists for the player."""
+
+
+class PracticeSessionBusyError(Exception):
+	"""Raised when another request is mutating the active practice session."""
 
 
 class BatchSeqMismatchError(Exception):
@@ -101,6 +120,18 @@ class InvalidSessionStateError(Exception):
 		super().__init__(f"Session missing required field: {missing_field}")
 
 
+class DuplicateBatchItemsError(Exception):
+	"""Raised when a submit payload contains the same item_id more than once."""
+
+	def __init__(self, duplicate_ids: list[str]):
+		self.duplicate_ids = duplicate_ids
+		super().__init__(f"Duplicate item_ids in submit payload: {duplicate_ids[:5]}")
+
+
+class PracticeSelectionUnavailableError(Exception):
+	"""Raised when question selection cannot reach the backing data store."""
+
+
 def _compute_topic_quotas(counts: dict[str, int], batch_size: int) -> dict[str, int]:
 	"""Distribute batch_size across topics proportionally by item count.
 
@@ -114,37 +145,78 @@ def _compute_topic_quotas(counts: dict[str, int], batch_size: int) -> dict[str, 
 	Returns:
 		Mapping of topic_id → quota (number of questions to draw from that topic).
 	"""
-	if not counts:
+	if not counts or batch_size <= 0:
 		return {}
 
-	total = sum(counts.values())
-	if total == 0:
+	positive_counts = {topic_id: count for topic_id, count in counts.items() if count > 0}
+	if not positive_counts:
 		return {}
 
 	# Single topic — skip proportional logic
-	if len(counts) == 1:
-		topic_id = next(iter(counts))
-		return {topic_id: min(batch_size, counts[topic_id])}
+	if len(positive_counts) == 1:
+		topic_id = next(iter(positive_counts))
+		return {topic_id: min(batch_size, positive_counts[topic_id])}
 
-	quotas: dict[str, int] = {}
-	remaining = batch_size
+	sorted_topics = sorted(positive_counts.items(), key=lambda item: (-item[1], item[0]))
 
-	# First pass: proportional allocation (round down), min 1 each, capped at available
-	for topic_id, count in counts.items():
-		quota = max(1, int(batch_size * count / total))
-		quota = min(quota, count)  # Don't exceed available
-		quotas[topic_id] = quota
-		remaining -= quota
+	# When the selection spans more topics than the batch can hold, choose the
+	# largest topics first and cap the batch at one item per topic.
+	if len(sorted_topics) >= batch_size:
+		return {topic_id: 1 for topic_id, _count in sorted_topics[:batch_size]}
 
-	# Second pass: distribute remainder to largest topics (that still have room)
-	if remaining > 0:
-		sorted_topics = sorted(counts.keys(), key=lambda t: counts[t], reverse=True)
-		for topic_id in sorted_topics:
+	quotas: dict[str, int] = {topic_id: 1 for topic_id, _count in sorted_topics}
+	base_remaining = batch_size - len(sorted_topics)
+	if base_remaining <= 0:
+		return quotas
+
+	extra_capacity = {topic_id: max(0, count - 1) for topic_id, count in sorted_topics}
+	total_extra_capacity = sum(extra_capacity.values())
+	if total_extra_capacity == 0:
+		return quotas
+
+	extra_allocations: dict[str, int] = {}
+	remainders: list[tuple[float, int, str]] = []
+	allocated = 0
+
+	for topic_id, count in sorted_topics:
+		capacity = extra_capacity[topic_id]
+		if capacity <= 0:
+			extra_allocations[topic_id] = 0
+			continue
+		exact_share = base_remaining * capacity / total_extra_capacity
+		extra = min(capacity, int(exact_share))
+		extra_allocations[topic_id] = extra
+		allocated += extra
+		remainders.append((exact_share - extra, count, topic_id))
+
+	for topic_id, extra in extra_allocations.items():
+		quotas[topic_id] += extra
+
+	remaining = base_remaining - allocated
+
+	if remaining > 0 and remainders:
+		for _fraction, _count, topic_id in sorted(
+			remainders,
+			key=lambda item: (-item[0], -item[1], item[2]),
+		):
 			if remaining <= 0:
 				break
-			extra = min(remaining, counts[topic_id] - quotas[topic_id])
-			quotas[topic_id] += extra
-			remaining -= extra
+			room = positive_counts[topic_id] - quotas[topic_id]
+			if room <= 0:
+				continue
+			quotas[topic_id] += 1
+			remaining -= 1
+
+	if remaining > 0:
+		for topic_id, _count in sorted_topics:
+			if remaining <= 0:
+				break
+			room = positive_counts[topic_id] - quotas[topic_id]
+			if room <= 0:
+				continue
+			take = min(room, remaining)
+			quotas[topic_id] += take
+			remaining -= take
 
 	return quotas
 
@@ -171,6 +243,278 @@ class PracticeService:
 		self.hierarchy = hierarchy_service
 		self.access = access_service
 		self.progress = progress_service
+		self._active_session_guards: set[str] = set()
+
+	@staticmethod
+	def _parse_session_schema_version(raw_schema_version: str | None) -> int:
+		"""Parse a stored schema version, defaulting to the oldest legacy format."""
+		try:
+			return int(raw_schema_version) if raw_schema_version is not None else 1
+		except (TypeError, ValueError):
+			return 1
+
+	@staticmethod
+	def _parse_session_counter(raw_value: str | None) -> int:
+		"""Parse a non-negative counter stored in Redis session state."""
+		try:
+			return max(int(raw_value or "0"), 0)
+		except (TypeError, ValueError):
+			return 0
+
+	@staticmethod
+	def _parse_session_topic_counts(raw_value: str | None) -> dict[str, int] | None:
+		"""Parse cached per-topic counts from Redis, returning None when unavailable."""
+		if not raw_value:
+			return None
+
+		try:
+			loaded = json.loads(raw_value)
+		except (json.JSONDecodeError, TypeError):
+			return None
+
+		if not isinstance(loaded, dict):
+			return None
+
+		topic_counts: dict[str, int] = {}
+		for topic_id, raw_count in loaded.items():
+			if not isinstance(topic_id, str) or not topic_id:
+				continue
+			try:
+				count = int(raw_count)
+			except (TypeError, ValueError):
+				continue
+			if count > 0:
+				topic_counts[topic_id] = count
+
+		return topic_counts or None
+
+	@staticmethod
+	def _build_scope_cache_key(
+		player_id: str,
+		subject_id: str,
+		accessible_lessons: list[str],
+		selected_topics: list[str],
+	) -> str:
+		"""Build a stable Redis key for short-lived start-scope count caching."""
+		digest = hashlib.sha1()
+		for value in (player_id, subject_id):
+			digest.update(value.encode("utf-8"))
+			digest.update(b"\0")
+		for lesson_id in sorted(set(accessible_lessons)):
+			digest.update(lesson_id.encode("utf-8"))
+			digest.update(b"\0")
+		digest.update(b"|")
+		for topic_id in sorted(set(selected_topics)):
+			digest.update(topic_id.encode("utf-8"))
+			digest.update(b"\0")
+		return practice_scope_cache_key(player_id, digest.hexdigest())
+
+	async def _load_scope_cache(
+		self,
+		cache_key: str,
+	) -> tuple[dict[str, int], int] | None:
+		"""Load cached topic counts for a resolved practice start scope."""
+		raw_payload = await self.redis.get(cache_key)
+		if not raw_payload:
+			return None
+
+		try:
+			payload = json.loads(raw_payload)
+		except (json.JSONDecodeError, TypeError):
+			return None
+
+		if not isinstance(payload, dict):
+			return None
+
+		raw_topic_counts = payload.get("topic_counts")
+		if not isinstance(raw_topic_counts, dict):
+			return None
+
+		topic_counts = self._parse_session_topic_counts(json.dumps(raw_topic_counts))
+		if not topic_counts:
+			return None
+
+		total_available = self._parse_session_counter(str(payload.get("total_available", 0)))
+		if total_available <= 0:
+			total_available = sum(topic_counts.values())
+
+		return topic_counts, total_available
+
+	async def _store_scope_cache(
+		self,
+		cache_key: str,
+		topic_counts: dict[str, int] | None,
+		total_available: int,
+	) -> None:
+		"""Cache short-lived topic counts for a resolved practice start scope."""
+		if not topic_counts:
+			return
+
+		await self.redis.set(
+			cache_key,
+			json.dumps(
+				{
+					"topic_counts": topic_counts,
+					"total_available": max(total_available, 0),
+				}
+			),
+			ex=PRACTICE_SCOPE_CACHE_TTL,
+		)
+
+	@staticmethod
+	def _serialize_prefetched_batch(
+		batch_response: PracticeBatchResponse,
+		session_all_seen_mode: bool,
+		topic_counts: dict[str, int] | None,
+		session_total_available: int,
+	) -> str:
+		"""Serialize a computed next batch so /continue can consume it without Frappe."""
+		return json.dumps(
+			{
+				"batch_seq": batch_response.batch_seq,
+				"questions": [q.model_dump() for q in batch_response.questions],
+				"total_available": batch_response.total_available,
+				"all_seen_warning": batch_response.all_seen_warning,
+				"all_seen_mode": session_all_seen_mode,
+				"topic_counts": topic_counts or {},
+				"session_total_available": max(session_total_available, 0),
+			}
+		)
+
+	def _parse_prefetched_batch(
+		self,
+		raw_payload: str | None,
+	) -> tuple[PracticeBatchResponse, bool, dict[str, int] | None, int] | None:
+		"""Parse a prefetched next-batch payload stored in the session hash."""
+		if not raw_payload:
+			return None
+
+		try:
+			payload = json.loads(raw_payload)
+		except (json.JSONDecodeError, TypeError):
+			return None
+
+		if not isinstance(payload, dict):
+			return None
+
+		raw_questions = payload.get("questions", [])
+		if not isinstance(raw_questions, list):
+			return None
+
+		try:
+			questions = [PracticeQuestion.model_validate(question) for question in raw_questions]
+			batch_response = PracticeBatchResponse(
+				session_active=True,
+				batch_seq=max(int(payload.get("batch_seq", 0)), 0),
+				questions=questions,
+				total_available=max(int(payload.get("total_available", 0)), 0),
+				all_seen_warning=bool(payload.get("all_seen_warning", False)),
+			)
+		except (TypeError, ValueError):
+			return None
+
+		topic_counts = self._parse_session_topic_counts(json.dumps(payload.get("topic_counts", {})))
+		session_total_available = self._parse_session_counter(str(payload.get("session_total_available", 0)))
+		if topic_counts and session_total_available <= 0:
+			session_total_available = sum(topic_counts.values())
+
+		return batch_response, bool(payload.get("all_seen_mode", False)), topic_counts, session_total_available
+
+	@staticmethod
+	def _parse_cached_submit_and_continue(
+		raw_payload: str | None,
+	) -> PracticeSubmitAndContinueResponse | None:
+		"""Parse a cached submit+continue response."""
+		if not raw_payload:
+			return None
+
+		try:
+			payload = json.loads(raw_payload)
+		except (json.JSONDecodeError, TypeError):
+			return None
+
+		if not isinstance(payload, dict):
+			return None
+
+		try:
+			return PracticeSubmitAndContinueResponse.model_validate(payload)
+		except Exception:
+			return None
+
+	async def _activate_next_batch(
+		self,
+		player_id: str,
+		session_key: str,
+		served_items_key: str,
+		batch_response: PracticeBatchResponse,
+		session_all_seen_mode: bool,
+		topic_counts: dict[str, int] | None,
+		session_total_available: int,
+		source: str = "computed",
+	) -> PracticeBatchResponse:
+		"""Promote a prepared next batch into the active session."""
+		batch_ids = [q.item_id for q in batch_response.questions]
+		pipe = self.redis.pipeline()
+		pipe.hset(
+			session_key,
+			mapping={
+				"batch_seq": str(batch_response.batch_seq),
+				"all_seen_mode": "1" if session_all_seen_mode else "0",
+				f"batch_{batch_response.batch_seq}_item_ids": json.dumps(batch_ids),
+			},
+		)
+		if topic_counts is not None:
+			pipe.hset(
+				session_key,
+				mapping={
+					"topic_counts": json.dumps(topic_counts),
+					"total_available": str(session_total_available),
+				},
+			)
+		pipe.hdel(session_key, PREFETCHED_NEXT_BATCH_FIELD)
+		if batch_ids:
+			pipe.sadd(served_items_key, *batch_ids)
+		pipe.expire(session_key, self.config.practice_session_ttl)
+		pipe.expire(served_items_key, self.config.practice_session_ttl)
+		await pipe.execute()
+
+		logger.bind(player_id=player_id).info(
+			"practice_next_batch_activated",
+			batch_seq=batch_response.batch_seq,
+			item_count=len(batch_response.questions),
+			total_available=batch_response.total_available,
+			all_seen=batch_response.all_seen_warning,
+			source=source,
+		)
+		return batch_response
+
+	async def _load_served_item_ids(
+		self,
+		player_id: str,
+		schema_version: int,
+		raw_legacy_value: str | None = None,
+	) -> list[str]:
+		"""Load served item history from the active storage format.
+
+		Schema v3+ stores served IDs in a dedicated Redis SET.
+		Older sessions still fall back to the hash field for compatibility.
+		"""
+		if schema_version >= 3:
+			served_ids = await self.redis.smembers(practice_served_items_key(player_id))
+			return [item_id for item_id in served_ids if item_id]
+
+		if not raw_legacy_value:
+			return []
+
+		try:
+			loaded_ids = json.loads(raw_legacy_value)
+		except (json.JSONDecodeError, TypeError):
+			return []
+
+		if not isinstance(loaded_ids, list):
+			return []
+
+		return [item_id for item_id in loaded_ids if isinstance(item_id, str) and item_id]
 
 	# =========================================================================
 	# Hierarchy Browsing (US2)
@@ -410,6 +754,38 @@ class PracticeService:
 			if acquired:
 				fill_lock.release()
 
+	@asynccontextmanager
+	async def _session_mutation_guard(self, player_id: str):
+		"""Serialize session mutations per player to keep submit/continue idempotent."""
+		if player_id in self._active_session_guards:
+			yield
+			return
+
+		lock = self.redis.lock(
+			practice_session_lock_key(player_id),
+			timeout=SESSION_LOCK_TIMEOUT,
+			blocking_timeout=SESSION_LOCK_BLOCKING_TIMEOUT,
+		)
+		acquired = False
+		try:
+			acquired = await lock.acquire()
+		except LockError as e:
+			logger.warning("practice_session_lock_acquire_failed", player_id=player_id, error=str(e))
+			raise PracticeSessionBusyError() from e
+
+		if not acquired:
+			raise PracticeSessionBusyError()
+
+		self._active_session_guards.add(player_id)
+		try:
+			yield
+		finally:
+			self._active_session_guards.discard(player_id)
+			try:
+				await lock.release()
+			except LockError:
+				logger.warning("practice_session_lock_release_failed", player_id=player_id)
+
 	async def _check_track_access(
 		self,
 		player_id: str,
@@ -515,89 +891,412 @@ class PracticeService:
 			NoItemsError: If filters produce zero items
 		"""
 		log = logger.bind(player_id=player_id, subject_id=subject_id)
+		async with self._session_mutation_guard(player_id):
+			# Load hierarchy
+			hier = await self.hierarchy.get_hierarchy(subject_id)
+			if not hier:
+				raise PracticeSubjectNotFoundError(subject_id)
 
-		# Load hierarchy
-		hier = await self.hierarchy.get_hierarchy(subject_id)
-		if not hier:
-			raise NoItemsError()
+			# Resolve accessible lessons + check access
+			lesson_ids, denied_tracks = await self._get_accessible_lessons(
+				player_id,
+				subject_id,
+				plan_id,
+				hier,
+				tracks,
+				units,
+				topics,
+				filter_mode,
+			)
 
-		# Resolve accessible lessons + check access
-		lesson_ids, denied_tracks = await self._get_accessible_lessons(
-			player_id,
-			subject_id,
-			plan_id,
-			hier,
-			tracks,
-			units,
-			topics,
-			filter_mode,
-		)
+			if denied_tracks:
+				log.info("practice_access_denied", denied_tracks=denied_tracks)
+				raise PracticeAccessDenied(denied_tracks)
 
-		if denied_tracks:
-			log.info("practice_access_denied", denied_tracks=denied_tracks)
-			raise PracticeAccessDenied(denied_tracks)
+			if not lesson_ids:
+				log.info("practice_no_items", filter=filter_mode, tracks=tracks)
+				raise NoItemsError()
 
-		if not lesson_ids:
-			log.info("practice_no_items", filter=filter_mode, tracks=tracks)
-			raise NoItemsError()
+			# Resolve topic IDs for selected lessons (for proportional distribution)
+			selected_topic_ids = self._get_topic_ids_for_lessons(hier, lesson_ids)
+			scope_cache_key = self._build_scope_cache_key(
+				player_id,
+				subject_id,
+				lesson_ids,
+				selected_topic_ids,
+			)
 
-		# Resolve topic IDs for selected lessons (for proportional distribution)
-		selected_topic_ids = self._get_topic_ids_for_lessons(hier, lesson_ids)
+			# Select first batch of questions
+			batch_size = self.config.practice_session_size
+			session_topic_counts: dict[str, int] | None = None
+			cached_scope = await self._load_scope_cache(scope_cache_key)
+			if cached_scope is not None:
+				session_topic_counts, total_available = cached_scope
+				questions, _, any_repeat = await self._select_questions(
+					player_id=player_id,
+					subject_id=subject_id,
+					accessible_lessons=lesson_ids,
+					selected_topics=selected_topic_ids,
+					served_item_ids=[],
+					batch_size=batch_size,
+					topic_counts=session_topic_counts,
+				)
+				if not questions and total_available > 0:
+					await self.redis.delete(scope_cache_key)
+					session_topic_counts = None
 
-		# Select first batch of questions
+			if session_topic_counts is None and self.config.practice_batched_topic_select_enabled:
+				prepared_batch = await self._prepare_batched_question_data(
+					player_id=player_id,
+					subject_id=subject_id,
+					accessible_lessons=lesson_ids,
+					selected_topics=selected_topic_ids,
+					served_item_ids=[],
+					batch_size=batch_size,
+				)
+				if prepared_batch is not None:
+					session_topic_counts, candidate_rows, _session_served_count = prepared_batch
+					questions, total_available, any_repeat = self._allocate_batched_questions(
+						topic_counts=session_topic_counts,
+						candidate_rows=candidate_rows,
+						batch_size=batch_size,
+					)
+				else:
+					session_topic_counts = await self._count_items_per_topic(
+						subject_id,
+						lesson_ids,
+						selected_topic_ids,
+					)
+					questions, total_available, any_repeat = await self._select_questions(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=lesson_ids,
+						selected_topics=selected_topic_ids,
+						served_item_ids=[],
+						batch_size=batch_size,
+						topic_counts=session_topic_counts,
+					)
+			elif session_topic_counts is None:
+				session_topic_counts = await self._count_items_per_topic(
+					subject_id,
+					lesson_ids,
+					selected_topic_ids,
+				)
+				questions, total_available, any_repeat = await self._select_questions(
+					player_id=player_id,
+					subject_id=subject_id,
+					accessible_lessons=lesson_ids,
+					selected_topics=selected_topic_ids,
+					served_item_ids=[],
+					batch_size=batch_size,
+					topic_counts=session_topic_counts,
+				)
+
+			await self._store_scope_cache(
+				scope_cache_key,
+				session_topic_counts,
+				total_available,
+			)
+
+			all_seen = any_repeat
+			served_ids = [q.item_id for q in questions]
+
+			# Create Redis session (overwrites any existing session)
+			session_key = practice_session_key(player_id)
+			served_items_key = practice_served_items_key(player_id)
+			now = datetime.now(timezone.utc)
+			created_at = now.isoformat()
+			session_started_at = now.replace(tzinfo=None).isoformat()
+
+			session_data = {
+				"subject_id": subject_id,
+				"filter": filter_mode,
+				"tracks": json.dumps(tracks),
+				"units": json.dumps(units),
+				"topics": json.dumps(topics),
+				"schema_version": str(PRACTICE_SESSION_SCHEMA_VERSION),
+				"batch_seq": "0",
+				"batch_0_item_ids": json.dumps(served_ids),
+				"accessible_lessons": json.dumps(lesson_ids),
+				"selected_topics": json.dumps(selected_topic_ids),
+				"created_at": created_at,
+				"session_started_at": session_started_at,
+				"all_seen_mode": "0",
+				"session_served_count": "0",
+			}
+			if session_topic_counts is not None:
+				session_data["topic_counts"] = json.dumps(session_topic_counts)
+				session_data["total_available"] = str(total_available)
+
+			pipe = self.redis.pipeline()
+			pipe.delete(session_key)
+			pipe.delete(served_items_key)
+			pipe.hset(session_key, mapping=session_data)
+			if served_ids:
+				pipe.sadd(served_items_key, *served_ids)
+			pipe.expire(session_key, self.config.practice_session_ttl)
+			pipe.expire(served_items_key, self.config.practice_session_ttl)
+			await pipe.execute()
+
+			log.info(
+				"practice_session_started",
+				batch_seq=0,
+				item_count=len(questions),
+				total_available=total_available,
+				track_count=len(tracks),
+				all_seen=all_seen,
+			)
+
+			return PracticeBatchResponse(
+				session_active=True,
+				batch_seq=0,
+				questions=questions,
+				total_available=total_available,
+				all_seen_warning=all_seen,
+			)
+
+	async def _compute_next_batch_response(
+		self,
+		player_id: str,
+		current_seq: int,
+		schema_version: int,
+		accessible_lessons: list[str],
+		selected_topics: list[str],
+		subject_id: str,
+		raw_legacy_served_item_ids: str | None,
+		session_started_at: str,
+		session_all_seen_mode: bool,
+		cached_topic_counts: dict[str, int] | None,
+		cached_total_available: int,
+		session_served_count: int,
+	) -> tuple[PracticeBatchResponse, bool, dict[str, int] | None, int]:
+		"""Compute the next batch without mutating Redis session state."""
+		next_seq = current_seq + 1
 		batch_size = self.config.practice_session_size
-		questions, total_available, any_repeat = await self._select_questions(
-			player_id=player_id,
-			subject_id=subject_id,
-			accessible_lessons=lesson_ids,
-			selected_topics=selected_topic_ids,
-			served_item_ids=[],
-			batch_size=batch_size,
-		)
+		questions: list[PracticeQuestion] = []
+		total_available = 0
+		all_seen = False
+		used_session_exclusion = False
+		next_topic_counts = cached_topic_counts
+		next_total_available = cached_total_available
 
-		all_seen = any_repeat
-		served_ids = [q.item_id for q in questions]
+		if schema_version >= PRACTICE_SESSION_SCHEMA_VERSION and not session_all_seen_mode:
+			prefetched_batch: tuple[dict[str, int], list[dict], int] | None = None
+			if self.config.practice_batched_topic_select_enabled and session_started_at and cached_topic_counts:
+				cached_quotas = _compute_topic_quotas(cached_topic_counts, batch_size)
+				total_available = cached_total_available
+				if cached_quotas:
+					cached_batched_result = await self._select_questions_batched(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=accessible_lessons,
+						served_item_ids=[],
+						topic_counts=cached_topic_counts,
+						quotas=cached_quotas,
+						batch_size=batch_size,
+						session_started_at=session_started_at,
+					)
+					if cached_batched_result is not None:
+						questions, any_repeat = cached_batched_result
+						if questions:
+							all_seen = any_repeat
+							used_session_exclusion = True
+						elif total_available > 0 and session_served_count >= total_available:
+							questions, _, _ = await self._select_questions(
+								player_id=player_id,
+								subject_id=subject_id,
+								accessible_lessons=accessible_lessons,
+								selected_topics=selected_topics,
+								served_item_ids=[],
+								batch_size=batch_size,
+								topic_counts=cached_topic_counts,
+							)
+							all_seen = True
+							session_all_seen_mode = True
+							used_session_exclusion = True
+				elif total_available == 0:
+					used_session_exclusion = True
 
-		# Create Redis session (overwrites any existing session)
-		session_key = practice_session_key(player_id)
-		now = datetime.now(timezone.utc).isoformat()
+			if not used_session_exclusion and self.config.practice_batched_topic_select_enabled and session_started_at:
+				prefetched_batch = await self._prepare_batched_question_data(
+					player_id=player_id,
+					subject_id=subject_id,
+					accessible_lessons=accessible_lessons,
+					selected_topics=selected_topics,
+					served_item_ids=[],
+					batch_size=batch_size,
+					session_started_at=session_started_at,
+				)
 
-		session_data = {
-			"subject_id": subject_id,
-			"filter": filter_mode,
-			"tracks": json.dumps(tracks),
-			"units": json.dumps(units),
-			"topics": json.dumps(topics),
-			"schema_version": str(PRACTICE_SESSION_SCHEMA_VERSION),
-			"batch_seq": "0",
-			"served_item_ids": json.dumps(served_ids),
-			"batch_0_item_ids": json.dumps(served_ids),
-			"accessible_lessons": json.dumps(lesson_ids),
-			"selected_topics": json.dumps(selected_topic_ids),
-			"created_at": now,
-		}
+			if prefetched_batch is not None:
+				topic_counts, candidate_rows, session_served_count = prefetched_batch
+				total_available = sum(topic_counts.values())
+				next_topic_counts = topic_counts
+				next_total_available = total_available
+				used_session_exclusion = True
 
-		pipe = self.redis.pipeline()
-		pipe.delete(session_key)
-		pipe.hset(session_key, mapping=session_data)
-		pipe.expire(session_key, self.config.practice_session_ttl)
-		await pipe.execute()
+				if total_available > 0 and session_served_count >= total_available:
+					questions, _, _ = await self._select_questions(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=accessible_lessons,
+						selected_topics=selected_topics,
+						served_item_ids=[],
+						batch_size=batch_size,
+						topic_counts=topic_counts,
+					)
+					all_seen = True
+					session_all_seen_mode = True
+				else:
+					questions, _, any_repeat = self._allocate_batched_questions(
+						topic_counts=topic_counts,
+						candidate_rows=candidate_rows,
+						batch_size=batch_size,
+					)
+					all_seen = any_repeat
 
-		log.info(
-			"practice_session_started",
-			batch_seq=0,
-			item_count=len(questions),
-			total_available=total_available,
-			track_count=len(tracks),
-			all_seen=all_seen,
-		)
+					if not questions and total_available > 0:
+						questions, _, _ = await self._select_questions(
+							player_id=player_id,
+							subject_id=subject_id,
+							accessible_lessons=accessible_lessons,
+							selected_topics=selected_topics,
+							served_item_ids=[],
+							batch_size=batch_size,
+							topic_counts=topic_counts,
+						)
+						all_seen = True
+						session_all_seen_mode = True
 
-		return PracticeBatchResponse(
-			session_active=True,
-			batch_seq=0,
-			questions=questions,
-			total_available=total_available,
-			all_seen_warning=all_seen,
+		if not used_session_exclusion:
+			if schema_version >= PRACTICE_SESSION_SCHEMA_VERSION and session_all_seen_mode:
+				if cached_topic_counts:
+					questions, total_available, _ = await self._select_questions(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=accessible_lessons,
+						selected_topics=selected_topics,
+						served_item_ids=[],
+						batch_size=batch_size,
+						topic_counts=cached_topic_counts,
+					)
+				else:
+					questions, total_available, _ = await self._select_questions(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=accessible_lessons,
+						selected_topics=selected_topics,
+						served_item_ids=[],
+						batch_size=batch_size,
+					)
+				all_seen = True
+			else:
+				served_item_ids = await self._load_served_item_ids(
+					player_id,
+					schema_version,
+					raw_legacy_served_item_ids,
+				)
+				prefetched_batch = None
+				if self.config.practice_batched_topic_select_enabled and cached_topic_counts:
+					topic_counts = cached_topic_counts
+					total_available = cached_total_available
+					candidate_rows = await self._select_candidates_for_topics(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=accessible_lessons,
+						topic_ids=list(_compute_topic_quotas(topic_counts, batch_size).keys()),
+						served_item_ids=served_item_ids,
+						per_topic_limit=batch_size,
+					)
+				elif self.config.practice_batched_topic_select_enabled:
+					prefetched_batch = await self._prepare_batched_question_data(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=accessible_lessons,
+						selected_topics=selected_topics,
+						served_item_ids=served_item_ids,
+						batch_size=batch_size,
+					)
+
+				if prefetched_batch is not None:
+					topic_counts, candidate_rows, _ignored_session_served_count = prefetched_batch
+					total_available = sum(topic_counts.values())
+					next_topic_counts = topic_counts
+					next_total_available = total_available
+				else:
+					topic_counts = cached_topic_counts
+					if topic_counts is None:
+						topic_counts = await self._count_items_per_topic(
+							subject_id,
+							accessible_lessons,
+							selected_topics,
+						)
+					total_available = sum(topic_counts.values())
+					next_topic_counts = topic_counts
+					next_total_available = total_available
+					if not self.config.practice_batched_topic_select_enabled:
+						candidate_rows = None
+
+				served_unique_ids = set(served_item_ids)
+				should_wrap = total_available > 0 and len(served_unique_ids) >= total_available
+				if should_wrap and served_unique_ids:
+					valid_served_ids = await self._get_valid_item_ids(list(served_unique_ids))
+					should_wrap = len(valid_served_ids) >= total_available
+
+				if should_wrap:
+					questions, _, _ = await self._select_questions(
+						player_id=player_id,
+						subject_id=subject_id,
+						accessible_lessons=accessible_lessons,
+						selected_topics=selected_topics,
+						served_item_ids=[],
+						batch_size=batch_size,
+						topic_counts=topic_counts,
+					)
+					all_seen = True
+				else:
+					if candidate_rows is not None:
+						questions, _, any_repeat = self._allocate_batched_questions(
+							topic_counts=topic_counts,
+							candidate_rows=candidate_rows,
+							batch_size=batch_size,
+						)
+					else:
+						questions, _, any_repeat = await self._select_questions(
+							player_id=player_id,
+							subject_id=subject_id,
+							accessible_lessons=accessible_lessons,
+							selected_topics=selected_topics,
+							served_item_ids=served_item_ids,
+							batch_size=batch_size,
+							topic_counts=topic_counts,
+						)
+
+					all_seen = any_repeat
+
+					if not questions and total_available > 0:
+						questions, _, _ = await self._select_questions(
+							player_id=player_id,
+							subject_id=subject_id,
+							accessible_lessons=accessible_lessons,
+							selected_topics=selected_topics,
+							served_item_ids=[],
+							batch_size=batch_size,
+							topic_counts=topic_counts,
+						)
+						all_seen = True
+
+		return (
+			PracticeBatchResponse(
+				session_active=True,
+				batch_seq=next_seq,
+				questions=questions,
+				total_available=total_available,
+				all_seen_warning=all_seen,
+			),
+			session_all_seen_mode,
+			next_topic_counts,
+			next_total_available,
 		)
 
 	async def submit_batch(
@@ -612,8 +1311,8 @@ class PracticeService:
 		The marker stores the original response JSON so duplicate submissions
 		return the exact same result regardless of payload changes.
 
-		Validates that submitted item_ids were actually served in the batch
-		(stored in served_item_ids). Off-batch items are rejected.
+		Validates that submitted item_ids were actually served in the batch.
+		Off-batch items are rejected.
 
 		Raises:
 			NoActiveSessionError: If no active session exists
@@ -623,185 +1322,313 @@ class PracticeService:
 		"""
 		log = logger.bind(player_id=player_id, batch_seq=batch_seq)
 		session_key = practice_session_key(player_id)
-		session = await self.redis.hgetall(session_key)
+		async with self._session_mutation_guard(player_id):
+			submit_started = time.perf_counter()
+			submitted_marker = f"submitted_{batch_seq}"
+			batch_items_key = f"batch_{batch_seq}_item_ids"
+			session_read_started = time.perf_counter()
+			raw_session = await self.redis.hmget(
+				session_key,
+				"batch_seq",
+				"schema_version",
+				batch_items_key,
+				submitted_marker,
+				"accessible_lessons",
+				"selected_topics",
+				"subject_id",
+				"served_item_ids",
+				"session_started_at",
+				"all_seen_mode",
+				"topic_counts",
+				"total_available",
+				"session_served_count",
+			)
+			session_read_ms = round((time.perf_counter() - session_read_started) * 1000, 2)
 
-		if not session:
-			log.info("practice_session_expired")
-			raise NoActiveSessionError()
+			if not raw_session or all(value is None for value in raw_session):
+				log.info("practice_session_expired")
+				raise NoActiveSessionError()
 
-		current_seq = int(session.get("batch_seq", "0"))
+			(
+				raw_batch_seq,
+				raw_schema_version,
+				raw_batch_ids,
+				cached_result,
+				raw_accessible_lessons,
+				raw_selected_topics,
+				raw_subject_id,
+				raw_legacy_served_item_ids,
+				raw_session_started_at,
+				raw_all_seen_mode,
+				raw_topic_counts,
+				raw_total_available,
+				raw_session_served_count,
+			) = raw_session
+			current_seq = int(raw_batch_seq or "0")
 
-		# Check for future batch_seq (skipping batches)
-		if batch_seq > current_seq:
-			raise BatchSeqMismatchError(expected=current_seq, received=batch_seq)
+			# Check for future batch_seq (skipping batches)
+			if batch_seq > current_seq:
+				raise BatchSeqMismatchError(expected=current_seq, received=batch_seq)
 
-		# Check for duplicate submission — return cached original response
-		submitted_marker = f"submitted_{batch_seq}"
-		cached_result = session.get(submitted_marker)
-		if cached_result:
-			log.info("practice_batch_duplicate")
-			try:
-				cached = json.loads(cached_result)
-			except (json.JSONDecodeError, TypeError):
-				cached = None
+			# Check for duplicate submission — return cached original response
+			if cached_result:
+				log.info(
+					"practice_batch_duplicate",
+					session_read_ms=session_read_ms,
+					total_ms=round((time.perf_counter() - submit_started) * 1000, 2),
+				)
+				try:
+					cached = json.loads(cached_result)
+				except (json.JSONDecodeError, TypeError):
+					cached = None
 
-			# Legacy sessions stored "1" as the marker (not JSON), which
-			# parses as the integer 1 — not a dict.  Treat any non-dict
-			# marker as "already submitted but no cached stats".
-			if isinstance(cached, dict) and "correct_count" in cached:
+				# Legacy sessions stored "1" as the marker (not JSON), which
+				# parses as the integer 1 — not a dict.  Treat any non-dict
+				# marker as "already submitted but no cached stats".
+				if isinstance(cached, dict) and "correct_count" in cached:
+					return PracticeSubmitResponse(
+						accepted=True,
+						batch_seq=batch_seq,
+						correct_count=cached["correct_count"],
+						total_count=cached["total_count"],
+						accuracy_percent=cached["accuracy_percent"],
+						is_duplicate=True,
+					)
+
+				# Legacy marker (pre-deploy "1") — no cached stats available.
+				# Recompute from submitted results to preserve API contract.
+				# May differ from original submit if client tampered, but old
+				# code had the same behavior and these sessions expire in ≤1h.
+				legacy_correct = sum(1 for r in results if r.get("is_correct"))
+				legacy_total = len(results)
 				return PracticeSubmitResponse(
 					accepted=True,
 					batch_seq=batch_seq,
-					correct_count=cached["correct_count"],
-					total_count=cached["total_count"],
-					accuracy_percent=cached["accuracy_percent"],
+					correct_count=legacy_correct,
+					total_count=legacy_total,
+					accuracy_percent=round(legacy_correct / legacy_total * 100, 1)
+					if legacy_total > 0
+					else 0.0,
 					is_duplicate=True,
 				)
 
-			# Legacy marker (pre-deploy "1") — no cached stats available.
-			# Recompute from submitted results to preserve API contract.
-			# May differ from original submit if client tampered, but old
-			# code had the same behavior and these sessions expire in ≤1h.
-			legacy_correct = sum(1 for r in results if r.get("is_correct"))
-			legacy_total = len(results)
+			# Validate submitted items were actually served in THIS specific batch.
+			# Legacy sessions (pre-deploy) lack both schema_version and per-batch
+			# keys. Only those sessions skip validation to preserve rollout safety.
+			# Current-format sessions must fail closed if required state is missing.
+			validation_started = time.perf_counter()
+			schema_version = self._parse_session_schema_version(raw_schema_version)
+			is_legacy_session = schema_version < PRACTICE_SESSION_SCHEMA_VERSION
+			submitted_ids = [r.get("item_id", "") for r in results]
+			seen_ids: set[str] = set()
+			duplicate_ids: list[str] = []
+			for item_id in submitted_ids:
+				if item_id in seen_ids and item_id not in duplicate_ids:
+					duplicate_ids.append(item_id)
+				seen_ids.add(item_id)
+
+			if duplicate_ids:
+				log.warning(
+					"practice_duplicate_submit_items",
+					duplicate_count=len(duplicate_ids),
+					duplicate_ids=duplicate_ids[:5],
+				)
+				raise DuplicateBatchItemsError(duplicate_ids)
+
+			if raw_batch_ids is None:
+				if is_legacy_session:
+					log.info(
+						"practice_legacy_session_skip_validation",
+						batch_seq=batch_seq,
+						reason="no_per_batch_key",
+					)
+				else:
+					log.error(
+						"practice_session_missing_batch_key",
+						batch_seq=batch_seq,
+						missing_field=batch_items_key,
+					)
+					raise InvalidSessionStateError(batch_items_key)
+			else:
+				batch_item_ids = set(json.loads(raw_batch_ids))
+				off_batch = [iid for iid in submitted_ids if iid not in batch_item_ids]
+				if off_batch:
+					log.warning(
+						"practice_off_batch_items",
+						off_batch_count=len(off_batch),
+						off_batch_ids=off_batch[:5],
+					)
+					raise OffBatchItemError(off_batch)
+			validation_ms = round((time.perf_counter() - validation_started) * 1000, 2)
+
+			# UPSERT Practice Log for each result
+			now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
+			correct_count = 0
+			total_count = 0
+			upsert_ms = 0.0
+
+			if self.frappe and results:
+				# The Frappe-side upsert returns the persisted item_ids.
+				upsert_started = time.perf_counter()
+				accepted_result = await self.frappe.call(
+					"memora_admin.api.practice.upsert_practice_results",
+					{"player_id": player_id, "results": results, "seen_at": now},
+				)
+				upsert_ms = round((time.perf_counter() - upsert_started) * 1000, 2)
+				if accepted_result is None:
+					accepted_ids = {item_id for item_id in submitted_ids if item_id}
+				elif isinstance(accepted_result, list) and accepted_result and isinstance(
+					accepted_result[0], dict
+				):
+					accepted_ids = {
+						row["item_id"] for row in accepted_result if isinstance(row, dict) and row.get("item_id")
+					}
+				else:
+					accepted_ids = {item_id for item_id in accepted_result if item_id}
+
+				skipped_ids = set(submitted_ids) - accepted_ids
+
+				if skipped_ids:
+					log.warning(
+						"practice_items_deleted_during_session",
+						skipped_count=len(skipped_ids),
+						skipped_ids=list(skipped_ids),
+					)
+
+				for r in results:
+					if r.get("item_id", "") not in accepted_ids:
+						continue
+					is_correct = r.get("is_correct", False)
+
+					if is_correct:
+						correct_count += 1
+					total_count += 1
+			else:
+				# Count without DB write (no frappe client)
+				for r in results:
+					total_count += 1
+					if r.get("is_correct"):
+						correct_count += 1
+
+			accuracy = round(correct_count / total_count * 100, 1) if total_count > 0 else 0.0
+			prefetched_payload: str | None = None
+
+			if raw_accessible_lessons is not None and raw_selected_topics is not None and raw_subject_id:
+				accessible_lessons = json.loads(raw_accessible_lessons or "[]")
+				selected_topics = json.loads(raw_selected_topics or "[]")
+				subject_id = raw_subject_id or ""
+				session_started_at = raw_session_started_at or ""
+				session_all_seen_mode = raw_all_seen_mode == "1"
+				cached_topic_counts = self._parse_session_topic_counts(raw_topic_counts)
+				cached_total_available = self._parse_session_counter(raw_total_available)
+				if cached_topic_counts and cached_total_available <= 0:
+					cached_total_available = sum(cached_topic_counts.values())
+				next_session_served_count = self._parse_session_counter(raw_session_served_count) + total_count
+				try:
+					(
+						prefetched_batch,
+						prefetched_all_seen_mode,
+						prefetched_topic_counts,
+						prefetched_total_available,
+					) = await self._compute_next_batch_response(
+						player_id=player_id,
+						current_seq=current_seq,
+						schema_version=schema_version,
+						accessible_lessons=accessible_lessons,
+						selected_topics=selected_topics,
+						subject_id=subject_id,
+						raw_legacy_served_item_ids=raw_legacy_served_item_ids,
+						session_started_at=session_started_at,
+						session_all_seen_mode=session_all_seen_mode,
+						cached_topic_counts=cached_topic_counts,
+						cached_total_available=cached_total_available,
+						session_served_count=next_session_served_count,
+					)
+					prefetched_payload = self._serialize_prefetched_batch(
+						batch_response=prefetched_batch,
+						session_all_seen_mode=prefetched_all_seen_mode,
+						topic_counts=prefetched_topic_counts,
+						session_total_available=prefetched_total_available,
+					)
+				except PracticeSelectionUnavailableError:
+					log.warning("practice_prefetch_next_batch_failed")
+
+			# Cache the result in the submitted marker so duplicates return identical response
+			cached_payload = json.dumps(
+				{
+					"correct_count": correct_count,
+					"total_count": total_count,
+					"accuracy_percent": accuracy,
+				}
+			)
+
+			# Set submitted marker in session hash + reset TTL
+			pipe = self.redis.pipeline()
+			cache_write_started = time.perf_counter()
+			pipe.hset(session_key, submitted_marker, cached_payload)
+			pipe.hdel(session_key, PREFETCHED_NEXT_BATCH_FIELD)
+			if prefetched_payload is not None:
+				pipe.hset(session_key, PREFETCHED_NEXT_BATCH_FIELD, prefetched_payload)
+			if total_count > 0:
+				pipe.hincrby(session_key, "session_served_count", total_count)
+			pipe.expire(session_key, self.config.practice_session_ttl)
+			await pipe.execute()
+			cache_write_ms = round((time.perf_counter() - cache_write_started) * 1000, 2)
+
+			log.info(
+				"practice_batch_submitted",
+				correct_count=correct_count,
+				total_count=total_count,
+				accuracy_percent=accuracy,
+				session_read_ms=session_read_ms,
+				validation_ms=validation_ms,
+				upsert_ms=upsert_ms,
+				cache_write_ms=cache_write_ms,
+				total_ms=round((time.perf_counter() - submit_started) * 1000, 2),
+			)
+
 			return PracticeSubmitResponse(
 				accepted=True,
 				batch_seq=batch_seq,
-				correct_count=legacy_correct,
-				total_count=legacy_total,
-				accuracy_percent=round(legacy_correct / legacy_total * 100, 1) if legacy_total > 0 else 0.0,
-				is_duplicate=True,
+				correct_count=correct_count,
+				total_count=total_count,
+				accuracy_percent=accuracy,
+				is_duplicate=False,
 			)
 
-		# Validate submitted items were actually served in THIS specific batch.
-		# Legacy sessions (pre-deploy) lack both schema_version and per-batch
-		# keys. Only those sessions skip validation to preserve rollout safety.
-		# Current-format sessions must fail closed if required state is missing.
-		batch_items_key = f"batch_{batch_seq}_item_ids"
-		raw_batch_ids = session.get(batch_items_key)
-		raw_schema_version = session.get("schema_version")
-		try:
-			schema_version = int(raw_schema_version) if raw_schema_version is not None else 1
-		except (TypeError, ValueError):
-			schema_version = 1
-		is_legacy_session = schema_version < PRACTICE_SESSION_SCHEMA_VERSION
-		submitted_ids = [r.get("item_id", "") for r in results]
-		if raw_batch_ids is None:
-			if is_legacy_session:
-				log.info(
-					"practice_legacy_session_skip_validation",
-					batch_seq=batch_seq,
-					reason="no_per_batch_key",
+	async def submit_and_continue_batch(
+		self,
+		player_id: str,
+		batch_seq: int,
+		results: list[dict],
+	) -> PracticeSubmitAndContinueResponse:
+		"""Submit the current batch and advance to the next batch atomically."""
+		session_key = practice_session_key(player_id)
+		combined_marker = f"submitted_continue_{batch_seq}"
+
+		async with self._session_mutation_guard(player_id):
+			cached_combined = self._parse_cached_submit_and_continue(
+				await self.redis.hget(session_key, combined_marker)
+			)
+			if cached_combined is not None:
+				cached_combined.submit.is_duplicate = True
+				return cached_combined
+
+			submit_response = await self.submit_batch(player_id, batch_seq, results)
+
+			if submit_response.is_duplicate:
+				cached_combined = self._parse_cached_submit_and_continue(
+					await self.redis.hget(session_key, combined_marker)
 				)
-			else:
-				log.error(
-					"practice_session_missing_batch_key",
-					batch_seq=batch_seq,
-					missing_field=batch_items_key,
-				)
-				raise InvalidSessionStateError(batch_items_key)
-		else:
-			batch_item_ids = set(json.loads(raw_batch_ids))
-			off_batch = [iid for iid in submitted_ids if iid not in batch_item_ids]
-			if off_batch:
-				log.warning(
-					"practice_off_batch_items",
-					off_batch_count=len(off_batch),
-					off_batch_ids=off_batch[:5],
-				)
-				raise OffBatchItemError(off_batch)
+				if cached_combined is not None:
+					cached_combined.submit.is_duplicate = True
+					return cached_combined
 
-		# UPSERT Practice Log for each result
-		now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()  # ISO string for JSON serialization
-		correct_count = 0
-		total_count = 0
-
-		if self.frappe and results:
-			# Validate item_ids still exist (items may be deleted during active session)
-			valid_ids = await self._get_valid_item_ids(submitted_ids)
-			skipped_ids = set(submitted_ids) - valid_ids
-
-			if skipped_ids:
-				log.warning(
-					"practice_items_deleted_during_session",
-					skipped_count=len(skipped_ids),
-					skipped_ids=list(skipped_ids),
-				)
-
-			# Filter to valid results only
-			valid_results = [r for r in results if r.get("item_id", "") in valid_ids]
-
-			# Build bulk UPSERT values
-			values_parts = []
-			params = []
-			for r in valid_results:
-				item_id = r.get("item_id", "")
-				is_correct = r.get("is_correct", False)
-				result_str = "Correct" if is_correct else "Incorrect"
-				correct_int = 1 if is_correct else 0
-
-				if is_correct:
-					correct_count += 1
-				total_count += 1
-
-				values_parts.append("(%s, %s, %s, %s, %s, 1, %s)")
-				params.extend([player_id, item_id, now, now, result_str, correct_int])
-
-			if values_parts:
-				sql = f"""
-					INSERT INTO `tabMemora Practice Log`
-						(player_id, item_id, first_seen_at, last_seen_at, last_result, attempt_count, correct_count)
-					VALUES {", ".join(values_parts)}
-					ON DUPLICATE KEY UPDATE
-						last_seen_at = VALUES(last_seen_at),
-						last_result = VALUES(last_result),
-						attempt_count = attempt_count + 1,
-						correct_count = correct_count + VALUES(correct_count)
-				"""
-				# Let exception propagate — do NOT mark as submitted on DB failure
-				await self.frappe.call(
-					"memora_admin.api.practice.execute_practice_log_upsert",
-					{"sql": sql, "params": params},
-				)
-		else:
-			# Count without DB write (no frappe client)
-			for r in results:
-				total_count += 1
-				if r.get("is_correct"):
-					correct_count += 1
-
-		accuracy = round(correct_count / total_count * 100, 1) if total_count > 0 else 0.0
-
-		# Cache the result in the submitted marker so duplicates return identical response
-		cached_payload = json.dumps(
-			{
-				"correct_count": correct_count,
-				"total_count": total_count,
-				"accuracy_percent": accuracy,
-			}
-		)
-
-		# Set submitted marker in session hash + reset TTL
-		pipe = self.redis.pipeline()
-		pipe.hset(session_key, submitted_marker, cached_payload)
-		pipe.expire(session_key, self.config.practice_session_ttl)
-		await pipe.execute()
-
-		log.info(
-			"practice_batch_submitted",
-			correct_count=correct_count,
-			total_count=total_count,
-			accuracy_percent=accuracy,
-		)
-
-		return PracticeSubmitResponse(
-			accepted=True,
-			batch_seq=batch_seq,
-			correct_count=correct_count,
-			total_count=total_count,
-			accuracy_percent=accuracy,
-			is_duplicate=False,
-		)
+			next_batch = await self.continue_session(player_id)
+			response = PracticeSubmitAndContinueResponse(submit=submit_response, next_batch=next_batch)
+			await self.redis.hset(session_key, combined_marker, response.model_dump_json())
+			await self.redis.expire(session_key, self.config.practice_session_ttl)
+			return response
 
 	async def continue_session(
 		self,
@@ -815,117 +1642,126 @@ class PracticeService:
 		"""
 		log = logger.bind(player_id=player_id)
 		session_key = practice_session_key(player_id)
-		session = await self.redis.hgetall(session_key)
-
-		if not session:
-			log.info("practice_session_expired")
-			raise NoActiveSessionError()
-
-		current_seq = int(session.get("batch_seq", "0"))
-
-		# Verify current batch was submitted before serving the next one
-		submitted_marker = f"submitted_{current_seq}"
-		if not session.get(submitted_marker):
-			raise PreviousBatchNotSubmittedError(current_seq)
-
-		# Increment batch sequence
-		next_seq = current_seq + 1
-
-		# Load session context
-		accessible_lessons = json.loads(session.get("accessible_lessons", "[]"))
-		selected_topics = json.loads(session.get("selected_topics", "[]"))
-		served_item_ids = json.loads(session.get("served_item_ids", "[]"))
-		subject_id = session.get("subject_id", "")
-
-		# Count once up front so we can short-circuit the guaranteed-empty
-		# pre-wrap query when this session has already seen the full pool.
-		topic_counts = await self._count_items_per_topic(
-			subject_id,
-			accessible_lessons,
-			selected_topics,
-		)
-		total_available = sum(topic_counts.values())
-
-		# Select next batch of questions
-		batch_size = self.config.practice_session_size
-		served_unique_ids = set(served_item_ids)
-		should_wrap = total_available > 0 and len(served_unique_ids) >= total_available
-		if should_wrap and served_unique_ids:
-			# Deleted Review Items can leave stale IDs in session history.
-			# Re-check only when we are about to short-circuit into wrap-around,
-			# so deleted items do not force premature repeats.
-			valid_served_ids = await self._get_valid_item_ids(list(served_unique_ids))
-			should_wrap = len(valid_served_ids) >= total_available
-
-		if should_wrap:
-			questions, _, _ = await self._select_questions(
-				player_id=player_id,
-				subject_id=subject_id,
-				accessible_lessons=accessible_lessons,
-				selected_topics=selected_topics,
-				served_item_ids=[],  # Clear dedup to allow re-serve
-				batch_size=batch_size,
-				topic_counts=topic_counts,
-			)
-			all_seen = True  # Always true when wrapping around
-		else:
-			questions, _, any_repeat = await self._select_questions(
-				player_id=player_id,
-				subject_id=subject_id,
-				accessible_lessons=accessible_lessons,
-				selected_topics=selected_topics,
-				served_item_ids=served_item_ids,
-				batch_size=batch_size,
-				topic_counts=topic_counts,
+		served_items_key = practice_served_items_key(player_id)
+		async with self._session_mutation_guard(player_id):
+			raw_session = await self.redis.hmget(
+				session_key,
+				"batch_seq",
+				"schema_version",
+				"accessible_lessons",
+				"selected_topics",
+				"subject_id",
+				"served_item_ids",
+				"session_started_at",
+				"all_seen_mode",
+				"topic_counts",
+				"total_available",
+				"session_served_count",
+				PREFETCHED_NEXT_BATCH_FIELD,
 			)
 
-			all_seen = any_repeat
+			if not raw_session or all(value is None for value in raw_session):
+				log.info("practice_session_expired")
+				raise NoActiveSessionError()
 
-			# If all items exhausted, re-serve from the full pool (wrap around)
-			if not questions and total_available > 0:
-				questions, _, _ = await self._select_questions(
-					player_id=player_id,
-					subject_id=subject_id,
-					accessible_lessons=accessible_lessons,
-					selected_topics=selected_topics,
-					served_item_ids=[],  # Clear dedup to allow re-serve
-					batch_size=batch_size,
-					topic_counts=topic_counts,
-				)
-				all_seen = True  # Always true when wrapping around
+			(
+				raw_batch_seq,
+				raw_schema_version,
+				raw_accessible_lessons,
+				raw_selected_topics,
+				subject_id,
+				raw_legacy_served_item_ids,
+				raw_session_started_at,
+				raw_all_seen_mode,
+				raw_topic_counts,
+				raw_total_available,
+				raw_session_served_count,
+				raw_prefetched_next_batch,
+			) = raw_session
+			schema_version = self._parse_session_schema_version(raw_schema_version)
+			current_seq = int(raw_batch_seq or "0")
 
-		# Update served_item_ids with new batch
-		batch_ids = [q.item_id for q in questions]
-		new_served_ids = served_item_ids + batch_ids
+			# Verify current batch was submitted before serving the next one.
+			submitted_marker = f"submitted_{current_seq}"
+			if not await self.redis.hget(session_key, submitted_marker):
+				raise PreviousBatchNotSubmittedError(current_seq)
 
-		# Update session in Redis
-		pipe = self.redis.pipeline()
-		pipe.hset(
-			session_key,
-			mapping={
-				"batch_seq": str(next_seq),
-				"served_item_ids": json.dumps(new_served_ids),
-				f"batch_{next_seq}_item_ids": json.dumps(batch_ids),
-			},
-		)
-		pipe.expire(session_key, self.config.practice_session_ttl)
-		await pipe.execute()
+			prefetched_batch = self._parse_prefetched_batch(raw_prefetched_next_batch)
+			if prefetched_batch is not None:
+				(
+					batch_response,
+					prefetched_all_seen_mode,
+					prefetched_topic_counts,
+					prefetched_total_available,
+				) = prefetched_batch
+				if batch_response.batch_seq == current_seq + 1:
+					activated_batch = await self._activate_next_batch(
+						player_id=player_id,
+						session_key=session_key,
+						served_items_key=served_items_key,
+						batch_response=batch_response,
+						session_all_seen_mode=prefetched_all_seen_mode,
+						topic_counts=prefetched_topic_counts,
+						session_total_available=prefetched_total_available,
+						source="prefetched",
+					)
+					log.info(
+						"practice_session_continued",
+						batch_seq=activated_batch.batch_seq,
+						item_count=len(activated_batch.questions),
+						total_available=activated_batch.total_available,
+						all_seen=activated_batch.all_seen_warning,
+					)
+					return activated_batch
+				await self.redis.hdel(session_key, PREFETCHED_NEXT_BATCH_FIELD)
 
-		log.info(
-			"practice_session_continued",
-			batch_seq=next_seq,
-			item_count=len(questions),
-			total_available=total_available,
-			all_seen=all_seen,
-		)
-
-		return PracticeBatchResponse(
-			session_active=True,
-			batch_seq=next_seq,
-			questions=questions,
-			total_available=total_available,
-			all_seen_warning=all_seen,
-		)
+			accessible_lessons = json.loads(raw_accessible_lessons or "[]")
+			selected_topics = json.loads(raw_selected_topics or "[]")
+			subject_id = subject_id or ""
+			session_started_at = raw_session_started_at or ""
+			session_all_seen_mode = raw_all_seen_mode == "1"
+			cached_topic_counts = self._parse_session_topic_counts(raw_topic_counts)
+			cached_total_available = self._parse_session_counter(raw_total_available)
+			if cached_topic_counts and cached_total_available <= 0:
+				cached_total_available = sum(cached_topic_counts.values())
+			session_served_count = self._parse_session_counter(raw_session_served_count)
+			(
+				batch_response,
+				next_session_all_seen_mode,
+				next_topic_counts,
+				next_total_available,
+			) = await self._compute_next_batch_response(
+				player_id=player_id,
+				current_seq=current_seq,
+				schema_version=schema_version,
+				accessible_lessons=accessible_lessons,
+				selected_topics=selected_topics,
+				subject_id=subject_id,
+				raw_legacy_served_item_ids=raw_legacy_served_item_ids,
+				session_started_at=session_started_at,
+				session_all_seen_mode=session_all_seen_mode,
+				cached_topic_counts=cached_topic_counts,
+				cached_total_available=cached_total_available,
+				session_served_count=session_served_count,
+			)
+			activated_batch = await self._activate_next_batch(
+				player_id=player_id,
+				session_key=session_key,
+				served_items_key=served_items_key,
+				batch_response=batch_response,
+				session_all_seen_mode=next_session_all_seen_mode,
+				topic_counts=next_topic_counts,
+				session_total_available=next_total_available,
+				source="computed",
+			)
+			log.info(
+				"practice_session_continued",
+				batch_seq=activated_batch.batch_seq,
+				item_count=len(activated_batch.questions),
+				total_available=activated_batch.total_available,
+				all_seen=activated_batch.all_seen_warning,
+			)
+			return activated_batch
 
 	# =========================================================================
 	# Session Helpers
@@ -1020,43 +1856,113 @@ class PracticeService:
 		accessible_lessons: list[str],
 		selected_topics: list[str],
 	) -> dict[str, int]:
-		"""Count available Review Items per topic via SQL COUNT grouped by topic.
-
-		Returns:
-			Mapping of topic_id → item count (topics with 0 items omitted).
-		"""
+		"""Count available Review Items per topic for the selected lesson scope."""
 		if not accessible_lessons or not self.frappe:
 			return {}
 
-		lesson_placeholders = ", ".join(["%s"] * len(accessible_lessons))
-		where_clause = f"ri.subject = %s AND ri.lesson IN ({lesson_placeholders})"
-		params: list = [subject_id, *accessible_lessons]
-
-		if selected_topics:
-			topic_placeholders = ", ".join(["%s"] * len(selected_topics))
-			where_clause += f" AND ri.topic IN ({topic_placeholders})"
-			params.extend(selected_topics)
-
-		sql = f"""
-			SELECT ri.topic, COUNT(*) as cnt
-			FROM `tabMemora Review Item` ri
-			WHERE {where_clause}
-			GROUP BY ri.topic
-		"""
-
 		try:
-			rows = await self.frappe.call(
-				"memora_admin.api.practice.execute_practice_query",
-				{"sql": sql, "params": params},
+			counts = await self.frappe.call(
+				"memora_admin.api.practice.count_practice_items_per_topic",
+				{
+					"subject_id": subject_id,
+					"accessible_lessons": accessible_lessons,
+					"selected_topics": selected_topics,
+				},
 			)
 		except Exception as e:
 			logger.error("practice_count_per_topic_failed", error=str(e))
+			raise PracticeSelectionUnavailableError() from e
+
+		if not counts:
 			return {}
 
-		if not rows:
-			return {}
+		if isinstance(counts, dict):
+			return {topic_id: int(count) for topic_id, count in counts.items()}
 
-		return {row["topic"]: row["cnt"] for row in rows}
+		return {row["topic"]: row["cnt"] for row in counts}
+
+	async def _prepare_batched_question_data(
+		self,
+		player_id: str,
+		subject_id: str,
+		accessible_lessons: list[str],
+		selected_topics: list[str],
+		served_item_ids: list[str],
+		batch_size: int,
+		session_started_at: str | None = None,
+	) -> tuple[dict[str, int], list[dict], int] | None:
+		"""Fetch per-topic counts plus candidate rows in one Frappe round-trip."""
+		if not accessible_lessons or not self.frappe:
+			return {}, [], 0
+
+		try:
+			result = await self.frappe.call(
+				"memora_admin.api.practice.prepare_practice_batch",
+				{
+					"player_id": player_id,
+					"subject_id": subject_id,
+					"accessible_lessons": accessible_lessons,
+					"selected_topics": selected_topics,
+					"served_item_ids": served_item_ids,
+					"per_topic_limit": batch_size,
+					"max_topics": batch_size,
+					"session_started_at": session_started_at,
+				},
+			)
+		except Exception as e:
+			logger.error(
+				"practice_batched_prepare_failed",
+				player_id=player_id,
+				topic_count=len(selected_topics),
+				error=str(e),
+			)
+			return None
+
+		if result is None:
+			return None
+		if not result:
+			return {}, [], 0
+
+		raw_topic_counts = result.get("topic_counts", {}) if isinstance(result, dict) else {}
+		if isinstance(raw_topic_counts, dict):
+			topic_counts = {topic_id: int(count) for topic_id, count in raw_topic_counts.items()}
+		else:
+			topic_counts = {
+				row["topic"]: int(row["cnt"])
+				for row in raw_topic_counts
+				if isinstance(row, dict) and row.get("topic") and row.get("cnt") is not None
+			}
+
+		raw_candidate_rows = result.get("candidate_rows", []) if isinstance(result, dict) else []
+		candidate_rows = raw_candidate_rows if isinstance(raw_candidate_rows, list) else []
+		raw_session_served_count = result.get("session_served_count", 0) if isinstance(result, dict) else 0
+		try:
+			session_served_count = int(raw_session_served_count or 0)
+		except (TypeError, ValueError):
+			session_served_count = 0
+		return topic_counts, candidate_rows, session_served_count
+
+	def _allocate_batched_questions(
+		self,
+		topic_counts: dict[str, int],
+		candidate_rows: list[dict],
+		batch_size: int,
+	) -> tuple[list[PracticeQuestion], int, bool]:
+		"""Build a batch from a pre-fetched batched candidate pool."""
+		total_available = sum(topic_counts.values())
+		if total_available == 0:
+			return [], 0, False
+
+		quotas = _compute_topic_quotas(topic_counts, batch_size)
+		if not quotas:
+			return [], total_available, False
+
+		questions, any_repeat = self._allocate_questions_from_candidates(
+			candidate_rows=candidate_rows,
+			quotas=quotas,
+			topic_counts=topic_counts,
+		)
+		return questions, total_available, any_repeat
 
 	async def _select_questions(
 		self,
@@ -1091,6 +1997,23 @@ class PracticeService:
 		"""
 		if not accessible_lessons or not self.frappe:
 			return [], 0, False
+
+		if self.config.practice_batched_topic_select_enabled and topic_counts is None:
+			prepared_batch = await self._prepare_batched_question_data(
+				player_id=player_id,
+				subject_id=subject_id,
+				accessible_lessons=accessible_lessons,
+				selected_topics=selected_topics,
+				served_item_ids=served_item_ids,
+				batch_size=batch_size,
+			)
+			if prepared_batch is not None:
+				prepared_counts, candidate_rows, _session_served_count = prepared_batch
+				return self._allocate_batched_questions(
+					topic_counts=prepared_counts,
+					candidate_rows=candidate_rows,
+					batch_size=batch_size,
+				)
 
 		# Get per-topic counts for proportional distribution
 		if topic_counts is None:
@@ -1153,6 +2076,7 @@ class PracticeService:
 		topic_counts: dict[str, int],
 		quotas: dict[str, int],
 		batch_size: int,
+		session_started_at: str | None = None,
 	) -> tuple[list[PracticeQuestion], bool] | None:
 		"""Fetch per-topic candidates in one query, then preserve allocation in Python."""
 		candidate_rows = await self._select_candidates_for_topics(
@@ -1162,6 +2086,7 @@ class PracticeService:
 			topic_ids=list(quotas.keys()),
 			served_item_ids=served_item_ids,
 			per_topic_limit=batch_size,
+			session_started_at=session_started_at,
 		)
 		if candidate_rows is None:
 			return None
@@ -1238,61 +2163,27 @@ class PracticeService:
 		topic_ids: list[str],
 		served_item_ids: list[str],
 		per_topic_limit: int,
+		session_started_at: str | None = None,
 	) -> list[dict] | None:
 		"""Fetch the top N candidate rows per topic in a single SQL round-trip."""
 		if not topic_ids:
 			return []
 
-		lesson_placeholders = ", ".join(["%s"] * len(accessible_lessons))
-		topic_placeholders = ", ".join(["%s"] * len(topic_ids))
-		where_clause = (
-			f"ri.subject = %s AND ri.lesson IN ({lesson_placeholders}) "
-			f"AND ri.topic IN ({topic_placeholders})"
-		)
-		params: list = [subject_id, *accessible_lessons, *topic_ids]
-
-		if served_item_ids:
-			served_placeholders = ", ".join(["%s"] * len(served_item_ids))
-			where_clause += f" AND ri.item_id NOT IN ({served_placeholders})"
-			params.extend(served_item_ids)
-
-		priority_case = """
-			CASE
-				WHEN pl.item_id IS NULL THEN 0
-				ELSE 1
-			END
-		"""
-		sort_seen_expr = "COALESCE(pl.last_seen_at, '1970-01-01')"
-
-		select_sql = f"""
-			SELECT candidates.item_id, candidates.question_text, candidates.choice_1, candidates.choice_2,
-				   candidates.choice_3, candidates.choice_4, candidates.correct_choice, candidates.content_json,
-				   candidates.stage_type, candidates.topic, candidates.priority, candidates.sort_seen
-			FROM (
-				SELECT ri.item_id, ri.question_text, ri.choice_1, ri.choice_2,
-					   ri.choice_3, ri.choice_4, ri.correct_choice, ri.content_json,
-					   ri.stage_type, ri.topic,
-					   {priority_case} AS priority,
-					   {sort_seen_expr} AS sort_seen,
-					   ROW_NUMBER() OVER (
-						   PARTITION BY ri.topic
-						   ORDER BY {priority_case} ASC, {sort_seen_expr} ASC, ri.item_id ASC
-					   ) AS topic_rank
-				FROM `tabMemora Review Item` ri
-				LEFT JOIN `tabMemora Practice Log` pl
-					ON pl.item_id = ri.item_id AND pl.player_id = %s
-				WHERE {where_clause}
-			) candidates
-			WHERE candidates.topic_rank <= %s
-			ORDER BY candidates.topic, candidates.topic_rank
-		"""
-
-		select_params = [player_id, *params, per_topic_limit]
+		params = {
+			"player_id": player_id,
+			"subject_id": subject_id,
+			"accessible_lessons": accessible_lessons,
+			"topic_ids": topic_ids,
+			"served_item_ids": served_item_ids,
+			"per_topic_limit": per_topic_limit,
+		}
+		if session_started_at:
+			params["session_started_at"] = session_started_at
 
 		try:
 			return await self.frappe.call(
-				"memora_admin.api.practice.execute_practice_query",
-				{"sql": select_sql, "params": select_params},
+				"memora_admin.api.practice.select_practice_candidates",
+				params,
 			)
 		except Exception as e:
 			logger.error(
@@ -1400,44 +2291,17 @@ class PracticeService:
 			Tuple of (questions, has_repeat). has_repeat is True if any
 			returned row has priority > 0 (previously seen).
 		"""
-		lesson_placeholders = ", ".join(["%s"] * len(accessible_lessons))
-		where_clause = f"ri.subject = %s AND ri.lesson IN ({lesson_placeholders}) AND ri.topic = %s"
-		params: list = [subject_id, *accessible_lessons, topic_id]
-
-		# Exclude already-served items from this session
-		served_exclude_params: list = []
-		if served_item_ids:
-			served_placeholders = ", ".join(["%s"] * len(served_item_ids))
-			where_clause += f" AND ri.item_id NOT IN ({served_placeholders})"
-			served_exclude_params = list(served_item_ids)
-
-		priority_case = """
-			CASE
-				WHEN pl.item_id IS NULL THEN 0
-				ELSE 1
-			END
-		"""
-
-		select_sql = f"""
-			SELECT ri.item_id, ri.question_text, ri.choice_1, ri.choice_2,
-				   ri.choice_3, ri.choice_4, ri.correct_choice, ri.content_json,
-				   ri.stage_type, ri.topic,
-				   {priority_case} AS priority,
-				   COALESCE(pl.last_seen_at, '1970-01-01') AS sort_seen
-			FROM `tabMemora Review Item` ri
-			LEFT JOIN `tabMemora Practice Log` pl
-				ON pl.item_id = ri.item_id AND pl.player_id = %s
-			WHERE {where_clause}
-			ORDER BY priority ASC, sort_seen ASC
-			LIMIT %s
-		"""
-
-		select_params = [player_id, *params, *served_exclude_params, limit]
-
 		try:
 			rows = await self.frappe.call(
-				"memora_admin.api.practice.execute_practice_query",
-				{"sql": select_sql, "params": select_params},
+				"memora_admin.api.practice.select_practice_questions_for_topic",
+				{
+					"player_id": player_id,
+					"subject_id": subject_id,
+					"accessible_lessons": accessible_lessons,
+					"topic_id": topic_id,
+					"served_item_ids": served_item_ids,
+					"limit": limit,
+				},
 			)
 		except Exception as e:
 			logger.error(
@@ -1446,7 +2310,7 @@ class PracticeService:
 				topic_id=topic_id,
 				error=str(e),
 			)
-			return [], False
+			raise PracticeSelectionUnavailableError() from e
 
 		if not rows:
 			return [], False
@@ -1462,15 +2326,16 @@ class PracticeService:
 		"""
 		if not item_ids or not self.frappe:
 			return set(item_ids)
-
-		placeholders = ", ".join(["%s"] * len(item_ids))
-		sql = f"SELECT item_id FROM `tabMemora Review Item` WHERE item_id IN ({placeholders})"
 		try:
-			rows = await self.frappe.call(
-				"memora_admin.api.practice.execute_practice_query",
-				{"sql": sql, "params": list(item_ids)},
+			result = await self.frappe.call(
+				"memora_admin.api.practice.get_existing_practice_item_ids",
+				{"item_ids": list(item_ids)},
 			)
-			return {r["item_id"] for r in (rows or [])}
+			if not result:
+				return set()
+			if isinstance(result, list) and result and isinstance(result[0], dict):
+				return {row["item_id"] for row in result if row.get("item_id")}
+			return {item_id for item_id in result if item_id}
 		except Exception:
 			# On failure, assume all valid to avoid data loss
 			return set(item_ids)

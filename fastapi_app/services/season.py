@@ -4,9 +4,12 @@ from datetime import date
 from typing import Optional
 
 import redis.asyncio as redis
+import structlog
 
 from fastapi_app.core.redis_keys import season_key as _season_key_fn
 from fastapi_app.models.access import SeasonMeta
+
+logger = structlog.get_logger()
 
 
 class SeasonService:
@@ -16,29 +19,69 @@ class SeasonService:
 	- is_published check
 	- is_expired check (date comparison)
 	- is_started check (date comparison)
+
+	Self-heals from MariaDB on cache miss (Redis flush / restart).
 	"""
 
-	def __init__(self, redis_client: redis.Redis):
+	def __init__(self, redis_client: redis.Redis, frappe=None):
 		self.redis = redis_client
+		self.frappe = frappe
 
 	def _season_key(self, season_id: str) -> str:
 		"""Generate Redis key for season metadata."""
 		return _season_key_fn(season_id)
 
+	async def ensure_hydrated(self, season_id: str) -> None:
+		"""Hydrate season metadata from MariaDB if missing in Redis.
+
+		Called on cache miss in get_season_meta(). Mirrors the pattern
+		used by AccessService, ProgressService, and WalletService.
+		"""
+		if not self.frappe:
+			logger.warning("season_hydration_skipped", season_id=season_id, reason="no_frappe_client")
+			return
+
+		try:
+			result = await self.frappe.call(
+				"memora_admin.api.subscriptions.get_season_data",
+				{"season_id": season_id},
+			)
+			if not result:
+				logger.debug("season_hydration_empty", season_id=season_id)
+				return
+
+			key = self._season_key(season_id)
+			await self.redis.hset(
+				key,
+				mapping={
+					"is_published": "1" if result["is_published"] else "0",
+					"start_date": result["start_date"],
+					"end_date": result["end_date"],
+					"season_seq": result["season_seq"],
+				},
+			)
+			logger.info("season_hydrated_from_mariadb", season_id=season_id)
+
+		except Exception as e:
+			logger.error("season_hydration_failed", season_id=season_id, error=str(e))
+
 	async def get_season_meta(self, season_id: str) -> Optional[SeasonMeta]:
-		"""Get season metadata from cache.
+		"""Get season metadata, hydrating from MariaDB on cache miss.
 
 		Args:
 		    season_id: The season document name/ID
 
 		Returns:
-		    SeasonMeta if cached, None if not found (fallback to MariaDB needed)
+		    SeasonMeta if found (Redis or MariaDB), None if not found anywhere
 		"""
 		key = self._season_key(season_id)
 		data = await self.redis.hgetall(key)
 
 		if not data:
-			return None
+			await self.ensure_hydrated(season_id)
+			data = await self.redis.hgetall(key)
+			if not data:
+				return None
 
 		# Handle both bytes and str responses (depends on decode_responses setting)
 		def decode_value(val: bytes | str) -> str:

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Request models
@@ -20,8 +20,8 @@ class StartPracticeRequest(BaseModel):
 	subject_id: str
 	filter: Literal["all", "completed"]
 	tracks: list[str]
-	units: list[str] = []
-	topics: list[str] = []
+	units: list[str] = Field(default_factory=list)
+	topics: list[str] = Field(default_factory=list)
 
 
 class PracticeResult(BaseModel):
@@ -30,7 +30,7 @@ class PracticeResult(BaseModel):
 
 
 class SubmitPracticeRequest(BaseModel):
-	batch_seq: int
+	batch_seq: int = Field(ge=0)
 	results: list[PracticeResult]
 
 
@@ -70,7 +70,7 @@ class PracticeQuestion(BaseModel):
 	item_id: str
 	stage_type: str
 	question_text: str | None = None
-	choices: list[str] = []
+	choices: list[str] = Field(default_factory=list)
 	correct_choice: int | None = None
 	content_json: dict | None = None
 
@@ -90,3 +90,8 @@ class PracticeSubmitResponse(BaseModel):
 	total_count: int
 	accuracy_percent: float
 	is_duplicate: bool = False
+
+
+class PracticeSubmitAndContinueResponse(BaseModel):
+	submit: PracticeSubmitResponse
+	next_batch: PracticeBatchResponse

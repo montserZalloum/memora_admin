@@ -276,12 +276,45 @@ def practice_session_key(player_id: str) -> str:
 	"""Active practice session for a player.
 
 	Type: HASH (subject_id, filter, tracks, units, topics, batch_seq,
-	           served_item_ids, accessible_lessons, created_at, submitted_{N})
+	           accessible_lessons, created_at, submitted_{N}, batch_{N}_item_ids)
 	Producers: PracticeService.start_session()
 	Consumers: PracticeService.continue_session(), submit_batch()
 	TTL: practice_session_ttl (default 3600s)
 	"""
 	return f"memora:practice:{player_id}"
+
+
+def practice_served_items_key(player_id: str) -> str:
+	"""Served Review Item IDs for the active practice session.
+
+	Type: SET of item_id strings
+	Producers: PracticeService.start_session(), continue_session()
+	Consumers: PracticeService.continue_session()
+	TTL: practice_session_ttl (kept in sync with the parent practice session)
+	"""
+	return f"{practice_session_key(player_id)}:served"
+
+
+def practice_session_lock_key(player_id: str) -> str:
+	"""Distributed lock key guarding practice session mutations.
+
+	Type: STRING (managed by Redis lock implementation)
+	Producers: PracticeService._session_mutation_guard()
+	Consumers: PracticeService._session_mutation_guard()
+	TTL: SESSION_LOCK_TIMEOUT (set by the Redis lock)
+	"""
+	return f"{practice_session_key(player_id)}:lock"
+
+
+def practice_scope_cache_key(player_id: str, scope_token: str) -> str:
+	"""Short-lived cached topic counts for a resolved practice start scope.
+
+	Type: STRING (JSON: {topic_counts, total_available})
+	Producers: PracticeService.start_session()
+	Consumers: PracticeService.start_session()
+	TTL: short-lived (used to skip repeated count queries for the same scope)
+	"""
+	return f"{practice_session_key(player_id)}:scope:{scope_token}"
 
 
 def practice_hierarchy_meta_key(subject_id: str) -> str:

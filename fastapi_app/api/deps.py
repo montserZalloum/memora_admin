@@ -207,8 +207,9 @@ AnnouncementServiceDep = Annotated[AnnouncementService, Depends(get_announcement
 
 
 async def get_season_service(redis_client: RedisClient) -> SeasonService:
-	"""Get SeasonService with Redis from app state."""
-	return SeasonService(redis_client)
+	"""Get SeasonService with Redis and FrappeClient from app state."""
+	frappe_client = await get_frappe_client()
+	return SeasonService(redis_client, frappe=frappe_client)
 
 
 SeasonServiceDep = Annotated[SeasonService, Depends(get_season_service)]

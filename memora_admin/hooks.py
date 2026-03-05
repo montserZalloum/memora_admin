@@ -228,6 +228,7 @@ doc_events = {
 	# Plan build trigger events (debounced)
 	"Memora Academic Plan": {
 		"on_update": "memora_admin.events.build_trigger.on_plan_updated",
+		"on_trash": "memora_admin.events.build_trigger.on_plan_deleted",
 	},
 	"Memora Plan Subject": {
 		"after_insert": [

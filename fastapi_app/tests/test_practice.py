@@ -9,6 +9,7 @@ Tests verify:
 Reference: specs/025-practice-arena/contracts/practice-api.md
 """
 
+import asyncio
 import json
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -21,6 +22,7 @@ from fastapi_app.core.redis_keys import (
 )
 from fastapi_app.core.redis_keys import (
 	practice_hierarchy_meta_key,
+	practice_served_items_key,
 	practice_session_key,
 )
 from fastapi_app.tests.conftest import (
@@ -93,33 +95,34 @@ def _make_question_rows(count=3, topic_id=TOPIC_ID):
 	]
 
 
-def _is_select_query(sql: str) -> bool:
-	"""Detect either the legacy per-topic selector or the new batched selector."""
-	return "ROW_NUMBER() OVER" in sql or "SELECT ri.item_id" in sql
-
-
-def _mock_select_rows(
-	sql: str,
-	sql_params: list,
+def _mock_select_candidates(
+	params: dict,
 	by_topic: dict[str, list[dict]],
 	all_item_ids: set[str],
 	default_questions: list[dict],
 ) -> list[dict]:
-	"""Return mock selection rows for either SQL shape."""
-	limit = sql_params[-1] if sql_params else 20
-	selected_topics = [p for p in sql_params if isinstance(p, str) and p in by_topic]
-	served_ids = {p for p in sql_params if isinstance(p, str) and p in all_item_ids}
+	"""Return mock rows for the typed batched selector."""
+	limit = params.get("per_topic_limit", 20)
+	selected_topics = params.get("topic_ids") or list(by_topic.keys())
+	served_ids = {item_id for item_id in params.get("served_item_ids", []) if item_id in all_item_ids}
 
-	if "ROW_NUMBER() OVER" in sql:
-		if not selected_topics:
-			selected_topics = list(by_topic.keys())
-		rows = []
-		for topic_id in selected_topics:
-			pool = by_topic.get(topic_id, default_questions)
-			rows.extend([q for q in pool if q["item_id"] not in served_ids][:limit])
-		return rows
+	rows = []
+	for topic_id in selected_topics:
+		pool = by_topic.get(topic_id, default_questions)
+		rows.extend([q for q in pool if q["item_id"] not in served_ids][:limit])
+	return rows
 
-	topic_id = selected_topics[0] if selected_topics else None
+
+def _mock_select_for_topic(
+	params: dict,
+	by_topic: dict[str, list[dict]],
+	all_item_ids: set[str],
+	default_questions: list[dict],
+) -> list[dict]:
+	"""Return mock rows for the typed single-topic selector."""
+	limit = params.get("limit", 20)
+	topic_id = params.get("topic_id")
+	served_ids = {item_id for item_id in params.get("served_item_ids", []) if item_id in all_item_ids}
 	pool = by_topic.get(topic_id, default_questions)
 	return [q for q in pool if q["item_id"] not in served_ids][:limit]
 
@@ -147,24 +150,84 @@ def _make_frappe_handler(questions=None, valid_item_ids=None, topic_counts=None)
 		by_topic.setdefault(t, []).append(q)
 
 	inferred_counts = topic_counts or {t: len(qs) for t, qs in by_topic.items()}
+	session_seen_ids: set[str] = set()
 
 	async def handler(method, params=None):
-		if method == "memora_admin.api.practice.execute_practice_query":
-			sql = (params or {}).get("sql", "")
-			sql_params = (params or {}).get("params", [])
-			if "GROUP BY ri.topic" in sql:
-				# _count_items_per_topic query
-				return [{"topic": t, "cnt": c} for t, c in inferred_counts.items()]
-			elif _is_select_query(sql):
-				return _mock_select_rows(sql, sql_params, by_topic, all_item_ids, questions)
-			elif "SELECT item_id" in sql:
-				# _get_valid_item_ids check
-				requested_ids = set(sql_params or [])
-				existing_ids = [iid for iid in valid if not requested_ids or iid in requested_ids]
-				return [{"item_id": iid} for iid in existing_ids]
-			return []
-		elif method == "memora_admin.api.practice.execute_practice_log_upsert":
-			return None
+		if method == "memora_admin.api.practice.count_practice_items_per_topic":
+			return inferred_counts
+		elif method == "memora_admin.api.practice.prepare_practice_batch":
+			params = params or {}
+			selected_topics = params.get("selected_topics") or list(inferred_counts.keys())
+			selected_counts = {
+				topic_id: inferred_counts[topic_id]
+				for topic_id in selected_topics
+				if topic_id in inferred_counts
+			}
+			max_topics = params.get("max_topics")
+			if max_topics:
+				candidate_topic_ids = [
+					topic_id
+					for topic_id, _count in sorted(
+						selected_counts.items(),
+						key=lambda item: (-item[1], item[0]),
+					)
+				][:max_topics]
+			else:
+				candidate_topic_ids = list(selected_counts.keys())
+
+			if params.get("session_started_at"):
+				scoped_item_ids = {
+					q["item_id"]
+					for topic_id in selected_counts
+					for q in by_topic.get(topic_id, [])
+				}
+				excluded_ids = session_seen_ids & scoped_item_ids
+			else:
+				excluded_ids = {
+					item_id
+					for item_id in params.get("served_item_ids", [])
+					if item_id in all_item_ids
+				}
+
+			candidate_rows = _mock_select_candidates(
+				{
+					"topic_ids": candidate_topic_ids,
+					"served_item_ids": list(excluded_ids),
+					"per_topic_limit": params.get("per_topic_limit", 20),
+				},
+				by_topic,
+				all_item_ids,
+				questions,
+			)
+			return {
+				"topic_counts": selected_counts,
+				"candidate_rows": candidate_rows,
+				"session_served_count": len(excluded_ids),
+			}
+		elif method == "memora_admin.api.practice.select_practice_candidates":
+			params = dict(params or {})
+			if params.get("session_started_at"):
+				selected_topics = params.get("topic_ids") or list(inferred_counts.keys())
+				scoped_item_ids = {
+					q["item_id"]
+					for topic_id in selected_topics
+					for q in by_topic.get(topic_id, [])
+				}
+				params["served_item_ids"] = list(session_seen_ids & scoped_item_ids)
+			return _mock_select_candidates(params, by_topic, all_item_ids, questions)
+		elif method == "memora_admin.api.practice.select_practice_questions_for_topic":
+			return _mock_select_for_topic(params or {}, by_topic, all_item_ids, questions)
+		elif method == "memora_admin.api.practice.get_existing_practice_item_ids":
+			requested_ids = set((params or {}).get("item_ids", []))
+			return [iid for iid in valid if not requested_ids or iid in requested_ids]
+		elif method == "memora_admin.api.practice.upsert_practice_results":
+			accepted_ids = [
+				result.get("item_id")
+				for result in (params or {}).get("results", [])
+				if result.get("item_id")
+			]
+			session_seen_ids.update(accepted_ids)
+			return accepted_ids
 		elif method == "memora_admin.api.practice.get_practice_hierarchy_meta":
 			return _make_practice_meta()
 		# For access hydration and other calls, return None
@@ -335,6 +398,9 @@ class TestPracticeStart:
 		session = await redis_client.hgetall(practice_session_key(player_id))
 		assert session["subject_id"] == SUBJECT_ID
 		assert session["batch_seq"] == "0"
+		assert session["total_available"] == "5"
+		assert session["session_served_count"] == "0"
+		assert sum(json.loads(session["topic_counts"]).values()) == 5
 		accessible = json.loads(session["accessible_lessons"])
 		assert len(accessible) > 0
 
@@ -354,6 +420,66 @@ class TestPracticeStart:
 		assert resp.status_code == 422
 		detail = resp.json()["detail"]
 		assert detail["code"] == "NO_ITEMS"
+
+	async def test_start_selection_failure_returns_503(self, authed_client, redis_client, mock_frappe):
+		"""Selection query failures should surface as 503, not empty sessions."""
+		client, token, player_id, family_id = authed_client
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+
+		base_handler = _make_frappe_handler([])
+
+		async def handler(method, params=None):
+			if method in {
+				"memora_admin.api.practice.prepare_practice_batch",
+				"memora_admin.api.practice.count_practice_items_per_topic",
+				"memora_admin.api.practice.select_practice_candidates",
+				"memora_admin.api.practice.select_practice_questions_for_topic",
+			}:
+				raise RuntimeError("selector unavailable")
+			return await base_handler(method, params)
+
+		mock_frappe.call.side_effect = handler
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+
+		assert resp.status_code == 503
+		assert resp.json()["detail"]["code"] == "PRACTICE_SELECTION_UNAVAILABLE"
+
+	async def test_start_reuses_cached_scope_counts_on_repeat_scope(self, authed_client, redis_client, mock_frappe):
+		"""A repeated start for the same resolved scope should skip batch prep recounts."""
+		client, token, player_id, family_id = authed_client
+
+		questions = _make_question_rows(5)
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+
+		call_counts = {"prepare": 0, "select": 0}
+		base_handler = _make_frappe_handler(questions)
+
+		async def counted_handler(method, params=None):
+			if method == "memora_admin.api.practice.prepare_practice_batch":
+				call_counts["prepare"] += 1
+			elif method == "memora_admin.api.practice.select_practice_candidates":
+				call_counts["select"] += 1
+			return await base_handler(method, params)
+
+		mock_frappe.call.side_effect = counted_handler
+
+		for _ in range(2):
+			resp = await client.post(
+				"/api/v1/practice/start",
+				json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+			)
+			assert resp.status_code == 200
+			assert len(resp.json()["questions"]) == 5
+
+		assert call_counts["prepare"] == 1
+		assert call_counts["select"] == 1
 
 	async def test_start_empty_tracks_422(self, authed_client, redis_client, mock_frappe):
 		"""422 when tracks array is empty."""
@@ -431,6 +557,109 @@ class TestPracticeSubmit:
 		assert resp2.status_code == 200
 		assert resp2.json()["is_duplicate"] is True
 
+	async def test_submit_and_continue_returns_next_batch(self, authed_client, redis_client, mock_frappe):
+		"""submit-continue returns submit stats plus the next batch in one response."""
+		client, token, player_id, family_id = authed_client
+		questions = await _start_session(client, redis_client, mock_frappe, player_id)
+		results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
+
+		resp = await client.post("/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results})
+
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["submit"]["accepted"] is True
+		assert data["submit"]["batch_seq"] == 0
+		assert data["submit"]["is_duplicate"] is False
+		assert data["next_batch"]["batch_seq"] == 1
+		assert isinstance(data["next_batch"]["questions"], list)
+
+	async def test_submit_and_continue_duplicate_reuses_cached_next_batch(
+		self, authed_client, redis_client, mock_frappe
+	):
+		"""Duplicate submit-continue should not advance twice."""
+		client, token, player_id, family_id = authed_client
+		questions = await _start_session(client, redis_client, mock_frappe, player_id)
+		results = [{"item_id": q["item_id"], "is_correct": True} for q in questions]
+
+		resp1 = await client.post("/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results})
+		resp2 = await client.post("/api/v1/practice/submit-continue", json={"batch_seq": 0, "results": results})
+
+		assert resp1.status_code == 200
+		assert resp2.status_code == 200
+		assert resp1.json()["next_batch"]["batch_seq"] == 1
+		assert resp2.json()["next_batch"]["batch_seq"] == 1
+		assert resp2.json()["submit"]["is_duplicate"] is True
+
+		resp3 = await client.post("/api/v1/practice/continue")
+		assert resp3.status_code == 422
+		assert resp3.json()["detail"]["batch_seq"] == 1
+
+	async def test_submit_duplicate_item_ids_422(self, authed_client, redis_client, mock_frappe):
+		"""Duplicate item_ids in one payload are rejected."""
+		client, token, player_id, family_id = authed_client
+		questions = await _start_session(client, redis_client, mock_frappe, player_id)
+
+		item_id = questions[0]["item_id"]
+		resp = await client.post(
+			"/api/v1/practice/submit",
+			json={
+				"batch_seq": 0,
+				"results": [
+					{"item_id": item_id, "is_correct": True},
+					{"item_id": item_id, "is_correct": False},
+				],
+			},
+		)
+
+		assert resp.status_code == 422
+		detail = resp.json()["detail"]
+		assert detail["code"] == "DUPLICATE_RESULTS"
+		assert detail["items"] == [item_id]
+
+	async def test_submit_concurrent_duplicate_only_writes_once(
+		self, authed_client, redis_client, mock_frappe
+	):
+		"""Concurrent duplicate submits should return one write and one cached duplicate."""
+		client, token, player_id, family_id = authed_client
+		questions = await _start_session(client, redis_client, mock_frappe, player_id)
+		results = [{"item_id": questions[0]["item_id"], "is_correct": True}]
+
+		base_handler = _make_frappe_handler(questions)
+		upsert_started = asyncio.Event()
+		release_upsert = asyncio.Event()
+		upsert_calls = 0
+
+		async def handler(method, params=None):
+			nonlocal upsert_calls
+			if method == "memora_admin.api.practice.upsert_practice_results":
+				upsert_calls += 1
+				upsert_started.set()
+				await release_upsert.wait()
+				return None
+			return await base_handler(method, params)
+
+		mock_frappe.call.side_effect = handler
+
+		submit_1 = asyncio.create_task(
+			client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+		)
+		await upsert_started.wait()
+
+		submit_2 = asyncio.create_task(
+			client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+		)
+
+		await asyncio.sleep(0)
+		release_upsert.set()
+
+		resp_1, resp_2 = await asyncio.gather(submit_1, submit_2)
+		payloads = [resp_1.json(), resp_2.json()]
+
+		assert resp_1.status_code == 200
+		assert resp_2.status_code == 200
+		assert upsert_calls == 1
+		assert sorted(payload["is_duplicate"] for payload in payloads) == [False, True]
+
 	async def test_submit_batch_seq_mismatch_409(self, authed_client, redis_client, mock_frappe):
 		"""409 when batch_seq skips ahead of current."""
 		client, token, player_id, family_id = authed_client
@@ -507,23 +736,55 @@ class TestPracticeContinue:
 		assert resp.json()["detail"] == "NO_ACTIVE_SESSION"
 
 	async def test_continue_updates_served_item_ids(self, authed_client, redis_client, mock_frappe):
-		"""Continue appends new item_ids to served_item_ids in session."""
+		"""Continue appends new item_ids to the dedicated served-items set."""
 		client, token, player_id, family_id = authed_client
 		questions = await _start_and_submit(client, redis_client, mock_frappe, player_id)
 
-		# Check served_item_ids before continue
+		# Check served history before continue
 		session_before = await redis_client.hgetall(practice_session_key(player_id))
-		served_before = json.loads(session_before["served_item_ids"])
+		assert "served_item_ids" not in session_before
+		served_before = await redis_client.smembers(practice_served_items_key(player_id))
 		assert len(served_before) == 3  # First batch had 3 items
 
 		# Continue
 		resp = await client.post("/api/v1/practice/continue")
 		assert resp.status_code == 200
 
-		# Verify served_item_ids grew
-		session_after = await redis_client.hgetall(practice_session_key(player_id))
-		served_after = json.loads(session_after["served_item_ids"])
+		# Verify served history grew
+		served_after = await redis_client.smembers(practice_served_items_key(player_id))
 		assert len(served_after) >= len(served_before)
+
+	async def test_continue_consumes_prefetched_batch_without_frappe_calls(
+		self, authed_client, redis_client, mock_frappe
+	):
+		"""Continue should serve the submit-time prefetched batch without hitting Frappe."""
+		client, token, player_id, family_id = authed_client
+		call_methods: list[str] = []
+		base_handler = _make_frappe_handler(_make_question_rows(3))
+
+		async def tracking_handler(method, params=None):
+			call_methods.append(method)
+			return await base_handler(method, params)
+
+		await seed_hierarchy(redis_client, SUBJECT_ID)
+		await seed_access_grants(redis_client, player_id, [f"SUB-{SUBJECT_ID}"])
+		mock_frappe.call.side_effect = tracking_handler
+
+		resp = await client.post(
+			"/api/v1/practice/start",
+			json={"subject_id": SUBJECT_ID, "filter": "all", "tracks": [TRACK_ID]},
+		)
+		assert resp.status_code == 200
+
+		results = [{"item_id": q["item_id"], "is_correct": True} for q in resp.json()["questions"]]
+		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
+		assert resp.status_code == 200
+
+		call_methods.clear()
+		resp = await client.post("/api/v1/practice/continue")
+
+		assert resp.status_code == 200
+		assert call_methods == []
 
 
 # ==========================================================================
@@ -632,10 +893,10 @@ class TestPracticeSessionExpiry:
 
 @pytest.mark.asyncio
 class TestPracticeDeletedItem:
-	"""T041: Item deleted mid-session is silently skipped on submit."""
+	"""T041: Historical items are still recorded even if deleted after serving."""
 
 	async def test_deleted_item_skipped_on_submit(self, authed_client, redis_client, mock_frappe):
-		"""Submit with deleted item: silently skipped, only valid items counted."""
+		"""Submit counts the served batch even if an item is later deleted upstream."""
 		client, token, player_id, family_id = authed_client
 
 		questions = _make_question_rows(3)
@@ -666,9 +927,8 @@ class TestPracticeDeletedItem:
 		assert resp.status_code == 200
 		data = resp.json()
 		assert data["accepted"] is True
-		# Only 2 valid items counted
-		assert data["total_count"] == 2
-		assert data["correct_count"] == 1
+		assert data["total_count"] == 3
+		assert data["correct_count"] == 2
 		assert data["is_duplicate"] is False
 
 
@@ -980,6 +1240,17 @@ class TestProportionalDistribution:
 
 		assert _compute_topic_quotas({}, 20) == {}
 
+	async def test_compute_topic_quotas_caps_when_topics_exceed_batch(self):
+		"""Pure function test: too many topics still respect batch_size."""
+		from fastapi_app.services.practice import _compute_topic_quotas
+
+		counts = {f"T{i:02d}": 10 for i in range(30)}
+		quotas = _compute_topic_quotas(counts, 20)
+
+		assert len(quotas) == 20
+		assert sum(quotas.values()) == 20
+		assert all(value == 1 for value in quotas.values())
+
 
 @pytest.mark.asyncio
 class TestBatchedTopicSelection:
@@ -1031,8 +1302,8 @@ class TestBatchedTopicSelection:
 		assert batched_total == legacy_total == 7
 		assert batched_repeat is legacy_repeat is True
 
-	async def test_batched_selection_uses_two_queries_for_many_topics(self, redis_client, mock_frappe):
-		"""The hot path is reduced to count + batched select, not per-topic selects."""
+	async def test_batched_selection_uses_one_query_for_many_topics(self, redis_client, mock_frappe):
+		"""The hot path uses the combined batch-prep RPC, not separate count/select calls."""
 		from fastapi_app.core.config import get_settings
 		from fastapi_app.services.practice import PracticeService
 
@@ -1057,7 +1328,10 @@ class TestBatchedTopicSelection:
 		base_handler = _make_frappe_handler(questions, topic_counts=topic_counts)
 
 		async def counted_handler(method, params=None):
-			if method == "memora_admin.api.practice.execute_practice_query":
+			if method in {
+				"memora_admin.api.practice.prepare_practice_batch",
+				"memora_admin.api.practice.select_practice_questions_for_topic",
+			}:
 				query_calls["n"] += 1
 			return await base_handler(method, params)
 
@@ -1074,7 +1348,7 @@ class TestBatchedTopicSelection:
 
 		assert len(selected_questions) == 20
 		assert total_available == 96
-		assert query_calls["n"] == 2
+		assert query_calls["n"] == 1
 
 
 # ==========================================================================
@@ -1153,29 +1427,27 @@ class TestAllSeenWarning:
 		resp = await client.post("/api/v1/practice/submit", json={"batch_seq": 0, "results": results})
 		assert resp.status_code == 200
 
-		# Phase 2: continue — mock returns empty for first select (all served)
-		# but count still returns 3 so wrap-around triggers
+		# Phase 2: continue — the next batch was already prefetched during submit,
+		# so changing the Frappe handler here should not affect the response.
 		select_call_count = {"n": 0}
 
 		async def wrap_handler(method, params=None):
-			if method == "memora_admin.api.practice.execute_practice_query":
-				sql = (params or {}).get("sql", "")
-				sql_params = (params or {}).get("params", [])
-				if "GROUP BY ri.topic" in sql:
-					return [{"topic": TOPIC_ID, "cnt": 3}]
-				elif _is_select_query(sql):
-					select_call_count["n"] += 1
-					return _mock_select_rows(
-						sql,
-						sql_params,
-						{TOPIC_ID: questions},
-						{q["item_id"] for q in questions},
-						questions,
-					)
-				elif "SELECT item_id" in sql:
-					requested_ids = set(sql_params or [])
-					return [{"item_id": q["item_id"]} for q in questions if q["item_id"] in requested_ids]
-			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
+			if method == "memora_admin.api.practice.count_practice_items_per_topic":
+				return {TOPIC_ID: 3}
+			elif method == "memora_admin.api.practice.select_practice_candidates":
+				select_call_count["n"] += 1
+				if (params or {}).get("session_started_at"):
+					return []
+				return _mock_select_candidates(
+					params or {},
+					{TOPIC_ID: questions},
+					{q["item_id"] for q in questions},
+					questions,
+				)
+			elif method == "memora_admin.api.practice.get_existing_practice_item_ids":
+				requested_ids = set((params or {}).get("item_ids", []))
+				return [q["item_id"] for q in questions if q["item_id"] in requested_ids]
+			elif method == "memora_admin.api.practice.upsert_practice_results":
 				return None
 			return None
 
@@ -1187,7 +1459,7 @@ class TestAllSeenWarning:
 		data = resp.json()
 		# Wrap-around should set all_seen_warning=true
 		assert data["all_seen_warning"] is True
-		assert select_call_count["n"] == 1
+		assert select_call_count["n"] == 0
 
 	async def test_continue_uses_same_semantics(self, authed_client, redis_client, mock_frappe):
 		"""continue_session uses same all_seen_warning semantics as start_session."""
@@ -1292,7 +1564,7 @@ class TestWriteFailureHandling:
 		call_count = {"n": 0}
 
 		async def failing_handler(method, params=None):
-			if method == "memora_admin.api.practice.execute_practice_log_upsert":
+			if method == "memora_admin.api.practice.upsert_practice_results":
 				call_count["n"] += 1
 				if call_count["n"] == 1:
 					raise RuntimeError("DB connection lost")
@@ -1372,32 +1644,27 @@ class TestOffBatchItemValidation:
 		batch_call = {"n": 0}
 
 		async def multi_batch_handler(method, params=None):
-			if method == "memora_admin.api.practice.execute_practice_query":
-				sql = (params or {}).get("sql", "")
-				sql_params = (params or {}).get("params", [])
-				if "GROUP BY ri.topic" in sql:
-					return [{"topic": TOPIC_ID, "cnt": 6}]
-				elif _is_select_query(sql):
-					batch_call["n"] += 1
-					# First select → batch 0 items, second select → batch 1 items
-					if batch_call["n"] <= 1:
-						return _mock_select_rows(
-							sql,
-							sql_params,
-							{TOPIC_ID: batch0_qs},
-							{q["item_id"] for q in batch0_qs},
-							batch0_qs,
-						)
-					return _mock_select_rows(
-						sql,
-						sql_params,
-						{TOPIC_ID: batch1_qs},
-						{q["item_id"] for q in batch1_qs},
-						batch1_qs,
+			if method == "memora_admin.api.practice.count_practice_items_per_topic":
+				return {TOPIC_ID: 6}
+			elif method == "memora_admin.api.practice.select_practice_candidates":
+				batch_call["n"] += 1
+				# First select → batch 0 items, second select → batch 1 items
+				if batch_call["n"] <= 1:
+					return _mock_select_candidates(
+						params or {},
+						{TOPIC_ID: batch0_qs},
+						{q["item_id"] for q in batch0_qs},
+						batch0_qs,
 					)
-				elif "SELECT item_id" in sql:
-					return [{"item_id": q["item_id"]} for q in all_qs]
-			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
+				return _mock_select_candidates(
+					params or {},
+					{TOPIC_ID: batch1_qs},
+					{q["item_id"] for q in batch1_qs},
+					batch1_qs,
+				)
+			elif method == "memora_admin.api.practice.get_existing_practice_item_ids":
+				return [q["item_id"] for q in all_qs]
+			elif method == "memora_admin.api.practice.upsert_practice_results":
 				return None
 			return None
 
@@ -1571,24 +1838,20 @@ class TestLegacySessionCompat:
 		batch_call = {"n": 0}
 
 		async def multi_batch_handler(method, params=None):
-			if method == "memora_admin.api.practice.execute_practice_query":
-				sql = (params or {}).get("sql", "")
-				sql_params = (params or {}).get("params", [])
-				if "GROUP BY ri.topic" in sql:
-					return [{"topic": TOPIC_ID, "cnt": 6}]
-				elif _is_select_query(sql):
-					batch_call["n"] += 1
-					pool = batch0_qs if batch_call["n"] <= 1 else batch1_qs
-					return _mock_select_rows(
-						sql,
-						sql_params,
-						{TOPIC_ID: pool},
-						{q["item_id"] for q in pool},
-						pool,
-					)
-				elif "SELECT item_id" in sql:
-					return [{"item_id": q["item_id"]} for q in all_qs]
-			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
+			if method == "memora_admin.api.practice.count_practice_items_per_topic":
+				return {TOPIC_ID: 6}
+			elif method == "memora_admin.api.practice.select_practice_candidates":
+				batch_call["n"] += 1
+				pool = batch0_qs if batch_call["n"] <= 1 else batch1_qs
+				return _mock_select_candidates(
+					params or {},
+					{TOPIC_ID: pool},
+					{q["item_id"] for q in pool},
+					pool,
+				)
+			elif method == "memora_admin.api.practice.get_existing_practice_item_ids":
+				return [q["item_id"] for q in all_qs]
+			elif method == "memora_admin.api.practice.upsert_practice_results":
 				return None
 			return None
 
@@ -1855,28 +2118,24 @@ class TestQuotaRedistribution:
 		all_qs = topic_a_qs + topic_b_qs
 
 		async def redistrib_handler(method, params=None):
-			if method == "memora_admin.api.practice.execute_practice_query":
-				sql = (params or {}).get("sql", "")
-				sql_params = (params or {}).get("params", [])
-				if "GROUP BY ri.topic" in sql:
-					return [
-						{"topic": TOPIC_ID_A, "cnt": 1},
-						{"topic": TOPIC_ID_B, "cnt": 40},
-					]
-				elif _is_select_query(sql):
-					return _mock_select_rows(
-						sql,
-						sql_params,
-						{
-							TOPIC_ID_A: topic_a_qs,
-							TOPIC_ID_B: topic_b_qs,
-						},
-						{q["item_id"] for q in all_qs},
-						all_qs,
-					)
-				elif "SELECT item_id" in sql:
-					return [{"item_id": q["item_id"]} for q in all_qs]
-			elif method == "memora_admin.api.practice.execute_practice_log_upsert":
+			if method == "memora_admin.api.practice.count_practice_items_per_topic":
+				return {
+					TOPIC_ID_A: 1,
+					TOPIC_ID_B: 40,
+				}
+			elif method == "memora_admin.api.practice.select_practice_candidates":
+				return _mock_select_candidates(
+					params or {},
+					{
+						TOPIC_ID_A: topic_a_qs,
+						TOPIC_ID_B: topic_b_qs,
+					},
+					{q["item_id"] for q in all_qs},
+					all_qs,
+				)
+			elif method == "memora_admin.api.practice.get_existing_practice_item_ids":
+				return [q["item_id"] for q in all_qs]
+			elif method == "memora_admin.api.practice.upsert_practice_results":
 				return None
 			return None
 
