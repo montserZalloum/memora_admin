@@ -302,6 +302,8 @@ scheduler_events = {
 		"30 2 * * *": ["memora_admin.tasks.voucher_cleanup.cleanup_expired_exports"],
 		# Monthly on 1st at 02:00: Generate consignment invoices for previous month
 		"0 2 1 * *": ["memora_admin.tasks.consignment_billing.generate_monthly_invoices"],
+		# Daily at 01:00: Delete expired Memora Announcements
+		"0 1 * * *": ["memora_admin.tasks.announcement_cleanup.cleanup_expired_announcements"],
 	}
 }
 

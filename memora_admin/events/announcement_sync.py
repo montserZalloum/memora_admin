@@ -41,6 +41,5 @@ def _invalidate_announcements_cache():
 			),
 		)
 
-		frappe.logger().info("Announcements cache invalidated")
-	except Exception as e:
-		frappe.logger().error(f"Failed to invalidate announcements cache: {e}")
+	except Exception:
+		pass
