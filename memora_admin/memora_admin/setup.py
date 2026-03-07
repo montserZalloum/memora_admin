@@ -625,7 +625,6 @@ def _ensure_practice_log_table():
 	"""
 	frappe.db.sql_ddl("""
 		CREATE TABLE IF NOT EXISTS `tabMemora Practice Log` (
-			`id` BIGINT AUTO_INCREMENT,
 			`player_id` VARCHAR(140) NOT NULL,
 			`item_id` VARCHAR(36) NOT NULL,
 			`first_seen_at` DATETIME NOT NULL,
@@ -633,8 +632,7 @@ def _ensure_practice_log_table():
 			`last_result` ENUM('Correct', 'Incorrect') NOT NULL,
 			`attempt_count` INT UNSIGNED NOT NULL DEFAULT 1,
 			`correct_count` INT UNSIGNED NOT NULL DEFAULT 0,
-			PRIMARY KEY (`id`),
-			UNIQUE KEY `uq_player_item` (`player_id`, `item_id`),
+			PRIMARY KEY (`player_id`, `item_id`),
 			KEY `idx_item_id` (`item_id`),
 			KEY `idx_player_seen_item` (`player_id`, `last_seen_at`, `item_id`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
