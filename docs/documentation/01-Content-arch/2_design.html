@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رحلة التعلم الذكية 🚀 - النسخة ٤</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Tajawal) -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f8fafc;
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .card-hover {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="text-gray-800 pb-20">
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-700 text-white py-14 text-center shadow-2xl rounded-b-[3rem] mb-12 relative overflow-hidden">
+        <div class="absolute top-0 right-0 w-full h-full opacity-10 pointer-events-none">
+            <i class="fa-solid fa-gamepad absolute top-10 right-20 text-6xl transform rotate-12"></i>
+            <i class="fa-solid fa-graduation-cap absolute bottom-10 left-20 text-6xl transform -rotate-12"></i>
+        </div>
+        <h1 class="text-4xl md:text-5xl font-black mb-4 relative z-10"><i class="fa-solid fa-rocket mr-2 animate-bounce inline-block"></i> خريطة رحلة التعلم (مدينة الأبطال!)</h1>
+        <p class="text-xl md:text-2xl font-bold opacity-90 relative z-10">تعال نكتشف كيف بتشتغل اللعبة بعد ما ضفنا "تحدي الوزارة" 🏆</p>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 space-y-20">
+
+        <!-- القسم الأول: مصنعي الأسئلة (المصادر) -->
+        <section>
+            <div class="flex items-center gap-3 mb-8 text-indigo-800 justify-center">
+                <i class="fa-solid fa-industry text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-extrabold">١. مصانع الأسئلة السحرية 🏭</h2>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- المصنع الأول: الدروس -->
+                <div class="bg-white rounded-3xl p-6 shadow-lg border-4 border-blue-200 relative overflow-hidden text-center">
+                    <div class="bg-blue-100 text-blue-800 px-4 py-2 rounded-full inline-block font-bold mb-6 text-sm">مصنع المنهاج المدرسي 📚</div>
+                    
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="bg-gray-50 p-4 rounded-2xl w-full flex items-center justify-between border-2 border-dashed border-gray-300">
+                            <i class="fa-solid fa-book-open text-4xl text-gray-500"></i>
+                            <span class="font-bold">كتب المدرسة (PDF)</span>
+                            <i class="fa-solid fa-arrow-left text-blue-400"></i>
+                            <i class="fa-solid fa-robot text-4xl text-blue-500"></i>
+                        </div>
+                        <i class="fa-solid fa-arrow-down text-3xl text-blue-300"></i>
+                        <div class="bg-blue-50 p-6 rounded-2xl w-full border-4 border-blue-400 transform transition hover:scale-105 cursor-pointer shadow-md">
+                            <i class="fa-solid fa-box-open text-5xl text-blue-600 mb-2"></i>
+                            <h3 class="font-black text-xl text-blue-800">صندوق أسئلة الدروس</h3>
+                            <p class="text-xs text-blue-600 mt-2 font-bold">(أسئلة من دروسك الصغيرة)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- المصنع الثاني: الوزاري -->
+                <div class="bg-white rounded-3xl p-6 shadow-lg border-4 border-yellow-200 relative overflow-hidden text-center">
+                    <div class="bg-yellow-100 text-yellow-800 px-4 py-2 rounded-full inline-block font-bold mb-6 text-sm">مصنع امتحانات الوزارة 📜</div>
+                    
+                    <div class="flex flex-col items-center gap-4">
+                        <div class="bg-gray-50 p-4 rounded-2xl w-full flex items-center justify-between border-2 border-dashed border-gray-300">
+                            <i class="fa-solid fa-file-signature text-4xl text-gray-500"></i>
+                            <span class="font-bold">أسئلة وزارية سابقة</span>
+                            <i class="fa-solid fa-arrow-left text-yellow-400"></i>
+                            <i class="fa-solid fa-robot text-4xl text-yellow-500"></i>
+                        </div>
+                        <i class="fa-solid fa-arrow-down text-3xl text-yellow-300"></i>
+                        <div class="bg-yellow-50 p-6 rounded-2xl w-full border-4 border-yellow-400 transform transition hover:scale-105 cursor-pointer shadow-md">
+                            <i class="fa-solid fa-treasure-chest text-5xl text-yellow-600 mb-2"></i>
+                            <h3 class="font-black text-xl text-yellow-800">صندوق أسئلة الوزارة</h3>
+                            <p class="text-xs text-yellow-600 mt-2 font-bold">(أسئلة الامتحانات الحقيقية وتواريخها)</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- القسم الثاني: غرف اللعب الأربعة -->
+        <section>
+            <div class="flex items-center gap-3 mb-8 text-purple-800 justify-center">
+                <i class="fa-solid fa-gamepad text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-extrabold">٢. غرف اللعب الأربعة (وين بنلاقي الأسئلة؟) 🎮</h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                
+                <!-- غرفة 1 -->
+                <div class="bg-white rounded-3xl p-6 shadow-xl border-t-8 border-green-500 card-hover flex flex-col h-full">
+                    <div class="text-center mb-4">
+                        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2 text-green-500 text-2xl">
+                            <i class="fa-solid fa-dumbbell"></i>
+                        </div>
+                        <h3 class="text-xl font-black text-green-700">ساحة التدريب 🏋️‍♂️</h3>
+                        <p class="text-xs text-gray-500 font-bold bg-gray-100 rounded-full py-1 mt-2">تسحب من: صندوق الدروس فقط</p>
+                    </div>
+                    <ul class="space-y-3 text-sm font-bold text-gray-600 flex-grow">
+                        <li><i class="fa-solid fa-user text-green-500 w-5"></i> <b>أنت تختار</b> شو تتدرب (وحدة، توبيك، الخ).</li>
+                        <li><i class="fa-solid fa-unlock text-green-500 w-5"></i> بس للدروس اللي ختمتها.</li>
+                        <li><i class="fa-solid fa-face-smile text-green-500 w-5"></i> تدريب حر بدون ضغط.</li>
+                    </ul>
+                </div>
+
+                <!-- غرفة 2 -->
+                <div class="bg-white rounded-3xl p-6 shadow-xl border-t-8 border-purple-500 card-hover flex flex-col h-full">
+                    <div class="text-center mb-4">
+                        <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2 text-purple-500 text-2xl">
+                            <i class="fa-solid fa-khanda"></i>
+                        </div>
+                        <h3 class="text-xl font-black text-purple-700">مركز التحدي ⚔️</h3>
+                        <p class="text-xs text-gray-500 font-bold bg-gray-100 rounded-full py-1 mt-2">تسحب من: صندوق الدروس فقط</p>
+                    </div>
+                    <ul class="space-y-3 text-sm font-bold text-gray-600 flex-grow">
+                        <li><i class="fa-solid fa-stairs text-purple-500 w-5"></i> <b>تسلسل إجباري</b> زي مراحل الألعاب (توبيك توبيك).</li>
+                        <li><i class="fa-solid fa-percent text-purple-500 w-5"></i> لازم تجيب ٥٠٪ لتفوز.</li>
+                        <li><i class="fa-solid fa-lock text-yellow-500 w-5"></i> المراحل مسكرة لحد ما تفوز باللي قبلها.</li>
+                    </ul>
+                </div>
+
+                <!-- غرفة 3 -->
+                <div class="bg-white rounded-3xl p-6 shadow-xl border-t-8 border-yellow-500 card-hover flex flex-col h-full">
+                    <div class="text-center mb-4 relative">
+                        <span class="absolute -top-3 -right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full animate-pulse">جديد!</span>
+                        <div class="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-2 text-yellow-600 text-2xl">
+                            <i class="fa-solid fa-crown"></i>
+                        </div>
+                        <h3 class="text-xl font-black text-yellow-700">الأسئلة الوزارية 👑</h3>
+                        <p class="text-xs text-gray-500 font-bold bg-gray-100 rounded-full py-1 mt-2">تسحب من: صندوق الوزارة فقط</p>
+                    </div>
+                    <ul class="space-y-3 text-sm font-bold text-gray-600 flex-grow">
+                        <li><i class="fa-solid fa-stairs text-yellow-500 w-5"></i> <b>تسلسل إجباري</b> (وحدة وحدة).</li>
+                        <li><i class="fa-solid fa-bolt text-yellow-500 w-5"></i> محاكاة لامتحان حقيقي.</li>
+                        <li><i class="fa-solid fa-lock text-yellow-500 w-5"></i> تفتح بس تختم الوحدة بالمسار العادي والوزاري اللي قبلها.</li>
+                    </ul>
+                </div>
+
+                <!-- غرفة 4 (المراجعة اليومية - الزعيم) -->
+                <div class="bg-gradient-to-b from-blue-50 to-white rounded-3xl p-6 shadow-xl border-t-8 border-blue-600 card-hover flex flex-col h-full relative overflow-hidden">
+                    <div class="absolute -right-4 -bottom-4 text-blue-100 text-7xl opacity-50"><i class="fa-solid fa-calendar-check"></i></div>
+                    <div class="text-center mb-4 relative z-10">
+                        <div class="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-2 text-2xl shadow-lg">
+                            <i class="fa-solid fa-calendar-check"></i>
+                        </div>
+                        <h3 class="text-xl font-black text-blue-800">المراجعة اليومية 📅</h3>
+                        <p class="text-xs text-white font-bold bg-blue-500 rounded-full py-1 mt-2 px-2 shadow-inner">تسحب من الصندوقين معاً! 📦+📦</p>
+                    </div>
+                    <ul class="space-y-3 text-sm font-bold text-gray-700 flex-grow relative z-10">
+                        <li><i class="fa-solid fa-robot text-blue-500 w-5"></i> <b>النظام يختار لك</b> بناءً على نسيانك (FSRS).</li>
+                        <li><i class="fa-solid fa-1 text-blue-500 w-5"></i><i class="fa-solid fa-0 text-blue-500 w-3"></i> ١٠ أسئلة يومياً لكل مادة.</li>
+                        <li><i class="fa-solid fa-star text-yellow-500 w-5"></i> هي المكان الوحيد اللي بجمع أسئلة الدروس والوزارة مع بعض!</li>
+                    </ul>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- القسم الثالث: عقل الروبوت السري (Memory State) -->
+        <section>
+            <div class="flex items-center gap-3 mb-8 text-red-600 justify-center">
+                <i class="fa-solid fa-brain text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-extrabold">٣. شو بصير لو جاوبت غلط؟ 🤔</h2>
+            </div>
+
+            <div class="bg-white p-8 rounded-[2.5rem] shadow-2xl border-4 border-gray-100 text-center relative">
+                <h3 class="font-bold text-xl text-gray-600 mb-6">أي سؤال بتجاوبه غلط بأي غرفة.. بروح فوراً لعقل الروبوت!</h3>
+                
+                <div class="flex flex-col md:flex-row items-center justify-center gap-6">
+                    
+                    <!-- الأخطاء -->
+                    <div class="flex flex-col gap-3 w-full md:w-1/3">
+                        <div class="bg-green-100 text-green-800 p-3 rounded-xl font-bold text-sm border-2 border-green-300">غلطت بساحة التدريب ❌</div>
+                        <div class="bg-purple-100 text-purple-800 p-3 rounded-xl font-bold text-sm border-2 border-purple-300">غلطت بمركز التحدي ❌</div>
+                        <div class="bg-yellow-100 text-yellow-800 p-3 rounded-xl font-bold text-sm border-2 border-yellow-300">غلطت بالوزاري ❌</div>
+                    </div>
+
+                    <!-- أسهم -->
+                    <div class="hidden md:flex text-gray-300 text-4xl">
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </div>
+                    <div class="md:hidden text-gray-300 text-4xl my-2">
+                        <i class="fa-solid fa-arrow-down"></i>
+                    </div>
+
+                    <!-- الذاكرة (Memory State) -->
+                    <div class="bg-gradient-to-br from-gray-700 to-gray-900 text-white p-6 rounded-3xl w-full md:w-1/3 shadow-2xl border-4 border-gray-400 transform hover:scale-105 transition">
+                        <i class="fa-solid fa-microchip text-5xl text-blue-400 mb-3 animate-pulse"></i>
+                        <h4 class="font-black text-xl mb-2">عقل الذاكرة (Memory State)</h4>
+                        <p class="text-xs text-gray-300 font-bold mb-3">يسجل: رقم السؤال + من أي صندوق إجى (درس ولا وزاري؟)</p>
+                    </div>
+
+                    <!-- أسهم -->
+                    <div class="hidden md:flex text-blue-300 text-4xl">
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </div>
+                    <div class="md:hidden text-blue-300 text-4xl my-2">
+                        <i class="fa-solid fa-arrow-down"></i>
+                    </div>
+
+                    <!-- النتيجة -->
+                    <div class="bg-blue-100 p-6 rounded-3xl w-full md:w-1/3 border-4 border-blue-400">
+                        <i class="fa-solid fa-calendar-check text-5xl text-blue-600 mb-3"></i>
+                        <h4 class="font-black text-blue-800 text-lg">المراجعة اليومية</h4>
+                        <p class="text-xs text-blue-700 font-bold mt-2">الروبوت ببعتلك السؤال هون عشان تراجعه قبل ما تنساه!</p>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- القسم الرابع: كيف أفتح الأقفال؟ -->
+        <section class="mb-10">
+            <div class="flex items-center gap-3 mb-8 text-orange-600 justify-center">
+                <i class="fa-solid fa-key text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-extrabold">٤. كيف أفتح الأقفال المغلقة؟ 🔓</h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                <!-- قفل التحدي -->
+                <div class="bg-purple-50 p-6 rounded-3xl border-4 border-purple-200">
+                    <h3 class="font-black text-xl text-purple-800 mb-4 text-center border-b-2 border-purple-200 pb-2"><i class="fa-solid fa-khanda mr-2"></i> لفتح (توبيك) في مركز التحدي:</h3>
+                    <ul class="space-y-4 font-bold text-gray-700">
+                        <li class="flex items-center gap-3">
+                            <span class="bg-white p-2 rounded-lg border-2 border-purple-300 text-purple-600"><i class="fa-solid fa-check"></i> 1</span>
+                            هل ختمت هذا التوبيك بالدراسة العادية؟
+                        </li>
+                        <li class="flex items-center gap-3">
+                            <span class="bg-white p-2 rounded-lg border-2 border-purple-300 text-purple-600"><i class="fa-solid fa-plus"></i> +</span>
+                            هل فزت بتحدي التوبيك اللي *قبله* بمركز التحدي؟
+                        </li>
+                    </ul>
+                    <div class="mt-4 bg-green-100 text-green-700 p-3 rounded-xl text-center font-bold">إذا نعم ونعم = مبروك انفتح! 🎉</div>
+                </div>
+
+                <!-- قفل الوزاري -->
+                <div class="bg-yellow-50 p-6 rounded-3xl border-4 border-yellow-200">
+                    <h3 class="font-black text-xl text-yellow-800 mb-4 text-center border-b-2 border-yellow-200 pb-2"><i class="fa-solid fa-crown mr-2"></i> لفتح (وحدة) في الأسئلة الوزارية:</h3>
+                    <ul class="space-y-4 font-bold text-gray-700">
+                        <li class="flex items-center gap-3">
+                            <span class="bg-white p-2 rounded-lg border-2 border-yellow-300 text-yellow-600"><i class="fa-solid fa-check"></i> 1</span>
+                            هل ختمت هذي الوحدة كاملة بالمسار العادي؟
+                        </li>
+                        <li class="flex items-center gap-3">
+                            <span class="bg-white p-2 rounded-lg border-2 border-yellow-300 text-yellow-600"><i class="fa-solid fa-plus"></i> +</span>
+                            هل خلصت الوحدة الوزارية اللي *قبلها*؟
+                        </li>
+                    </ul>
+                    <div class="mt-4 bg-green-100 text-green-700 p-3 rounded-xl text-center font-bold">إذا نعم ونعم = مبروك انفتح! 🎉</div>
+                </div>
+
+            </div>
+        </section>
+
+    </div>
+
+</body>
+</html>

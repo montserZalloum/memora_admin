@@ -1,0 +1,271 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>خريطة العالم النهائية 🌍🎮 (النسخة ٥)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Tajawal) -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800;900&display=swap" rel="stylesheet">
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f1f5f9;
+            background-image: radial-gradient(#cbd5e1 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-8px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+        .magic-border {
+            position: relative;
+        }
+        .magic-border::before {
+            content: "";
+            position: absolute;
+            inset: -4px;
+            border-radius: 2rem;
+            background: linear-gradient(45deg, #3b82f6, #8b5cf6, #ec4899, #eab308);
+            z-index: -1;
+            opacity: 0.5;
+            filter: blur(8px);
+        }
+    </style>
+</head>
+<body class="text-slate-800 pb-20 overflow-x-hidden">
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-slate-800 via-indigo-900 to-slate-900 text-white py-16 text-center shadow-2xl rounded-b-[4rem] mb-12 relative overflow-hidden border-b-8 border-indigo-500">
+        <div class="absolute inset-0 opacity-10 pointer-events-none">
+            <i class="fa-solid fa-globe absolute top-5 right-20 text-9xl animate-pulse"></i>
+            <i class="fa-solid fa-code absolute bottom-5 left-10 text-8xl transform -rotate-12"></i>
+        </div>
+        <h1 class="text-4xl md:text-6xl font-black mb-4 relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400"><i class="fa-solid fa-map-location-dot text-blue-400 mr-2"></i> المخطط العظيم (النسخة النهائية!)</h1>
+        <p class="text-xl md:text-2xl font-bold opacity-90 relative z-10 mt-4">هون بنكشف كل أسرار اللعبة وكيف كل اشي مربوط ببعضه 🧩</p>
+    </header>
+
+    <div class="max-w-7xl mx-auto px-4 space-y-20">
+
+        <!-- القسم الأول: السر الجديد (كيف نصنع اللعبة؟) -->
+        <section class="magic-border bg-white rounded-[2rem] p-8 shadow-xl">
+            <div class="flex items-center gap-3 mb-8 text-indigo-700 border-b-2 border-indigo-100 pb-4">
+                <i class="fa-solid fa-wand-magic-sparkles text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-black">١. السر الجديد: كيف الروبوت بصنع الدروس؟ 🪄</h2>
+            </div>
+            
+            <p class="font-bold text-slate-600 mb-6 text-lg">زمان كنا نفكر إنه اللعبة بتنعمل بعدين بناخد منها أسئلة.. <span class="text-red-500 underline">غلط!</span> النظام الجديد صار أذكى بكثير:</p>
+
+            <div class="flex flex-col lg:flex-row items-center gap-6 justify-center">
+                <!-- الخطوة 1 -->
+                <div class="bg-blue-50 p-6 rounded-3xl border-4 border-blue-200 w-full lg:w-1/3 text-center relative card-hover">
+                    <span class="absolute -top-5 right-1/2 transform translate-x-1/2 bg-blue-500 text-white font-black px-4 py-1 rounded-full text-xl shadow-lg">أولاً</span>
+                    <i class="fa-solid fa-box-open text-6xl text-blue-500 mb-4 mt-2"></i>
+                    <h3 class="font-black text-xl mb-2 text-blue-800">صندوق البطاقات الأساسية<br>(Review Items)</h3>
+                    <p class="text-sm font-bold text-slate-600">الروبوت بقرأ الكتاب، وبصنع أسئلة (ضع دائرة) وبخبيها جوا هاد الصندوق.</p>
+                </div>
+
+                <div class="hidden lg:flex flex-col items-center">
+                    <span class="text-xs font-bold text-slate-400 mb-1">الرقم السري (item_id)</span>
+                    <i class="fa-solid fa-arrow-left-long text-4xl text-indigo-300"></i>
+                </div>
+                <i class="fa-solid fa-arrow-down-long text-4xl text-indigo-300 lg:hidden my-2"></i>
+
+                <!-- الخطوة 2 -->
+                <div class="bg-purple-50 p-6 rounded-3xl border-4 border-purple-200 w-full lg:w-1/3 text-center relative card-hover">
+                    <span class="absolute -top-5 right-1/2 transform translate-x-1/2 bg-purple-500 text-white font-black px-4 py-1 rounded-full text-xl shadow-lg">ثانياً</span>
+                    <i class="fa-solid fa-gamepad text-6xl text-purple-500 mb-4 mt-2"></i>
+                    <h3 class="font-black text-xl mb-2 text-purple-800">بناء ألعاب الدرس<br>(Micro-Lessons)</h3>
+                    <p class="text-sm font-bold text-slate-600">الروبوت بيبني ألعاب (توصيل، فراغات) وكل لعبة بيربطها بخيط سري مع بطاقة من الصندوق الأول!</p>
+                </div>
+            </div>
+            <div class="mt-6 bg-slate-100 p-4 rounded-xl text-center font-bold text-slate-700 border-l-4 border-indigo-500">
+                <i class="fa-solid fa-lightbulb text-yellow-500"></i> الخلاصة: الأسئلة موجودة أصلاً في الصندوق، الدرس بس بيأشر عليها!
+            </div>
+        </section>
+
+        <!-- القسم الثاني: الصندوقين الرئيسيين -->
+        <section>
+            <div class="flex items-center gap-3 mb-8 text-slate-800 justify-center">
+                <i class="fa-solid fa-boxes-stacked text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-black">٢. صندوقين للمحتوى (مفصولين عن بعض!) 📦</h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <!-- الصندوق الأزرق -->
+                <div class="bg-white p-8 rounded-[2rem] shadow-lg border-t-8 border-blue-500">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="font-black text-2xl text-blue-800">صندوق الدروس العادية<br><span class="text-sm text-blue-500">(Review Item)</span></h3>
+                        <i class="fa-solid fa-book-open text-4xl text-blue-200"></i>
+                    </div>
+                    <ul class="space-y-3 font-bold text-slate-600">
+                        <li><i class="fa-solid fa-sitemap text-blue-400 w-6"></i> التقسيم: مادة ⬅️ مسار ⬅️ وحدة ⬅️ <span class="bg-blue-100 px-1 rounded">توبيك</span></li>
+                        <li><i class="fa-solid fa-check text-blue-400 w-6"></i> مرتبط بالدروس التفاعلية (ألعاب الدرس).</li>
+                        <li><i class="fa-solid fa-database text-blue-400 w-6"></i> إلو جدول خاص فيه بالداتابيز.</li>
+                    </ul>
+                </div>
+
+                <!-- الصندوق الذهبي -->
+                <div class="bg-white p-8 rounded-[2rem] shadow-lg border-t-8 border-yellow-500">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="font-black text-2xl text-yellow-800">صندوق الزعماء<br><span class="text-sm text-yellow-600">(الجدول الوزاري)</span></h3>
+                        <i class="fa-solid fa-crown text-4xl text-yellow-200"></i>
+                    </div>
+                    <ul class="space-y-3 font-bold text-slate-600">
+                        <li><i class="fa-solid fa-sitemap text-yellow-500 w-6"></i> التقسيم: مادة ⬅️ <span class="bg-yellow-100 px-1 rounded">وحدة وزارية</span> (أكبر من التوبيك).</li>
+                        <li><i class="fa-solid fa-tags text-yellow-500 w-6"></i> جواته نوعين: <span class="text-yellow-700">١. وزاري</span> | <span class="text-orange-600">٢. بنك أسئلة</span>.</li>
+                        <li><i class="fa-solid fa-database text-yellow-500 w-6"></i> الروبوت بيدخل الأسئلة هون مباشرة (بدون دروس!).</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <!-- القسم الثالث: الغرف الأربعة وعلاقتها بعقل الروبوت (FSRS) -->
+        <section class="bg-slate-800 text-white rounded-[3rem] p-8 md:p-12 shadow-2xl">
+            <div class="flex items-center gap-3 mb-8 text-white justify-center border-b-2 border-slate-600 pb-4">
+                <i class="fa-solid fa-brain text-4xl text-pink-400"></i>
+                <h2 class="text-3xl md:text-4xl font-black">٣. الغرف الأربعة وعلاقتها بـ (عقل الروبوت FSRS) 🧠</h2>
+            </div>
+            
+            <p class="font-bold text-slate-300 mb-8 text-center text-lg">مين بيبعت نتائجك لعقل الروبوت؟ ومين ما إلو دخل؟</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                
+                <!-- المراجعة اليومية -->
+                <div class="bg-slate-700 p-6 rounded-2xl border-4 border-blue-400 text-center relative overflow-hidden">
+                    <span class="absolute top-0 right-0 bg-blue-500 text-white text-xs font-black px-3 py-1 rounded-bl-xl">الزعيم المستلم</span>
+                    <i class="fa-solid fa-calendar-check text-5xl text-blue-300 mb-3 mt-2"></i>
+                    <h3 class="font-black text-xl mb-2">المراجعة اليومية</h3>
+                    <p class="text-xs text-slate-300 font-bold mb-3">تسحب الأسئلة من (الصندوق الأزرق + الذهبي).</p>
+                    <div class="bg-blue-900/50 p-2 rounded-lg text-sm font-bold text-blue-200">
+                        <i class="fa-solid fa-microchip"></i> عقل الروبوت هو اللي بقرر متى تطلعلك الأسئلة هون!
+                    </div>
+                </div>
+
+                <!-- ساحة التدريب -->
+                <div class="bg-slate-700 p-6 rounded-2xl border-4 border-slate-500 text-center relative opacity-90">
+                    <span class="absolute top-0 right-0 bg-slate-500 text-white text-xs font-black px-3 py-1 rounded-bl-xl">منعزلة تماماً</span>
+                    <i class="fa-solid fa-dumbbell text-5xl text-slate-400 mb-3 mt-2"></i>
+                    <h3 class="font-black text-xl mb-2">ساحة التدريب</h3>
+                    <p class="text-xs text-slate-300 font-bold mb-3">تسحب من (الصندوق الأزرق) فقط. تتدرب براحتك.</p>
+                    <div class="bg-red-900/30 border border-red-500/50 p-2 rounded-lg text-sm font-bold text-red-300">
+                        <i class="fa-solid fa-ban"></i> <b>صفر علاقة!</b> الروبوت ما بشوف اشي بتعمله هون.
+                    </div>
+                </div>
+
+                <!-- مركز التحدي -->
+                <div class="bg-slate-700 p-6 rounded-2xl border-4 border-purple-400 text-center relative">
+                    <span class="absolute top-0 right-0 bg-purple-500 text-white text-xs font-black px-3 py-1 rounded-bl-xl">مُرسل قوي</span>
+                    <i class="fa-solid fa-khanda text-5xl text-purple-300 mb-3 mt-2"></i>
+                    <h3 class="font-black text-xl mb-2">مركز التحدي</h3>
+                    <p class="text-xs text-slate-300 font-bold mb-3">يسحب من (الصندوق الأزرق). تلعب توبيك توبيك.</p>
+                    <div class="bg-green-900/30 border border-green-500/50 p-2 rounded-lg text-sm font-bold text-green-300">
+                        <i class="fa-solid fa-paper-plane"></i> <b>يرسل كل شيء!</b> كل صح وغلط بيروح لعقل الروبوت فوراً.
+                    </div>
+                </div>
+
+                <!-- الأسئلة الوزارية -->
+                <div class="bg-slate-700 p-6 rounded-2xl border-4 border-yellow-400 text-center relative">
+                    <span class="absolute top-0 right-0 bg-yellow-500 text-slate-900 text-xs font-black px-3 py-1 rounded-bl-xl">مُرسل قوي</span>
+                    <i class="fa-solid fa-crown text-5xl text-yellow-300 mb-3 mt-2"></i>
+                    <h3 class="font-black text-xl mb-2">الأسئلة الوزارية</h3>
+                    <p class="text-xs text-slate-300 font-bold mb-3">يسحب من (الصندوق الذهبي). تلعب وحدة وحدة.</p>
+                    <div class="bg-green-900/30 border border-green-500/50 p-2 rounded-lg text-sm font-bold text-green-300">
+                        <i class="fa-solid fa-paper-plane"></i> <b>يرسل كل شيء!</b> كل صح وغلط بيروح لعقل الروبوت فوراً.
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
+        <!-- القسم الرابع: كيف الروبوت بفرق بين الأسئلة؟ -->
+        <section>
+            <div class="flex items-center gap-3 mb-8 text-emerald-700 justify-center">
+                <i class="fa-solid fa-tags text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-black">٤. الختم السري جوا الذاكرة (Memory State) 🏷️</h2>
+            </div>
+
+            <div class="bg-emerald-50 p-8 rounded-[2rem] shadow-lg border-4 border-emerald-200 flex flex-col md:flex-row items-center justify-between gap-8">
+                
+                <div class="w-full md:w-1/2">
+                    <p class="font-bold text-slate-700 mb-4 text-lg">عشان المراجعة اليومية ما تتلخبط وتعرف من أي صندوق تسحب السؤال، عقل الروبوت بيحط <span class="text-emerald-600">"ختم مصدر" (Source Type)</span> على كل سؤال بغلط فيه الطالب:</p>
+                    <ul class="space-y-4">
+                        <li class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+                            <span class="bg-blue-100 text-blue-600 px-3 py-1 rounded font-black text-sm">ختم "درس"</span>
+                            <span class="font-bold text-slate-600 text-sm">المراجعة بتروح تسحب السؤال من الصندوق الأزرق.</span>
+                        </li>
+                        <li class="bg-white p-3 rounded-xl shadow-sm border border-slate-200 flex items-center gap-3">
+                            <span class="bg-yellow-100 text-yellow-700 px-3 py-1 rounded font-black text-sm">ختم "وزاري"</span>
+                            <span class="font-bold text-slate-600 text-sm">المراجعة بتروح تسحب السؤال من الصندوق الذهبي.</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <div class="w-full md:w-1/2 text-center">
+                    <img src="https://cdn-icons-png.flaticon.com/512/2083/2083282.png" alt="Brain Database" class="w-48 mx-auto opacity-80 mix-blend-multiply">
+                </div>
+
+            </div>
+        </section>
+
+        <!-- القسم الخامس: دفاتر الإحصائيات (التحليل) -->
+        <section>
+            <div class="flex items-center gap-3 mb-8 text-pink-600 justify-center">
+                <i class="fa-solid fa-chart-line text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-black">٥. دفاتر الإحصائيات السرية 📓</h2>
+            </div>
+
+            <div class="bg-white p-8 rounded-[2rem] shadow-lg border-2 border-slate-200">
+                <p class="font-bold text-slate-600 text-center mb-8">النظام عنده "دفترين مفصولين" عشان يسجل محاولاتك (عشان كل مكان إلو قواعده وتطويره الخاص):</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="bg-purple-50 p-6 rounded-2xl border-2 border-purple-300">
+                        <h3 class="font-black text-lg text-purple-800 mb-3"><i class="fa-solid fa-book-journal-whills mr-2"></i> دفتر محاولات التحدي</h3>
+                        <p class="text-sm font-bold text-slate-600 mb-2">يسجل: الطالب، التوبيك، رقم المحاولة، النسبة، الوقت.</p>
+                        <div class="bg-purple-100 text-purple-700 text-xs p-2 rounded font-black">مرتبط بجدول تفاصيل الأسئلة (صح/غلط)</div>
+                    </div>
+                    
+                    <div class="bg-yellow-50 p-6 rounded-2xl border-2 border-yellow-300">
+                        <h3 class="font-black text-lg text-yellow-800 mb-3"><i class="fa-solid fa-book-bookmark mr-2"></i> دفتر محاولات الوزاري</h3>
+                        <p class="text-sm font-bold text-slate-600 mb-2">يسجل: الطالب، الوحدة الوزارية، رقم المحاولة، النسبة.</p>
+                        <div class="bg-yellow-100 text-yellow-700 text-xs p-2 rounded font-black">مرتبط بجدول تفاصيل الأسئلة (صح/غلط)</div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- القسم الأخير: القوانين الذهبية الـ 11 -->
+        <section class="mb-10">
+            <div class="flex items-center gap-3 mb-8 text-red-600 justify-center">
+                <i class="fa-solid fa-gavel text-4xl"></i>
+                <h2 class="text-3xl md:text-4xl font-black">٦. دستور اللعبة (١١ قانون نهائي) 📜</h2>
+            </div>
+
+            <div class="bg-white p-8 rounded-[2rem] shadow-2xl border-t-8 border-red-500">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 font-bold text-slate-700 text-sm">
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-1 text-red-500 mt-1 w-4"></i> صندوق (Review Item) هو الأساس، الدروس بتاخد منه مش العكس.</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-2 text-red-500 mt-1 w-4"></i> الذكاء الاصطناعي بيصنع الأسئلة قبل ما يبني ألعاب الدرس.</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-3 text-red-500 mt-1 w-4"></i> الجدول الوزاري منفصل <span class="text-red-500 underline">تماماً</span> عن صندوق الدروس العادية.</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-4 text-red-500 mt-1 w-4"></i> الختم السري (Source Type) هو اللي بيفهم الروبوت من وين يجيب السؤال.</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-5 text-red-500 mt-1 w-4"></i> المراجعة اليومية ذكية، بتسحب من الصندوقين مع بعض.</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-6 text-red-500 mt-1 w-4"></i> ساحة التدريب = <span class="bg-red-100 px-1 rounded">صفر</span> علاقة بالروبوت والذاكرة.</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-7 text-red-500 mt-1 w-4"></i> مركز التحدي + الوزاري = بيرسلوا <span class="bg-green-100 px-1 rounded">كل إشي</span> لعقل الروبوت.</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-8 text-red-500 mt-1 w-4"></i> نفس السؤال بطلع بكل الغرف بدون أي فلترة (كل غرفة إلها جوها).</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-9 text-red-500 mt-1 w-4"></i> دفاتر التحليل مفصولة (تحدي لحال، ووزاري لحال).</div>
+                    <div class="flex items-start gap-2 text-slate-400"><i class="fa-solid fa-1 text-red-500 mt-1 w-4"></i><i class="fa-solid fa-0 text-red-500 mt-1 w-2"></i> ملف إعدادات اللعبة (config_json) بضل زي ما هو ما بتغير.</div>
+                    <div class="flex items-start gap-2"><i class="fa-solid fa-1 text-red-500 mt-1 w-4"></i><i class="fa-solid fa-1 text-red-500 mt-1 w-2"></i> بنوك الأسئلة بتتعامل زي الوزاري بالضبط (نفس الصندوق).</div>
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+</body>
+</html>
