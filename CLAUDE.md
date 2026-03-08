@@ -312,6 +312,8 @@ bench --site your-site set-config redis_memora "redis://127.0.0.1:13001"
 - Redis at `redis://127.0.0.1:13001` (stats hash, hierarchy JSON, practice metadata, progress bitmap) (036-read-path-perf)
 - Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocTypes, hooks, scheduled jobs), FastAPI, Pydantic v2, redis.asyncio, structlog, asyncio (Queue + background tasks) (037-live-challenges)
 - MariaDB via Frappe ORM (event config, participation, leaderboard), Redis at `redis://127.0.0.1:13001` (event state, questions cache, capacity counter, submitted set) (037-live-challenges)
+- Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM, DocTypes, hooks, scheduled jobs) (038-challenge-hub)
+- MariaDB via Frappe ORM (Challenge Progress, Challenge Attempt, Challenge Attempt Detail); Redis at `redis://127.0.0.1:13001` (progress cache, leaderboard ZSETs, idempotency keys, FSRS interaction buffer) (038-challenge-hub)
 
 ## Test Environment Configuration
 
@@ -331,9 +333,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 038-challenge-hub: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM, DocTypes, hooks, scheduled jobs)
 - 037-live-challenges: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocTypes, hooks, scheduled jobs), FastAPI, Pydantic v2, redis.asyncio, structlog, asyncio (Queue + background tasks)
 - 036-read-path-perf: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, Pydantic v2, structlog, asyncio
-- 035-practice-arena: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log)
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users
