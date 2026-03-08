@@ -1,0 +1,640 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Memora — بنية المحتوى</title>
+  <style>
+    :root {
+      --bg: #f6fbfa;
+      --card: #ffffff;
+      --text: #13322f;
+      --muted: #557572;
+      --line: #cfe5e1;
+      --primary: #11998e;
+      --primary-2: #38c7a6;
+      --soft: #e9f8f4;
+      --accent: #f4c95d;
+      --danger: #ff8a7a;
+      --shadow: 0 10px 30px rgba(17, 153, 142, 0.08);
+      --radius: 20px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Tahoma", "Arial", sans-serif;
+      background:
+        radial-gradient(circle at top right, rgba(56, 199, 166, 0.08), transparent 25%),
+        linear-gradient(180deg, #f9fdfc 0%, var(--bg) 100%);
+      color: var(--text);
+      line-height: 1.7;
+    }
+
+    .container {
+      width: min(1200px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 60px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, rgba(17, 153, 142, 0.12), rgba(244, 201, 93, 0.14));
+      border: 1px solid rgba(17, 153, 142, 0.12);
+      border-radius: 28px;
+      padding: 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 24px;
+    }
+
+    .hero h1 {
+      margin: 0 0 8px;
+      font-size: clamp(28px, 4vw, 42px);
+    }
+
+    .hero p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 800px;
+    }
+
+    .section {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: var(--shadow);
+      margin-bottom: 18px;
+    }
+
+    .section h2 {
+      margin: 0 0 14px;
+      font-size: 22px;
+    }
+
+    .section .desc {
+      margin: -4px 0 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--soft);
+      color: var(--primary);
+      border: 1px solid rgba(17, 153, 142, 0.18);
+      border-radius: 999px;
+      padding: 8px 14px;
+      font-size: 13px;
+      font-weight: bold;
+      margin-bottom: 12px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 16px;
+    }
+
+    .tree-level {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 14px;
+      padding-top: 10px;
+    }
+
+    .tree-level + .tree-level {
+      margin-top: 10px;
+    }
+
+    .tree-level + .tree-level::before {
+      content: "↓";
+      position: absolute;
+      top: -22px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--primary);
+      font-size: 26px;
+      font-weight: bold;
+    }
+
+    .node {
+      background: linear-gradient(180deg, #fff, #f9fffd);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 14px 18px;
+      min-width: 180px;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(19, 50, 47, 0.05);
+    }
+
+    .node strong {
+      display: block;
+      font-size: 16px;
+      margin-bottom: 4px;
+    }
+
+    .node small {
+      color: var(--muted);
+      display: block;
+    }
+
+    .lessons-grid,
+    .stage-grid,
+    .apps-grid,
+    .rules-grid,
+    .flow-grid,
+    .unlock-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .lessons-grid {
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      margin-top: 14px;
+    }
+
+    .lesson-card,
+    .mini-card,
+    .rule-card,
+    .flow-card,
+    .unlock-card,
+    .compare-card,
+    .item-box {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px;
+    }
+
+    .lesson-card h3,
+    .compare-card h3,
+    .item-box h3,
+    .flow-card h3,
+    .unlock-card h3 {
+      margin: 0 0 8px;
+      font-size: 17px;
+    }
+
+    .stage-grid {
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-top: 12px;
+    }
+
+    .stage {
+      background: var(--soft);
+      border: 1px dashed rgba(17, 153, 142, 0.28);
+      border-radius: 16px;
+      padding: 12px;
+      text-align: center;
+      font-weight: bold;
+      color: var(--primary);
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1.2fr;
+      gap: 14px;
+      align-items: center;
+      margin-top: 16px;
+    }
+
+    .arrow {
+      font-size: 30px;
+      color: var(--primary);
+      text-align: center;
+      font-weight: bold;
+    }
+
+    .item-box ul,
+    .compare-card ul,
+    .flow-card ul,
+    .unlock-card ul,
+    .rule-card ul,
+    .lesson-card ul {
+      margin: 0;
+      padding: 0 18px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .apps-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      margin-top: 16px;
+    }
+
+    .app {
+      position: relative;
+      background: linear-gradient(180deg, #ffffff, #f7fffc);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 18px;
+      min-height: 120px;
+    }
+
+    .app::before {
+      content: "←";
+      position: absolute;
+      top: -20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: var(--primary);
+      font-size: 24px;
+      display: none;
+    }
+
+    .app h4 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .app p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 14px;
+    }
+
+    .compare-card {
+      background: linear-gradient(180deg, #fff, #fbfffe);
+    }
+
+    .compare-card.featured {
+      border-color: rgba(17, 153, 142, 0.35);
+      box-shadow: 0 12px 30px rgba(17, 153, 142, 0.08);
+    }
+
+    .title-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .pill {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--soft);
+      color: var(--primary);
+      border: 1px solid rgba(17, 153, 142, 0.18);
+      white-space: nowrap;
+    }
+
+    .flow-grid {
+      grid-template-columns: 1fr auto repeat(3, minmax(180px, 1fr));
+      align-items: stretch;
+    }
+
+    .flow-center {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #fff7f5, #fff);
+      border: 1px solid rgba(255, 138, 122, 0.3);
+      color: #b64c3f;
+      font-weight: bold;
+      border-radius: 18px;
+      padding: 16px;
+      min-height: 120px;
+    }
+
+    .flow-arrow {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      color: var(--primary);
+      font-weight: bold;
+    }
+
+    .rules-grid {
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
+
+    .rule-card strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 16px;
+    }
+
+    .context-list {
+      display: grid;
+      gap: 10px;
+      margin-top: 10px;
+    }
+
+    .context-item {
+      background: var(--soft);
+      border: 1px solid rgba(17, 153, 142, 0.16);
+      border-radius: 14px;
+      padding: 12px;
+      font-size: 14px;
+    }
+
+    .unlock-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+
+    .unlock-card {
+      position: relative;
+      padding-top: 38px;
+    }
+
+    .unlock-step {
+      position: absolute;
+      top: 12px;
+      right: 14px;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--primary);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 13px;
+      font-weight: bold;
+    }
+
+    .footer-note {
+      text-align: center;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 12px;
+    }
+
+    @media (max-width: 920px) {
+      .pipeline {
+        grid-template-columns: 1fr;
+      }
+
+      .arrow {
+        transform: rotate(-90deg);
+      }
+
+      .flow-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-arrow {
+        transform: rotate(-90deg);
+        min-height: 40px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <section class="hero">
+      <h1>بنية المحتوى في Memora</h1>
+      <p>
+        صفحة مرجعية مبسطة توضّح هرمية المحتوى، مصدر الأسئلة الواحد، والعلاقة بين
+        المراجعة اليومية وساحة التدريب ومركز التحدي.
+      </p>
+    </section>
+
+    <section class="section">
+      <div class="badge">هرمية المحتوى</div>
+      <h2>كيف ينزل المحتوى من المادة إلى الـ Stages</h2>
+      <p class="desc">التوبيك هو الدرس الفعلي في الكتاب، وبعده يتفرع إلى دروس صغيرة ثم مراحل تعلم متنوعة.</p>
+
+      <div class="stack">
+        <div class="tree-level">
+          <div class="node"><strong>المادة</strong><small>Subject</small></div>
+        </div>
+        <div class="tree-level">
+          <div class="node"><strong>المسار</strong><small>Track</small></div>
+        </div>
+        <div class="tree-level">
+          <div class="node"><strong>الوحدة</strong><small>Unit</small></div>
+        </div>
+        <div class="tree-level">
+          <div class="node"><strong>التوبيك</strong><small>Topic — الدرس الفعلي في الكتاب</small></div>
+        </div>
+      </div>
+
+      <div class="lessons-grid">
+        <div class="lesson-card">
+          <h3>الدرس ١</h3>
+          <ul>
+            <li>مجموعة مراحل صغيرة</li>
+            <li>شرح + تفاعل + تقييم</li>
+          </ul>
+          <div class="stage-grid">
+            <div class="stage">INFORMATION</div>
+            <div class="stage">QUESTION</div>
+            <div class="stage">MATCHING</div>
+            <div class="stage">FILL_BLANK</div>
+          </div>
+        </div>
+
+        <div class="lesson-card">
+          <h3>الدرس ٢</h3>
+          <ul>
+            <li>يكمل نفس التوبيك</li>
+            <li>يركز على نقطة جزئية</li>
+          </ul>
+        </div>
+
+        <div class="lesson-card">
+          <h3>الدرس ٣</h3>
+          <ul>
+            <li>إغلاق التوبيك</li>
+            <li>تثبيت الفهم قبل الانتقال</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">مصدر واحد للأسئلة</div>
+      <h2>رحلة السؤال من الكتاب إلى كل الأنظمة</h2>
+      <p class="desc">الفكرة الأساسية: سؤال واحد يدخل إلى جدول موحد، وبعدها كل ميزة تسحب منه حسب سياقها.</p>
+
+      <div class="pipeline">
+        <div class="mini-card">
+          <strong>كتب المنهاج</strong>
+          <div>PDF</div>
+        </div>
+        <div class="arrow">←</div>
+        <div class="mini-card">
+          <strong>ذكاء اصطناعي + سكربتات</strong>
+          <div>توليد دروس ومراحل وأسئلة</div>
+        </div>
+        <div class="arrow">←</div>
+        <div class="mini-card">
+          <strong>Lessons + Stages</strong>
+          <div>استخراج تلقائي عند حفظ الدرس</div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:center;margin:16px 0 12px;font-size:30px;color:var(--primary);">↓</div>
+
+      <div class="item-box">
+        <h3>جدول الأسئلة — Review Item</h3>
+        <ul>
+          <li>معرّف فريد لكل سؤال <strong>item_id</strong></li>
+          <li>يرتبط بالمادة / المسار / الوحدة / التوبيك / الدرس</li>
+          <li>يحمل نص السؤال والخيارات والإجابة الصحيحة</li>
+          <li>يُعتبر المصدر الموحد الذي تعتمد عليه كل الأنظمة</li>
+        </ul>
+      </div>
+
+      <div class="apps-grid">
+        <div class="app">
+          <h4>المراجعة اليومية</h4>
+          <p>يسحب من نفس الجدول لكن باستخدام FSRS وتوقيت ذكي للمراجعة.</p>
+        </div>
+        <div class="app">
+          <h4>ساحة التدريب</h4>
+          <p>يسحب من نفس الجدول بناءً على اختيار الطالب للتوبيكات أو الوحدات أو المسارات.</p>
+        </div>
+        <div class="app">
+          <h4>مركز التحدي</h4>
+          <p>يسحب من نفس الجدول لكن داخل مسار إجباري وتسلسل تقدم واضح.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">مقارنة الأماكن الثلاثة</div>
+      <h2>ما الفرق بين كل مكان؟</h2>
+      <div class="compare">
+        <div class="compare-card">
+          <div class="title-row">
+            <h3>المراجعة اليومية</h3>
+            <span class="pill">Daily Reviews</span>
+          </div>
+          <ul>
+            <li>النظام يقرر متى تظهر الأسئلة</li>
+            <li>عادة 10 أسئلة لكل مادة مع خيار إكمال</li>
+            <li>تعتمد على FSRS والتكرار المتباعد</li>
+            <li>تسحب من الدروس المختومة فقط</li>
+          </ul>
+        </div>
+
+        <div class="compare-card featured">
+          <div class="title-row">
+            <h3>ساحة التدريب</h3>
+            <span class="pill">Practice Arena</span>
+          </div>
+          <ul>
+            <li>الطالب يقرر ماذا يتدرب عليه</li>
+            <li>اختيار حر: تراكات / وحدات / توبيكات متعددة</li>
+            <li>بدون FSRS</li>
+            <li>فقط من التوبيكات المختومة</li>
+          </ul>
+        </div>
+
+        <div class="compare-card">
+          <div class="title-row">
+            <h3>مركز التحدي</h3>
+            <span class="pill">Challenge Hub</span>
+          </div>
+          <ul>
+            <li>تسلسل إجباري مثل الألعاب</li>
+            <li>توبيك واحد في كل مرة</li>
+            <li>بدون FSRS</li>
+            <li>يفتح بعد ختمه بالمسار العادي + ختم السابق في مركز التحدي</li>
+            <li>نسبة نجاح 50٪ لختم التوبيك</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">قاعدة الأسئلة الخاطئة</div>
+      <h2>ماذا يحدث إذا أخطأ الطالب؟</h2>
+      <div class="flow-grid">
+        <div class="flow-center">سؤال خاطئ</div>
+        <div class="flow-arrow">←</div>
+        <div class="flow-card">
+          <h3>ساحة التدريب</h3>
+          <ul>
+            <li>السؤال يدخل إلى FSRS</li>
+            <li>ويظهر لاحقًا في المراجعة اليومية</li>
+          </ul>
+        </div>
+        <div class="flow-card">
+          <h3>مركز التحدي</h3>
+          <ul>
+            <li>السؤال يدخل إلى FSRS</li>
+            <li>ويظهر لاحقًا في المراجعة اليومية</li>
+          </ul>
+        </div>
+        <div class="flow-card">
+          <h3>المراجعة اليومية</h3>
+          <ul>
+            <li>هو أصلًا داخل FSRS</li>
+            <li>فتكمل الدورة الطبيعية للمراجعة</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">قاعدة عرض الأسئلة</div>
+      <h2>لماذا نفس السؤال ممكن يظهر في أكثر من مكان؟</h2>
+      <div class="rules-grid">
+        <div class="rule-card">
+          <strong>لا يوجد فلترة على مستوى المكان</strong>
+          <p class="desc" style="margin:0;">نفس السؤال قد يظهر في كل الأنظمة لأن كل نظام يخدم هدفًا مختلفًا.</p>
+        </div>
+        <div class="rule-card">
+          <strong>السياق هو المختلف، وليس السؤال</strong>
+          <div class="context-list">
+            <div class="context-item">المراجعة اليومية = النظام يقرر لتثبيت المعلومة بالذاكرة</div>
+            <div class="context-item">ساحة التدريب = الطالب يقرر للتدريب الحر</div>
+            <div class="context-item">مركز التحدي = اختبار إتقان داخل مسار متسلسل</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="badge">فتح التوبيك في مركز التحدي</div>
+      <h2>قواعد فتح التقدم</h2>
+      <div class="unlock-grid">
+        <div class="unlock-card">
+          <div class="unlock-step">1</div>
+          <h3>هل التوبيك مختوم بالمسار العادي؟</h3>
+          <ul>
+            <li>إذا لا: يبقى مقفل في مركز التحدي</li>
+            <li>إذا نعم: ننتقل للخطوة التالية</li>
+          </ul>
+        </div>
+
+        <div class="unlock-card">
+          <div class="unlock-step">2</div>
+          <h3>هل التوبيك السابق مختوم في مركز التحدي؟</h3>
+          <ul>
+            <li>إذا كان هذا أول توبيك: يعتبر مفتوح</li>
+            <li>إذا السابق غير مختوم: يبقى مقفل</li>
+          </ul>
+        </div>
+
+        <div class="unlock-card">
+          <div class="unlock-step">3</div>
+          <h3>النتيجة</h3>
+          <ul>
+            <li>إذا تحقق الشرطان: التوبيك مفتوح</li>
+            <li>بعد النجاح 50٪ أو أكثر: يتم ختم التوبيك</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer-note">تصميم توضيحي بسيط — HTML + CSS فقط</div>
+  </div>
+</body>
+</html>

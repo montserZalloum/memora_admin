@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>رحلة التعلم الذكية 🚀</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts (Tajawal) -->
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        body {
+            font-family: 'Tajawal', sans-serif;
+            background-color: #f0fdf4;
+            background-image: radial-gradient(#dcfce7 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+        .card-hover {
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card-hover:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="text-gray-800 pb-20">
+
+    <!-- Header -->
+    <header class="bg-gradient-to-r from-green-500 to-emerald-600 text-white py-12 text-center shadow-lg rounded-b-3xl mb-12">
+        <h1 class="text-4xl md:text-5xl font-extrabold mb-4"><i class="fa-solid fa-rocket mr-2"></i> خريطة رحلة التعلم الذكية!</h1>
+        <p class="text-xl md:text-2xl font-semibold opacity-90">تعال نكتشف كيف بتشتغل منصتنا كأنها لعبة ممتعة 🎮</p>
+    </header>
+
+    <div class="max-w-6xl mx-auto px-4 space-y-16">
+
+        <!-- القسم الأول: شجرة الدروس (هرمية المحتوى) -->
+        <section>
+            <div class="flex items-center gap-3 mb-6 text-green-700">
+                <i class="fa-solid fa-sitemap text-3xl"></i>
+                <h2 class="text-3xl font-bold">١. كيف مقسمة دروسنا؟ (خريطة الكنز)</h2>
+            </div>
+            
+            <div class="bg-white rounded-3xl p-6 shadow-md border-4 border-green-100">
+                <!-- المادة -->
+                <div class="bg-blue-500 text-white p-4 rounded-xl mb-4 font-bold text-lg">
+                    <i class="fa-solid fa-book-open"></i> المادة (مثلاً: رياضيات)
+                </div>
+                <!-- المسار -->
+                <div class="mr-8 border-r-4 border-blue-300 pr-4">
+                    <div class="bg-purple-500 text-white p-3 rounded-xl mb-4 font-bold">
+                        <i class="fa-solid fa-route"></i> المسار (الفصل الأول)
+                    </div>
+                    <!-- الوحدة -->
+                    <div class="mr-8 border-r-4 border-purple-300 pr-4">
+                        <div class="bg-orange-500 text-white p-3 rounded-xl mb-4 font-bold">
+                            <i class="fa-solid fa-layer-group"></i> الوحدة (الكسور)
+                        </div>
+                        <!-- التوبيك -->
+                        <div class="mr-8 border-r-4 border-orange-300 pr-4">
+                            <div class="bg-red-500 text-white p-3 rounded-xl mb-4 font-bold animate-pulse">
+                                <i class="fa-solid fa-star"></i> التوبيك (الدرس الأساسي اللي بتدرسه)
+                            </div>
+                            <!-- الدروس الصغيرة -->
+                            <div class="mr-8 border-r-4 border-red-300 pr-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="bg-gray-100 p-4 rounded-xl border-2 border-gray-200">
+                                    <h4 class="font-bold text-gray-700 mb-2"><i class="fa-solid fa-puzzle-piece text-yellow-500"></i> دروس صغيرة</h4>
+                                    <ul class="text-sm space-y-2 text-gray-600 font-bold">
+                                        <li><i class="fa-solid fa-lightbulb text-yellow-400"></i> معلومة (الشرح)</li>
+                                        <li><i class="fa-solid fa-question-circle text-blue-400"></i> سؤال وجواب</li>
+                                        <li><i class="fa-solid fa-link text-green-400"></i> لعبة التوصيل</li>
+                                        <li><i class="fa-solid fa-pen text-purple-400"></i> اكمل الفراغ</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- القسم الثاني: مصنع الأسئلة -->
+        <section>
+            <div class="flex items-center gap-3 mb-6 text-blue-700">
+                <i class="fa-solid fa-industry text-3xl"></i>
+                <h2 class="text-3xl font-bold">٢. مصنع الأسئلة السحري 🏭</h2>
+            </div>
+            
+            <div class="bg-blue-50 rounded-3xl p-8 shadow-md border-4 border-blue-100 text-center flex flex-col md:flex-row items-center justify-between gap-4">
+                
+                <div class="flex flex-col items-center">
+                    <i class="fa-solid fa-book text-6xl text-gray-400 mb-2"></i>
+                    <span class="font-bold">كتب المدرسة</span>
+                </div>
+
+                <i class="fa-solid fa-arrow-left text-3xl text-blue-300 hidden md:block"></i>
+                <i class="fa-solid fa-arrow-down text-3xl text-blue-300 md:hidden"></i>
+
+                <div class="flex flex-col items-center bg-white p-4 rounded-2xl shadow">
+                    <i class="fa-solid fa-robot text-6xl text-blue-500 mb-2"></i>
+                    <span class="font-bold text-blue-600">الذكاء الاصطناعي</span>
+                    <span class="text-xs">يحولها لدروس صغيرة</span>
+                </div>
+
+                <i class="fa-solid fa-arrow-left text-3xl text-blue-300 hidden md:block"></i>
+                <i class="fa-solid fa-arrow-down text-3xl text-blue-300 md:hidden"></i>
+
+                <div class="flex flex-col items-center bg-yellow-100 p-4 rounded-2xl shadow border-2 border-yellow-400">
+                    <i class="fa-solid fa-box-open text-6xl text-yellow-500 mb-2"></i>
+                    <span class="font-bold text-yellow-700">صندوق الأسئلة الكبير</span>
+                    <span class="text-xs">(كل سؤال إلو رقم واسم)</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- القسم الثالث: غرف اللعب الثلاثة -->
+        <section>
+            <div class="flex items-center gap-3 mb-6 text-purple-700">
+                <i class="fa-solid fa-gamepad text-3xl"></i>
+                <h2 class="text-3xl font-bold">٣. وين بتلاقي هاي الأسئلة؟ (غرف اللعب ٣)</h2>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- المراجعة اليومية -->
+                <div class="bg-white rounded-3xl p-6 shadow-lg border-t-8 border-blue-500 card-hover">
+                    <div class="text-center mb-4">
+                        <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-2 text-blue-500 text-2xl">
+                            <i class="fa-solid fa-calendar-check"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-blue-600">المراجعة اليومية 📅</h3>
+                        <p class="text-sm text-gray-500">"فيتامين الذاكرة"</p>
+                    </div>
+                    <ul class="space-y-3 text-sm font-semibold text-gray-700">
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> <b>النظام يختار:</b> هو بعرف شو لازم تراجع اليوم.</li>
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> ١٠ أسئلة لكل مادة يومياً.</li>
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> <b>تكرار ذكي (FSRS):</b> بذكرك بالسؤال قبل ما تنساه!</li>
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> أسئلة من الدروس اللي <b>ختمتها فقط</b>.</li>
+                    </ul>
+                </div>
+
+                <!-- ساحة التدريب -->
+                <div class="bg-white rounded-3xl p-6 shadow-lg border-t-8 border-green-500 card-hover">
+                    <div class="text-center mb-4">
+                        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-2 text-green-500 text-2xl">
+                            <i class="fa-solid fa-dumbbell"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-green-600">ساحة التدريب 🏋️‍♂️</h3>
+                        <p class="text-sm text-gray-500">"الملعب الحر"</p>
+                    </div>
+                    <ul class="space-y-3 text-sm font-semibold text-gray-700">
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> <b>أنت تختار:</b> تدرب على اللي بدك ياه!</li>
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> اختار وحدة أو توبيك أو مادة كاملة.</li>
+                        <li><i class="fa-solid fa-times text-red-500 w-5"></i> بدون نظام التكرار الذكي.</li>
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> للدروس اللي <b>ختمتها فقط</b>.</li>
+                    </ul>
+                </div>
+
+                <!-- مركز التحدي -->
+                <div class="bg-white rounded-3xl p-6 shadow-lg border-t-8 border-purple-500 card-hover">
+                    <div class="text-center mb-4">
+                        <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-2 text-purple-500 text-2xl">
+                            <i class="fa-solid fa-trophy"></i>
+                        </div>
+                        <h3 class="text-xl font-bold text-purple-600">مركز التحدي 🏆</h3>
+                        <p class="text-sm text-gray-500">"برج الأبطال"</p>
+                    </div>
+                    <ul class="space-y-3 text-sm font-semibold text-gray-700">
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> <b>تسلسل إجباري:</b> زي مراحل الألعاب!</li>
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> تلعب (توبيك) واحد كل مرة.</li>
+                        <li><i class="fa-solid fa-check text-green-500 w-5"></i> لازم تنجح بنسبة ٥٠٪ لتفوز.</li>
+                        <li><i class="fa-solid fa-lock text-yellow-500 w-5"></i> المراحل مسكرة لحد ما تفوز باللي قبلها!</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mt-4 bg-yellow-100 text-yellow-800 p-4 rounded-xl text-center font-bold text-sm">
+                <i class="fa-solid fa-circle-info"></i> معلومة: نفس السؤال ممكن يطلعلك بالـ ٣ أماكن، بس كل مكان إلو هدف غير!
+            </div>
+        </section>
+
+        <!-- القسم الرابع: شو بصير لو جاوبت غلط؟ -->
+        <section>
+            <div class="flex items-center gap-3 mb-6 text-red-600">
+                <i class="fa-solid fa-triangle-exclamation text-3xl"></i>
+                <h2 class="text-3xl font-bold">٤. شو بصير لو جاوبت غلط؟ ❌</h2>
+            </div>
+
+            <div class="bg-red-50 p-6 rounded-3xl border-2 border-red-200 flex flex-col md:flex-row items-center justify-center gap-8">
+                <div class="text-center">
+                    <div class="bg-red-500 text-white w-16 h-16 flex items-center justify-center rounded-full text-2xl mx-auto mb-2 shadow-lg">
+                        <i class="fa-solid fa-xmark"></i>
+                    </div>
+                    <p class="font-bold">لو غلطت بسؤال في<br>ساحة التدريب أو التحدي</p>
+                </div>
+                
+                <div class="flex space-x-2 space-x-reverse text-red-300 text-2xl">
+                    <i class="fa-solid fa-chevron-left animate-pulse"></i>
+                    <i class="fa-solid fa-chevron-left animate-pulse" style="animation-delay: 0.2s;"></i>
+                    <i class="fa-solid fa-chevron-left animate-pulse" style="animation-delay: 0.4s;"></i>
+                </div>
+
+                <div class="text-center">
+                    <div class="bg-blue-500 text-white w-16 h-16 flex items-center justify-center rounded-full text-2xl mx-auto mb-2 shadow-lg">
+                        <i class="fa-solid fa-calendar-check"></i>
+                    </div>
+                    <p class="font-bold">السؤال بروح فوراً على<br><span class="text-blue-600">المراجعة اليومية</span> عشان تتعلمه وما تنساه!</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- القسم الخامس: كيف أفتح مراحل التحدي -->
+        <section>
+            <div class="flex items-center gap-3 mb-6 text-orange-600">
+                <i class="fa-solid fa-unlock-keyhole text-3xl"></i>
+                <h2 class="text-3xl font-bold">٥. كيف أفتح القفل في مركز التحدي؟ 🔓</h2>
+            </div>
+
+            <div class="bg-white p-6 rounded-3xl shadow-md border-4 border-orange-100">
+                <p class="font-bold text-center mb-6 text-gray-600">عشان تلعب تحدي لأي درس (توبيك)، لازم تجاوب على هالسؤالين:</p>
+                
+                <div class="max-w-md mx-auto relative">
+                    <!-- خطوة 1 -->
+                    <div class="bg-gray-100 p-4 rounded-xl text-center font-bold border-2 border-gray-300 mb-4 z-10 relative">
+                        ١. هل ختمت الدرس في المسار العادي؟ 📖
+                    </div>
+                    
+                    <div class="flex justify-between mb-4 px-8">
+                        <div class="text-center">
+                            <i class="fa-solid fa-arrow-down text-red-400 mb-2"></i>
+                            <div class="bg-red-100 text-red-700 p-2 rounded-lg font-bold text-sm">لا ← الدرس مقفل 🔒</div>
+                        </div>
+                        <div class="text-center">
+                            <i class="fa-solid fa-arrow-down text-green-400 mb-2"></i>
+                            <div class="text-green-600 font-bold">نـــعـــم</div>
+                        </div>
+                    </div>
+
+                    <!-- خطوة 2 -->
+                    <div class="bg-gray-100 p-4 rounded-xl text-center font-bold border-2 border-gray-300 mb-4 ml-auto w-3/4">
+                        ٢. هل فزت بالتحدي تبع الدرس اللي قبله؟ ⚔️<br>
+                        <span class="text-xs text-gray-500">(أو هذا أول درس إلك)</span>
+                    </div>
+
+                    <div class="flex justify-end mb-4 px-8 gap-8">
+                        <div class="text-center">
+                            <i class="fa-solid fa-arrow-down text-red-400 mb-2"></i>
+                            <div class="bg-red-100 text-red-700 p-2 rounded-lg font-bold text-sm">لا ← الدرس مقفل 🔒</div>
+                        </div>
+                        <div class="text-center">
+                            <i class="fa-solid fa-arrow-down text-green-400 mb-2"></i>
+                            <div class="bg-green-500 text-white p-2 rounded-lg font-bold shadow-lg animate-bounce">مبروك! مفتوح 🔓</div>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+    </div>
+
+</body>
+</html>

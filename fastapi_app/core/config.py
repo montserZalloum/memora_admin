@@ -62,6 +62,10 @@ class Settings(BaseSettings):
 	practice_submit_rate_limit: int = 30
 	practice_continue_rate_limit: int = 30
 
+	# Live Challenge Rate Limits
+	lc_join_rate_limit: int = 5
+	lc_submit_rate_limit: int = 2
+
 	# Practice Arena Session Settings
 	practice_session_size: int = 20
 	practice_session_ttl: int = 3600

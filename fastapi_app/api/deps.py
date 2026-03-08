@@ -25,6 +25,7 @@ from fastapi_app.services.game_session import GameSessionService
 from fastapi_app.services.global_rate_limit import GlobalRateLimiter, RateLimitExceeded
 from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.leaderboard import LeaderboardService
+from fastapi_app.services.live_challenge import LiveChallengeService
 from fastapi_app.services.plan import PlanService
 from fastapi_app.services.plan_change import PlanChangeService
 from fastapi_app.services.practice import PracticeService
@@ -399,6 +400,14 @@ async def get_plan_change_service(redis_client: RedisClient) -> PlanChangeServic
 PlanChangeServiceDep = Annotated[PlanChangeService, Depends(get_plan_change_service)]
 
 
+async def get_live_challenge_service(request: Request) -> LiveChallengeService:
+	"""Get singleton LiveChallengeService from app state (shares submission queue)."""
+	return request.app.state.live_challenge_service
+
+
+LiveChallengeServiceDep = Annotated[LiveChallengeService, Depends(get_live_challenge_service)]
+
+
 async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) -> VoucherService:
 	"""Get VoucherService with Redis, FrappeClient, and HMAC secret."""
 	frappe_client = await get_frappe_client()
@@ -418,6 +427,8 @@ _SCOPE_SETTINGS = {
 	"practice_start": "practice_start_rate_limit",
 	"practice_submit": "practice_submit_rate_limit",
 	"practice_continue": "practice_continue_rate_limit",
+	"lc_join": "lc_join_rate_limit",
+	"lc_submit": "lc_submit_rate_limit",
 }
 
 

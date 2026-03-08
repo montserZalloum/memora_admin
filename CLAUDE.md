@@ -310,6 +310,8 @@ bench --site your-site set-config redis_memora "redis://127.0.0.1:13001"
 - Python 3.11+ (Frappe v15) + Frappe Framework (ORM, DocTypes, hooks, Script Reports), ERPNext (Sales Invoice — unaffected) (034-scholarship-gift-vouchers)
 - MariaDB via Frappe ORM (existing tables extended with new fields) (034-scholarship-gift-vouchers)
 - Redis at `redis://127.0.0.1:13001` (stats hash, hierarchy JSON, practice metadata, progress bitmap) (036-read-path-perf)
+- Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocTypes, hooks, scheduled jobs), FastAPI, Pydantic v2, redis.asyncio, structlog, asyncio (Queue + background tasks) (037-live-challenges)
+- MariaDB via Frappe ORM (event config, participation, leaderboard), Redis at `redis://127.0.0.1:13001` (event state, questions cache, capacity counter, submitted set) (037-live-challenges)
 
 ## Test Environment Configuration
 
@@ -329,9 +331,9 @@ player = make_player(season="SEAS-00027")
 ```
 
 ## Recent Changes
+- 037-live-challenges: Added Python 3.11+ (Frappe v15 bench environment) + Frappe Framework (ORM, DocTypes, hooks, scheduled jobs), FastAPI, Pydantic v2, redis.asyncio, structlog, asyncio (Queue + background tasks)
 - 036-read-path-perf: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, redis.asyncio, Pydantic v2, structlog, asyncio
 - 035-practice-arena: Added Python 3.11+ (Frappe v15 bench environment) + FastAPI, Pydantic v2, redis.asyncio, structlog, Frappe Framework (ORM for Review Items, raw SQL for Practice Log)
-- 034-scholarship-gift-vouchers: Added Python 3.11+ (Frappe v15) + Frappe Framework (ORM, DocTypes, hooks, Script Reports), ERPNext (Sales Invoice — unaffected)
 
 ## Important Notes for dev
 - this project must handle 100k concurrent users

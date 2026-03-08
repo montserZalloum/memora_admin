@@ -51,6 +51,8 @@ _test_settings = Settings(
 	reviews_rate_limit=5,
 	session_rate_limit=3,
 	ws_max_connections_per_user=3,
+	lc_join_rate_limit=5,
+	lc_submit_rate_limit=2,
 )
 
 get_settings.cache_clear()
@@ -177,6 +179,7 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 		"memora:plan_change_ts:PLAYER-TEST-*",
 		"memora:daily_xp:PLAYER-TEST-*",
 		"memora:player_plan:PLAYER-TEST-*",
+		"memora:lc:*",  # Live challenge keys (status, questions, count, submitted, joined, meta)
 		registration_options_key(),
 	]
 
@@ -333,6 +336,12 @@ async def app_client(redis_client: redis.Redis, mock_frappe: AsyncMock) -> Async
 
 	# Set redis_pool on app.state so middleware (e.g., GlobalRateLimitMiddleware) can access it
 	app.state.redis_pool = redis_client.connection_pool
+
+	# Set LiveChallengeService singleton on app.state (used by deps.py)
+	from fastapi_app.services.live_challenge import LiveChallengeService
+
+	lc_service = LiveChallengeService(redis_client, mock_frappe)
+	app.state.live_challenge_service = lc_service
 
 	transport = ASGITransport(app=app)
 	client = AsyncClient(transport=transport, base_url="http://test")

@@ -1117,6 +1117,93 @@ def webhook_retry_queue_key() -> str:
 
 
 # =============================================================================
+# Live Challenges
+# =============================================================================
+
+LC_KEY_TTL = 86400
+"""24 hours. Applied to all live challenge ephemeral keys.
+
+LC keys are write-once-read-many during an event's lifecycle. They are
+created when an event transitions to Waiting and auto-expire after the
+event ends. MariaDB is the source of truth — no ensure_hydrated() needed.
+"""
+
+
+def lc_status_key(event_id: str) -> str:
+	"""Current live challenge event state.
+
+	Type: STRING (value: "waiting", "active", or "ended")
+	Producers: process_live_challenge_transitions() (Frappe task),
+	           LiveChallengeService (FastAPI — Waiting->Active real-time)
+	Consumers: LiveChallengeService.join(), grade(), WebSocket handler
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:status"
+
+
+def lc_questions_key(event_id: str) -> str:
+	"""Live challenge questions JSON with correct answers.
+
+	Type: STRING (JSON array of question dicts with correct_answer)
+	Producers: process_live_challenge_transitions() on Waiting transition
+	Consumers: LiveChallengeService.grade(), WebSocket exam_start broadcast
+	TTL: 24h (LC_KEY_TTL)
+	Note: Contains correct answers — NEVER served to client directly
+	"""
+	return f"memora:lc:{event_id}:questions"
+
+
+def lc_count_key(event_id: str) -> str:
+	"""Atomic participant counter for capacity enforcement.
+
+	Type: STRING (integer via INCR)
+	Producers: LiveChallengeService.join() (INCR via Lua)
+	Consumers: LiveChallengeService.join() (capacity check),
+	           GET /live-challenge/{event_id} (current_count)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:count"
+
+
+def lc_submitted_key(event_id: str) -> str:
+	"""Set of player IDs who have submitted answers.
+
+	Type: SET of player_id strings
+	Producers: LiveChallengeService.grade() (SADD)
+	Consumers: LiveChallengeService.grade() (SISMEMBER — duplicate prevention),
+	           GET /live-challenge/{event_id} (has_submitted check)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:submitted"
+
+
+def lc_joined_key(event_id: str) -> str:
+	"""Set of player IDs who have joined the event.
+
+	Type: SET of player_id strings
+	Producers: LiveChallengeService.join() (SADD)
+	Consumers: LiveChallengeService.join() (SISMEMBER — duplicate prevention),
+	           GET /live-challenge/{event_id} (has_joined check)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:joined"
+
+
+def lc_meta_key(event_id: str) -> str:
+	"""Live challenge event metadata hash.
+
+	Type: HASH (exam_start_ts, exam_end_ts, capacity, show_correct_answers,
+	            show_student_rank, enable_question_timer, question_time_limit,
+	            eligible_plans — JSON array of plan IDs)
+	Producers: process_live_challenge_transitions() on Waiting transition
+	Consumers: LiveChallengeService.join() (capacity, eligible_plans),
+	           WebSocket handler (exam_start_ts, timer settings)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:meta"
+
+
+# =============================================================================
 # SCAN Patterns (for background tasks iterating over key sets)
 # =============================================================================
 

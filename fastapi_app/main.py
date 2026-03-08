@@ -26,6 +26,7 @@ from fastapi_app.services.catalog import CatalogService
 from fastapi_app.services.frappe_client import FrappeClient
 from fastapi_app.services.global_rate_limit import RateLimitExceeded
 from fastapi_app.services.hierarchy import HierarchyService
+from fastapi_app.services.live_challenge import LiveChallengeService
 from fastapi_app.services.plan import PlanService
 from fastapi_app.services.profile import ProfileService
 
@@ -112,7 +113,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 	notify_task = asyncio.create_task(start_notification_listener(pool, app.state))
 	app.state.notify_task = notify_task
 
+	# Create LiveChallengeService singleton (shared submission queue)
+	lc_service = LiveChallengeService(redis_client, frappe_client)
+	await lc_service.start_queue_consumer()
+	app.state.live_challenge_service = lc_service
+
 	yield
+
+	# Stop LiveChallengeService queue consumer and drain remaining submissions
+	if hasattr(app.state, "live_challenge_service"):
+		await app.state.live_challenge_service.stop_queue_consumer()
 
 	# Cancel pub/sub listener (cache invalidation)
 	if hasattr(app.state, "pubsub_task"):

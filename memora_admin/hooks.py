@@ -275,6 +275,7 @@ scheduler_events = {
 			"memora_admin.tasks.sync.flush_interaction_buffer",
 			"memora_admin.tasks.fsrs_processor.process_fsrs_reviews",
 			"memora_admin.tasks.build_worker.process_pending_builds",
+			"memora_admin.tasks.live_challenge_transitions.process_live_challenge_transitions",
 		],
 		# Every 2 minutes: Sync dirty Review Item extraction from Redis to MariaDB
 		"*/2 * * * *": [

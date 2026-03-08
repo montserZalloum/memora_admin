@@ -1,0 +1,81 @@
+{
+	"actions": [],
+	"allow_rename": 1,
+	"creation": "2026-03-07 12:00:00.000000",
+	"doctype": "DocType",
+	"editable_grid": 1,
+	"engine": "InnoDB",
+	"field_order": [
+		"question_text",
+		"option_a",
+		"option_b",
+		"option_c",
+		"option_d",
+		"correct_answer",
+		"source_review_item"
+	],
+	"fields": [
+		{
+			"fieldname": "question_text",
+			"fieldtype": "Small Text",
+			"in_list_view": 1,
+			"label": "Question Text",
+			"reqd": 1
+		},
+		{
+			"fieldname": "option_a",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Option A",
+			"reqd": 1
+		},
+		{
+			"fieldname": "option_b",
+			"fieldtype": "Data",
+			"in_list_view": 1,
+			"label": "Option B",
+			"reqd": 1
+		},
+		{
+			"fieldname": "option_c",
+			"fieldtype": "Data",
+			"label": "Option C",
+			"reqd": 1
+		},
+		{
+			"fieldname": "option_d",
+			"fieldtype": "Data",
+			"label": "Option D",
+			"reqd": 1
+		},
+		{
+			"fieldname": "correct_answer",
+			"fieldtype": "Select",
+			"in_list_view": 1,
+			"label": "Correct Answer",
+			"options": "A\nB\nC\nD",
+			"reqd": 1
+		},
+		{
+			"fieldname": "source_review_item",
+			"fieldtype": "Link",
+			"label": "Source Review Item",
+			"options": "Memora Review Item"
+		}
+	],
+	"grid_page_length": 50,
+	"index_web_pages_for_search": 1,
+	"istable": 1,
+	"links": [],
+	"modified": "2026-03-07 12:00:00.000000",
+	"modified_by": "Administrator",
+	"module": "Memora Admin",
+	"name": "Memora Live Challenge Question",
+	"owner": "Administrator",
+	"permissions": [],
+	"row_format": "Dynamic",
+	"rows_threshold_for_grid_search": 20,
+	"sort_field": "modified",
+	"sort_order": "DESC",
+	"states": []
+}

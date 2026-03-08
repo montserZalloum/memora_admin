@@ -9,6 +9,7 @@ from fastapi_app.api.v1.endpoints import (
 	catalog,
 	health,
 	leaderboard,
+	live_challenge,
 	notifications,
 	plan_change,
 	plans,
@@ -49,3 +50,4 @@ router.include_router(reports.router)
 router.include_router(voucher.router)
 router.include_router(practice.router)
 router.include_router(plan_change.router)
+router.include_router(live_challenge.router)
