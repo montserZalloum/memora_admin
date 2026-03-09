@@ -1,0 +1,301 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "ARCH-.#####.",
+ "creation": "2026-03-09 12:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "source_doctype",
+  "archive_scope",
+  "schema_version",
+  "column_break_identity",
+  "archive_type",
+  "status",
+  "priority",
+  "section_execution",
+  "execution_stage",
+  "started_at",
+  "claimed_at",
+  "column_break_execution",
+  "completed_at",
+  "snapshot_taken_at",
+  "duration_seconds",
+  "section_output",
+  "row_count",
+  "file_path",
+  "column_break_output",
+  "file_checksum",
+  "file_size_bytes",
+  "section_retry",
+  "retry_count",
+  "retry_btn",
+  "column_break_retry",
+  "error_log",
+  "section_behavior",
+  "post_archive_action",
+  "source_deleted",
+  "purge_progress",
+  "section_transfer",
+  "transfer_status",
+  "transferred_at",
+  "column_break_transfer",
+  "local_deleted_at",
+  "section_meta",
+  "meta"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source DocType",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "archive_scope",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Archive Scope",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "schema_version",
+   "fieldtype": "Data",
+   "label": "Schema Version",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "archive_type",
+   "fieldtype": "Data",
+   "label": "Archive Type",
+   "read_only": 1
+  },
+  {
+   "default": "Pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Status",
+   "options": "Pending\nProcessing\nCompleted\nPurged\nFailed",
+   "read_only": 1,
+   "reqd": 1
+  },
+  {
+   "default": "Normal",
+   "fieldname": "priority",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Priority",
+   "options": "Low\nNormal\nHigh",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_execution",
+   "fieldtype": "Section Break",
+   "label": "Execution Tracking"
+  },
+  {
+   "fieldname": "execution_stage",
+   "fieldtype": "Data",
+   "label": "Execution Stage",
+   "read_only": 1
+  },
+  {
+   "fieldname": "started_at",
+   "fieldtype": "Datetime",
+   "label": "Started At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "claimed_at",
+   "fieldtype": "Datetime",
+   "label": "Claimed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_execution",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "completed_at",
+   "fieldtype": "Datetime",
+   "label": "Completed At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "snapshot_taken_at",
+   "fieldtype": "Datetime",
+   "label": "Snapshot Taken At",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "duration_seconds",
+   "fieldtype": "Float",
+   "label": "Duration (seconds)",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_output",
+   "fieldtype": "Section Break",
+   "label": "Output Metadata"
+  },
+  {
+   "default": "0",
+   "fieldname": "row_count",
+   "fieldtype": "Int",
+   "label": "Row Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "file_path",
+   "fieldtype": "Data",
+   "label": "File Path",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_output",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "file_checksum",
+   "fieldtype": "Data",
+   "label": "File Checksum",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "file_size_bytes",
+   "fieldtype": "Int",
+   "label": "File Size (bytes)",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_retry",
+   "fieldtype": "Section Break",
+   "label": "Retry & Error"
+  },
+  {
+   "default": "0",
+   "fieldname": "retry_count",
+   "fieldtype": "Int",
+   "label": "Retry Count",
+   "read_only": 1
+  },
+  {
+   "depends_on": "eval:doc.status=='Failed'",
+   "fieldname": "retry_btn",
+   "fieldtype": "Button",
+   "label": "Retry"
+  },
+  {
+   "fieldname": "column_break_retry",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "error_log",
+   "fieldtype": "Long Text",
+   "label": "Error Log",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_behavior",
+   "fieldtype": "Section Break",
+   "label": "Behavior"
+  },
+  {
+   "default": "Keep",
+   "fieldname": "post_archive_action",
+   "fieldtype": "Select",
+   "label": "Post-Archive Action",
+   "options": "Keep\nDelete",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "source_deleted",
+   "fieldtype": "Check",
+   "label": "Source Deleted",
+   "read_only": 1
+  },
+  {
+   "fieldname": "purge_progress",
+   "fieldtype": "JSON",
+   "label": "Purge Progress",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_transfer",
+   "fieldtype": "Section Break",
+   "label": "Transfer Lifecycle"
+  },
+  {
+   "default": "Pending",
+   "fieldname": "transfer_status",
+   "fieldtype": "Select",
+   "label": "Transfer Status",
+   "options": "Pending\nTransferred\nTransfer Failed",
+   "read_only": 1
+  },
+  {
+   "fieldname": "transferred_at",
+   "fieldtype": "Datetime",
+   "label": "Transferred At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_transfer",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "local_deleted_at",
+   "fieldtype": "Datetime",
+   "label": "Local Deleted At",
+   "read_only": 1
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_meta",
+   "fieldtype": "Section Break",
+   "label": "Metadata"
+  },
+  {
+   "fieldname": "meta",
+   "fieldtype": "JSON",
+   "label": "Meta",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-03-09 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Archive Job",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 1
+}

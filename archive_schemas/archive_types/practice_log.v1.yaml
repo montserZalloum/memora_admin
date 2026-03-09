@@ -1,0 +1,29 @@
+archive_type: practice_log
+version: v1
+source_table: "tabMemora Practice Log"
+fact_columns:
+  - player_id
+  - item_id
+  - first_seen_at
+  - last_seen_at
+  - last_result
+  - attempt_count
+  - correct_count
+scope_column: last_seen_at
+dimensions:
+  - entity: player
+    schema_version: v1
+    join_column: player_id
+  - entity: review_item
+    schema_version: v1
+    join_column: item_id
+schema_snapshot:
+  columns:
+    - {name: player_id, type: "VARCHAR(140)"}
+    - {name: item_id, type: "VARCHAR(36)"}
+    - {name: first_seen_at, type: DATETIME}
+    - {name: last_seen_at, type: DATETIME}
+    - {name: last_result, type: "ENUM('Correct','Incorrect')"}
+    - {name: attempt_count, type: "INT UNSIGNED"}
+    - {name: correct_count, type: "INT UNSIGNED"}
+  primary_key: [player_id, item_id]

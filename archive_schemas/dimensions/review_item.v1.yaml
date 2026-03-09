@@ -1,0 +1,11 @@
+entity: review_item
+version: v1
+source_table: "tabMemora Review Item"
+id_column: item_id
+fields:
+  - item_id
+  - player_id
+  - topic
+  - lesson
+  - stage
+  - question_text

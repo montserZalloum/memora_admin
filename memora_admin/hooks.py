@@ -308,6 +308,10 @@ scheduler_events = {
 		"0 2 1 * *": ["memora_admin.tasks.consignment_billing.generate_monthly_invoices"],
 		# Daily at 01:00: Delete expired Memora Announcements
 		"0 1 * * *": ["memora_admin.tasks.announcement_cleanup.cleanup_expired_announcements"],
+		# Daily at 01:20: Create archive jobs for ended seasons
+		"20 1 * * *": ["memora_admin.tasks.archive_trigger.check_seasons_for_archive"],
+		# Daily at 06:00: Notify admins of permanently failed archive jobs
+		"0 6 * * *": ["memora_admin.tasks.archive_notify.notify_failed_archive_jobs"],
 	}
 }
 

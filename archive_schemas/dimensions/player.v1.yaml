@@ -1,0 +1,10 @@
+entity: player
+version: v1
+source_table: "tabMemora Player Profile"
+id_column: name
+fields:
+  - name
+  - display_name
+  - grade
+  - academic_plan
+  - mobile

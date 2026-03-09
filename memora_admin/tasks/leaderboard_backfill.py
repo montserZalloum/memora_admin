@@ -1,4 +1,10 @@
 """
+Backfill and rebuild utilities for leaderboard keys.
+
+1. backfill_tier_metadata() — populates tier index/counts for dense rank reads.
+2. rebuild_challenge_leaderboards() — rebuilds Challenge Hub leaderboard ZSETs
+   from MariaDB (Memora Challenge Progress) after Redis data loss.
+
 Backfill tier metadata for existing leaderboard keys.
 
 Populates tier index (ZSET) and tier counts (HASH) for every active
@@ -37,6 +43,8 @@ from collections import defaultdict
 from fastapi_app.core.redis_keys import (
 	LB_PREFIX,
 	LBMETA_LOCK_TTL,
+	ch_leaderboard_key,
+	ch_leaderboard_subject_key,
 	lbmeta_keys_from_lb_key,
 	lbmeta_lock_key,
 )
@@ -192,3 +200,138 @@ def _backfill_one_key(r, lb_key: str, stats: dict) -> None:
 	finally:
 		# Release lock
 		r.delete(lock_key)
+
+
+def rebuild_challenge_leaderboards(season_id: str | None = None) -> dict:
+	"""Rebuild Challenge Hub leaderboard ZSETs from MariaDB source of truth.
+
+	Reads Memora Challenge Progress records, groups by player + plan + season,
+	and populates both overall and per-subject leaderboard ZSETs.
+
+	This is a recovery tool for when Redis leaderboard data is lost
+	(restart without AOF, accidental deletion, etc.).
+
+	Args:
+		season_id: Specific season to rebuild. If None, rebuilds all seasons
+			found in Memora Challenge Progress.
+
+	Usage:
+		bench --site x.conanacademy.com execute \\
+			memora_admin.tasks.leaderboard_backfill.rebuild_challenge_leaderboards
+
+		# Single season:
+		bench --site x.conanacademy.com execute \\
+			memora_admin.tasks.leaderboard_backfill.rebuild_challenge_leaderboards \\
+			--kwargs '{"season_id": "SEAS-00635"}'
+
+	Returns:
+		Summary dict with counts: seasons, plans, players, keys_written, errors.
+	"""
+	import frappe
+
+	r = get_memora_redis()
+
+	stats = {
+		"seasons": 0,
+		"plans": 0,
+		"players": 0,
+		"keys_written": 0,
+		"errors": 0,
+	}
+
+	# Query: per-player per-subject XP totals with their plan from profile.
+	# Challenge Progress has player, subject, season, total_xp_earned.
+	# Player Profile has the player's current plan.
+	season_filter = ""
+	params = {}
+	if season_id:
+		season_filter = "AND cp.season = %(season_id)s"
+		params["season_id"] = season_id
+
+	rows = frappe.db.sql(
+		f"""
+		SELECT
+			cp.player,
+			cp.subject,
+			cp.season,
+			pp.plan,
+			SUM(cp.total_xp_earned) AS total_xp
+		FROM `tabMemora Challenge Progress` cp
+		JOIN `tabMemora Player Profile` pp ON pp.name = cp.player
+		WHERE pp.plan IS NOT NULL
+			AND pp.plan != ''
+			{season_filter}
+		GROUP BY cp.player, cp.subject, cp.season, pp.plan
+		HAVING total_xp > 0
+		""",
+		params,
+		as_dict=True,
+	)
+
+	if not rows:
+		logger.info("rebuild_ch_leaderboards: no challenge progress found")
+		return stats
+
+	# Aggregate into: (season, plan) → {player → {overall_xp, per_subject_xp}}
+	leaderboard_data: dict[tuple[str, str], dict[str, dict]] = defaultdict(lambda: defaultdict(lambda: {"overall": 0, "subjects": defaultdict(int)}))
+
+	for row in rows:
+		key = (row["season"], row["plan"])
+		player_data = leaderboard_data[key][row["player"]]
+		xp = int(row["total_xp"])
+		player_data["overall"] += xp
+		player_data["subjects"][row["subject"]] += xp
+
+	seasons_seen = set()
+	plans_seen = set()
+	players_seen = set()
+
+	for (season, plan), players in leaderboard_data.items():
+		seasons_seen.add(season)
+		plans_seen.add((season, plan))
+
+		try:
+			# Build overall leaderboard
+			lb_key = ch_leaderboard_key(season, plan)
+			overall_mapping = {}
+			for player_id, data in players.items():
+				players_seen.add(player_id)
+				overall_mapping[player_id] = data["overall"]
+
+			if overall_mapping:
+				pipe = r.pipeline()
+				pipe.delete(lb_key)
+				pipe.zadd(lb_key, overall_mapping)
+				pipe.execute()
+				stats["keys_written"] += 1
+
+			# Build per-subject leaderboards
+			subject_members: dict[str, dict[str, int]] = defaultdict(dict)
+			for player_id, data in players.items():
+				for subject_id, xp in data["subjects"].items():
+					subject_members[subject_id][player_id] = xp
+
+			for subject_id, members in subject_members.items():
+				lb_subj_key = ch_leaderboard_subject_key(season, plan, subject_id)
+				pipe = r.pipeline()
+				pipe.delete(lb_subj_key)
+				pipe.zadd(lb_subj_key, members)
+				pipe.execute()
+				stats["keys_written"] += 1
+
+		except Exception as e:
+			stats["errors"] += 1
+			logger.error(f"rebuild_ch_leaderboards: error for season={season} plan={plan}: {e}")
+
+	stats["seasons"] = len(seasons_seen)
+	stats["plans"] = len(plans_seen)
+	stats["players"] = len(players_seen)
+
+	logger.info(
+		f"rebuild_ch_leaderboards: complete — "
+		f"seasons={stats['seasons']}, plans={stats['plans']}, "
+		f"players={stats['players']}, keys_written={stats['keys_written']}, "
+		f"errors={stats['errors']}"
+	)
+
+	return stats
