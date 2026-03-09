@@ -34,7 +34,13 @@
   "challenge_pass_threshold",
   "column_break_challenge",
   "challenge_lb_top_count",
-  "challenge_lb_refresh_interval"
+  "challenge_lb_refresh_interval",
+  "analytics_section",
+  "analytics_ssh_host",
+  "analytics_ssh_user",
+  "column_break_analytics",
+  "analytics_ssh_key_path",
+  "analytics_remote_path"
  ],
  "fields": [
   {
@@ -204,13 +210,49 @@
    "fieldname": "challenge_lb_refresh_interval",
    "fieldtype": "Int",
    "label": "Challenge LB Refresh Interval"
+  },
+  {
+   "fieldname": "analytics_section",
+   "fieldtype": "Section Break",
+   "label": "Analytics Server"
+  },
+  {
+   "description": "Hostname or IP of the analytics server (display only — executor reads from env vars)",
+   "fieldname": "analytics_ssh_host",
+   "fieldtype": "Data",
+   "label": "Analytics SSH Host",
+   "read_only": 1
+  },
+  {
+   "fieldname": "analytics_ssh_user",
+   "fieldtype": "Data",
+   "label": "Analytics SSH User",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_analytics",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Path to SSH private key on executor server",
+   "fieldname": "analytics_ssh_key_path",
+   "fieldtype": "Data",
+   "label": "Analytics SSH Key Path",
+   "read_only": 1
+  },
+  {
+   "description": "Base path on analytics server for archive/live data",
+   "fieldname": "analytics_remote_path",
+   "fieldtype": "Data",
+   "label": "Analytics Remote Path",
+   "read_only": 1
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-03-08 00:00:00.000000",
+ "modified": "2026-03-09 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Settings",

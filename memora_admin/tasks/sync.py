@@ -47,6 +47,77 @@ DEBUG_LOG_FILE = "/tmp/memora_sync_debug.log"
 # Maximum items to process per DB transaction (chunk)
 SYNC_CHUNK_SIZE = 500
 
+# ---------------------------------------------------------------------------
+# Archive sync_paused coordination
+# ---------------------------------------------------------------------------
+
+_paused_filters_cache: dict = {"data": None, "expires": 0}
+
+
+def invalidate_paused_filters_cache():
+	"""Force-expire the paused filters cache so next call re-queries DB."""
+	_paused_filters_cache["data"] = None
+	_paused_filters_cache["expires"] = 0
+
+
+def _get_paused_filters() -> list[dict]:
+	"""Cached (60s) query for active archive jobs with sync_paused=1.
+
+	Returns list of {source_doctype, date_from, date_to, filter_column}
+	parsed from job meta JSON.
+	"""
+	import time as _time
+
+	now = _time.time()
+	if _paused_filters_cache["data"] is not None and now < _paused_filters_cache["expires"]:
+		return _paused_filters_cache["data"]
+
+	try:
+		jobs = frappe.get_all(
+			"Memora Archive Job",
+			filters={"sync_paused": 1},
+			fields=["source_doctype", "meta"],
+		)
+	except Exception:
+		# If query fails (e.g., column not yet migrated), return empty
+		_paused_filters_cache["data"] = []
+		_paused_filters_cache["expires"] = now + 60
+		return []
+
+	result = []
+	for job in jobs:
+		try:
+			meta = json.loads(job.meta) if isinstance(job.meta, str) else (job.meta or {})
+			qf = meta.get("query_filter", {})
+			if qf.get("date_from") and qf.get("date_to"):
+				result.append({
+					"source_doctype": job.source_doctype,
+					"date_from": qf["date_from"],
+					"date_to": qf["date_to"],
+					"filter_column": qf.get("filter_column", "last_seen_at"),
+				})
+		except (json.JSONDecodeError, TypeError, AttributeError):
+			continue
+
+	_paused_filters_cache["data"] = result
+	_paused_filters_cache["expires"] = now + 60
+	return result
+
+
+def _is_in_paused_range(timestamp_value: str, source_doctype: str, paused_filters: list[dict]) -> bool:
+	"""Check if a record's timestamp falls within any paused archive range."""
+	if not paused_filters:
+		return False
+
+	for pf in paused_filters:
+		if pf["source_doctype"] != source_doctype:
+			continue
+		# String comparison works due to ISO lexicographic ordering:
+		# date_from/date_to are "YYYY-MM-DD", timestamp_value is "YYYY-MM-DD HH:MM:SS"
+		if pf["date_from"] <= timestamp_value < pf["date_to"]:
+			return True
+	return False
+
 
 def _write_debug_log(message: str):
 	"""Write to debug log file for troubleshooting"""
@@ -735,9 +806,13 @@ def flush_interaction_buffer():
 		count = len(items)
 		skipped = 0
 
+		# Check for paused archive ranges affecting Memora Interaction Log
+		paused_filters = _get_paused_filters()
+
 		# Phase 1: Parse and validate all items
 		valid_rows = []
 		now_str = frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S.%f")
+		paused_count = 0
 
 		for i, item_bytes in enumerate(items):
 			try:
@@ -752,6 +827,13 @@ def flush_interaction_buffer():
 				skipped += 1
 				logger.warning(f"Missing player or lesson in item: {str(item)[:100]}")
 				continue
+
+			# Skip records that fall within a paused archive range
+			if paused_filters:
+				ts_value = _parse_timestamp(item.get("timestamp", ""))
+				if _is_in_paused_range(ts_value, "Memora Interaction Log", paused_filters):
+					paused_count += 1
+					continue
 
 			valid_rows.append(
 				(
@@ -809,8 +891,8 @@ def flush_interaction_buffer():
 		status = "Success" if skipped == 0 else "Failed"
 		_log_sync("Memory", inserted, status)
 
-		_write_debug_log(f"=== COMPLETE: {inserted} inserted, {skipped} skipped ===\n")
-		logger.info(f"Interaction flush: {inserted} inserted, {skipped} skipped")
+		_write_debug_log(f"=== COMPLETE: {inserted} inserted, {skipped} skipped, {paused_count} paused ===\n")
+		logger.info(f"Interaction flush: {inserted} inserted, {skipped} skipped, {paused_count} paused")
 
 	except Exception as e:
 		error_msg = f"FATAL ERROR in flush_interaction_buffer: {e}"

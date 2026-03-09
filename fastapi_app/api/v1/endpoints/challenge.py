@@ -45,6 +45,7 @@ async def get_challenge_hierarchy_list(
 	subjects = await challenge_svc.get_challenge_subjects(
 		player_id=user.sub,
 		plan_id=user.plan,
+		season_id=user.season,
 	)
 	return {"subjects": subjects}
 

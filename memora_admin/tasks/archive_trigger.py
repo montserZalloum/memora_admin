@@ -2,8 +2,8 @@
 
 Queries seasons with is_published=0 AND end_date < CURDATE(), then for each
 season loads all registered archive type YAMLs and creates one Archive Job per
-type. Duplicate jobs (same source_doctype + archive_scope + schema_version)
-are silently skipped via the DB unique constraint.
+type. Duplicate jobs (same source_doctype + archive_scope + archive_type)
+are skipped via explicit existence check before insert.
 
 Runs daily at 01:20 (cron: 20 1 * * *) — after season unpublish (01:10).
 """
@@ -12,6 +12,7 @@ import json
 import os
 
 import frappe
+import yaml
 
 # Path to archive_schemas/ directory within the app
 _SCHEMA_REGISTRY_PATH = os.path.join(
@@ -21,19 +22,22 @@ _SCHEMA_REGISTRY_PATH = os.path.join(
 
 
 def check_seasons_for_archive():
-	"""Scan ended seasons and create Pending archive jobs for each archive type."""
-	import yaml
+	"""Scan ended seasons and create Pending archive jobs for each archive type.
 
+	Only considers seasons ended within the last 90 days to avoid unbounded growth.
+	"""
 	today = frappe.utils.today()
 
-	# Step 1: Find ended seasons (unpublished + end_date in the past)
+	# Step 1: Find recently ended seasons (unpublished + end_date in the past, within 90 days)
 	ended_seasons = frappe.db.sql(
 		"""
 		SELECT name, start_date, end_date
 		FROM `tabMemora Season`
-		WHERE is_published = 0 AND end_date < %s
+		WHERE is_published = 0
+			AND end_date < %s
+			AND end_date >= DATE_SUB(%s, INTERVAL 90 DAY)
 		""",
-		(today,),
+		(today, today),
 		as_dict=True,
 	)
 
@@ -54,8 +58,23 @@ def check_seasons_for_archive():
 	for season in ended_seasons:
 		for archive_type in archive_types:
 			try:
-				meta = _build_meta_json(season, archive_type)
 				source_doctype = _format_source_doctype(archive_type["source_table"])
+				archive_type_name = archive_type["archive_type"]
+
+				# Explicit dedup check — no DB unique constraint exists
+				already_exists = frappe.db.exists(
+					"Memora Archive Job",
+					{
+						"source_doctype": source_doctype,
+						"archive_scope": season.name,
+						"archive_type": archive_type_name,
+					},
+				)
+				if already_exists:
+					jobs_skipped += 1
+					continue
+
+				meta = _build_meta_json(season, archive_type)
 
 				job = frappe.get_doc(
 					{
@@ -63,7 +82,7 @@ def check_seasons_for_archive():
 						"source_doctype": source_doctype,
 						"archive_scope": season.name,
 						"schema_version": archive_type["version"],
-						"archive_type": archive_type["archive_type"],
+						"archive_type": archive_type_name,
 						"status": "Pending",
 						"post_archive_action": "Keep",
 						"meta": json.dumps(meta),
@@ -72,11 +91,6 @@ def check_seasons_for_archive():
 				job.flags.programmatic_creation = True
 				job.insert(ignore_permissions=True)
 				jobs_created += 1
-
-			except frappe.DuplicateEntryError:
-				# Unique constraint prevents duplicate jobs — expected, skip silently
-				jobs_skipped += 1
-				frappe.clear_last_message()
 
 			except Exception:
 				frappe.log_error(
@@ -95,8 +109,6 @@ def check_seasons_for_archive():
 
 def _load_archive_types(registry_path: str) -> list[dict]:
 	"""Load all archive type YAML files from the registry."""
-	import yaml
-
 	types_dir = os.path.join(registry_path, "archive_types")
 	if not os.path.isdir(types_dir):
 		return []
@@ -144,8 +156,6 @@ def _build_meta_json(season: dict, archive_type: dict) -> dict:
 
 def _load_dimension_schema(registry_path: str, entity: str, version: str) -> dict:
 	"""Load a single dimension schema YAML."""
-	import yaml
-
 	file_path = os.path.join(registry_path, "dimensions", f"{entity}.{version}.yaml")
 	if not os.path.isfile(file_path):
 		raise FileNotFoundError(f"Dimension schema not found: {file_path}")

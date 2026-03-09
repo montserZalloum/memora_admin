@@ -8,7 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .config import Config
-from .db import streaming_cursor
+from .db import streaming_cursor, validate_identifier
 
 
 def _sql_type_to_arrow(sql_type: str) -> pa.DataType:
@@ -34,16 +34,21 @@ def _build_arrow_schema(schema_snapshot: dict) -> pa.Schema:
 	return pa.schema(fields)
 
 
-def _coerce_value(val):
+def _coerce_value(val, target_type: pa.DataType | None = None):
 	"""Coerce Python values to types pyarrow handles cleanly."""
 	if isinstance(val, date) and not isinstance(val, datetime):
-		return datetime(val.year, val.month, val.day)
+		# Only promote to datetime if the target schema expects timestamp;
+		# leave as date if schema expects pa.date32().
+		if target_type is not None and pa.types.is_timestamp(target_type):
+			return datetime(val.year, val.month, val.day)
 	return val
 
 
 def _rows_to_batch(rows: list[dict], columns: list[str], schema: pa.Schema) -> pa.RecordBatch:
 	"""Convert a list of row dicts to a pyarrow RecordBatch."""
-	col_data = {col: [_coerce_value(row.get(col)) for row in rows] for col in columns}
+	col_data = {
+		col: [_coerce_value(row.get(col), schema.field(col).type) for row in rows] for col in columns
+	}
 	return pa.RecordBatch.from_pydict(col_data, schema=schema)
 
 
@@ -53,6 +58,7 @@ def export_fact_data(
 	meta: dict,
 	source_table: str,
 	archive_type_name: str,
+	mode: str = "filtered",
 ) -> tuple[str, int, dict[str, set]]:
 	"""Export fact data to a Parquet file using server-side streaming.
 
@@ -62,12 +68,13 @@ def export_fact_data(
 		meta: Job meta JSON with query_filter, export_columns, schema_snapshot.
 		source_table: MariaDB table name (e.g., 'tabMemora Practice Log').
 		archive_type_name: Archive type key for the output filename.
+		mode: "filtered" (default) uses WHERE clause from query_filter;
+		      "full_snapshot" exports all rows with no WHERE clause.
 
 	Returns:
 		Tuple of (file_path, row_count, referenced_ids) where referenced_ids
 		maps fact_column name → set of unique IDs seen in the exported data.
 	"""
-	query_filter = meta["query_filter"]
 	export_columns = meta["export_columns"]
 	schema_snapshot = meta.get("schema_snapshot", {})
 	related_tables = meta.get("related_tables", [])
@@ -75,11 +82,29 @@ def export_fact_data(
 	# Determine which fact columns to track for dimension scoping
 	dimension_fact_columns = [rt["fact_column"] for rt in related_tables]
 
+	# Validate all identifiers against allowlist before SQL interpolation
+	validate_identifier(source_table)
+	for col in export_columns:
+		validate_identifier(col)
+
 	# Build SQL query
 	columns_sql = ", ".join(f"`{col}`" for col in export_columns)
-	filter_col = query_filter["filter_column"]
-	sql = f"SELECT {columns_sql} FROM `{source_table}` WHERE `{filter_col}` >= %s AND `{filter_col}` < %s"
-	params = (query_filter["date_from"], query_filter["date_to"])
+
+	if mode == "full_snapshot":
+		# Full snapshot: no WHERE clause, export all rows
+		sql = f"SELECT {columns_sql} FROM `{source_table}`"
+		params = ()
+	else:
+		# Filtered: use query_filter date range
+		query_filter = meta["query_filter"]
+		filter_col = query_filter["filter_column"]
+		validate_identifier(filter_col)
+		sql = (
+			f"SELECT {columns_sql} FROM `{source_table}` "
+			f"WHERE `{filter_col}` >= %s AND `{filter_col}` < %s "
+			f"ORDER BY `{filter_col}`"
+		)
+		params = (query_filter["date_from"], query_filter["date_to"])
 
 	# Build pyarrow schema from snapshot
 	arrow_schema = _build_arrow_schema(schema_snapshot) if schema_snapshot.get("columns") else None
@@ -122,9 +147,16 @@ def export_fact_data(
 			writer.close()
 
 	# If no rows were exported, create an empty Parquet file with the schema
-	if writer is None and arrow_schema:
-		writer = pq.ParquetWriter(output_path, arrow_schema)
-		writer.close()
+	if writer is None:
+		if arrow_schema:
+			writer = pq.ParquetWriter(output_path, arrow_schema)
+			writer.close()
+		else:
+			# No schema snapshot and no rows — create a minimal empty file
+			# with string columns so downstream validators find a valid Parquet file
+			fallback_schema = pa.schema([pa.field(col, pa.string()) for col in export_columns])
+			writer = pq.ParquetWriter(output_path, fallback_schema)
+			writer.close()
 
 	return output_path, row_count, dict(referenced_ids)
 
@@ -150,6 +182,12 @@ def export_dimension(
 	source_table = dim_schema["source_table"]
 	id_column = dim_schema["id_column"]
 	fields = dim_schema["fields"]
+
+	# Validate all identifiers against allowlist before SQL interpolation
+	validate_identifier(source_table)
+	validate_identifier(id_column)
+	for f in fields:
+		validate_identifier(f)
 
 	output_path = os.path.join(staging_dir, f"dim_{entity}.parquet")
 

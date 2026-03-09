@@ -296,8 +296,11 @@ scheduler_events = {
 		"0 */6 * * *": ["memora_admin.tasks.plan_sync.sync_all_plan_subjects_to_redis"],
 		# Every 5 minutes: Redis health monitoring with threshold alerting
 		"*/5 * * * *": ["memora_admin.tasks.redis_monitor.monitor_redis_health"],
-		# Daily at 03:00: Clean up old leaderboard keys (30d daily, 90d weekly/archive)
-		"0 3 * * *": ["memora_admin.tasks.leaderboard_cleanup.cleanup_old_leaderboards"],
+		# Daily at 03:00: Clean up old leaderboard keys + create live sync jobs
+		"0 3 * * *": [
+			"memora_admin.tasks.leaderboard_cleanup.cleanup_old_leaderboards",
+			"memora_admin.tasks.live_sync_trigger.trigger_daily_live_sync",
+		],
 		# Daily at 01:05: Expire cards linked to ended/unpublished seasons
 		"5 1 * * *": ["memora_admin.tasks.season_expiration.expire_season_cards"],
 		# Daily at 01:10: Reset Challenge Hub data for seasons past end_date
@@ -312,6 +315,8 @@ scheduler_events = {
 		"20 1 * * *": ["memora_admin.tasks.archive_trigger.check_seasons_for_archive"],
 		# Daily at 06:00: Notify admins of permanently failed archive jobs
 		"0 6 * * *": ["memora_admin.tasks.archive_notify.notify_failed_archive_jobs"],
+		# Daily at 07:00: Check for stale sync_paused on archive jobs
+		"0 7 * * *": ["memora_admin.tasks.archive_stale_pause.check_stale_archive_pauses"],
 	}
 }
 

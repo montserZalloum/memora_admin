@@ -299,8 +299,8 @@ def rebuild_challenge_leaderboards(season_id: str | None = None) -> dict:
 				overall_mapping[player_id] = data["overall"]
 
 			if overall_mapping:
-				pipe = r.pipeline()
-				pipe.delete(lb_key)
+				pipe = r.pipeline(transaction=True)
+				pipe.unlink(lb_key)
 				pipe.zadd(lb_key, overall_mapping)
 				pipe.execute()
 				stats["keys_written"] += 1
@@ -313,8 +313,8 @@ def rebuild_challenge_leaderboards(season_id: str | None = None) -> dict:
 
 			for subject_id, members in subject_members.items():
 				lb_subj_key = ch_leaderboard_subject_key(season, plan, subject_id)
-				pipe = r.pipeline()
-				pipe.delete(lb_subj_key)
+				pipe = r.pipeline(transaction=True)
+				pipe.unlink(lb_subj_key)
 				pipe.zadd(lb_subj_key, members)
 				pipe.execute()
 				stats["keys_written"] += 1

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
@@ -34,7 +35,8 @@ from fastapi_app.models.challenge import (
 	TrackState,
 	UnitState,
 )
-from fastapi_app.services.hydration import guarded_hydrate
+from fastapi_app.core.redis_keys import hydration_lock_key
+from fastapi_app.services.hydration import SENTINEL_TTL, get_hydration_semaphore, guarded_hydrate
 
 if TYPE_CHECKING:
 	from fastapi_app.services.access import AccessService
@@ -167,6 +169,200 @@ class ChallengeService:
 
 		await guarded_hydrate(self.redis, key, _do_hydrate)
 
+	async def _wait_for_keys(
+		self,
+		keys_to_wait: list[tuple[str, str]],
+		wait_timeout: float = 5.0,
+		poll_interval: float = 0.1,
+	) -> None:
+		"""Poll-wait for cache keys or sentinels to appear (waiter behavior).
+
+		Mirrors guarded_hydrate waiter path (hydration.py:89-105). Called for keys
+		where another request holds the hydration lock.
+		"""
+		if not keys_to_wait:
+			return
+
+		elapsed = 0.0
+		remaining = list(keys_to_wait)  # (cache_key, sentinel_key) pairs
+
+		while elapsed < wait_timeout and remaining:
+			await asyncio.sleep(poll_interval)
+			elapsed += poll_interval
+
+			# Pipeline check all remaining keys + sentinels
+			poll_pipe = self.redis.pipeline()
+			for cache_key, sentinel_key in remaining:
+				poll_pipe.exists(cache_key, sentinel_key)
+			poll_results = await poll_pipe.execute()
+
+			# Remove keys that appeared (exists() with 2 keys returns count > 0)
+			still_waiting = []
+			for pair, found_count in zip(remaining, poll_results):
+				if not found_count:
+					still_waiting.append(pair)
+			remaining = still_waiting
+
+		if remaining:
+			logger.warning(
+				"ch_bulk_hydration_wait_timeout",
+				waited_s=round(elapsed, 1),
+				timed_out_count=len(remaining),
+			)
+
+	async def _ensure_hydrated_bulk(self, player_id: str, subject_ids: list[str]) -> None:
+		"""Bulk-hydrate challenge progress for multiple subjects in one Frappe call.
+
+		Preserves all guarded_hydrate protections (distributed lock, global semaphore,
+		empty-result sentinel, waiter poll) while batching the Frappe call. Re-checks
+		key existence before writing to prevent stale overwrite from concurrent
+		submit_attempt.
+
+		Flow:
+		1. Pipeline EXISTS + sentinel checks for all subjects.
+		2. Pipeline SET NX to acquire per-key hydration locks.
+		3. For keys we didn't lock: poll-wait until key/sentinel appears.
+		4. One bulk Frappe call under global semaphore for locked keys.
+		5. Re-check EXISTS before writing (prevents stale overwrite race).
+		6. Pipeline write results + set sentinels for empty + release locks.
+		   On Frappe failure: set sentinels + release locks (prevents retry storm).
+		"""
+		if not subject_ids:
+			return
+
+		keys = [ch_progress_key(player_id, sid) for sid in subject_ids]
+		sentinel_keys = [f"{k}:_hydrated" for k in keys]
+
+		# Step 1: Pipeline EXISTS + sentinel checks
+		check_pipe = self.redis.pipeline()
+		for k in keys:
+			check_pipe.exists(k)
+		for sk in sentinel_keys:
+			check_pipe.exists(sk)
+		check_results = await check_pipe.execute()
+
+		exists_results = check_results[: len(keys)]
+		sentinel_results = check_results[len(keys) :]
+
+		# Filter to keys that are missing AND have no sentinel
+		need_hydration: list[tuple[str, str]] = []  # (subject_id, cache_key)
+		for sid, key, exists, has_sentinel in zip(subject_ids, keys, exists_results, sentinel_results):
+			if not exists and not has_sentinel:
+				need_hydration.append((sid, key))
+
+		if not need_hydration:
+			return
+
+		if not self.frappe:
+			logger.warning(
+				"ch_bulk_hydration_skipped",
+				player_id=player_id,
+				missing_count=len(need_hydration),
+				reason="no_frappe_client",
+			)
+			return
+
+		# Step 2: Pipeline SET NX to acquire per-key distributed locks
+		lock_pipe = self.redis.pipeline()
+		lock_keys: list[str] = []
+		for _sid, key in need_hydration:
+			lk = hydration_lock_key(key)
+			lock_keys.append(lk)
+			lock_pipe.set(lk, "1", nx=True, ex=30)
+		lock_results = await lock_pipe.execute()
+
+		# Split into locked (we hydrate) and waiting (someone else is hydrating)
+		locked: list[tuple[str, str, str]] = []  # (subject_id, cache_key, lock_key)
+		waiting: list[tuple[str, str]] = []  # (cache_key, sentinel_key)
+		for (sid, key), lk, acquired in zip(need_hydration, lock_keys, lock_results):
+			if acquired:
+				locked.append((sid, key, lk))
+			else:
+				waiting.append((key, f"{key}:_hydrated"))
+
+		# Step 3: Poll-wait for keys we didn't lock (mirrors guarded_hydrate waiter path)
+		if waiting:
+			await self._wait_for_keys(waiting)
+
+		if not locked:
+			return  # all keys are being hydrated by other requests; we waited for them
+
+		locked_sids = [sid for sid, _, _ in locked]
+
+		# Step 4: One bulk Frappe call under global semaphore
+		sem = get_hydration_semaphore()
+		try:
+			async with sem:
+				bulk_records = await self.frappe.call(
+					"memora_admin.api.challenge.get_player_challenge_progress_bulk",
+					{"player_id": player_id, "subject_ids": json.dumps(locked_sids)},
+				)
+				if not bulk_records:
+					bulk_records = {}
+		except Exception as e:
+			logger.error(
+				"ch_bulk_hydration_failed",
+				player_id=player_id,
+				missing_count=len(locked_sids),
+				error=str(e),
+			)
+			# Set sentinels + release locks on failure (prevents retry storm)
+			fail_pipe = self.redis.pipeline()
+			for _, key, lk in locked:
+				fail_pipe.set(f"{key}:_hydrated", "1", ex=SENTINEL_TTL)
+				fail_pipe.delete(lk)
+			await fail_pipe.execute()
+			return
+
+		# Step 5: Re-check EXISTS before writing (prevents stale overwrite race).
+		# Between our initial check and now, submit_attempt may have created a key
+		# with fresh data — we must not clobber it with stale DB snapshot.
+		recheck_pipe = self.redis.pipeline()
+		for _, key, _ in locked:
+			recheck_pipe.exists(key)
+		recheck_results = await recheck_pipe.execute()
+
+		# Step 6: Write results + set sentinels for empty + release locks (1 pipeline)
+		write_pipe = self.redis.pipeline()
+		hydrated_count = 0
+		for (sid, key, lk), already_exists in zip(locked, recheck_results):
+			if already_exists:
+				# Key was created while we were fetching — skip to avoid clobbering
+				logger.debug("ch_bulk_hydration_skip_exists", player_id=player_id, subject_id=sid)
+			else:
+				records = bulk_records.get(sid, [])
+				if records:
+					for rec in records:
+						topic_id = rec["topic"]
+						progress_data = json.dumps(
+							{
+								"stamped": rec.get("stamped", 0),
+								"best_correct": rec.get("best_correct", 0),
+								"best_score_pct": rec.get("best_score_pct", 0),
+								"best_passing_pct": rec.get("best_passing_pct", 0),
+								"total_xp": rec.get("total_xp_earned", 0),
+								"attempt_count": rec.get("attempt_count", 0),
+							}
+						)
+						write_pipe.hset(key, topic_id, progress_data)
+					write_pipe.expire(key, CH_PROGRESS_KEY_TTL)
+					hydrated_count += 1
+				else:
+					# Empty result — set sentinel to prevent repeated hydration
+					write_pipe.set(f"{key}:_hydrated", "1", ex=SENTINEL_TTL)
+
+			# Always release lock
+			write_pipe.delete(lk)
+
+		await write_pipe.execute()
+
+		logger.info(
+			"ch_bulk_hydrated",
+			player_id=player_id,
+			requested=len(locked_sids),
+			hydrated=hydrated_count,
+		)
+
 	async def _get_progress_map(self, player_id: str, subject_id: str) -> dict[str, dict]:
 		"""Get challenge progress for all topics in a subject.
 
@@ -188,14 +384,81 @@ class ChallengeService:
 
 		return result
 
+	async def _get_progress_maps_bulk(
+		self, player_id: str, subject_ids: list[str]
+	) -> dict[str, dict[str, dict]]:
+		"""Bulk-fetch progress maps for multiple subjects in one pipeline.
+
+		Returns dict of subject_id → {topic_id → progress_data}.
+		Assumes hydration is already done (call _ensure_hydrated_bulk first).
+		"""
+		if not subject_ids:
+			return {}
+
+		keys = [ch_progress_key(player_id, sid) for sid in subject_ids]
+
+		pipe = self.redis.pipeline()
+		for key in keys:
+			pipe.hgetall(key)
+		raw_results = await pipe.execute()
+
+		result: dict[str, dict[str, dict]] = {}
+		for sid, raw in zip(subject_ids, raw_results):
+			parsed: dict[str, dict] = {}
+			for topic_id, data_str in raw.items():
+				try:
+					parsed[topic_id] = json.loads(data_str)
+				except (json.JSONDecodeError, TypeError):
+					continue
+			result[sid] = parsed
+
+		return result
+
+	@staticmethod
+	def _compute_subject_stats(
+		hierarchy,
+		progress_map: dict[str, dict],
+	) -> tuple[int, int]:
+		"""Walk hierarchy and count total/stamped topics. Pure CPU, no I/O."""
+		total_topics = 0
+		stamped_topics = 0
+
+		for track in hierarchy.tracks:
+			for unit in track.units:
+				prev_stamped = True
+				for topic in unit.topics:
+					if topic.mcq_count == 0:
+						if prev_stamped:
+							prev_stamped = True
+						continue
+
+					total_topics += 1
+					tp = progress_map.get(topic.topic_id, {})
+					is_stamped = bool(tp.get("stamped", 0))
+
+					if is_stamped:
+						stamped_topics += 1
+						prev_stamped = True
+					else:
+						prev_stamped = False
+
+		return total_topics, stamped_topics
+
 	async def get_challenge_subjects(
 		self,
 		player_id: str,
 		plan_id: str | None,
+		season_id: str | None = None,
 	) -> list[ChallengeSubjectSummary]:
 		"""Load player's plan subjects with challenge summary stats.
 
-		For each subject: count total non-empty topics, stamped topics, total challenge XP.
+		Bulk-optimized flow:
+		1. Fetch plan manifest (1 Redis GET)
+		2. Fetch all hierarchies concurrently (local in-memory cache hits)
+		3. Bulk EXISTS + bulk hydrate missing subjects (1 pipeline + 1 Frappe call)
+		4. Bulk HGETALL all progress maps (1 pipeline)
+		5. Bulk ZSCORE for XP from leaderboard (1 pipeline, fallback to progress walk)
+		6. CPU walk for total/stamped counts (no I/O)
 		"""
 		if not plan_id or not self.plan_svc:
 			return []
@@ -204,46 +467,57 @@ class ChallengeService:
 		if not manifest:
 			return []
 
+		subject_ids = [ps.id for ps in manifest.subjects]
+		subject_titles = {ps.id: ps.title for ps in manifest.subjects}
+
+		# Step 1: Fetch all hierarchies concurrently (local cache, ~0ms per hit)
+		if self.hierarchy_svc:
+			hierarchy_tasks = [self.hierarchy_svc.get_hierarchy(sid) for sid in subject_ids]
+			hierarchies_raw = await asyncio.gather(*hierarchy_tasks)
+		else:
+			hierarchies_raw = [None] * len(subject_ids)
+
+		# Filter to subjects with valid hierarchies
+		valid = [(sid, h) for sid, h in zip(subject_ids, hierarchies_raw) if h is not None]
+		if not valid:
+			return []
+
+		valid_ids = [sid for sid, _ in valid]
+		valid_hierarchies = {sid: h for sid, h in valid}
+
+		# Step 2: Bulk hydrate missing progress caches (1 pipeline EXISTS + 1 Frappe call)
+		await self._ensure_hydrated_bulk(player_id, valid_ids)
+
+		# Step 3: Bulk HGETALL all progress maps (1 pipeline)
+		progress_maps = await self._get_progress_maps_bulk(player_id, valid_ids)
+
+		# Step 4: Try ZSCORE from leaderboard for XP (1 pipeline, fast path)
+		xp_from_leaderboard: dict[str, int | None] = {}
+		if season_id and plan_id:
+			lb_pipe = self.redis.pipeline()
+			for sid in valid_ids:
+				lb_pipe.zscore(ch_leaderboard_subject_key(season_id, plan_id, sid), player_id)
+			lb_scores = await lb_pipe.execute()
+			for sid, score in zip(valid_ids, lb_scores):
+				xp_from_leaderboard[sid] = int(score) if score is not None else None
+
+		# Step 5: CPU walk — compute summaries (no I/O)
 		summaries = []
-		for plan_subject in manifest.subjects:
-			subject_id = plan_subject.id
-			hierarchy = await self.hierarchy_svc.get_hierarchy(subject_id) if self.hierarchy_svc else None
-			if not hierarchy:
-				continue
+		for sid in valid_ids:
+			hierarchy = valid_hierarchies[sid]
+			progress_map = progress_maps.get(sid, {})
 
-			# Load challenge progress for this subject
-			progress_map = await self._get_progress_map(player_id, subject_id)
+			total_topics, stamped_topics = self._compute_subject_stats(hierarchy, progress_map)
 
-			# Walk hierarchy, count non-empty topics (mcq_count > 0)
-			total_topics = 0
-			stamped_topics = 0
-			total_xp = 0
-
-			for track in hierarchy.tracks:
-				for unit in track.units:
-					prev_stamped = True  # First topic has no predecessor constraint
-					for topic in unit.topics:
-						if topic.mcq_count == 0:
-							# Empty topics auto-stamp if predecessor is stamped
-							if prev_stamped:
-								prev_stamped = True  # Chain continues
-							continue
-
-						total_topics += 1
-						tp = progress_map.get(topic.topic_id, {})
-						is_stamped = bool(tp.get("stamped", 0))
-						total_xp += int(tp.get("total_xp", 0))
-
-						if is_stamped:
-							stamped_topics += 1
-							prev_stamped = True
-						else:
-							prev_stamped = False
+			# XP: use leaderboard ZSCORE (fast path), fallback to summing progress map
+			total_xp = xp_from_leaderboard.get(sid)
+			if total_xp is None:
+				total_xp = sum(int(tp.get("total_xp", 0)) for tp in progress_map.values())
 
 			summaries.append(
 				ChallengeSubjectSummary(
-					subject_id=subject_id,
-					subject_name=plan_subject.title,
+					subject_id=sid,
+					subject_name=subject_titles.get(sid, sid),
 					total_topics=total_topics,
 					stamped_topics=stamped_topics,
 					total_challenge_xp=total_xp,

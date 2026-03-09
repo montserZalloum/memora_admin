@@ -1,19 +1,21 @@
 """Standalone archive executor entry point.
 
 Picks up Pending archive jobs, exports fact + dimension Parquet files,
-builds manifest, and marks jobs Completed. Designed to run via cron
-in a separate virtualenv — no Frappe imports.
+builds manifest, and progresses jobs through the delivery pipeline:
+Pending -> Processing -> Exported -> Transferred -> Ingested -> Completed -> Purged
+
+Designed to run via cron in a separate virtualenv — no Frappe imports.
 
 Usage:
-	/opt/memora-archive/venv/bin/python run.py
+	/opt/memora-archive/venv/bin/python -m archive_executor.run
 
 Cron:
-	0 2 * * * /opt/memora-archive/venv/bin/python /opt/memora-archive/run.py
+	0 2 * * * /opt/memora-archive/venv/bin/python -m archive_executor.run
 """
 
-import fcntl
 import json
 import os
+import re
 import shutil
 import sys
 import time
@@ -23,78 +25,80 @@ from datetime import datetime, timezone
 from .config import Config
 from .db import atomic_update, get_connection
 from .exporter import export_dimension, export_fact_data
+from .ingestion import IngestionError, handoff_archive, ingest_archive_batch, verify_ingestion
+from .locking import acquire_lock, release_lock
 from .logger import StructuredLogger
 from .manifest import build_manifest
-from .purge import cleanup_transferred_local_copies, purge_completed_jobs
-from .schemas import load_archive_type, load_dimension_schema
+from .purge import cleanup_local_copies, purge_completed_jobs
+from .schemas import load_dimension_schema
+from .transfer import TransferError, transfer_batch, verify_remote_checksums
 from .validator import validate_file
 
 
-def _acquire_lock(lock_file: str):
-	"""Acquire an exclusive file lock. Returns the fd or None if already held."""
-	os.makedirs(os.path.dirname(lock_file) or ".", exist_ok=True)
-	fd = open(lock_file, "w")
-	try:
-		fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-		fd.write(str(os.getpid()))
-		fd.flush()
-		return fd
-	except (BlockingIOError, OSError):
-		fd.close()
-		return None
+# ---------------------------------------------------------------------------
+# Stuck job detection
+# ---------------------------------------------------------------------------
 
-
-def _release_lock(fd):
-	"""Release the file lock."""
-	if fd:
-		try:
-			fcntl.flock(fd, fcntl.LOCK_UN)
-			fd.close()
-		except OSError:
-			pass
+# Per-state timeout hours for stuck job detection
+_STUCK_TIMEOUTS = {
+	"Processing": 1,
+	"Exported": 24,
+	"Transferred": 24,
+	"Ingested": 24,
+}
 
 
 def _fail_stuck_jobs(config: Config, log: StructuredLogger) -> int:
-	"""Detect and fail jobs stuck in Processing beyond the timeout."""
-	sql = (
-		"UPDATE `tabMemora Archive Job` "
-		"SET status = 'Failed', error_log = 'Stuck: exceeded timeout', "
-		"    completed_at = NOW() "
-		"WHERE status = 'Processing' "
-		"  AND claimed_at < DATE_SUB(NOW(), INTERVAL %s HOUR)"
-	)
-	count = atomic_update(config, sql, (config.stuck_timeout_hours,))
-	if count:
-		log.warning("stuck_jobs_failed", count=count, timeout_hours=config.stuck_timeout_hours)
-	return count
+	"""Detect and fail jobs stuck in active states beyond their timeouts."""
+	total_failed = 0
+	for status, default_hours in _STUCK_TIMEOUTS.items():
+		timeout_hours = config.stuck_timeout_hours if status == "Processing" else default_hours
+		sql = (
+			"UPDATE `tabMemora Archive Job` "
+			"SET status = 'Failed', error_log = CONCAT(COALESCE(error_log, ''), %s), "
+			"    completed_at = NOW(), sync_paused = 0, sync_paused_at = NULL "
+			"WHERE status = %s "
+			"  AND claimed_at < DATE_SUB(NOW(), INTERVAL %s HOUR)"
+		)
+		count = atomic_update(
+			config, sql,
+			(f"\nStuck: exceeded {timeout_hours}h timeout in {status} state", status, timeout_hours),
+		)
+		if count:
+			log.warning("stuck_jobs_failed", count=count, status=status, timeout_hours=timeout_hours)
+			total_failed += count
+	return total_failed
 
 
-def _get_pending_jobs(config: Config) -> list[dict]:
-	"""Query all Pending jobs ordered by priority DESC, creation ASC."""
+# ---------------------------------------------------------------------------
+# Job queries
+# ---------------------------------------------------------------------------
+
+
+def _get_jobs_by_status(config: Config, status: str) -> list[dict]:
+	"""Query jobs by status, ordered by priority DESC, creation ASC."""
 	conn = get_connection(config)
 	try:
 		with conn.cursor() as cursor:
 			cursor.execute(
 				"SELECT name, source_doctype, archive_scope, schema_version, "
-				"       archive_type, meta, retry_count, post_archive_action "
+				"       archive_type, meta, retry_count, post_archive_action, "
+				"       file_path, file_checksum, remote_path "
 				"FROM `tabMemora Archive Job` "
-				"WHERE status = 'Pending' "
-				"ORDER BY FIELD(priority, 'High', 'Normal', 'Low'), creation ASC"
+				"WHERE status = %s "
+				"ORDER BY FIELD(priority, 'High', 'Normal', 'Low'), creation ASC",
+				(status,),
 			)
 			return cursor.fetchall()
 	finally:
 		conn.close()
 
 
-def _claim_job(config: Config, job_name: str) -> bool:
-	"""Atomically claim a job. Returns True if successfully claimed."""
-	sql = (
-		"UPDATE `tabMemora Archive Job` "
-		"SET status = 'Processing', claimed_at = NOW(), "
-		"    started_at = NOW(), execution_stage = 'claiming' "
-		"WHERE name = %s AND status = 'Pending'"
-	)
-	return atomic_update(config, sql, (job_name,)) == 1
+# ---------------------------------------------------------------------------
+# Stage helpers
+# ---------------------------------------------------------------------------
+
+_JOB_NAME_RE = re.compile(r"^ARCH-\d+$")
 
 
 def _update_stage(config: Config, job_name: str, stage: str):
@@ -106,7 +110,19 @@ def _update_stage(config: Config, job_name: str, stage: str):
 	)
 
 
-def _complete_job(
+def _claim_job(config: Config, job_name: str) -> bool:
+	"""Atomically claim a Pending job. Returns True if successfully claimed."""
+	sql = (
+		"UPDATE `tabMemora Archive Job` "
+		"SET status = 'Processing', claimed_at = NOW(), "
+		"    started_at = NOW(), execution_stage = 'claiming', "
+		"    sync_paused = 1, sync_paused_at = NOW() "
+		"WHERE name = %s AND status = 'Pending'"
+	)
+	return atomic_update(config, sql, (job_name,)) == 1
+
+
+def _mark_exported(
 	config: Config,
 	job_name: str,
 	row_count: int,
@@ -116,46 +132,84 @@ def _complete_job(
 	snapshot_taken_at: str,
 	duration_seconds: float,
 ):
-	"""Mark a job as Completed with output metadata."""
+	"""Mark a job as Exported with output metadata."""
 	sql = (
 		"UPDATE `tabMemora Archive Job` "
-		"SET status = 'Completed', completed_at = NOW(), execution_stage = 'done', "
+		"SET status = 'Exported', exported_at = NOW(), execution_stage = 'exported', "
 		"    row_count = %s, file_path = %s, file_checksum = %s, "
 		"    file_size_bytes = %s, snapshot_taken_at = %s, duration_seconds = %s "
 		"WHERE name = %s"
 	)
 	atomic_update(
-		config,
-		sql,
+		config, sql,
 		(row_count, file_path, file_checksum, file_size_bytes, snapshot_taken_at, duration_seconds, job_name),
 	)
 
 
-def _fail_job(config: Config, job_name: str, error_msg: str, retry_count: int):
+def _mark_transferred(config: Config, job_name: str, remote_path: str):
+	"""Mark a job as Transferred with remote path."""
+	sql = (
+		"UPDATE `tabMemora Archive Job` "
+		"SET status = 'Transferred', transferred_at = NOW(), "
+		"    remote_path = %s, execution_stage = 'transferred' "
+		"WHERE name = %s"
+	)
+	atomic_update(config, sql, (remote_path, job_name))
+
+
+def _mark_ingested(config: Config, job_name: str):
+	"""Mark a job as Ingested."""
+	sql = (
+		"UPDATE `tabMemora Archive Job` "
+		"SET status = 'Ingested', ingested_at = NOW(), execution_stage = 'ingested' "
+		"WHERE name = %s"
+	)
+	atomic_update(config, sql, (job_name,))
+
+
+def _mark_completed(config: Config, job_name: str):
+	"""Mark a job as Completed and clear sync pause."""
+	sql = (
+		"UPDATE `tabMemora Archive Job` "
+		"SET status = 'Completed', completed_at = NOW(), execution_stage = 'done', "
+		"    sync_paused = 0, sync_paused_at = NULL "
+		"WHERE name = %s"
+	)
+	atomic_update(config, sql, (job_name,))
+
+
+def _fail_job(config: Config, job_name: str, error_msg: str, retry_count: int, current_status: str = "Processing"):
 	"""Handle job failure with automatic retry up to 3 attempts.
 
-	If retry_count < 3: resets to Pending with retry_count + 1 (auto-retry).
+	If retry_count < 3: resets to the same state for retry with incremented retry_count.
 	If retry_count >= 3: permanently fails with completed_at timestamp.
 	"""
 	error_msg = error_msg[:60000] if error_msg else ""
 
 	if retry_count < 3:
-		# Auto-retry: reset to Pending with incremented retry_count
+		# Auto-retry: reset to Pending with incremented retry_count so
+		# _process_pending_jobs() picks it up again (avoids stuck Processing state)
 		sql = (
 			"UPDATE `tabMemora Archive Job` "
 			"SET status = 'Pending', retry_count = retry_count + 1, "
 			"    error_log = %s, execution_stage = NULL "
-			"WHERE name = %s AND status = 'Processing'"
+			"WHERE name = %s AND status = %s"
 		)
-		atomic_update(config, sql, (error_msg, job_name))
+		atomic_update(config, sql, (error_msg, job_name, current_status))
 	else:
-		# Permanent failure: exhausted all retries
+		# Permanent failure: exhausted all retries — clear sync_paused to unblock live sync
 		sql = (
 			"UPDATE `tabMemora Archive Job` "
-			"SET status = 'Failed', error_log = %s, completed_at = NOW() "
-			"WHERE name = %s AND status = 'Processing'"
+			"SET status = 'Failed', error_log = %s, completed_at = NOW(), "
+			"    sync_paused = 0, sync_paused_at = NULL "
+			"WHERE name = %s AND status = %s"
 		)
-		atomic_update(config, sql, (error_msg, job_name))
+		atomic_update(config, sql, (error_msg, job_name, current_status))
+
+
+# ---------------------------------------------------------------------------
+# Pipeline phases
+# ---------------------------------------------------------------------------
 
 
 def _cleanup_staging(staging_dir: str):
@@ -171,170 +225,397 @@ def _set_permissions(directory: str):
 		os.chmod(os.path.join(directory, entry), 0o600)
 
 
-def _process_job(config: Config, job: dict, log: StructuredLogger):
-	"""Process a single archive job end-to-end."""
+def _process_pending_jobs(config: Config, log: StructuredLogger) -> tuple[int, int]:
+	"""Process Pending jobs: claim -> export -> Exported.
+
+	Returns (processed, failed) counts.
+	"""
+	pending_jobs = _get_jobs_by_status(config, "Pending")
+	if not pending_jobs:
+		return 0, 0
+
+	log.info("pending_jobs_found", count=len(pending_jobs))
+	processed = 0
+	failed = 0
+
+	for job in pending_jobs:
+		job_name = job["name"]
+
+		# Validate job_name to prevent path traversal
+		if not _JOB_NAME_RE.match(job_name):
+			log.error("invalid_job_name", job=job_name)
+			continue
+
+		# Atomic claim (also sets sync_paused=1)
+		if not _claim_job(config, job_name):
+			log.info("job_claim_skipped", job=job_name, reason="already_claimed")
+			continue
+
+		log.info("job_claimed", job=job_name, source=job["source_doctype"], scope=job["archive_scope"])
+
+		start_time = time.monotonic()
+		staging_dir = os.path.join(config.archive_output_path, ".staging", job_name)
+		final_dir = os.path.join(config.archive_output_path, job_name)
+
+		# Belt-and-suspenders: verify resolved paths stay under archive_output_path
+		real_output = os.path.realpath(config.archive_output_path)
+		if not os.path.realpath(staging_dir).startswith(real_output):
+			log.error("path_traversal", job=job_name, staging_dir=staging_dir)
+			continue
+		if not os.path.realpath(final_dir).startswith(real_output):
+			log.error("path_traversal", job=job_name, final_dir=final_dir)
+			continue
+
+		try:
+			_export_job(config, job, log, staging_dir, final_dir, start_time)
+			processed += 1
+		except Exception as exc:
+			_cleanup_staging(staging_dir)
+			error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
+			retry_count = job.get("retry_count", 0) or 0
+			try:
+				_fail_job(config, job_name, error_msg, retry_count, "Processing")
+			except Exception as fail_exc:
+				log.error("fail_job_error", job=job_name, original_error=str(exc), fail_error=str(fail_exc))
+			if retry_count < 3:
+				log.warning("job_retryable_failure", job=job_name, retry_count=retry_count + 1, error=str(exc))
+			else:
+				log.error("job_permanently_failed", job=job_name, retry_count=retry_count, error=str(exc))
+				failed += 1
+
+	return processed, failed
+
+
+def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: str, final_dir: str, start_time: float):
+	"""Export a single job from Processing -> Exported."""
 	job_name = job["name"]
-	start_time = time.monotonic()
-	staging_dir = os.path.join(config.archive_output_path, ".staging", job_name)
-	final_dir = os.path.join(config.archive_output_path, job_name)
 
-	try:
-		# Parse meta JSON
-		meta = json.loads(job["meta"]) if isinstance(job["meta"], str) else job["meta"]
-		archive_type_key = job.get("archive_type") or "practice_log"
-		source_table = f"tab{job['source_doctype']}"
+	# Parse meta JSON
+	meta = json.loads(job["meta"]) if isinstance(job["meta"], str) else (job["meta"] or {})
+	archive_type_key = job.get("archive_type") or "practice_log"
+	source_table = f"tab{job['source_doctype']}"
 
-		# Create staging directory
-		os.makedirs(staging_dir, exist_ok=True)
+	# Create staging directory
+	os.makedirs(staging_dir, exist_ok=True)
 
-		# --- Export fact data ---
-		_update_stage(config, job_name, "exporting_fact")
-		log.info("exporting_fact", job=job_name)
+	# --- Export fact data ---
+	_update_stage(config, job_name, "exporting_fact")
+	log.info("exporting_fact", job=job_name)
 
-		fact_path, fact_row_count, referenced_ids = export_fact_data(
+	fact_path, fact_row_count, referenced_ids = export_fact_data(
+		config=config,
+		staging_dir=staging_dir,
+		meta=meta,
+		source_table=source_table,
+		archive_type_name=archive_type_key,
+	)
+
+	# Record snapshot timestamp
+	snapshot_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+	# --- Export dimension snapshots ---
+	_update_stage(config, job_name, "exporting_dimensions")
+	log.info("exporting_dimensions", job=job_name)
+
+	dimension_results = []
+	for rt in meta.get("related_tables", []):
+		entity = rt["entity"]
+		schema_version = rt["schema_version"]
+
+		dim_schema = load_dimension_schema(config.schema_registry_path, entity, schema_version)
+
+		# Get referenced IDs for this dimension from the fact export
+		fact_col = rt["fact_column"]
+		ids_for_dim = referenced_ids.get(fact_col, set())
+
+		dim_path, dim_row_count = export_dimension(
 			config=config,
 			staging_dir=staging_dir,
-			meta=meta,
-			source_table=source_table,
-			archive_type_name=archive_type_key,
+			dim_schema=dim_schema,
+			referenced_ids=ids_for_dim,
 		)
-
-		# Record snapshot timestamp
-		snapshot_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
-
-		# --- Export dimension snapshots ---
-		_update_stage(config, job_name, "exporting_dimensions")
-		log.info("exporting_dimensions", job=job_name)
-
-		dimension_results = []
-		for rt in meta.get("related_tables", []):
-			entity = rt["entity"]
-			schema_version = rt["schema_version"]
-
-			dim_schema = load_dimension_schema(config.schema_registry_path, entity, schema_version)
-
-			# Get referenced IDs for this dimension from the fact export
-			fact_col = rt["fact_column"]
-			ids_for_dim = referenced_ids.get(fact_col, set())
-
-			dim_path, dim_row_count = export_dimension(
-				config=config,
-				staging_dir=staging_dir,
-				dim_schema=dim_schema,
-				referenced_ids=ids_for_dim,
-			)
-			dimension_results.append(
-				{
-					"entity": entity,
-					"schema_version": schema_version,
-					"fact_column": fact_col,
-					"path": dim_path,
-					"row_count": dim_row_count,
-				}
-			)
-
-		# --- Validate all files ---
-		_update_stage(config, job_name, "verifying")
-		log.info("verifying", job=job_name)
-
-		file_entries = []
-
-		# Validate fact file
-		fact_validation = validate_file(fact_path, fact_row_count)
-		if not fact_validation["valid"]:
-			raise RuntimeError(f"Fact file validation failed: {fact_validation['errors']}")
-
-		file_entries.append(
+		dimension_results.append(
 			{
-				"role": "fact",
-				"filename": fact_validation["filename"],
-				"row_count": fact_validation["row_count"],
-				"checksum": fact_validation["checksum"],
-				"size_bytes": fact_validation["size_bytes"],
+				"entity": entity,
+				"schema_version": schema_version,
+				"fact_column": fact_col,
+				"path": dim_path,
+				"row_count": dim_row_count,
 			}
 		)
 
-		# Validate dimension files
-		for dim_result in dimension_results:
-			dim_validation = validate_file(dim_result["path"], dim_result["row_count"])
-			if not dim_validation["valid"]:
-				raise RuntimeError(
-					f"Dimension {dim_result['entity']} validation failed: {dim_validation['errors']}"
-				)
+	# --- Validate all files ---
+	_update_stage(config, job_name, "verifying")
+	log.info("verifying", job=job_name)
 
-			file_entries.append(
-				{
-					"role": "dimension",
-					"entity": dim_result["entity"],
-					"snapshot_schema_version": dim_result["schema_version"],
-					"scope": "batch_referenced",
-					"referenced_by": dim_result["fact_column"],
-					"filename": dim_validation["filename"],
-					"row_count": dim_validation["row_count"],
-					"checksum": dim_validation["checksum"],
-					"size_bytes": dim_validation["size_bytes"],
-				}
+	file_entries = []
+
+	# Validate fact file
+	fact_validation = validate_file(fact_path, fact_row_count)
+	if not fact_validation["valid"]:
+		raise RuntimeError(f"Fact file validation failed: {fact_validation['errors']}")
+
+	file_entries.append(
+		{
+			"role": "fact",
+			"filename": fact_validation["filename"],
+			"row_count": fact_validation["row_count"],
+			"checksum": fact_validation["checksum"],
+			"size_bytes": fact_validation["size_bytes"],
+		}
+	)
+
+	# Validate dimension files
+	for dim_result in dimension_results:
+		dim_validation = validate_file(dim_result["path"], dim_result["row_count"])
+		if not dim_validation["valid"]:
+			raise RuntimeError(
+				f"Dimension {dim_result['entity']} validation failed: {dim_validation['errors']}"
 			)
 
-		# --- Build manifest ---
-		build_manifest(
-			staging_dir=staging_dir,
-			batch_id=job_name,
-			source_doctype=job["source_doctype"],
-			archive_scope=job["archive_scope"],
-			schema_version=job["schema_version"],
-			snapshot_taken_at=snapshot_ts,
-			files=file_entries,
+		file_entries.append(
+			{
+				"role": "dimension",
+				"entity": dim_result["entity"],
+				"snapshot_schema_version": dim_result["schema_version"],
+				"scope": "batch_referenced",
+				"referenced_by": dim_result["fact_column"],
+				"filename": dim_validation["filename"],
+				"row_count": dim_validation["row_count"],
+				"checksum": dim_validation["checksum"],
+				"size_bytes": dim_validation["size_bytes"],
+			}
 		)
 
-		# --- Publish: atomic rename staging → final ---
-		_update_stage(config, job_name, "publishing")
-		log.info("publishing", job=job_name)
+	# --- Build manifest ---
+	build_manifest(
+		staging_dir=staging_dir,
+		batch_id=job_name,
+		source_doctype=job["source_doctype"],
+		archive_scope=job["archive_scope"],
+		schema_version=job["schema_version"],
+		snapshot_taken_at=snapshot_ts,
+		files=file_entries,
+	)
+
+	# --- Publish: atomic rename staging -> final ---
+	_update_stage(config, job_name, "publishing")
+	log.info("publishing", job=job_name)
+
+	# Handle pre-existing final_dir from a previous (retried) run
+	if os.path.isdir(final_dir):
+		old_dir = final_dir + ".old"
+		if os.path.isdir(old_dir):
+			shutil.rmtree(old_dir)
+		os.rename(final_dir, old_dir)
+	else:
+		old_dir = None
+
+	try:
+		os.rename(staging_dir, final_dir)
+	except OSError:
+		# Cross-filesystem: copy + verify + remove staging
+		shutil.copytree(staging_dir, final_dir)
+		shutil.rmtree(staging_dir)
+
+	# Clean up .old after successful swap
+	if old_dir and os.path.isdir(old_dir):
+		shutil.rmtree(old_dir, ignore_errors=True)
+
+	# Set permissions
+	_set_permissions(final_dir)
+
+	# --- Mark Exported ---
+	duration = time.monotonic() - start_time
+	fact_checksum = fact_validation["checksum"]
+	fact_size = fact_validation["size_bytes"]
+
+	_mark_exported(
+		config=config,
+		job_name=job_name,
+		row_count=fact_row_count,
+		file_path=final_dir,
+		file_checksum=fact_checksum,
+		file_size_bytes=fact_size,
+		snapshot_taken_at=snapshot_ts,
+		duration_seconds=round(duration, 2),
+	)
+
+	log.info(
+		"job_exported",
+		job=job_name,
+		rows=fact_row_count,
+		duration_s=round(duration, 2),
+		dimensions=len(dimension_results),
+	)
+
+
+def _process_exported_jobs(config: Config, log: StructuredLogger) -> int:
+	"""Transfer Exported jobs to analytics server. Returns count processed."""
+	if not config.has_ssh_config():
+		log.debug("transfer_skipped", reason="ssh_not_configured")
+		return 0
+
+	jobs = _get_jobs_by_status(config, "Exported")
+	if not jobs:
+		return 0
+
+	log.info("exported_jobs_found", count=len(jobs))
+	processed = 0
+
+	for job in jobs:
+		job_name = job["name"]
+		local_dir = job.get("file_path")
+
+		if not local_dir or not os.path.isdir(local_dir):
+			log.warning("transfer_skipped", job=job_name, reason="local_dir_missing")
+			continue
 
 		try:
-			os.rename(staging_dir, final_dir)
-		except OSError:
-			# Cross-filesystem: copy + verify + remove staging
-			shutil.copytree(staging_dir, final_dir)
-			shutil.rmtree(staging_dir)
+			_update_stage(config, job_name, "transferring")
 
-		# Set permissions
-		_set_permissions(final_dir)
+			# Transfer via rsync
+			remote_path = transfer_batch(config, local_dir, config.remote_archive_path, job_name, log)
 
-		# --- Mark completed ---
-		duration = time.monotonic() - start_time
-		fact_checksum = fact_validation["checksum"]
-		fact_size = fact_validation["size_bytes"]
+			# Load manifest for checksum verification
+			manifest_path = os.path.join(local_dir, "manifest.json")
+			with open(manifest_path) as f:
+				manifest = json.load(f)
 
-		_complete_job(
-			config=config,
-			job_name=job_name,
-			row_count=fact_row_count,
-			file_path=final_dir,
-			file_checksum=fact_checksum,
-			file_size_bytes=fact_size,
-			snapshot_taken_at=snapshot_ts,
-			duration_seconds=round(duration, 2),
-		)
+			# Verify remote checksums
+			_update_stage(config, job_name, "verifying_transfer")
+			result = verify_remote_checksums(config, remote_path, manifest, log)
 
-		log.info(
-			"job_completed",
-			job=job_name,
-			rows=fact_row_count,
-			duration_s=round(duration, 2),
-			dimensions=len(dimension_results),
-		)
+			if not result["valid"]:
+				raise TransferError(f"Checksum verification failed: {result['errors']}")
 
-	except Exception as exc:
-		_cleanup_staging(staging_dir)
-		error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
-		retry_count = job.get("retry_count", 0) or 0
-		_fail_job(config, job_name, error_msg, retry_count)
-		if retry_count < 3:
-			log.warning("job_retryable_failure", job=job_name, retry_count=retry_count + 1, error=str(exc))
-		else:
-			log.error("job_permanently_failed", job=job_name, retry_count=retry_count, error=str(exc))
-		raise
+			_mark_transferred(config, job_name, remote_path)
+			processed += 1
+			log.info("job_transferred", job=job_name, remote_path=remote_path)
+
+		except Exception as exc:
+			error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
+			retry_count = job.get("retry_count", 0) or 0
+			try:
+				_fail_job(config, job_name, error_msg, retry_count, "Exported")
+			except Exception:
+				log.error("fail_job_error", job=job_name, error=str(exc))
+			if retry_count >= 3:
+				log.error("job_permanently_failed", job=job_name, error=str(exc))
+
+	return processed
+
+
+def _process_transferred_jobs(config: Config, log: StructuredLogger) -> int:
+	"""Ingest Transferred jobs into analytics DuckDB. Returns count processed."""
+	if not config.has_ssh_config():
+		log.debug("ingestion_skipped", reason="ssh_not_configured")
+		return 0
+
+	jobs = _get_jobs_by_status(config, "Transferred")
+	if not jobs:
+		return 0
+
+	log.info("transferred_jobs_found", count=len(jobs))
+	processed = 0
+
+	for job in jobs:
+		job_name = job["name"]
+		remote_path = job.get("remote_path")
+		local_dir = job.get("file_path")
+
+		if not remote_path:
+			log.warning("ingestion_skipped", job=job_name, reason="no_remote_path")
+			continue
+
+		try:
+			_update_stage(config, job_name, "ingesting")
+
+			# Load local manifest for metadata
+			manifest_path = os.path.join(local_dir, "manifest.json") if local_dir else None
+			manifest = {}
+			if manifest_path and os.path.isfile(manifest_path):
+				with open(manifest_path) as f:
+					manifest = json.load(f)
+
+			# Ingest into DuckDB
+			ingest_result = ingest_archive_batch(config, remote_path, manifest, log)
+
+			# Verify ingestion
+			_update_stage(config, job_name, "verifying_ingestion")
+			verify_result = verify_ingestion(config, manifest, remote_path, log)
+
+			if not verify_result.get("valid", False):
+				raise IngestionError(f"Ingestion verification failed: {verify_result.get('errors', [])}")
+
+			_mark_ingested(config, job_name)
+			processed += 1
+			log.info("job_ingested", job=job_name)
+
+		except Exception as exc:
+			error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
+			retry_count = job.get("retry_count", 0) or 0
+			try:
+				_fail_job(config, job_name, error_msg, retry_count, "Transferred")
+			except Exception:
+				log.error("fail_job_error", job=job_name, error=str(exc))
+			if retry_count >= 3:
+				log.error("job_permanently_failed", job=job_name, error=str(exc))
+
+	return processed
+
+
+def _process_ingested_jobs(config: Config, log: StructuredLogger) -> int:
+	"""Handoff Ingested jobs: remove overlapping live data, mark Completed. Returns count processed."""
+	if not config.has_ssh_config():
+		log.debug("handoff_skipped", reason="ssh_not_configured")
+		return 0
+
+	jobs = _get_jobs_by_status(config, "Ingested")
+	if not jobs:
+		return 0
+
+	log.info("ingested_jobs_found", count=len(jobs))
+	processed = 0
+
+	for job in jobs:
+		job_name = job["name"]
+		remote_path = job.get("remote_path")
+
+		if not remote_path:
+			log.warning("handoff_skipped", job=job_name, reason="no_remote_path")
+			continue
+
+		try:
+			_update_stage(config, job_name, "handoff")
+
+			# Parse query_filter from meta for date range
+			meta = json.loads(job["meta"]) if isinstance(job["meta"], str) else (job["meta"] or {})
+			query_filter = meta.get("query_filter", {})
+
+			# Call handoff — analytics server removes overlapping live data
+			handoff_archive(config, remote_path, query_filter, log)
+
+			_mark_completed(config, job_name)
+			processed += 1
+			log.info("job_completed", job=job_name)
+
+		except Exception as exc:
+			error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
+			retry_count = job.get("retry_count", 0) or 0
+			try:
+				_fail_job(config, job_name, error_msg, retry_count, "Ingested")
+			except Exception:
+				log.error("fail_job_error", job=job_name, error=str(exc))
+			if retry_count >= 3:
+				log.error("job_permanently_failed", job=job_name, error=str(exc))
+
+	return processed
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 
 def main():
@@ -345,64 +626,51 @@ def main():
 	log.info("run_started", pid=os.getpid())
 
 	# Step 1: Acquire file lock
-	lock_fd = _acquire_lock(config.lock_file)
+	lock_fd = acquire_lock(config.lock_file)
 	if lock_fd is None:
 		log.info("run_skipped", reason="lock_held")
 		sys.exit(0)
 
-	jobs_processed = 0
-	jobs_failed = 0
+	# Initialize counters before try so they're defined even if an early stage throws
+	exported = 0
+	export_failed = 0
+	transferred = 0
+	ingested = 0
+	completed = 0
 
 	try:
-		# Step 2: Fail stuck jobs
+		# Step 2: Fail stuck jobs (all active states)
 		_fail_stuck_jobs(config, log)
 
-		# Step 3: Get pending jobs
-		pending_jobs = _get_pending_jobs(config)
-		if not pending_jobs:
-			log.info("run_finished", jobs_processed=0, jobs_failed=0, reason="no_pending_jobs")
-			return
+		# Step 3: Process pipeline stages
+		exported, export_failed = _process_pending_jobs(config, log)
+		transferred = _process_exported_jobs(config, log)
+		ingested = _process_transferred_jobs(config, log)
+		completed = _process_ingested_jobs(config, log)
 
-		log.info("pending_jobs_found", count=len(pending_jobs))
-
-		# Step 4: Process each job
-		for job in pending_jobs:
-			job_name = job["name"]
-
-			# Atomic claim
-			if not _claim_job(config, job_name):
-				log.info("job_claim_skipped", job=job_name, reason="already_claimed")
-				continue
-
-			log.info(
-				"job_claimed",
-				job=job_name,
-				source=job["source_doctype"],
-				scope=job["archive_scope"],
-			)
-
-			try:
-				_process_job(config, job, log)
-				jobs_processed += 1
-			except Exception:
-				jobs_failed += 1
-
-		# Step 5: Purge source data for eligible completed jobs
+		# Step 4: Purge source data for eligible completed jobs
 		try:
 			purge_completed_jobs(config, log)
 		except Exception as exc:
 			log.error("purge_error", error=str(exc))
 
-		# Step 6: Clean up local copies for transferred jobs
+		# Step 5: Clean up local copies for completed+ jobs
 		try:
-			cleanup_transferred_local_copies(config, log)
+			cleanup_local_copies(config, log)
 		except Exception as exc:
 			log.error("local_cleanup_error", error=str(exc))
 
 	finally:
-		_release_lock(lock_fd)
+		release_lock(lock_fd)
 
-	log.info("run_finished", jobs_processed=jobs_processed, jobs_failed=jobs_failed)
+	log.info(
+		"run_finished",
+		exported=exported,
+		export_failed=export_failed,
+		transferred=transferred,
+		ingested=ingested,
+		completed=completed,
+	)
 
 
 if __name__ == "__main__":

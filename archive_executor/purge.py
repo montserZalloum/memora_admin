@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timezone
 
 from .config import Config
-from .db import atomic_update, get_connection
+from .db import atomic_update, get_connection, validate_identifier
 from .logger import StructuredLogger
 
 PURGE_BATCH_SIZE = 10_000
@@ -25,7 +25,7 @@ def _get_purgeable_jobs(config: Config) -> list[dict]:
 	try:
 		with conn.cursor() as cursor:
 			cursor.execute(
-				"SELECT name, source_doctype, archive_scope, meta, purge_progress "
+				"SELECT name, source_doctype, archive_scope, meta, purge_progress, file_path "
 				"FROM `tabMemora Archive Job` "
 				"WHERE status = 'Completed' "
 				"  AND post_archive_action = 'Delete' "
@@ -87,6 +87,20 @@ def purge_completed_jobs(config: Config, log: StructuredLogger):
 			log.warning("purge_skipped", job=job_name, reason="missing_date_range")
 			continue
 
+		# Validate identifiers before SQL interpolation
+		try:
+			validate_identifier(source_table)
+			validate_identifier(filter_column)
+		except ValueError as exc:
+			log.error("purge_skipped", job=job_name, reason=str(exc))
+			continue
+
+		# Verify archive files exist on disk before purging source data
+		file_path = job.get("file_path") if isinstance(job, dict) else getattr(job, "file_path", None)
+		if not file_path or not os.path.isdir(file_path):
+			log.warning("purge_skipped", job=job_name, reason="archive_files_missing", path=file_path)
+			continue
+
 		# Load resume point from purge_progress
 		progress_raw = job.get("purge_progress")
 		progress = {}
@@ -97,9 +111,9 @@ def purge_completed_jobs(config: Config, log: StructuredLogger):
 
 		log.info("purge_job_started", job=job_name, source_table=source_table, resume_from=total_deleted)
 
-		conn = get_connection(config)
-		try:
-			while True:
+		while True:
+			conn = get_connection(config)
+			try:
 				with conn.cursor() as cursor:
 					sql = (
 						f"DELETE FROM `{source_table}` "
@@ -108,41 +122,41 @@ def purge_completed_jobs(config: Config, log: StructuredLogger):
 						f"LIMIT {PURGE_BATCH_SIZE}"
 					)
 					cursor.execute(sql, (date_from, date_to))
+					deleted = cursor.rowcount
 				conn.commit()
+			finally:
+				conn.close()
 
-				deleted = cursor.rowcount
-				if deleted == 0:
-					break
+			if deleted == 0:
+				break
 
-				total_deleted += deleted
-				progress = {
-					"total_deleted": total_deleted,
-					"last_batch_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
-				}
-				_update_purge_progress(config, job_name, progress)
+			total_deleted += deleted
+			progress = {
+				"total_deleted": total_deleted,
+				"last_batch_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+			}
+			_update_purge_progress(config, job_name, progress)
 
-				log.info("purge_batch", job=job_name, batch_deleted=deleted, total_deleted=total_deleted)
+			log.info("purge_batch", job=job_name, batch_deleted=deleted, total_deleted=total_deleted)
 
-				time.sleep(PURGE_SLEEP_SECONDS)
-		finally:
-			conn.close()
+			time.sleep(PURGE_SLEEP_SECONDS)
 
 		# Mark purged
 		_mark_purged(config, job_name)
 		log.info("purge_job_completed", job=job_name, total_deleted=total_deleted)
 
 
-def _get_transferable_jobs(config: Config) -> list[dict]:
-	"""Query jobs with transfer_status='Transferred' and local copy still present."""
+def _get_cleanable_jobs(config: Config) -> list[dict]:
+	"""Query Completed/Purged jobs with local file_path still present."""
 	conn = get_connection(config)
 	try:
 		with conn.cursor() as cursor:
 			cursor.execute(
-				"SELECT name, file_path "
+				"SELECT name, file_path, status "
 				"FROM `tabMemora Archive Job` "
-				"WHERE transfer_status = 'Transferred' "
-				"  AND local_deleted_at IS NULL "
+				"WHERE status IN ('Completed', 'Purged') "
 				"  AND file_path IS NOT NULL "
+				"  AND remote_path IS NOT NULL "
 				"ORDER BY creation ASC"
 			)
 			return cursor.fetchall()
@@ -150,13 +164,12 @@ def _get_transferable_jobs(config: Config) -> list[dict]:
 		conn.close()
 
 
-def cleanup_transferred_local_copies(config: Config, log: StructuredLogger):
-	"""Delete local batch directories for jobs whose transfer has been verified.
+def cleanup_local_copies(config: Config, log: StructuredLogger):
+	"""Delete local batch directories for Completed/Purged jobs that have a remote_path.
 
-	Only processes jobs with transfer_status='Transferred'.
-	Records local_deleted_at timestamp after successful deletion.
+	Only cleans up jobs whose data has been confirmed at the remote destination.
 	"""
-	jobs = _get_transferable_jobs(config)
+	jobs = _get_cleanable_jobs(config)
 	if not jobs:
 		return
 
@@ -167,10 +180,10 @@ def cleanup_transferred_local_copies(config: Config, log: StructuredLogger):
 		file_path = job["file_path"]
 
 		if not file_path or not os.path.isdir(file_path):
-			# Directory already gone or path invalid — just record the timestamp
+			# Directory already gone — clear the file_path
 			atomic_update(
 				config,
-				"UPDATE `tabMemora Archive Job` SET local_deleted_at = NOW() WHERE name = %s",
+				"UPDATE `tabMemora Archive Job` SET file_path = NULL WHERE name = %s",
 				(job_name,),
 			)
 			log.info("local_cleanup_skipped", job=job_name, reason="directory_not_found")
@@ -180,7 +193,7 @@ def cleanup_transferred_local_copies(config: Config, log: StructuredLogger):
 			shutil.rmtree(file_path)
 			atomic_update(
 				config,
-				"UPDATE `tabMemora Archive Job` SET local_deleted_at = NOW() WHERE name = %s",
+				"UPDATE `tabMemora Archive Job` SET file_path = NULL WHERE name = %s",
 				(job_name,),
 			)
 			log.info("local_cleanup_completed", job=job_name, path=file_path)

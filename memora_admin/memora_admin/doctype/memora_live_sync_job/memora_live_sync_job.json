@@ -1,26 +1,22 @@
 {
  "actions": [],
  "allow_rename": 0,
- "autoname": "ARCH-.#####.",
- "creation": "2026-03-09 12:00:00.000000",
+ "autoname": "LSYNC-.#####.",
+ "creation": "2026-03-09 14:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
-  "source_doctype",
-  "archive_scope",
+  "sync_type",
   "schema_version",
   "column_break_identity",
-  "archive_type",
   "status",
-  "priority",
+  "triggered_by",
   "section_execution",
   "execution_stage",
   "started_at",
-  "claimed_at",
   "exported_at",
   "column_break_execution",
   "completed_at",
-  "snapshot_taken_at",
   "transferred_at",
   "ingested_at",
   "duration_seconds",
@@ -33,35 +29,17 @@
   "remote_path",
   "section_retry",
   "retry_count",
-  "retry_btn",
   "column_break_retry",
   "error_log",
-  "notified_at",
-  "section_behavior",
-  "post_archive_action",
-  "source_deleted",
-  "purge_progress",
-  "column_break_behavior",
-  "sync_paused",
-  "sync_paused_at",
-  "clear_pause_btn",
   "section_meta",
   "meta"
  ],
  "fields": [
   {
-   "fieldname": "source_doctype",
+   "fieldname": "sync_type",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Source DocType",
-   "read_only": 1,
-   "reqd": 1
-  },
-  {
-   "fieldname": "archive_scope",
-   "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Archive Scope",
+   "label": "Sync Type",
    "read_only": 1,
    "reqd": 1
   },
@@ -77,29 +55,23 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "archive_type",
-   "fieldtype": "Data",
-   "label": "Archive Type",
-   "read_only": 1
-  },
-  {
    "default": "Pending",
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Pending\nProcessing\nExported\nTransferred\nIngested\nCompleted\nPurged\nFailed",
+   "options": "Pending\nProcessing\nExported\nTransferred\nIngested\nCompleted\nFailed",
    "read_only": 1,
    "reqd": 1
   },
   {
-   "default": "Normal",
-   "fieldname": "priority",
+   "default": "Cron",
+   "fieldname": "triggered_by",
    "fieldtype": "Select",
    "in_standard_filter": 1,
-   "label": "Priority",
-   "options": "Low\nNormal\nHigh",
+   "label": "Triggered By",
+   "options": "Cron\nManual",
    "read_only": 1
   },
   {
@@ -121,12 +93,6 @@
    "read_only": 1
   },
   {
-   "fieldname": "claimed_at",
-   "fieldtype": "Datetime",
-   "label": "Claimed At",
-   "read_only": 1
-  },
-  {
    "fieldname": "exported_at",
    "fieldtype": "Datetime",
    "label": "Exported At",
@@ -140,12 +106,6 @@
    "fieldname": "completed_at",
    "fieldtype": "Datetime",
    "label": "Completed At",
-   "read_only": 1
-  },
-  {
-   "fieldname": "snapshot_taken_at",
-   "fieldtype": "Datetime",
-   "label": "Snapshot Taken At",
    "read_only": 1
   },
   {
@@ -223,12 +183,6 @@
    "read_only": 1
   },
   {
-   "depends_on": "eval:doc.status=='Failed'",
-   "fieldname": "retry_btn",
-   "fieldtype": "Button",
-   "label": "Retry"
-  },
-  {
    "fieldname": "column_break_retry",
    "fieldtype": "Column Break"
   },
@@ -237,62 +191,6 @@
    "fieldtype": "Long Text",
    "label": "Error Log",
    "read_only": 1
-  },
-  {
-   "fieldname": "notified_at",
-   "fieldtype": "Datetime",
-   "label": "Notified At",
-   "read_only": 1
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_behavior",
-   "fieldtype": "Section Break",
-   "label": "Behavior"
-  },
-  {
-   "default": "Keep",
-   "fieldname": "post_archive_action",
-   "fieldtype": "Select",
-   "label": "Post-Archive Action",
-   "options": "Keep\nDelete",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "source_deleted",
-   "fieldtype": "Check",
-   "label": "Source Deleted",
-   "read_only": 1
-  },
-  {
-   "fieldname": "purge_progress",
-   "fieldtype": "JSON",
-   "label": "Purge Progress",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_behavior",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "fieldname": "sync_paused",
-   "fieldtype": "Check",
-   "label": "Sync Paused",
-   "read_only": 1
-  },
-  {
-   "fieldname": "sync_paused_at",
-   "fieldtype": "Datetime",
-   "label": "Sync Paused At",
-   "read_only": 1
-  },
-  {
-   "depends_on": "eval:doc.sync_paused",
-   "fieldname": "clear_pause_btn",
-   "fieldtype": "Button",
-   "label": "Clear Sync Pause"
   },
   {
    "collapsible": 1,
@@ -312,7 +210,7 @@
  "modified": "2026-03-09 14:00:00.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
- "name": "Memora Archive Job",
+ "name": "Memora Live Sync Job",
  "owner": "Administrator",
  "permissions": [
   {

@@ -37,6 +37,54 @@ def get_player_challenge_progress(player_id: str, subject_id: str) -> list[dict]
 
 
 @frappe.whitelist(allow_guest=False)
+def get_player_challenge_progress_bulk(player_id: str, subject_ids: str) -> dict[str, list[dict]]:
+	"""Load Challenge Progress records for a player across multiple subjects in one call.
+
+	Called by ChallengeService.ensure_hydrated_bulk() on Redis cache miss.
+	Returns dict mapping subject_id → list of topic progress records.
+	subject_ids is a JSON-encoded list of subject ID strings.
+	"""
+	import json as _json
+
+	if isinstance(subject_ids, str):
+		try:
+			parsed_ids = _json.loads(subject_ids)
+		except (ValueError, TypeError):
+			frappe.throw("subject_ids must be a valid JSON array of strings", frappe.InvalidRequestError)
+			return {}
+	else:
+		parsed_ids = subject_ids
+	if not parsed_ids or not isinstance(parsed_ids, list):
+		return {}
+
+	season = frappe.db.get_value("Memora Player Profile", player_id, "season")
+	if not season:
+		return {}
+
+	records = frappe.get_all(
+		"Memora Challenge Progress",
+		filters={"player": player_id, "subject": ["in", parsed_ids], "season": season},
+		fields=[
+			"subject",
+			"topic",
+			"stamped",
+			"best_correct",
+			"best_score_pct",
+			"best_passing_pct",
+			"total_xp_earned",
+			"attempt_count",
+		],
+	)
+
+	result: dict[str, list[dict]] = {sid: [] for sid in parsed_ids}
+	for rec in records:
+		sid = rec.pop("subject")
+		if sid in result:
+			result[sid].append(rec)
+	return result
+
+
+@frappe.whitelist(allow_guest=False)
 def get_challenge_settings() -> dict:
 	"""Get Challenge Hub settings from Memora Settings singleton.
 

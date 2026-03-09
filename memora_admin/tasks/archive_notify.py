@@ -1,11 +1,13 @@
 """Notification task for permanently failed archive jobs.
 
 Scans for Failed archive jobs that haven't been notified yet
-(completed_at set but no prior notification), sends email to
-System Manager users and publishes Desk realtime alert.
+(notified_at not set), sends email to System Manager users
+and publishes Desk realtime alert.
 
 Schedule: Daily at 06:00 via hooks.py
 """
+
+import html as html_mod
 
 import frappe
 
@@ -13,46 +15,54 @@ import frappe
 def notify_failed_archive_jobs():
 	"""Send admin notifications for archive jobs that permanently failed.
 
-	Uses error_log prefix marker '[NOTIFIED]' to track which jobs have
-	already been reported, avoiding a separate DB field.
+	Uses the notified_at Datetime field to track which jobs have
+	already been reported.
 	"""
 	failed_jobs = frappe.get_all(
 		"Memora Archive Job",
 		filters={
 			"status": "Failed",
 			"completed_at": ["is", "set"],
+			"notified_at": ["is", "not set"],
 		},
 		fields=["name", "source_doctype", "archive_scope", "schema_version", "error_log", "retry_count"],
 	)
 
-	# Filter out already-notified jobs (error_log starts with [NOTIFIED])
-	unnotified = [j for j in failed_jobs if not (j.error_log or "").startswith("[NOTIFIED]")]
+	unnotified = failed_jobs
 
 	if not unnotified:
 		return
 
-	# Get System Manager recipients
+	# Get System Manager recipients (single query instead of N+1)
 	admin_users = frappe.get_all(
 		"Has Role",
 		filters={"role": "System Manager", "parenttype": "User"},
 		fields=["parent"],
 	)
+	admin_names = list({u.parent for u in admin_users})
 	recipients = []
-	for u in admin_users:
-		user = frappe.get_doc("User", u.parent)
-		if user.enabled and user.email:
-			recipients.append(user.email)
+	if admin_names:
+		users = frappe.get_all(
+			"User",
+			filters={"name": ["in", admin_names], "enabled": 1},
+			fields=["email"],
+		)
+		recipients = [u.email for u in users if u.email]
 
 	site_url = frappe.utils.get_url()
 
 	for job in unnotified:
+		safe_name = html_mod.escape(str(job.name))
+		safe_source = html_mod.escape(str(job.source_doctype or ""))
+		safe_scope = html_mod.escape(str(job.archive_scope or ""))
+		safe_version = html_mod.escape(str(job.schema_version or ""))
+		error_snippet = html_mod.escape((job.error_log or "No error details")[:500])
 		job_link = f"{site_url}/app/memora-archive-job/{job.name}"
-		error_snippet = (job.error_log or "No error details")[:500]
 
 		# Desk realtime alert
 		frappe.publish_realtime(
 			event="eval_js",
-			message=f'frappe.show_alert({{message: "Archive job {job.name} failed permanently", indicator: "red"}})',
+			message=f'frappe.show_alert({{message: "Archive job {safe_name} failed permanently", indicator: "red"}})',
 			user="Administrator",
 		)
 
@@ -63,10 +73,10 @@ def notify_failed_archive_jobs():
 				subject=f"Archive Job Failed: {job.name} ({job.archive_scope})",
 				message=f"""
 				<h3>Archive Job Permanently Failed</h3>
-				<p><strong>Job:</strong> {job.name}</p>
-				<p><strong>Source:</strong> {job.source_doctype}</p>
-				<p><strong>Scope:</strong> {job.archive_scope}</p>
-				<p><strong>Schema Version:</strong> {job.schema_version}</p>
+				<p><strong>Job:</strong> {safe_name}</p>
+				<p><strong>Source:</strong> {safe_source}</p>
+				<p><strong>Scope:</strong> {safe_scope}</p>
+				<p><strong>Schema Version:</strong> {safe_version}</p>
 				<p><strong>Retry Count:</strong> {job.retry_count}</p>
 				<p><strong>Error:</strong></p>
 				<pre>{error_snippet}</pre>
@@ -75,12 +85,12 @@ def notify_failed_archive_jobs():
 				now=True,
 			)
 
-		# Mark as notified by prepending marker to error_log
+		# Mark as notified via dedicated timestamp field
 		frappe.db.set_value(
 			"Memora Archive Job",
 			job.name,
-			"error_log",
-			f"[NOTIFIED] {job.error_log or ''}",
+			"notified_at",
+			frappe.utils.now(),
 			update_modified=False,
 		)
 

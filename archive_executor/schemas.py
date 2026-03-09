@@ -47,11 +47,52 @@ def load_archive_type(registry_path: str, type_name: str, version: str) -> dict:
 		return yaml.safe_load(f)
 
 
+def load_sync_type(registry_path: str, type_name: str, version: str) -> dict:
+	"""Load a sync type schema YAML file from the sync_types/ subdirectory.
+
+	Args:
+		registry_path: Root path to the schema registry directory.
+		type_name: Sync type name (e.g., "practice_log_live").
+		version: Schema version (e.g., "v1").
+
+	Returns:
+		Parsed dict from the YAML file.
+
+	Raises:
+		FileNotFoundError: If the schema file does not exist.
+	"""
+	file_path = os.path.join(registry_path, "sync_types", f"{type_name}.{version}.yaml")
+	if not os.path.isfile(file_path):
+		raise FileNotFoundError(f"Sync type schema not found: {file_path}")
+	with open(file_path, "r") as f:
+		return yaml.safe_load(f)
+
+
+def list_sync_types(registry_path: str) -> list[dict]:
+	"""Discover all sync type YAML files in the registry.
+
+	Returns:
+		List of parsed sync type dicts (skips empty/invalid files).
+	"""
+	types_dir = os.path.join(registry_path, "sync_types")
+	if not os.path.isdir(types_dir):
+		return []
+	results = []
+	for filename in sorted(os.listdir(types_dir)):
+		if filename.endswith(".yaml") or filename.endswith(".yml"):
+			file_path = os.path.join(types_dir, filename)
+			with open(file_path, "r") as f:
+				parsed = yaml.safe_load(f)
+			if parsed and isinstance(parsed, dict):
+				results.append(parsed)
+	return results
+
+
 def list_archive_types(registry_path: str) -> list[dict]:
 	"""Discover all archive type YAML files in the registry.
 
 	Returns:
-		List of parsed archive type dicts.
+		List of parsed archive type dicts (skips empty/invalid files).
 	"""
 	types_dir = os.path.join(registry_path, "archive_types")
 	if not os.path.isdir(types_dir):
@@ -61,7 +102,9 @@ def list_archive_types(registry_path: str) -> list[dict]:
 		if filename.endswith(".yaml") or filename.endswith(".yml"):
 			file_path = os.path.join(types_dir, filename)
 			with open(file_path, "r") as f:
-				results.append(yaml.safe_load(f))
+				parsed = yaml.safe_load(f)
+			if parsed and isinstance(parsed, dict):
+				results.append(parsed)
 	return results
 
 

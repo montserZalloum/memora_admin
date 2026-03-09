@@ -42,7 +42,7 @@ def build_manifest(
 		"source_doctype": source_doctype,
 		"archive_scope": archive_scope,
 		"schema_version": schema_version,
-		"created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+		"created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
 		"snapshot_taken_at": snapshot_taken_at,
 		"files": files,
 	}
