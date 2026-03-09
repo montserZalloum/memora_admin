@@ -30,8 +30,10 @@ class TopicInfo(BaseModel):
 	"""Topic containing lessons."""
 
 	topic_id: str
+	topic_title: str = ""  # Display name (for Challenge Hub)
 	is_linear: bool = True  # If true, lessons must complete in order
 	is_free: bool = False  # If true, bypasses Gate 2
+	mcq_count: int = 0  # Number of QUESTION-type Review Items (for Challenge Hub)
 	lessons: list[LessonInfo]
 
 
@@ -39,6 +41,7 @@ class UnitInfo(BaseModel):
 	"""Unit containing topics."""
 
 	unit_id: str
+	unit_title: str = ""  # Display name (for Challenge Hub)
 	is_linear: bool = True  # If true, topics must complete in order
 	is_free: bool = False  # If true, bypasses Gate 2
 	topics: list[TopicInfo]
@@ -48,6 +51,7 @@ class TrackInfo(BaseModel):
 	"""Track containing units."""
 
 	track_id: str
+	track_title: str = ""  # Display name (for Challenge Hub)
 	is_linear: bool = True  # If true, units must complete in order
 	is_sold_separately: bool = False  # If true, track can be purchased individually
 	units: list[UnitInfo]

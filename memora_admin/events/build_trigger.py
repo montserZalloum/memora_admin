@@ -706,3 +706,34 @@ def _remove_subject_from_plan_free_subjects(subject_id: str):
 			f"Failed to remove deleted subject {subject_id} from plan free_subjects: {e}",
 			"Subject Deletion Cleanup Error",
 		)
+
+
+# =============================================================================
+# Challenge Hub: Question File Rebuild Trigger
+# =============================================================================
+
+
+def rebuild_challenge_questions_for_lesson(lesson_name: str):
+	"""Rebuild challenge question JSON file for the topic of a given lesson.
+
+	Called after sync_dirty_review_items processes a lesson — at that point
+	the Review Item records in MariaDB are up to date.
+
+	Looks up the lesson's topic and triggers a question file rebuild.
+	Best-effort: errors are logged but never bubble up.
+	"""
+	try:
+		topic_id = frappe.db.get_value("Memora Lesson", lesson_name, "topic", cache=True)
+		if not topic_id:
+			return
+
+		from memora_admin.memora_admin.services.build.challenge_questions import (
+			rebuild_topic_question_file,
+		)
+
+		rebuild_topic_question_file(topic_id)
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to rebuild challenge question file for lesson {lesson_name}: {e}",
+			"Challenge Question Rebuild Error",
+		)

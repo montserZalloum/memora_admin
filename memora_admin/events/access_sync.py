@@ -14,8 +14,11 @@ import frappe
 
 from fastapi_app.core.redis_keys import (
 	ACCESS_KEY_TTL,
+	CH_PROGRESS_SCAN_PATTERN,
 	PLAN_FREE_SUBJECTS_TTL,
 	cache_invalidation_channel,
+	ch_lbmeta_scan_pattern,
+	ch_leaderboard_scan_pattern,
 	plan_free_subjects_key,
 	season_key,
 	subjects_with_free_content_key,
@@ -50,6 +53,9 @@ def on_season_updated(doc, method):
 	Per CONTEXT.md:
 	- Gate 1 validates season is active and not expired
 	- Uses Redis hash for atomic multi-field updates
+
+	Also triggers Challenge Hub data reset when a season is unpublished
+	or has ended (end_date < today).
 	"""
 	r = get_memora_redis()
 	redis_key = season_key(doc.name)
@@ -67,6 +73,60 @@ def on_season_updated(doc, method):
 
 	frappe.logger().info(f"Season {doc.name} synced to Redis")
 
+	# Trigger Challenge Hub reset ONLY on a genuine 1 → 0 unpublish transition.
+	# We cannot rely on has_value_changed() alone because on insert both
+	# after_insert AND on_update fire with _doc_before_save as a blank doc
+	# (blank.is_published is None, so `0 != None` is True → false positive).
+	# Instead, explicitly verify the OLD value was truthy (i.e. the season
+	# was actually published before this save).
+	prev = getattr(doc, "_doc_before_save", None)
+	was_published = prev and prev.get("is_published") if prev else False
+	if was_published and not doc.is_published:
+		try:
+			reset_challenge_data(doc.name)
+		except Exception:
+			frappe.log_error(title=f"Challenge Hub reset failed for season {doc.name}")
+
+
+def check_expired_seasons_challenge_reset():
+	"""Daily job: unpublish seasons that have passed their end_date.
+
+	The on_season_updated hook only fires on explicit unpublish (is_published 1→0).
+	If a season simply expires by date without an admin action, this job catches it
+	and sets is_published=0, which triggers the on_season_updated hook to perform
+	the Challenge Hub reset.
+
+	This approach avoids two problems:
+	1. Repeated resets: the season is unpublished once, so the job won't re-trigger.
+	2. Global progress wipe: reset_challenge_data is only called once via the hook,
+	   not on every daily run for every expired season.
+
+	Runs daily at 01:10 (registered in hooks.py scheduler_events).
+	"""
+	today = frappe.utils.today()
+
+	# Find published seasons whose end_date has passed
+	expired_seasons = frappe.get_all(
+		"Memora Season",
+		filters={"is_published": 1, "end_date": ["<", today]},
+		pluck="name",
+	)
+
+	if not expired_seasons:
+		return
+
+	for season_id in expired_seasons:
+		try:
+			# Unpublish the season — this triggers on_season_updated hook which
+			# detects the 1→0 transition and calls reset_challenge_data() exactly once.
+			doc = frappe.get_doc("Memora Season", season_id)
+			doc.is_published = 0
+			doc.save(ignore_permissions=True)
+			frappe.db.commit()
+			frappe.logger().info(f"Auto-unpublished expired season {season_id}")
+		except Exception:
+			frappe.log_error(title=f"Auto-unpublish failed for expired season {season_id}")
+
 
 def on_season_deleted(doc, method):
 	"""Remove season from Redis cache when deleted."""
@@ -75,6 +135,97 @@ def on_season_deleted(doc, method):
 	r.delete(redis_key)
 
 	frappe.logger().info(f"Season {doc.name} removed from Redis")
+
+	# Also clean up any Challenge Hub data for this season
+	try:
+		reset_challenge_data(doc.name)
+	except Exception:
+		frappe.log_error(title=f"Challenge Hub reset failed for deleted season {doc.name}")
+
+
+def reset_challenge_data(season_id: str) -> dict:
+	"""Reset all Challenge Hub Redis data for a season.
+
+	Cleans up:
+	1. All challenge progress keys (memora:ch:progress:*)
+	2. All challenge leaderboard keys for the season (memora:lb:ch:{season_id}:*)
+	3. Dirty set entries (memora:dirty:ch_progress) — flush first to avoid data loss
+	4. Attempt buffer (memora:ch:attempt_buffer) — flush first to avoid data loss
+
+	MariaDB records are preserved as archive (no deletion).
+
+	Args:
+		season_id: The season identifier to reset.
+
+	Returns:
+		dict with counts of deleted keys.
+	"""
+	r = get_memora_redis()
+	deleted_progress = 0
+	deleted_leaderboard = 0
+
+	# Step 1: Flush dirty challenge progress to MariaDB before clearing Redis
+	# This ensures no pending data is lost
+	_flush_dirty_challenge_data_before_reset()
+
+	# Step 2: SCAN and DELETE all challenge progress keys
+	# These are not season-scoped (player x subject), so we delete all of them
+	# on season reset since challenge progress is season-specific conceptually
+	cursor = 0
+	while True:
+		cursor, keys = r.scan(cursor=cursor, match=CH_PROGRESS_SCAN_PATTERN, count=200)
+		if keys:
+			deleted_progress += r.delete(*keys)
+		if cursor == 0:
+			break
+
+	# Step 3: SCAN and DELETE all challenge leaderboard keys for this season
+	# Pattern: memora:lb:ch:{season_id}:* covers plan and subject leaderboards
+	lb_pattern = ch_leaderboard_scan_pattern(season_id)
+	cursor = 0
+	while True:
+		cursor, keys = r.scan(cursor=cursor, match=lb_pattern, count=200)
+		if keys:
+			deleted_leaderboard += r.delete(*keys)
+		if cursor == 0:
+			break
+
+	# Step 4: Also clean the leaderboard metadata keys (tieridx, tiercnt)
+	lbmeta_pattern = ch_lbmeta_scan_pattern(season_id)
+	cursor = 0
+	while True:
+		cursor, keys = r.scan(cursor=cursor, match=lbmeta_pattern, count=200)
+		if keys:
+			deleted_leaderboard += r.delete(*keys)
+		if cursor == 0:
+			break
+
+	frappe.logger().info(
+		f"Challenge Hub reset for season {season_id}: "
+		f"{deleted_progress} progress keys, {deleted_leaderboard} leaderboard keys deleted"
+	)
+
+	return {
+		"season_id": season_id,
+		"deleted_progress": deleted_progress,
+		"deleted_leaderboard": deleted_leaderboard,
+	}
+
+
+def _flush_dirty_challenge_data_before_reset():
+	"""Flush any pending dirty challenge progress and attempt buffer to MariaDB.
+
+	Called before season reset to ensure no data loss. If sync fails,
+	we still proceed with the reset (data is in MariaDB already via
+	periodic sync, and remaining dirty items are best-effort).
+	"""
+	try:
+		from memora_admin.tasks.sync import sync_dirty_challenge_progress
+
+		sync_dirty_challenge_progress()
+		frappe.logger().info("Pre-reset challenge data flush completed")
+	except Exception:
+		frappe.log_error(title="Pre-reset challenge data flush failed (proceeding with reset)")
 
 
 # =============================================================================

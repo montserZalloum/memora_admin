@@ -66,6 +66,11 @@ class Settings(BaseSettings):
 	lc_join_rate_limit: int = 5
 	lc_submit_rate_limit: int = 2
 
+	# Challenge Hub Rate Limits
+	ch_hierarchy_rate_limit: int = 10
+	ch_attempt_rate_limit: int = 30
+	ch_leaderboard_rate_limit: int = 10
+
 	# Practice Arena Session Settings
 	practice_session_size: int = 20
 	practice_session_ttl: int = 3600

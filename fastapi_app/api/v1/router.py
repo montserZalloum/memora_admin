@@ -8,6 +8,7 @@ from fastapi_app.api.v1.endpoints import (
 	auth,
 	bootstrap,
 	catalog,
+	challenge,
 	health,
 	leaderboard,
 	live_challenge,
@@ -53,3 +54,4 @@ router.include_router(voucher.router)
 router.include_router(practice.router)
 router.include_router(plan_change.router)
 router.include_router(live_challenge.router)
+router.include_router(challenge.router)

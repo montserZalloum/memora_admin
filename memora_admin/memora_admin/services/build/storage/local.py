@@ -206,6 +206,10 @@ class LocalStorageBackend(StorageBackend):
 		(setgid + rwxrwxr-x) so new files/dirs inherit the www-data group
 		and allow group write access for the web server.
 
+		Also sets group ownership to www-data so nginx can traverse the
+		directory tree. The setgid bit ensures subsequent files/subdirs
+		inherit the www-data group automatically.
+
 		Args:
 		    path: Directory path to create
 		"""
@@ -215,12 +219,23 @@ class LocalStorageBackend(StorageBackend):
 		# Create directory with parents
 		path.mkdir(parents=True, exist_ok=True)
 
-		# Fix permissions on all created directories (walk up to base_path)
+		# Resolve www-data GID once
+		import grp
+
+		try:
+			www_data_gid = grp.getgrnam("www-data").gr_gid
+		except KeyError:
+			www_data_gid = None
+
+		# Fix permissions and group on all created directories (walk up to base_path)
 		current = path
 		while current != self.base_path and current.exists():
 			try:
 				# Set to setgid + rwxrwxr-x (group writable + inherit group for web server)
 				os.chmod(current, 0o2775)
+				# Set group to www-data so nginx can traverse
+				if www_data_gid is not None:
+					os.chown(current, -1, www_data_gid)
 			except OSError as e:
 				logger.warning(f"Failed to set permissions on {current}: {e}")
 			current = current.parent

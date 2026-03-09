@@ -28,7 +28,13 @@
   "practice_section",
   "practice_session_size",
   "column_break_practice",
-  "practice_session_ttl"
+  "practice_session_ttl",
+  "challenge_section",
+  "challenge_xp_per_question",
+  "challenge_pass_threshold",
+  "column_break_challenge",
+  "challenge_lb_top_count",
+  "challenge_lb_refresh_interval"
  ],
  "fields": [
   {
@@ -161,13 +167,50 @@
    "fieldname": "practice_session_ttl",
    "fieldtype": "Int",
    "label": "Practice Session TTL"
+  },
+  {
+   "fieldname": "challenge_section",
+   "fieldtype": "Section Break",
+   "label": "Challenge Hub"
+  },
+  {
+   "default": "5",
+   "description": "XP awarded per correct answer in Challenge Hub",
+   "fieldname": "challenge_xp_per_question",
+   "fieldtype": "Int",
+   "label": "Challenge XP Per Question"
+  },
+  {
+   "default": "50",
+   "description": "Minimum score percentage to stamp a topic",
+   "fieldname": "challenge_pass_threshold",
+   "fieldtype": "Int",
+   "label": "Challenge Pass Threshold (%)"
+  },
+  {
+   "fieldname": "column_break_challenge",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "20",
+   "description": "Number of top players shown on leaderboard",
+   "fieldname": "challenge_lb_top_count",
+   "fieldtype": "Int",
+   "label": "Challenge Leaderboard Top N"
+  },
+  {
+   "default": "300",
+   "description": "Leaderboard refresh interval in seconds",
+   "fieldname": "challenge_lb_refresh_interval",
+   "fieldtype": "Int",
+   "label": "Challenge LB Refresh Interval"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2026-02-19 00:00:00.000000",
+ "modified": "2026-03-08 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Memora Admin",
  "name": "Memora Settings",

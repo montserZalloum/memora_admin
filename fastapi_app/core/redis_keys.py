@@ -1204,6 +1204,164 @@ def lc_meta_key(event_id: str) -> str:
 
 
 # =============================================================================
+# Challenge Hub
+# =============================================================================
+
+CH_PROGRESS_KEY_TTL = 172800
+"""48 hours. Applied to ch:progress:{player}:{subject} hashes.
+
+Same TTL as main progress bitmaps. Self-heals via ChallengeService.ensure_hydrated()
+from Memora Challenge Progress DocType on cache miss.
+"""
+
+CH_IDEM_KEY_TTL = 300
+"""5 minutes. Applied to ch:idem:{player}:{attempt_key} strings.
+
+Short TTL for attempt submission idempotency. Client-generated attempt_key
+prevents duplicate submissions on network retry.
+"""
+
+CH_SETTINGS_KEY_TTL = 300
+"""5 minutes. Applied to challenge settings cache.
+
+Reuses existing SettingsService cache pattern. Short TTL so admin changes
+take effect quickly without explicit invalidation.
+"""
+
+CH_QUESTION_LOOKUP_KEY_TTL = 300
+"""5 minutes. Applied to per-topic challenge question lookup cache.
+
+Short TTL keeps server-side grading metadata fresh after content edits
+while absorbing burst traffic on hot topics.
+"""
+
+CH_ATTEMPT_LOCK_TTL = 10
+"""10 seconds. Lock TTL for per-player+subject+topic challenge submission guard.
+
+Prevents concurrent read-modify-write races from double-awarding XP.
+"""
+
+
+def ch_progress_key(player_id: str, subject_id: str) -> str:
+	"""Per-student per-subject challenge progress hash.
+
+	Type: HASH (field = topic_id, value = JSON {stamped, best_correct, best_score_pct,
+	            best_passing_pct, total_xp, attempt_count})
+	Producers: ChallengeService.submit_attempt() (HSET after grading)
+	Consumers: ChallengeService.get_challenge_hierarchy() (unlock logic),
+	           ChallengeService.get_challenge_subjects() (stamped counts)
+	TTL: 48h (CH_PROGRESS_KEY_TTL)
+	Self-heals: Yes — on cache miss, hydrate from Memora Challenge Progress records
+	"""
+	return f"memora:ch:progress:{player_id}:{subject_id}"
+
+
+def ch_settings_key() -> str:
+	"""Challenge settings cache key.
+
+	Type: STRING (JSON: xp_per_question, pass_threshold, lb_top_count, lb_refresh_interval)
+	Producers: ChallengeService._get_challenge_settings() on cache miss
+	Consumers: ChallengeService._get_challenge_settings()
+	TTL: 300s (CH_SETTINGS_KEY_TTL)
+	"""
+	return "memora:ch:settings"
+
+
+def ch_question_lookup_key(topic_id: str) -> str:
+	"""Per-topic question lookup cache used for server-side challenge grading.
+
+	Type: STRING (JSON: item_id -> {lesson, stage_id, correct_choice})
+	Producers: ChallengeService._get_question_lookup() on cache miss
+	Consumers: ChallengeService._get_question_lookup()
+	TTL: 300s (CH_QUESTION_LOOKUP_KEY_TTL)
+	"""
+	return f"memora:ch:qlookup:{topic_id}"
+
+
+def ch_leaderboard_key(season_id: str, plan_id: str) -> str:
+	"""Plan-level Challenge XP leaderboard (all subjects combined).
+
+	Type: ZSET (member = player_id, score = total Challenge XP)
+	Producers: ChallengeService.submit_attempt() (ZINCRBY when xp_delta > 0)
+	Consumers: GET /challenge/leaderboard, GET /challenge/leaderboard/me
+	TTL: None (protected within season, cleaned on season reset)
+	"""
+	return f"{LB_PREFIX}:ch:{season_id}:plan:{plan_id}"
+
+
+def ch_leaderboard_subject_key(season_id: str, plan_id: str, subject_id: str) -> str:
+	"""Per-subject Challenge XP leaderboard within a plan.
+
+	Type: ZSET (member = player_id, score = subject-specific Challenge XP)
+	Producers: ChallengeService.submit_attempt() (ZINCRBY when xp_delta > 0)
+	Consumers: GET /challenge/leaderboard?subject_id=X, GET /challenge/leaderboard/me?subject_id=X
+	TTL: None (protected within season, cleaned on season reset)
+	"""
+	return f"{LB_PREFIX}:ch:{season_id}:plan:{plan_id}:subject:{subject_id}"
+
+
+def ch_idem_key(player_id: str, attempt_key: str) -> str:
+	"""Idempotency key for challenge attempt submission.
+
+	Type: STRING (JSON response body of the processed attempt)
+	Producers: POST /challenge/attempt (SET NX EX 300)
+	Consumers: POST /challenge/attempt (GET before processing)
+	TTL: 300s (CH_IDEM_KEY_TTL)
+	"""
+	return f"memora:ch:idem:{player_id}:{attempt_key}"
+
+
+def ch_attempt_lock_key(player_id: str, subject_id: str, topic_id: str) -> str:
+	"""Submission lock key guarding challenge attempt mutation critical section.
+
+	Type: STRING (managed by Redis lock implementation)
+	Producers: ChallengeService.submit_attempt()
+	Consumers: ChallengeService.submit_attempt()
+	TTL: 10s (CH_ATTEMPT_LOCK_TTL)
+	"""
+	return f"memora:ch:lock:attempt:{player_id}:{subject_id}:{topic_id}"
+
+
+def dirty_ch_progress_key() -> str:
+	"""Dirty set of player:subject:season triples pending challenge progress sync to MariaDB.
+
+	Type: SET of strings formatted as "{player_id}:{subject_id}:{season_id}"
+	    (legacy format "{player_id}:{subject_id}" still accepted by consumer — falls back
+	    to profile lookup, but new writes always include season)
+	Producers: ChallengeService.submit_attempt() (SADD after Redis update)
+	Consumers: sync.py sync_dirty_challenge_progress()
+	TTL: None (protected — never evicted, data loss = permanent)
+	"""
+	return "memora:dirty:ch_progress"
+
+
+def ch_attempt_buffer_key() -> str:
+	"""Buffer of serialized challenge attempt payloads pending flush to MariaDB.
+
+	Type: LIST of JSON strings (each = one complete attempt with per-question details)
+	Producers: ChallengeService.submit_attempt() (RPUSH after grading)
+	Consumers: sync.py sync_dirty_challenge_progress() (LPOP batch, creates DocType records)
+	TTL: None (protected — never evicted, data loss = permanent attempt loss)
+	"""
+	return "memora:ch:attempt_buffer"
+
+
+# Challenge Hub SCAN patterns
+CH_PROGRESS_SCAN_PATTERN = "memora:ch:progress:*"
+"""SCAN pattern for all challenge progress keys (used by season reset)."""
+
+
+def ch_leaderboard_scan_pattern(season_id: str) -> str:
+	"""SCAN pattern for Challenge leaderboard keys in one season."""
+	return f"{LB_PREFIX}:ch:{season_id}:*"
+
+
+def ch_lbmeta_scan_pattern(season_id: str) -> str:
+	"""SCAN pattern for Challenge leaderboard metadata keys in one season."""
+	return f"{LBMETA_PREFIX}:ch:{season_id}:*"
+
+
+# =============================================================================
 # SCAN Patterns (for background tasks iterating over key sets)
 # =============================================================================
 

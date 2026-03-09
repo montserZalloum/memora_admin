@@ -6,6 +6,8 @@ from collections import defaultdict
 
 import frappe
 
+from memora_admin.utils.review_item_counts import get_question_counts_by_topic
+
 
 def _compute_content_hash(hierarchy: dict) -> str:
 	"""Compute a structural fingerprint for the hierarchy.
@@ -132,25 +134,28 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 		"tracks": [],
 	}
 
+	# --- Bulk-fetch MCQ counts per topic (for Challenge Hub) ---
+	mcq_count_by_topic = get_question_counts_by_topic(subject_id)
+
 	# --- Bulk-fetch all entities in 4 queries (was N+1 nested loops) ---
 	all_tracks = frappe.get_all(
 		"Memora Track",
 		filters={"subject": subject_id, "is_published": 1},
-		fields=["name", "is_linear", "is_sold_separately"],
+		fields=["name", "track_title", "is_linear", "is_sold_separately"],
 		order_by="idx asc",
 	)
 
 	all_units = frappe.get_all(
 		"Memora Unit",
 		filters={"subject": subject_id, "is_published": 1},
-		fields=["name", "track", "is_linear", "is_free"],
+		fields=["name", "track", "unit_title", "is_linear", "is_free"],
 		order_by="idx asc",
 	)
 
 	all_topics = frappe.get_all(
 		"Memora Topic",
 		filters={"subject": subject_id, "is_published": 1},
-		fields=["name", "unit", "is_linear", "is_free"],
+		fields=["name", "unit", "topic_title", "is_linear", "is_free"],
 		order_by="idx asc",
 	)
 
@@ -181,6 +186,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 	for track in all_tracks:
 		track_info = {
 			"track_id": track.name,
+			"track_title": track.track_title or track.name,
 			"is_linear": track.is_linear if track.is_linear is not None else True,
 			"is_sold_separately": bool(track.get("is_sold_separately")),
 			"units": [],
@@ -189,6 +195,7 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 		for unit in units_by_track[track.name]:
 			unit_info = {
 				"unit_id": unit.name,
+				"unit_title": unit.unit_title or unit.name,
 				"is_linear": unit.is_linear if unit.is_linear is not None else True,
 				"is_free": unit.is_free if unit.is_free is not None else False,
 				"topics": [],
@@ -197,8 +204,10 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 			for topic in topics_by_unit[unit.name]:
 				topic_info = {
 					"topic_id": topic.name,
+					"topic_title": topic.topic_title or topic.name,
 					"is_linear": topic.is_linear if topic.is_linear is not None else True,
 					"is_free": topic.is_free if topic.is_free is not None else False,
+					"mcq_count": mcq_count_by_topic.get(topic.name, 0),
 					"lessons": [],
 				}
 

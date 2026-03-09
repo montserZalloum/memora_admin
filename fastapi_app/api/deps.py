@@ -19,6 +19,7 @@ from fastapi_app.models.auth import TokenPayload
 from fastapi_app.services.access import AccessService
 from fastapi_app.services.announcements import AnnouncementService
 from fastapi_app.services.catalog import CatalogService
+from fastapi_app.services.challenge import ChallengeService
 from fastapi_app.services.device import DeviceService
 from fastapi_app.services.frappe_client import FrappeClient
 from fastapi_app.services.game_session import GameSessionService
@@ -408,6 +409,26 @@ async def get_live_challenge_service(request: Request) -> LiveChallengeService:
 LiveChallengeServiceDep = Annotated[LiveChallengeService, Depends(get_live_challenge_service)]
 
 
+async def get_challenge_service(redis_client: RedisClient) -> ChallengeService:
+	"""Get ChallengeService with Redis, FrappeClient, and sub-services."""
+	frappe_client = await get_frappe_client()
+	hierarchy_service = HierarchyService(redis_client, frappe_client)
+	access_service = AccessService(redis_client, frappe_client=frappe_client)
+	stats_service = StatsService(redis_client)
+	plan_service = PlanService(redis_client, frappe_client)
+	return ChallengeService(
+		redis_client,
+		frappe_client=frappe_client,
+		hierarchy_service=hierarchy_service,
+		access_service=access_service,
+		stats_service=stats_service,
+		plan_service=plan_service,
+	)
+
+
+ChallengeServiceDep = Annotated[ChallengeService, Depends(get_challenge_service)]
+
+
 async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) -> VoucherService:
 	"""Get VoucherService with Redis, FrappeClient, and HMAC secret."""
 	frappe_client = await get_frappe_client()
@@ -429,6 +450,9 @@ _SCOPE_SETTINGS = {
 	"practice_continue": "practice_continue_rate_limit",
 	"lc_join": "lc_join_rate_limit",
 	"lc_submit": "lc_submit_rate_limit",
+	"ch_hierarchy": "ch_hierarchy_rate_limit",
+	"ch_attempt": "ch_attempt_rate_limit",
+	"ch_leaderboard": "ch_leaderboard_rate_limit",
 }
 
 

@@ -26,7 +26,10 @@ from fastapi_app.core.constants import (
 	INTERACTION_BUFFER_KEY,
 )
 from fastapi_app.core.redis_keys import (
+	ch_attempt_buffer_key,
+	ch_progress_key,
 	daily_xp_key,
+	dirty_ch_progress_key,
 	freeze_key,
 	subject_total_lessons_key,
 	wallet_key,
@@ -636,6 +639,7 @@ def sync_dirty_review_items():
 	Scheduled: every 2 minutes via hooks.py (*/2 * * * *)
 	"""
 	from memora_admin.api.review_items import sync_review_items
+	from memora_admin.events.build_trigger import rebuild_challenge_questions_for_lesson
 
 	r = get_memora_redis()
 	dirty_lessons = r.smembers(DIRTY_REVIEW_ITEMS_KEY)
@@ -661,6 +665,8 @@ def sync_dirty_review_items():
 					f"Review Item sync for {lesson_name}: "
 					f"created={result['created']}, updated={result['updated']}, deleted={result['deleted']}"
 				)
+				# Rebuild challenge question file for the affected topic
+				rebuild_challenge_questions_for_lesson(lesson_name)
 		except frappe.DoesNotExistError:
 			# Lesson was deleted — remove from dirty set
 			r.srem(DIRTY_REVIEW_ITEMS_KEY, lesson_name)
@@ -853,3 +859,265 @@ def _log_sync(sync_type: str, count: int, status: str):
 		frappe.db.commit()
 	except Exception as e:
 		logger.error(f"Failed to log sync: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Challenge Hub sync
+# ---------------------------------------------------------------------------
+
+# Maximum attempt buffer entries to process per run
+CH_ATTEMPT_BATCH_SIZE = 100
+CH_PROGRESS_SYNC_BATCH_SIZE = 500
+
+
+def sync_dirty_challenge_progress():
+	"""Sync challenge progress and attempt buffer from Redis to MariaDB.
+
+	Two jobs in one function:
+	1. SPOP dirty challenge progress set → upsert Memora Challenge Progress records
+	2. LPOP attempt buffer entries → create Memora Challenge Attempt + child details
+
+	Follows MERGE pattern: reads existing DB records and merges, never replaces.
+	Protected keys (dirty set, attempt buffer) have no TTL.
+
+	Scheduled: every 1 minute via hooks.py
+	"""
+	r = get_memora_redis()
+
+	progress_synced = 0
+	attempts_synced = 0
+	errors = []
+
+	# --- Job 1: Sync dirty challenge progress ---
+	try:
+		dirty_members = r.spop(dirty_ch_progress_key(), count=CH_PROGRESS_SYNC_BATCH_SIZE)
+		if isinstance(dirty_members, str):
+			dirty_members = [dirty_members]
+		if dirty_members:
+			progress_synced = _sync_ch_progress_members(r, dirty_members, members_popped=True)
+	except Exception as e:
+		errors.append(f"progress: {e!s}")
+		frappe.log_error(f"Challenge progress sync failed: {e}")
+
+	# --- Job 2: Flush attempt buffer ---
+	try:
+		attempts_synced = _flush_ch_attempt_buffer(r)
+	except Exception as e:
+		errors.append(f"attempts: {e!s}")
+		frappe.log_error(f"Challenge attempt buffer flush failed: {e}")
+
+	total = progress_synced + attempts_synced
+	if total > 0 or errors:
+		status_str = "Success" if not errors else "Failed"
+		_log_sync("ChallengeProgress", total, status_str)
+		logger.info(
+			f"Challenge sync: {progress_synced} progress, {attempts_synced} attempts, {len(errors)} errors"
+		)
+
+
+def _sync_ch_progress_members(r, dirty_members, *, members_popped: bool = False):
+	"""Process dirty challenge progress members: upsert to MariaDB."""
+	synced = 0
+
+	for member in dirty_members:
+		member_str = member
+
+		# New format: "player_id:subject_id:season_id" (season embedded at earn-time)
+		# Old format: "player_id:subject_id" (backward compat — fall back to profile lookup)
+		parts = member_str.split(":")
+		if len(parts) == 3:
+			player_id, subject_id, season = parts
+		elif len(parts) == 2:
+			player_id, subject_id = parts
+			season = None
+		else:
+			logger.warning(f"Invalid dirty ch_progress format: {member_str}")
+			continue
+
+		try:
+			# Fall back to profile lookup only for old-format members (inside try
+			# so a DB error isolates to this member instead of aborting the batch)
+			if not season:
+				season = frappe.db.get_value("Memora Player Profile", player_id, "season")
+
+			# Read full progress hash from Redis
+			key = ch_progress_key(player_id, subject_id)
+			raw = r.hgetall(key)
+
+			if not raw:
+				continue
+
+			if not season:
+				logger.warning(f"No season for player {player_id}, skipping ch_progress sync")
+				continue
+
+			for topic_id, data_str in raw.items():
+				try:
+					data = json.loads(data_str)
+				except (json.JSONDecodeError, TypeError):
+					continue
+
+				# Upsert: find existing record for this player+topic+subject+season
+				existing = frappe.db.get_value(
+					"Memora Challenge Progress",
+					{"player": player_id, "topic": topic_id, "subject": subject_id, "season": season},
+					["name", "best_correct", "total_xp_earned", "attempt_count"],
+					as_dict=True,
+				)
+
+				if existing:
+					# MERGE: only update if Redis values are >= existing (monotonic fields)
+					update_fields = {}
+					redis_best_correct = int(data.get("best_correct", 0))
+					redis_best_score = float(data.get("best_score_pct", 0))
+					redis_best_passing = float(data.get("best_passing_pct", 0))
+					redis_total_xp = int(data.get("total_xp", 0))
+					redis_attempt_count = int(data.get("attempt_count", 0))
+					redis_stamped = int(data.get("stamped", 0))
+
+					if redis_best_correct > int(existing.get("best_correct", 0)):
+						update_fields["best_correct"] = redis_best_correct
+						update_fields["best_score_pct"] = redis_best_score
+					if redis_best_passing > float(existing.get("best_passing_pct", 0)):
+						update_fields["best_passing_pct"] = redis_best_passing
+					if redis_total_xp > int(existing.get("total_xp_earned", 0)):
+						update_fields["total_xp_earned"] = redis_total_xp
+					if redis_attempt_count > int(existing.get("attempt_count", 0)):
+						update_fields["attempt_count"] = redis_attempt_count
+					if redis_stamped:
+						update_fields["stamped"] = 1
+
+					if update_fields:
+						frappe.db.set_value(
+							"Memora Challenge Progress",
+							existing["name"],
+							update_fields,
+							update_modified=True,
+						)
+				else:
+					frappe.get_doc(
+						{
+							"doctype": "Memora Challenge Progress",
+							"player": player_id,
+							"topic": topic_id,
+							"subject": subject_id,
+							"season": season,
+							"stamped": int(data.get("stamped", 0)),
+							"best_correct": int(data.get("best_correct", 0)),
+							"best_score_pct": float(data.get("best_score_pct", 0)),
+							"best_passing_pct": float(data.get("best_passing_pct", 0)),
+							"total_xp_earned": int(data.get("total_xp", 0)),
+							"attempt_count": int(data.get("attempt_count", 0)),
+						}
+					).insert(ignore_permissions=True)
+
+			frappe.db.commit()
+			synced += 1
+			if not members_popped:
+				r.srem(dirty_ch_progress_key(), member)
+
+		except Exception as e:
+			logger.error(f"Challenge progress sync failed for {member_str}: {e}")
+			frappe.log_error(f"Challenge progress sync failed for {member_str}: {e}")
+			if members_popped:
+				r.sadd(dirty_ch_progress_key(), member_str)
+
+	return synced
+
+
+def _flush_ch_attempt_buffer(r):
+	"""Flush challenge attempt buffer: create Attempt + Detail records in MariaDB.
+
+	Uses LRANGE + LTRIM for batch read, then re-queues any items that failed
+	to insert so they are retried on the next sync cycle (no data loss).
+	"""
+	buf_key = ch_attempt_buffer_key()
+	items = r.lrange(buf_key, 0, CH_ATTEMPT_BATCH_SIZE - 1)
+
+	if not items:
+		return 0
+
+	count = len(items)
+	inserted = 0
+	failed_items = []
+
+	for item_raw in items:
+		item_str = item_raw
+
+		try:
+			data = json.loads(item_str)
+		except (json.JSONDecodeError, TypeError) as e:
+			logger.warning(f"Invalid JSON in challenge attempt buffer (dropping): {e}")
+			continue
+
+		try:
+			# Dedup guard: natural key = player + topic + attempt_number + submitted_at.
+			# If a crash happened between commit and ltrim on a previous cycle, the same
+			# records would be replayed. Check before inserting to avoid duplicates.
+			existing = frappe.db.exists(
+				"Memora Challenge Attempt",
+				{
+					"player": data["player"],
+					"topic": data["topic"],
+					"attempt_number": data["attempt_number"],
+					"submitted_at": data.get("submitted_at"),
+				},
+			)
+			if existing:
+				inserted += 1  # Count as success so it gets trimmed
+				continue
+
+			# Create the attempt record with child details
+			attempt_doc = frappe.get_doc(
+				{
+					"doctype": "Memora Challenge Attempt",
+					"player": data["player"],
+					"topic": data["topic"],
+					"subject": data["subject"],
+					"season": data.get("season"),
+					"attempt_number": data["attempt_number"],
+					"total_questions": data["total_questions"],
+					"correct_count": data["correct_count"],
+					"score_pct": data["score_pct"],
+					"passed": 1 if data["passed"] else 0,
+					"time_spent": data.get("time_spent", 0),
+					"xp_earned": data.get("xp_earned", 0),
+					"submitted_at": data.get("submitted_at"),
+					"details": [
+						{
+							"doctype": "Memora Challenge Attempt Detail",
+							"item_id": d["item_id"],
+							"correct": 1 if d["correct"] else 0,
+							"time_spent": d.get("time_spent", 0),
+							"chosen_answer": d.get("chosen_answer", 0),
+						}
+						for d in data.get("details", [])
+					],
+				}
+			)
+			attempt_doc.insert(ignore_permissions=True, ignore_links=True)
+			inserted += 1
+
+		except Exception as e:
+			logger.error(f"Challenge attempt insert failed (will retry): {e}")
+			frappe.log_error(f"Challenge attempt insert failed: {e}")
+			failed_items.append(item_str)
+
+	# Commit all successful inserts
+	if inserted:
+		frappe.db.commit()
+
+	# Trim the processed batch, then re-queue failures at the front.
+	# Order matters: LTRIM first removes the batch we just processed
+	# (indexes 0..count-1). Then LPUSH prepends failed items so they
+	# retry next cycle. A pipeline ensures both run atomically — if
+	# the process crashes mid-pipeline, Redis executes none or both.
+	pipe = r.pipeline()
+	pipe.ltrim(buf_key, count, -1)
+	if failed_items:
+		for item in reversed(failed_items):
+			pipe.lpush(buf_key, item)
+		logger.warning(f"Re-queued {len(failed_items)} failed challenge attempt(s) for retry")
+	pipe.execute()
+
+	return inserted

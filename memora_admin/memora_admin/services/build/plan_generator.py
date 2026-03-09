@@ -19,6 +19,8 @@ from typing import Any
 
 import frappe
 
+from memora_admin.utils.review_item_counts import get_question_counts_by_topic
+
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION = 1
@@ -34,6 +36,7 @@ class PlanSubjectTree:
 	lessons_by_topic: dict = field(default_factory=dict)
 	stages_by_lesson: dict = field(default_factory=dict)
 	skippable_types: set = field(default_factory=set)
+	mcq_count_by_topic: dict = field(default_factory=dict)
 
 
 def _prefetch_plan_subject_tree(subject_id: str) -> PlanSubjectTree:
@@ -105,6 +108,9 @@ def _prefetch_plan_subject_tree(subject_id: str) -> PlanSubjectTree:
 
 	# Query 6: skippable stage types (single small query)
 	tree.skippable_types = _get_skippable_stage_types()
+
+	# Query 7: MCQ counts per topic from Review Items (for Challenge Hub)
+	tree.mcq_count_by_topic = get_question_counts_by_topic(subject_id)
 
 	return tree
 
@@ -545,6 +551,7 @@ def _generate_unit_content_from_tree(
 				"sort_order": topic["sort_order"] or 0,
 				"is_linear": bool(topic.get("is_linear")),
 				"is_free": topic_is_free,
+				"mcq_count": tree.mcq_count_by_topic.get(topic["name"], 0),
 				"lessons": lessons_data,
 			}
 		)

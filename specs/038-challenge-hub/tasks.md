@@ -19,9 +19,9 @@
 
 **Purpose**: Redis keys, Pydantic models, and settings — everything downstream depends on these.
 
-- [ ] T001 Add 6 Redis key builders (`ch_progress_key`, `ch_leaderboard_key`, `ch_leaderboard_subject_key`, `ch_idem_key`, `dirty_ch_progress_key`, `ch_attempt_buffer_key`) and TTL constants (`CH_PROGRESS_KEY_TTL = 48h`, `CH_IDEM_KEY_TTL = 300s`, `CH_SETTINGS_KEY_TTL = 300s`) to `fastapi_app/core/redis_keys.py`. Note: challenge settings reuse the existing `memora:settings` key pattern (no separate key builder needed)
-- [ ] T002 [P] Create Pydantic request/response models (`AttemptRequest`, `QuestionDetail`, `AttemptResponse`, `ChallengeSubjectSummary`, `ChallengeHierarchyResponse`, `TopicState`, `UnitState`, `TrackState`, `LeaderboardEntry`, `LeaderboardResponse`, `MyRankResponse`) in `fastapi_app/models/challenge.py`
-- [ ] T003 [P] Add Challenge Hub section to Memora Settings DocType: `challenge_xp_per_question` (Int, default 5), `challenge_pass_threshold` (Int, default 50), `challenge_lb_top_count` (Int, default 20), `challenge_lb_refresh_interval` (Int, default 300) in `memora_admin/memora_admin/doctype/memora_settings/memora_settings.json`
+- [x] T001 Add 6 Redis key builders (`ch_progress_key`, `ch_leaderboard_key`, `ch_leaderboard_subject_key`, `ch_idem_key`, `dirty_ch_progress_key`, `ch_attempt_buffer_key`) and TTL constants (`CH_PROGRESS_KEY_TTL = 48h`, `CH_IDEM_KEY_TTL = 300s`, `CH_SETTINGS_KEY_TTL = 300s`) to `fastapi_app/core/redis_keys.py`. Note: challenge settings reuse the existing `memora:settings` key pattern (no separate key builder needed)
+- [x] T002 [P] Create Pydantic request/response models (`AttemptRequest`, `QuestionDetail`, `AttemptResponse`, `ChallengeSubjectSummary`, `ChallengeHierarchyResponse`, `TopicState`, `UnitState`, `TrackState`, `LeaderboardEntry`, `LeaderboardResponse`, `MyRankResponse`) in `fastapi_app/models/challenge.py`
+- [x] T003 [P] Add Challenge Hub section to Memora Settings DocType: `challenge_xp_per_question` (Int, default 5), `challenge_pass_threshold` (Int, default 50), `challenge_lb_top_count` (Int, default 20), `challenge_lb_refresh_interval` (Int, default 300) in `memora_admin/memora_admin/doctype/memora_settings/memora_settings.json`
 
 ---
 
@@ -31,11 +31,11 @@
 
 **CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T004 [P] Create `Memora Challenge Progress` DocType with fields: `player` (Link → Memora Player Profile), `topic` (Link → Memora Topic), `subject` (Link → Memora Subject), `season` (Link → Memora Season), `stamped` (Check, default 0), `best_correct` (Int, default 0), `best_score_pct` (Percent, default 0), `best_passing_pct` (Percent, default 0), `total_xp_earned` (Int, default 0), `attempt_count` (Int, default 0). Autoname: `hash`. Files: `memora_admin/memora_admin/doctype/memora_challenge_progress/memora_challenge_progress.json` and `memora_challenge_progress.py`
-- [ ] T005 [P] Create `Memora Challenge Attempt Detail` child table DocType with fields: `item_id` (Data), `correct` (Check), `time_spent` (Int), `chosen_answer` (Int). Files: `memora_admin/memora_admin/doctype/memora_challenge_attempt_detail/memora_challenge_attempt_detail.json` and `memora_challenge_attempt_detail.py`
-- [ ] T006 [P] Create `Memora Challenge Attempt` DocType with fields: `player` (Link → Memora Player Profile), `topic` (Link → Memora Topic), `subject` (Link → Memora Subject), `season` (Link → Memora Season), `attempt_number` (Int), `total_questions` (Int), `correct_count` (Int), `score_pct` (Percent), `passed` (Check), `time_spent` (Int), `xp_earned` (Int), `submitted_at` (Datetime), `details` (Table → Memora Challenge Attempt Detail). Autoname: `naming_series` (`CHA-.#####`). Files: `memora_admin/memora_admin/doctype/memora_challenge_attempt/memora_challenge_attempt.json` and `memora_challenge_attempt.py`
-- [ ] T007 Create `ChallengeService` skeleton in `fastapi_app/services/challenge.py` with `__init__` accepting `redis: Redis`, `frappe_client: FrappeClient`, and `settings: dict`. Include `ensure_hydrated()` stub and structured logging setup via `structlog`
-- [ ] T008 Add `ChallengeServiceDep` (Annotated + Depends) to `fastapi_app/api/deps.py`, create empty router in `fastapi_app/api/v1/endpoints/challenge.py`, and mount `challenge.router` with prefix `/challenge` in `fastapi_app/api/v1/router.py`
+- [x] T004 [P] Create `Memora Challenge Progress` DocType with fields: `player` (Link → Memora Player Profile), `topic` (Link → Memora Topic), `subject` (Link → Memora Subject), `season` (Link → Memora Season), `stamped` (Check, default 0), `best_correct` (Int, default 0), `best_score_pct` (Percent, default 0), `best_passing_pct` (Percent, default 0), `total_xp_earned` (Int, default 0), `attempt_count` (Int, default 0). Autoname: `hash`. Files: `memora_admin/memora_admin/doctype/memora_challenge_progress/memora_challenge_progress.json` and `memora_challenge_progress.py`
+- [x] T005 [P] Create `Memora Challenge Attempt Detail` child table DocType with fields: `item_id` (Data), `correct` (Check), `time_spent` (Int), `chosen_answer` (Int). Files: `memora_admin/memora_admin/doctype/memora_challenge_attempt_detail/memora_challenge_attempt_detail.json` and `memora_challenge_attempt_detail.py`
+- [x] T006 [P] Create `Memora Challenge Attempt` DocType with fields: `player` (Link → Memora Player Profile), `topic` (Link → Memora Topic), `subject` (Link → Memora Subject), `season` (Link → Memora Season), `attempt_number` (Int), `total_questions` (Int), `correct_count` (Int), `score_pct` (Percent), `passed` (Check), `time_spent` (Int), `xp_earned` (Int), `submitted_at` (Datetime), `details` (Table → Memora Challenge Attempt Detail). Autoname: `naming_series` (`CHA-.#####`). Files: `memora_admin/memora_admin/doctype/memora_challenge_attempt/memora_challenge_attempt.json` and `memora_challenge_attempt.py`
+- [x] T007 Create `ChallengeService` skeleton in `fastapi_app/services/challenge.py` with `__init__` accepting `redis: Redis`, `frappe_client: FrappeClient`, and `settings: dict`. Include `ensure_hydrated()` stub and structured logging setup via `structlog`
+- [x] T008 Add `ChallengeServiceDep` (Annotated + Depends) to `fastapi_app/api/deps.py`, create empty router in `fastapi_app/api/v1/endpoints/challenge.py`, and mount `challenge.router` with prefix `/challenge` in `fastapi_app/api/v1/router.py`
 
 **Checkpoint**: Foundation ready — DocTypes installable, router mounted, service injectable.
 
@@ -49,12 +49,12 @@
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Extend `generate_plan_json()` in `memora_admin/services/build/plan_generator.py` to embed `mcq_count` per topic by querying `Memora Review Item` where `stage_type = "QUESTION"` grouped by topic
-- [ ] T010 [US1] Implement `ensure_hydrated()` in `ChallengeService` in `fastapi_app/services/challenge.py` — on Redis cache miss for `ch_progress_key(player, subject)`, load all `Memora Challenge Progress` records for that player+subject from MariaDB via FrappeClient and populate the Redis HASH
-- [ ] T011 [US1] Implement `get_challenge_subjects()` in `ChallengeService` in `fastapi_app/services/challenge.py` — load player's plan subjects, for each subject load hierarchy + challenge progress, compute `total_topics` (excluding empty), `stamped_topics`, `total_challenge_xp`, return list of `ChallengeSubjectSummary`
-- [ ] T012 [US1] Implement `get_challenge_hierarchy()` in `ChallengeService` in `fastapi_app/services/challenge.py` — load hierarchy for subject, walk tracks → units → topics, for each topic evaluate 3 unlock conditions (access via `AccessService.check_access_with_plan()`, normal path complete via stats cache, predecessor stamped via challenge progress), handle empty topic auto-stamp chain (FR-009: when predecessor is stamped, empty topics with `mcq_count == 0` auto-stamp and propagate through the chain), filter hidden topics from response, attach `lock_reason`
-- [ ] T013 [US1] Implement GET `/challenge/hierarchy` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`, `ChallengeServiceDep`, returns `{"subjects": [ChallengeSubjectSummary]}`
-- [ ] T014 [US1] Implement GET `/challenge/hierarchy/{subject_id}` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`, `ChallengeServiceDep`, validates subject in player's plan (404 if not), returns `ChallengeHierarchyResponse` with tracks/units/topics and states
+- [x] T009 [US1] Extend `generate_plan_json()` in `memora_admin/services/build/plan_generator.py` to embed `mcq_count` per topic by querying `Memora Review Item` where `stage_type = "QUESTION"` grouped by topic
+- [x] T010 [US1] Implement `ensure_hydrated()` in `ChallengeService` in `fastapi_app/services/challenge.py` — on Redis cache miss for `ch_progress_key(player, subject)`, load all `Memora Challenge Progress` records for that player+subject from MariaDB via FrappeClient and populate the Redis HASH
+- [x] T011 [US1] Implement `get_challenge_subjects()` in `ChallengeService` in `fastapi_app/services/challenge.py` — load player's plan subjects, for each subject load hierarchy + challenge progress, compute `total_topics` (excluding empty), `stamped_topics`, `total_challenge_xp`, return list of `ChallengeSubjectSummary`
+- [x] T012 [US1] Implement `get_challenge_hierarchy()` in `ChallengeService` in `fastapi_app/services/challenge.py` — load hierarchy for subject, walk tracks → units → topics, for each topic evaluate 3 unlock conditions (access via `AccessService.check_access_with_plan()`, normal path complete via stats cache, predecessor stamped via challenge progress), handle empty topic auto-stamp chain (FR-009: when predecessor is stamped, empty topics with `mcq_count == 0` auto-stamp and propagate through the chain), filter hidden topics from response, attach `lock_reason`
+- [x] T013 [US1] Implement GET `/challenge/hierarchy` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`, `ChallengeServiceDep`, returns `{"subjects": [ChallengeSubjectSummary]}`
+- [x] T014 [US1] Implement GET `/challenge/hierarchy/{subject_id}` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`, `ChallengeServiceDep`, validates subject in player's plan (404 if not), returns `ChallengeHierarchyResponse` with tracks/units/topics and states
 
 **Checkpoint**: Students can browse Challenge Hub hierarchy with correct topic states. No gameplay yet.
 
@@ -68,14 +68,14 @@
 
 ### Implementation for User Stories 2, 3, 4
 
-- [ ] T015 [US2] Implement `_grade_attempt()` pure method in `ChallengeService` in `fastapi_app/services/challenge.py` — calculate `score_pct = round(correct_count / total_questions * 100, 2)`, determine `passed = score_pct >= pass_threshold`, validate `correct_count == sum(q.correct for q in questions)` and `total_questions == len(questions)`
-- [ ] T016 [US3] Implement `_update_best_scores()` in `ChallengeService` in `fastapi_app/services/challenge.py` — compare current `correct_count` with `best_correct`, update `best_correct`, `best_score_pct` if improved, update `best_passing_pct` if passed and score > previous best passing, return `is_new_best` flag
-- [ ] T017 [US4] Implement `_calculate_xp_delta()` in `ChallengeService` in `fastapi_app/services/challenge.py` — `xp_delta = max(0, current_correct - previous_best_correct) * xp_per_question`, return `xp_delta` (0 if no improvement)
-- [ ] T018 [US2] Implement `_push_fsrs_interactions()` in `ChallengeService` in `fastapi_app/services/challenge.py` — for each question result, RPUSH to `interaction_buffer_key()` with FSRS interaction format: `{player, lesson, stage_id, item_id, event_type: "Completed", errors_count: 0 if correct else 1, time_spent, timestamp, metadata: {source: "challenge_hub"}}`. The `lesson` and `stage_id` per question are read from the cached topic question JSON file (generated by T028, which includes these fields per question item)
-- [ ] T019 [US2] Implement `submit_attempt()` orchestration in `ChallengeService` in `fastapi_app/services/challenge.py` — validate topic is open (3 conditions), load topic question file for `lesson`/`stage_id` mapping, grade → update best scores → calculate XP delta → update Redis progress HASH → SADD dirty set → RPUSH serialized attempt payload (attempt_number, total_questions, correct_count, score_pct, passed, time_spent, xp_earned, submitted_at, per-question details) to `ch_attempt_buffer_key()` → push FSRS interactions → compute `next_topic` (if this stamp unlocked the next topic, evaluate its unlock state and return `{topic_id, state}`, else null) → return `AttemptResponse`. Use Redis pipeline for atomic progress update + dirty set + attempt buffer + FSRS push
-- [ ] T020 [US2] Implement POST `/challenge/attempt` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`, `ChallengeServiceDep`. Implement idempotency: check `ch_idem_key(player, attempt_key)` via GET, if exists return cached response (409), else process and SET NX EX 300 with response. Validate request body against `AttemptRequest` model
-- [ ] T021 [US2] Add `sync_dirty_challenge_progress()` function to `memora_admin/tasks/sync.py` — two jobs in one function: (1) SPOP members from `dirty_ch_progress_key()`, for each `{player}:{subject}` load Redis HASH, upsert `Memora Challenge Progress` records in MariaDB (follow existing MERGE pattern, do not replace); (2) LPOP entries from `ch_attempt_buffer_key()` (batch up to 100), deserialize each payload, create `Memora Challenge Attempt` + child `Memora Challenge Attempt Detail` records in MariaDB
-- [ ] T022 [US2] Register `sync_dirty_challenge_progress` as scheduled job (every 1 min) in `memora_admin/hooks.py` under `scheduler_events.cron`
+- [x] T015 [US2] Implement `_grade_attempt()` pure method in `ChallengeService` in `fastapi_app/services/challenge.py` — calculate `score_pct = round(correct_count / total_questions * 100, 2)`, determine `passed = score_pct >= pass_threshold`, validate `correct_count == sum(q.correct for q in questions)` and `total_questions == len(questions)`
+- [x] T016 [US3] Implement `_update_best_scores()` in `ChallengeService` in `fastapi_app/services/challenge.py` — compare current `correct_count` with `best_correct`, update `best_correct`, `best_score_pct` if improved, update `best_passing_pct` if passed and score > previous best passing, return `is_new_best` flag
+- [x] T017 [US4] Implement `_calculate_xp_delta()` in `ChallengeService` in `fastapi_app/services/challenge.py` — `xp_delta = max(0, current_correct - previous_best_correct) * xp_per_question`, return `xp_delta` (0 if no improvement)
+- [x] T018 [US2] Implement `_push_fsrs_interactions()` in `ChallengeService` in `fastapi_app/services/challenge.py` — for each question result, RPUSH to `interaction_buffer_key()` with FSRS interaction format: `{player, lesson, stage_id, item_id, event_type: "Completed", errors_count: 0 if correct else 1, time_spent, timestamp, metadata: {source: "challenge_hub"}}`. The `lesson` and `stage_id` per question are read from the cached topic question JSON file (generated by T028, which includes these fields per question item)
+- [x] T019 [US2] Implement `submit_attempt()` orchestration in `ChallengeService` in `fastapi_app/services/challenge.py` — validate topic is open (3 conditions), load topic question file for `lesson`/`stage_id` mapping, grade → update best scores → calculate XP delta → update Redis progress HASH → SADD dirty set → RPUSH serialized attempt payload (attempt_number, total_questions, correct_count, score_pct, passed, time_spent, xp_earned, submitted_at, per-question details) to `ch_attempt_buffer_key()` → push FSRS interactions → compute `next_topic` (if this stamp unlocked the next topic, evaluate its unlock state and return `{topic_id, state}`, else null) → return `AttemptResponse`. Use Redis pipeline for atomic progress update + dirty set + attempt buffer + FSRS push
+- [x] T020 [US2] Implement POST `/challenge/attempt` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`, `ChallengeServiceDep`. Implement idempotency: check `ch_idem_key(player, attempt_key)` via GET, if exists return cached response (409), else process and SET NX EX 300 with response. Validate request body against `AttemptRequest` model
+- [x] T021 [US2] Add `sync_dirty_challenge_progress()` function to `memora_admin/tasks/sync.py` — two jobs in one function: (1) SPOP members from `dirty_ch_progress_key()`, for each `{player}:{subject}` load Redis HASH, upsert `Memora Challenge Progress` records in MariaDB (follow existing MERGE pattern, do not replace); (2) LPOP entries from `ch_attempt_buffer_key()` (batch up to 100), deserialize each payload, create `Memora Challenge Attempt` + child `Memora Challenge Attempt Detail` records in MariaDB
+- [x] T022 [US2] Register `sync_dirty_challenge_progress` as scheduled job (every 1 min) in `memora_admin/hooks.py` under `scheduler_events.cron`
 
 **Checkpoint**: Full gameplay loop works — play, score, stamp, retry, XP delta, FSRS push. All P1 stories complete.
 
@@ -89,9 +89,9 @@
 
 ### Implementation for User Story 5
 
-- [ ] T023 [US5] Integrate leaderboard ZSET update into `submit_attempt()` in `fastapi_app/services/challenge.py` — when `xp_delta > 0`, pipeline `ZINCRBY` on `ch_leaderboard_key(season, plan)` and `ch_leaderboard_subject_key(season, plan, subject)`. Update tier metadata (tieridx/tiercnt) following existing `LeaderboardService` pattern
-- [ ] T024 [P] [US5] Implement GET `/challenge/leaderboard` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`. Accept optional `subject_id`, `limit` (default 20, max 100), `offset` (default 0). Query ZREVRANGE on appropriate key, resolve player profiles (display_name, avatar), mark `is_me`, return `LeaderboardResponse`
-- [ ] T025 [US5] Implement GET `/challenge/leaderboard/me` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`. Accept optional `subject_id`. Get own score + rank via ZSCORE/ZREVRANK, get neighbors via ZREVRANGE around own rank, compute `xp_to_next`, return `MyRankResponse`. Handle unranked case (rank=null, xp=0)
+- [x] T023 [US5] Integrate leaderboard ZSET update into `submit_attempt()` in `fastapi_app/services/challenge.py` — when `xp_delta > 0`, pipeline `ZINCRBY` on `ch_leaderboard_key(season, plan)` and `ch_leaderboard_subject_key(season, plan, subject)`. Update tier metadata (tieridx/tiercnt) following existing `LeaderboardService` pattern
+- [x] T024 [P] [US5] Implement GET `/challenge/leaderboard` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`. Accept optional `subject_id`, `limit` (default 20, max 100), `offset` (default 0). Query ZREVRANGE on appropriate key, resolve player profiles (display_name, avatar), mark `is_me`, return `LeaderboardResponse`
+- [x] T025 [US5] Implement GET `/challenge/leaderboard/me` endpoint in `fastapi_app/api/v1/endpoints/challenge.py` — depends on `ActiveSeasonDep`, `PlayerDep`. Accept optional `subject_id`. Get own score + rank via ZSCORE/ZREVRANK, get neighbors via ZREVRANGE around own rank, compute `xp_to_next`, return `MyRankResponse`. Handle unranked case (rank=null, xp=0)
 
 **Checkpoint**: Leaderboard fully functional with plan-scope, subject filter, and own-rank.
 
@@ -105,8 +105,8 @@
 
 ### Implementation for User Story 6
 
-- [ ] T026 [US6] Implement `reset_challenge_data(season_id)` in `ChallengeService` or as standalone function — SCAN and DELETE all `memora:ch:progress:*` keys, DELETE all `memora:lb:ch:{season_id}:*` keys (plan + subject leaderboards + tier metadata), DELETE `memora:dirty:ch_progress` entries for the season. MariaDB records are preserved as archive (no deletion)
-- [ ] T027 [US6] Hook `reset_challenge_data` into existing season expiry event — extend `on_season_updated` in `memora_admin/events/build_trigger.py` or `access_sync.py` to call challenge cleanup when season status changes to expired
+- [x] T026 [US6] Implement `reset_challenge_data(season_id)` in `ChallengeService` or as standalone function — SCAN and DELETE all `memora:ch:progress:*` keys, DELETE all `memora:lb:ch:{season_id}:*` keys (plan + subject leaderboards + tier metadata), DELETE `memora:dirty:ch_progress` entries for the season. MariaDB records are preserved as archive (no deletion)
+- [x] T027 [US6] Hook `reset_challenge_data` into existing season expiry event — extend `on_season_updated` in `memora_admin/events/build_trigger.py` or `access_sync.py` to call challenge cleanup when season status changes to expired
 
 **Checkpoint**: Season lifecycle complete — data clears on expiry, fresh start on new season.
 
@@ -116,8 +116,8 @@
 
 **Purpose**: Generate per-topic question JSON files for CDN delivery (zero DB load on challenge start).
 
-- [ ] T028 [P] Create topic question JSON file generator in `memora_admin/services/build/challenge_questions.py` — query `Memora Review Item` where `stage_type = "QUESTION"` per topic, generate `challenges/{subject_id}/topics/{topic_id}_q.json` with structure: `{topic_id, subject_id, total_questions, questions: [{item_id, lesson, stage_id, question_text, choices, correct_choice}]}`. The `lesson` and `stage_id` fields per question are required by the FSRS interaction push (T018) — including them in the cached file avoids MariaDB lookups in the hot path
-- [ ] T029 Add build trigger for question file rebuild on Review Item sync in `memora_admin/events/build_trigger.py` — when `on_content_updated` fires for a topic with Review Item changes, queue rebuild of that topic's question JSON file
+- [x] T028 [P] Create topic question JSON file generator in `memora_admin/services/build/challenge_questions.py` — query `Memora Review Item` where `stage_type = "QUESTION"` per topic, generate `challenges/{subject_id}/topics/{topic_id}_q.json` with structure: `{topic_id, subject_id, total_questions, questions: [{item_id, lesson, stage_id, question_text, choices, correct_choice}]}`. The `lesson` and `stage_id` fields per question are required by the FSRS interaction push (T018) — including them in the cached file avoids MariaDB lookups in the hot path
+- [x] T029 Add build trigger for question file rebuild on Review Item sync in `memora_admin/events/build_trigger.py` — when `on_content_updated` fires for a topic with Review Item changes, queue rebuild of that topic's question JSON file
 
 **Checkpoint**: Question files auto-generated and served from CDN. Teachers add/edit questions → files rebuild automatically.
 
@@ -127,9 +127,9 @@
 
 **Purpose**: Logging, validation, and final verification across all stories.
 
-- [ ] T030 Add structured logging for challenge operations (attempt submissions, XP delta, stamps, cache misses, FSRS pushes) using `structlog` in `fastapi_app/services/challenge.py`
-- [ ] T031 Register rate limit scopes (`ch_hierarchy`: 10/min, `ch_attempt`: 30/min, `ch_leaderboard`: 10/min) in `fastapi_app/api/deps.py` and apply to all 5 challenge endpoints
-- [ ] T032 Run quickstart.md verification checklist — validate all 10 items pass end-to-end
+- [x] T030 Add structured logging for challenge operations (attempt submissions, XP delta, stamps, cache misses, FSRS pushes) using `structlog` in `fastapi_app/services/challenge.py`
+- [x] T031 Register rate limit scopes (`ch_hierarchy`: 10/min, `ch_attempt`: 30/min, `ch_leaderboard`: 10/min) in `fastapi_app/api/deps.py` and apply to all 5 challenge endpoints
+- [x] T032 Run quickstart.md verification checklist — validate all 10 items pass end-to-end
 
 ---
 
@@ -137,12 +137,12 @@
 
 **Purpose**: Pure logic tests and key integration tests to validate core challenge mechanics.
 
-- [ ] T033 [P] Pure tests for `_grade_attempt()` in `fastapi_app/tests/test_challenge_service.py` — test pass/fail at threshold boundary (49% fail, 50% pass, 51% pass), 0/N score, N/N score, validation that `correct_count` matches sum of `q.correct`
-- [ ] T034 [P] Pure tests for `_calculate_xp_delta()` in `fastapi_app/tests/test_challenge_service.py` — test first attempt (full XP), improvement (delta XP), regression (0 XP), same score (0 XP), configurable `xp_per_question`
-- [ ] T035 [P] Pure tests for `_update_best_scores()` in `fastapi_app/tests/test_challenge_service.py` — test new best overall, new best passing, regression (no update), first passing attempt after failures, `is_new_best` flag
-- [ ] T036 Integration test for empty topic auto-stamp chain in `fastapi_app/tests/test_challenge_service.py` — test chain of [stamped, empty, empty, real] resolves to [stamped, auto-stamped, auto-stamped, open], single empty topic, all-empty unit
-- [ ] T037 Integration test for challenge XP isolation in `fastapi_app/tests/test_challenge_service.py` — verify Challenge XP does not appear in main wallet hash (`memora:wallet:{player}`), main leaderboard ZSETs (`memora:lb:*` excluding `memora:lb:ch:*`), or profile stats
-- [ ] T038 Integration test for FSRS push in `fastapi_app/tests/test_challenge_service.py` — submit attempt, verify `memora:buffer:interactions` contains one entry per question with `metadata.source == "challenge_hub"`, verify abandoned attempt (no submission) produces zero buffer entries
+- [x] T033 [P] Pure tests for `_grade_attempt()` in `fastapi_app/tests/test_challenge_service.py` — test pass/fail at threshold boundary (49% fail, 50% pass, 51% pass), 0/N score, N/N score, validation that `correct_count` matches sum of `q.correct`
+- [x] T034 [P] Pure tests for `_calculate_xp_delta()` in `fastapi_app/tests/test_challenge_service.py` — test first attempt (full XP), improvement (delta XP), regression (0 XP), same score (0 XP), configurable `xp_per_question`
+- [x] T035 [P] Pure tests for `_update_best_scores()` in `fastapi_app/tests/test_challenge_service.py` — test new best overall, new best passing, regression (no update), first passing attempt after failures, `is_new_best` flag
+- [x] T036 Integration test for empty topic auto-stamp chain in `fastapi_app/tests/test_challenge_service.py` — test chain of [stamped, empty, empty, real] resolves to [stamped, auto-stamped, auto-stamped, open], single empty topic, all-empty unit
+- [x] T037 Integration test for challenge XP isolation in `fastapi_app/tests/test_challenge_service.py` — verify Challenge XP does not appear in main wallet hash (`memora:wallet:{player}`), main leaderboard ZSETs (`memora:lb:*` excluding `memora:lb:ch:*`), or profile stats
+- [x] T038 Integration test for FSRS push in `fastapi_app/tests/test_challenge_service.py` — submit attempt, verify `memora:buffer:interactions` contains one entry per question with `metadata.source == "challenge_hub"`, verify abandoned attempt (no submission) produces zero buffer entries
 
 **Checkpoint**: Core mechanics verified — grading, XP delta, unlock chain, isolation, FSRS push.
 

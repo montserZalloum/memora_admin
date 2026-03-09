@@ -273,6 +273,7 @@ scheduler_events = {
 			"memora_admin.tasks.sync.sync_dirty_progress",
 			"memora_admin.tasks.sync.sync_dirty_wallets",
 			"memora_admin.tasks.sync.flush_interaction_buffer",
+			"memora_admin.tasks.sync.sync_dirty_challenge_progress",
 			"memora_admin.tasks.fsrs_processor.process_fsrs_reviews",
 			"memora_admin.tasks.build_worker.process_pending_builds",
 			"memora_admin.tasks.live_challenge_transitions.process_live_challenge_transitions",
@@ -299,6 +300,8 @@ scheduler_events = {
 		"0 3 * * *": ["memora_admin.tasks.leaderboard_cleanup.cleanup_old_leaderboards"],
 		# Daily at 01:05: Expire cards linked to ended/unpublished seasons
 		"5 1 * * *": ["memora_admin.tasks.season_expiration.expire_season_cards"],
+		# Daily at 01:10: Reset Challenge Hub data for seasons past end_date
+		"10 1 * * *": ["memora_admin.events.access_sync.check_expired_seasons_challenge_reset"],
 		# Daily at 02:30: Delete encrypted voucher exports older than 30 days
 		"30 2 * * *": ["memora_admin.tasks.voucher_cleanup.cleanup_expired_exports"],
 		# Monthly on 1st at 02:00: Generate consignment invoices for previous month

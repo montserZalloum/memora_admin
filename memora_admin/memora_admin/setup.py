@@ -174,6 +174,12 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Hot table indexes setup failed: {e}")
 
+	# Challenge Hub query indexes
+	try:
+		_ensure_challenge_query_indexes()
+	except Exception as e:
+		print(f"[after_migrate] Challenge query indexes setup failed: {e}")
+
 	# Practice Log raw SQL table
 	try:
 		_ensure_practice_log_table()
@@ -716,6 +722,46 @@ def _ensure_practice_query_indexes():
 			(table, index_name),
 		)
 
+		if existing:
+			continue
+
+		frappe.db.sql_ddl(f"""
+			CREATE INDEX `{index_name}` ON `{table}` {columns}
+		""")
+		print(f"[after_migrate] Created INDEX {index_name} on {table}")
+
+
+def _ensure_challenge_query_indexes():
+	"""Backfill composite indexes used by Challenge Hub sync/read paths."""
+	tables = set(frappe.db.get_tables())
+
+	indexes = [
+		(
+			"tabMemora Challenge Progress",
+			"idx_ch_progress_player_subject_season_topic",
+			"(player, subject, season, topic)",
+		),
+		(
+			"tabMemora Challenge Attempt",
+			"idx_ch_attempt_dedup",
+			"(player, topic, attempt_number, submitted_at)",
+		),
+	]
+
+	for table, index_name, columns in indexes:
+		if table not in tables:
+			continue
+
+		existing = frappe.db.sql(
+			"""
+			SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+			WHERE TABLE_SCHEMA = DATABASE()
+			AND TABLE_NAME = %s
+			AND INDEX_NAME = %s
+			LIMIT 1
+		""",
+			(table, index_name),
+		)
 		if existing:
 			continue
 
