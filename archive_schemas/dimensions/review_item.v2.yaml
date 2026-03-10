@@ -1,0 +1,32 @@
+entity: review_item
+version: v2
+source_table: "tabMemora Review Item"
+id_column: item_id
+fields:
+  - item_id
+  - subject
+  - subject_title
+  - topic
+  - topic_title
+  - lesson
+  - lesson_title
+  - question_text
+  - item_type
+  - difficulty
+query: >
+  SELECT
+    ri.`item_id`,
+    ri.`subject`,
+    subj.`subject_title`,
+    ri.`topic`,
+    tpc.`topic_title`,
+    ri.`lesson`,
+    les.`lesson_title`,
+    ri.`question_text`,
+    ri.`stage_type` AS item_type,
+    NULL AS difficulty
+  FROM `tabMemora Review Item` ri
+  LEFT JOIN `tabMemora Subject` subj ON ri.`subject` = subj.`name`
+  LEFT JOIN `tabMemora Topic` tpc ON ri.`topic` = tpc.`name`
+  LEFT JOIN `tabMemora Lesson` les ON ri.`lesson` = les.`name`
+  WHERE ri.`item_id` IN ({placeholders})

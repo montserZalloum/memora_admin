@@ -292,8 +292,11 @@ scheduler_events = {
 		"15 0 * * 5": ["memora_admin.tasks.leaderboard_reset.archive_weekly_leaderboard"],
 		# Hourly at :30: Pre-warm profile cache for active leaderboard players
 		"30 * * * *": ["memora_admin.tasks.profile_cache.warm_profile_cache"],
-		# Every 6 hours: Sync all plan subjects to Redis (safety net)
-		"0 */6 * * *": ["memora_admin.tasks.plan_sync.sync_all_plan_subjects_to_redis"],
+		# Every 6 hours: Sync all plan subjects to Redis (safety net) + archive health monitoring
+		"0 */6 * * *": [
+			"memora_admin.tasks.plan_sync.sync_all_plan_subjects_to_redis",
+			"memora_admin.tasks.archive_monitor.check_archive_health",
+		],
 		# Every 5 minutes: Redis health monitoring with threshold alerting
 		"*/5 * * * *": ["memora_admin.tasks.redis_monitor.monitor_redis_health"],
 		# Daily at 03:00: Clean up old leaderboard keys + create live sync jobs

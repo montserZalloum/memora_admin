@@ -182,8 +182,8 @@
 ### Phase 5.2 — Dimensions Design
 
 - **Player dimension** (`player.v2` — new version):
-  - Core: `player_id`, `grade`, `major`, `season`
-  - Enriched at archive: `plan_id`, `plan_name`, `plan_type` (minimal cohort/segmentation context)
+  - Core: `player_id`, `grade`, `major`, `season_id` (renamed from `season` for consistency)
+  - Enriched at archive: `plan_id`, `plan_name` (minimal cohort/segmentation context; `plan_type` does not exist on `Memora Academic Plan` and is excluded)
   - Snapshot: Point-in-time at archive — survives upstream changes
   - Deeper subscription lifecycle details: **not** included, join later if needed
 
@@ -250,7 +250,7 @@ The existing `sync_types/practice_log_live.v1.yaml` needs:
 ### Phase 7.3 — Dimension YAMLs
 
 - `player.v1.yaml` — preserved intact for backward compatibility
-- `player.v2.yaml` — **new version** with plan fields (`plan_id`, `plan_name`, `plan_type`), excluding PII (`mobile`, `display_name`, `gender`)
+- `player.v2.yaml` — **new version** with plan fields (`plan_id`, `plan_name`), renamed `season` → `season_id`, excluding PII (`mobile`, `display_name`, `gender`)
 - `review_item.v1.yaml` — existing, sufficient as-is
 - `season.v1.yaml` — **new** (`season_id`, `season_title`, `start_date`, `end_date`)
 - `plan.v1.yaml` — **new** (`plan_id`, `plan_name`, `grade`, `major`, `season_id`, `is_published`)
@@ -525,12 +525,12 @@ The existing `sync_types/practice_log_live.v1.yaml` needs:
 | Post-archive | Delete (after validation + grace period) |
 | Cross-season rows | Latest season only — documented limitation |
 | Publish mode | Replace (1 previous retained for rollback) |
-| Fact columns | All 7 source + 4 export-time metadata |
+| Fact columns | All 7 source + export-time metadata (archive: 4 cols, live sync: 4 cols — different sets) |
 | Dimensions | Player v2, Review Item v1, Season v1, Plan v1 — batch-scoped |
 | Privacy | Exclude mobile, display_name, gender; keep grade, major |
 | Raw layer | Separate archive + live sources |
 | Curated layer | Unified with precedence, dedup, 5 derived fields |
-| Marts | 7 marts (5 materialized, 1 rollup views, 1 optional drill-down) |
+| Marts | 5 materialized marts + 1 rollup view family + 1 optional drill-down |
 | DQ rules | 16 hard-fail validations |
 | Acceptance tests | 19 scenarios |
 | Handoff | Live continues until archive validated; archive wins in curated |

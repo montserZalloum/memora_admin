@@ -8,6 +8,7 @@ Key differences from archive executor:
 - Uses full_snapshot mode (no WHERE clause)
 - Uses ingest_live_snapshot() (staging -> swap) instead of ingest_archive_batch()
 - Respects sync_paused — skips if any archive job has sync_paused=1 for same source
+- Excludes date ranges from completed archive jobs to avoid duplication
 
 Usage:
 	/opt/memora-archive/venv/bin/python -m archive_executor.live_sync
@@ -24,6 +25,8 @@ import sys
 import time
 import traceback
 from datetime import datetime, timezone
+
+import pyarrow.parquet as pq
 
 from .config import Config
 from .db import atomic_update, get_connection
@@ -64,6 +67,94 @@ def _is_source_paused(config: Config, source_table: str) -> bool:
 		conn.close()
 
 
+def _get_completed_archive_ranges(config: Config, source_table: str) -> list[tuple[str, str]]:
+	"""Get date ranges from completed archive jobs for scope exclusion.
+
+	Returns list of (date_from, date_to) tuples parsed from archive job meta.
+	"""
+	source_doctype = source_table[3:] if source_table.startswith("tab") else source_table
+
+	conn = get_connection(config)
+	try:
+		with conn.cursor() as cursor:
+			cursor.execute(
+				"SELECT job_meta FROM `tabMemora Archive Job` "
+				"WHERE status = 'Completed' AND source_doctype = %s",
+				(source_doctype,),
+			)
+			rows = cursor.fetchall()
+	finally:
+		conn.close()
+
+	ranges = []
+	for row in rows:
+		meta_raw = row.get("job_meta")
+		if not meta_raw:
+			continue
+		meta = json.loads(meta_raw) if isinstance(meta_raw, str) else meta_raw
+		qf = meta.get("query_filter", {})
+		date_from = qf.get("date_from")
+		date_to = qf.get("date_to")
+		if date_from and date_to:
+			ranges.append((date_from, date_to))
+
+	return ranges
+
+
+# ---------------------------------------------------------------------------
+# Derived dimension helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_ids_from_parquet(parquet_path: str, column_name: str) -> set:
+	"""Read a Parquet file and extract unique non-null values from a column."""
+	table = pq.read_table(parquet_path, columns=[column_name])
+	col = table.column(column_name)
+	return {val.as_py() for val in col if val.as_py() is not None}
+
+
+def _export_derived_dimensions(
+	config: Config,
+	staging_dir: str,
+	related_tables: list[dict],
+	player_dim_path: str,
+) -> list[dict]:
+	"""Export derived dimensions (season, plan) based on player dimension data."""
+	results = []
+
+	for rt in related_tables:
+		if rt.get("scope_source") != "derived":
+			continue
+
+		entity = rt["entity"]
+		schema_version = rt["schema_version"]
+		dim_schema = load_dimension_schema(config.schema_registry_path, entity, schema_version)
+
+		if entity == "season":
+			ids = _extract_ids_from_parquet(player_dim_path, "season_id")
+		elif entity == "plan":
+			ids = _extract_ids_from_parquet(player_dim_path, "plan_id")
+		else:
+			continue
+
+		dim_path, dim_row_count = export_dimension(
+			config=config,
+			staging_dir=staging_dir,
+			dim_schema=dim_schema,
+			referenced_ids=ids,
+		)
+
+		results.append({
+			"entity": entity,
+			"schema_version": schema_version,
+			"scope_source": "derived",
+			"path": dim_path,
+			"row_count": dim_row_count,
+		})
+
+	return results
+
+
 # ---------------------------------------------------------------------------
 # Job queries
 # ---------------------------------------------------------------------------
@@ -75,7 +166,7 @@ def _get_jobs_by_status(config: Config, status: str) -> list[dict]:
 	try:
 		with conn.cursor() as cursor:
 			cursor.execute(
-				f"SELECT name, sync_type, schema_version, meta, retry_count, "
+				f"SELECT name, sync_type, schema_version, job_meta, retry_count, "
 				f"       file_path, file_checksum, remote_path "
 				f"FROM `{_TABLE_NAME}` "
 				f"WHERE status = %s "
@@ -220,7 +311,7 @@ def _process_pending_live_jobs(config: Config, log: StructuredLogger) -> int:
 			continue
 
 		# Parse meta
-		meta = json.loads(job["meta"]) if isinstance(job["meta"], str) else (job["meta"] or {})
+		meta = json.loads(job["job_meta"]) if isinstance(job["job_meta"], str) else (job["job_meta"] or {})
 		source_table = meta.get("source_table", "")
 
 		# Check if source is paused by archive
@@ -253,23 +344,45 @@ def _process_pending_live_jobs(config: Config, log: StructuredLogger) -> int:
 			# Load sync type schema
 			sync_schema = load_sync_type(config.schema_registry_path, sync_type_name, job["schema_version"])
 
+			# Build related_tables list from sync schema dimensions
+			related_tables = [
+				{
+					"entity": d["entity"],
+					"schema_version": d["schema_version"],
+					"fact_column": d.get("join_column"),
+					"scope_source": d.get("scope_source"),
+				}
+				for d in sync_schema.get("dimensions", [])
+			]
+
 			# Build export meta from sync schema
 			export_meta = {
 				"export_columns": sync_schema.get("fact_columns", []),
 				"schema_snapshot": sync_schema.get("schema_snapshot", {}),
-				"related_tables": [
-					{
-						"entity": d["entity"],
-						"schema_version": d["schema_version"],
-						"fact_column": d["join_column"],
-					}
-					for d in sync_schema.get("dimensions", [])
-				],
+				"related_tables": related_tables,
+				"scope_column": sync_schema.get("scope_column"),
+				"fact_sql": sync_schema.get("fact_sql", {}),
 			}
 
 			export_source_table = sync_schema.get("source_table", source_table)
 
-			# --- Export fact data (full snapshot) ---
+			# Get exclusion ranges from completed archive jobs
+			exclusion_ranges = _get_completed_archive_ranges(config, export_source_table)
+			if exclusion_ranges:
+				log.info("applying_scope_exclusion", job=job_name, exclusion_count=len(exclusion_ranges))
+
+			# Record snapshot timestamp
+			snapshot_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+			# Build sync_metadata for injection into fact rows
+			sync_metadata = {
+				"scope_type": "live",
+				"sync_batch_id": job_name,
+				"schema_version": job["schema_version"] or "",
+				"synced_at": snapshot_ts,
+			}
+
+			# --- Export fact data (full snapshot with exclusions) ---
 			_update_stage(config, job_name, "exporting_fact")
 			log.info("exporting_live_fact", job=job_name)
 
@@ -280,14 +393,20 @@ def _process_pending_live_jobs(config: Config, log: StructuredLogger) -> int:
 				source_table=export_source_table,
 				archive_type_name=sync_type_name,
 				mode="full_snapshot",
+				export_metadata=sync_metadata,
+				exclusion_ranges=exclusion_ranges if exclusion_ranges else None,
 			)
-
-			snapshot_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
 			# --- Export dimensions ---
 			_update_stage(config, job_name, "exporting_dimensions")
 			dimension_results = []
-			for rt in export_meta.get("related_tables", []):
+			player_dim_path = None
+
+			# Pass 1: Direct dimensions (with join_column, no scope_source)
+			for rt in related_tables:
+				if rt.get("scope_source") == "derived":
+					continue
+
 				entity = rt["entity"]
 				schema_version = rt["schema_version"]
 				dim_schema = load_dimension_schema(config.schema_registry_path, entity, schema_version)
@@ -299,6 +418,10 @@ def _process_pending_live_jobs(config: Config, log: StructuredLogger) -> int:
 					dim_schema=dim_schema,
 					referenced_ids=ids_for_dim,
 				)
+
+				if entity == "player":
+					player_dim_path = dim_path
+
 				dimension_results.append({
 					"entity": entity,
 					"schema_version": schema_version,
@@ -306,6 +429,16 @@ def _process_pending_live_jobs(config: Config, log: StructuredLogger) -> int:
 					"path": dim_path,
 					"row_count": dim_row_count,
 				})
+
+			# Pass 2: Derived dimensions (season, plan) — scoped from player dimension
+			if player_dim_path:
+				derived_results = _export_derived_dimensions(
+					config=config,
+					staging_dir=staging_dir,
+					related_tables=related_tables,
+					player_dim_path=player_dim_path,
+				)
+				dimension_results.extend(derived_results)
 
 			# --- Validate ---
 			_update_stage(config, job_name, "verifying")
@@ -317,6 +450,7 @@ def _process_pending_live_jobs(config: Config, log: StructuredLogger) -> int:
 
 			file_entries.append({
 				"role": "fact",
+				"entity": job.get("sync_type", "practice_log"),
 				"filename": fact_validation["filename"],
 				"row_count": fact_validation["row_count"],
 				"checksum": fact_validation["checksum"],
@@ -327,26 +461,26 @@ def _process_pending_live_jobs(config: Config, log: StructuredLogger) -> int:
 				dim_validation = validate_file(dim_result["path"], dim_result["row_count"])
 				if not dim_validation["valid"]:
 					raise RuntimeError(f"Dimension {dim_result['entity']} validation failed: {dim_validation['errors']}")
-				file_entries.append({
+
+				entry = {
 					"role": "dimension",
 					"entity": dim_result["entity"],
 					"snapshot_schema_version": dim_result["schema_version"],
-					"scope": "batch_referenced",
-					"referenced_by": dim_result["fact_column"],
 					"filename": dim_validation["filename"],
 					"row_count": dim_validation["row_count"],
 					"checksum": dim_validation["checksum"],
 					"size_bytes": dim_validation["size_bytes"],
-				})
+				}
+				file_entries.append(entry)
 
 			# --- Build manifest ---
 			build_manifest(
 				staging_dir=staging_dir,
 				batch_id=job_name,
-				source_doctype=sync_schema.get("source_table", "").replace("tab", "", 1),
-				archive_scope="live",
-				schema_version=job["schema_version"],
-				snapshot_taken_at=snapshot_ts,
+				dataset_key=f"{job.get('sync_type', 'practice_log')}_live",
+				kind="live",
+				schema_version="1.0",
+				source="memora_admin",
 				files=file_entries,
 			)
 

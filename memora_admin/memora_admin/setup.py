@@ -192,6 +192,12 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Practice query indexes setup failed: {e}")
 
+	# Archive delete audit log (used by archive_executor purge)
+	try:
+		_ensure_archive_delete_audit_table()
+	except Exception as e:
+		print(f"[after_migrate] Archive delete audit table setup failed: {e}")
+
 
 def _ensure_uuid_polyfill_functions():
 	"""Create UUID_TO_BIN and BIN_TO_UUID polyfill stored functions.
@@ -705,6 +711,7 @@ def _ensure_practice_query_indexes():
 			"idx_player_seen_item",
 			"(player_id, last_seen_at, item_id)",
 		),
+		("tabMemora Practice Log", "idx_last_seen_at", "(last_seen_at)"),
 	]
 
 	for table, index_name, columns in indexes:
@@ -769,3 +776,34 @@ def _ensure_challenge_query_indexes():
 			CREATE INDEX `{index_name}` ON `{table}` {columns}
 		""")
 		print(f"[after_migrate] Created INDEX {index_name} on {table}")
+
+
+def _ensure_archive_delete_audit_table():
+	"""Create archive_delete_audit_log table for purge operation audit trail.
+
+	This is NOT a Frappe DocType — it's a raw SQL table accessed only by
+	archive_executor via pymysql. Follows the Practice Log precedent.
+
+	Idempotent: uses CREATE TABLE IF NOT EXISTS.
+	"""
+	frappe.db.sql_ddl("""
+		CREATE TABLE IF NOT EXISTS `archive_delete_audit_log` (
+			`id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+			`job_id` VARCHAR(140) NOT NULL,
+			`season_id` VARCHAR(140) DEFAULT NULL,
+			`rows_deleted` INT UNSIGNED NOT NULL DEFAULT 0,
+			`timestamp` DATETIME NOT NULL,
+			`executor_host` VARCHAR(255) DEFAULT NULL,
+			`executor_user` VARCHAR(255) DEFAULT NULL,
+			`duration_ms` INT UNSIGNED DEFAULT NULL,
+			`status` ENUM('success', 'failed', 'partial') NOT NULL DEFAULT 'success',
+			`error_msg` TEXT DEFAULT NULL,
+			`total_rows_estimated` INT UNSIGNED DEFAULT NULL,
+			`batch_size` INT UNSIGNED NOT NULL DEFAULT 10000,
+			`num_batches` INT UNSIGNED NOT NULL DEFAULT 0,
+			PRIMARY KEY (`id`),
+			UNIQUE KEY `uq_job_id` (`job_id`),
+			KEY `idx_season_id` (`season_id`),
+			KEY `idx_timestamp` (`timestamp`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+	""")

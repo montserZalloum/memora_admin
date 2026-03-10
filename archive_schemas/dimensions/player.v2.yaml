@@ -1,0 +1,22 @@
+entity: player
+version: v2
+source_table: "tabMemora Player Profile"
+id_column: name
+fields:
+  - player_id
+  - grade
+  - major
+  - season_id
+  - plan_id
+  - plan_name
+query: >
+  SELECT
+    p.`name` AS player_id,
+    p.`grade`,
+    p.`major`,
+    p.`season` AS season_id,
+    p.`plan` AS plan_id,
+    ap.`plan_name`
+  FROM `tabMemora Player Profile` p
+  LEFT JOIN `tabMemora Academic Plan` ap ON p.`plan` = ap.`name`
+  WHERE p.`name` IN ({placeholders})

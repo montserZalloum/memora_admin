@@ -1,0 +1,17 @@
+entity: season
+version: v1
+source_table: "tabMemora Season"
+id_column: name
+fields:
+  - season_id
+  - season_title
+  - start_date
+  - end_date
+query: >
+  SELECT
+    s.`name` AS season_id,
+    s.`season_title`,
+    s.`start_date`,
+    s.`end_date`
+  FROM `tabMemora Season` s
+  WHERE s.`name` IN ({placeholders})

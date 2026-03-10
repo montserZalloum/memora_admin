@@ -8,6 +8,7 @@ interruptions.
 import json
 import os
 import shutil
+import socket
 import time
 from datetime import datetime, timezone
 
@@ -25,7 +26,7 @@ def _get_purgeable_jobs(config: Config) -> list[dict]:
 	try:
 		with conn.cursor() as cursor:
 			cursor.execute(
-				"SELECT name, source_doctype, archive_scope, meta, purge_progress, file_path "
+				"SELECT name, source_doctype, archive_scope, job_meta, purge_progress, file_path "
 				"FROM `tabMemora Archive Job` "
 				"WHERE status = 'Completed' "
 				"  AND post_archive_action = 'Delete' "
@@ -57,6 +58,50 @@ def _mark_purged(config: Config, job_name: str):
 	)
 
 
+def _get_estimated_row_count(config, source_table, filter_column, date_from, date_to):
+	"""Count rows matching the purge WHERE clause before deletion starts."""
+	conn = get_connection(config)
+	try:
+		with conn.cursor() as cursor:
+			sql = (
+				f"SELECT COUNT(*) AS cnt FROM `{source_table}` "
+				f"WHERE `{filter_column}` >= %s AND `{filter_column}` < %s"
+			)
+			cursor.execute(sql, (date_from, date_to))
+			return cursor.fetchone()["cnt"]
+	finally:
+		conn.close()
+
+
+def _log_delete_audit(config, log, *, job_id, season_id, rows_deleted,
+                      duration_ms, status, error_msg, total_rows_estimated,
+                      batch_size, num_batches):
+	"""Record a purge operation in the audit log. Non-blocking on failure."""
+	try:
+		conn = get_connection(config)
+		try:
+			with conn.cursor() as cursor:
+				cursor.execute(
+					"INSERT INTO `archive_delete_audit_log` "
+					"  (job_id, season_id, rows_deleted, timestamp, executor_host, "
+					"   executor_user, duration_ms, status, error_msg, "
+					"   total_rows_estimated, batch_size, num_batches) "
+					"VALUES (%s, %s, %s, NOW(), %s, %s, %s, %s, %s, %s, %s, %s) "
+					"ON DUPLICATE KEY UPDATE "
+					"  rows_deleted=VALUES(rows_deleted), duration_ms=VALUES(duration_ms), "
+					"  status=VALUES(status), error_msg=VALUES(error_msg), "
+					"  num_batches=VALUES(num_batches), timestamp=NOW()",
+					(job_id, season_id, rows_deleted, socket.gethostname(),
+					 os.getenv("USER", "unknown"), duration_ms, status, error_msg,
+					 total_rows_estimated, batch_size, num_batches),
+				)
+			conn.commit()
+		finally:
+			conn.close()
+	except Exception as exc:
+		log.warning("audit_log_failed", job=job_id, error=str(exc))
+
+
 def purge_completed_jobs(config: Config, log: StructuredLogger):
 	"""Purge source data for all eligible Completed archive jobs.
 
@@ -75,7 +120,7 @@ def purge_completed_jobs(config: Config, log: StructuredLogger):
 
 	for job in jobs:
 		job_name = job["name"]
-		meta = json.loads(job["meta"]) if isinstance(job["meta"], str) else (job["meta"] or {})
+		meta = json.loads(job["job_meta"]) if isinstance(job["job_meta"], str) else (job["job_meta"] or {})
 		query_filter = meta.get("query_filter", {})
 
 		date_from = query_filter.get("date_from")
@@ -111,39 +156,68 @@ def purge_completed_jobs(config: Config, log: StructuredLogger):
 
 		log.info("purge_job_started", job=job_name, source_table=source_table, resume_from=total_deleted)
 
-		while True:
-			conn = get_connection(config)
-			try:
-				with conn.cursor() as cursor:
-					sql = (
-						f"DELETE FROM `{source_table}` "
-						f"WHERE `{filter_column}` >= %s AND `{filter_column}` < %s "
-						f"ORDER BY `{filter_column}` "
-						f"LIMIT {PURGE_BATCH_SIZE}"
-					)
-					cursor.execute(sql, (date_from, date_to))
-					deleted = cursor.rowcount
-				conn.commit()
-			finally:
-				conn.close()
+		purge_start = time.monotonic()
+		num_batches = 0
+		season_id = job.get("archive_scope")
+		estimated_rows = _get_estimated_row_count(config, source_table, filter_column, date_from, date_to)
 
-			if deleted == 0:
-				break
+		try:
+			while True:
+				conn = get_connection(config)
+				try:
+					with conn.cursor() as cursor:
+						sql = (
+							f"DELETE FROM `{source_table}` "
+							f"WHERE `{filter_column}` >= %s AND `{filter_column}` < %s "
+							f"ORDER BY `{filter_column}` "
+							f"LIMIT {PURGE_BATCH_SIZE}"
+						)
+						cursor.execute(sql, (date_from, date_to))
+						deleted = cursor.rowcount
+					conn.commit()
+				finally:
+					conn.close()
 
-			total_deleted += deleted
-			progress = {
-				"total_deleted": total_deleted,
-				"last_batch_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
-			}
-			_update_purge_progress(config, job_name, progress)
+				if deleted == 0:
+					break
 
-			log.info("purge_batch", job=job_name, batch_deleted=deleted, total_deleted=total_deleted)
+				num_batches += 1
+				total_deleted += deleted
+				progress = {
+					"total_deleted": total_deleted,
+					"last_batch_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+				}
+				_update_purge_progress(config, job_name, progress)
 
-			time.sleep(PURGE_SLEEP_SECONDS)
+				log.info("purge_batch", job=job_name, batch_deleted=deleted, total_deleted=total_deleted)
 
-		# Mark purged
-		_mark_purged(config, job_name)
-		log.info("purge_job_completed", job=job_name, total_deleted=total_deleted)
+				time.sleep(PURGE_SLEEP_SECONDS)
+
+			# Mark purged
+			_mark_purged(config, job_name)
+			duration_ms = int((time.monotonic() - purge_start) * 1000)
+			log.info("purge_job_completed", job=job_name, total_deleted=total_deleted)
+
+			_log_delete_audit(
+				config, log, job_id=job_name, season_id=season_id,
+				rows_deleted=total_deleted, duration_ms=duration_ms,
+				status="success", error_msg=None,
+				total_rows_estimated=estimated_rows,
+				batch_size=PURGE_BATCH_SIZE, num_batches=num_batches,
+			)
+		except Exception as exc:
+			duration_ms = int((time.monotonic() - purge_start) * 1000)
+			log.error("purge_job_failed", job=job_name, error=str(exc), total_deleted=total_deleted)
+
+			_log_delete_audit(
+				config, log, job_id=job_name, season_id=season_id,
+				rows_deleted=total_deleted, duration_ms=duration_ms,
+				status="failed" if total_deleted == 0 else "partial",
+				error_msg=str(exc),
+				total_rows_estimated=estimated_rows,
+				batch_size=PURGE_BATCH_SIZE, num_batches=num_batches,
+			)
+			raise
 
 
 def _get_cleanable_jobs(config: Config) -> list[dict]:

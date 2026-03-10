@@ -22,6 +22,8 @@ import time
 import traceback
 from datetime import datetime, timezone
 
+import pyarrow.parquet as pq
+
 from .config import Config
 from .db import atomic_update, get_connection
 from .exporter import export_dimension, export_fact_data
@@ -32,7 +34,7 @@ from .manifest import build_manifest
 from .purge import cleanup_local_copies, purge_completed_jobs
 from .schemas import load_dimension_schema
 from .transfer import TransferError, transfer_batch, verify_remote_checksums
-from .validator import validate_file
+from .validator import validate_fact_quality, validate_file
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +84,7 @@ def _get_jobs_by_status(config: Config, status: str) -> list[dict]:
 		with conn.cursor() as cursor:
 			cursor.execute(
 				"SELECT name, source_doctype, archive_scope, schema_version, "
-				"       archive_type, meta, retry_count, post_archive_action, "
+				"       archive_type, job_meta, retry_count, post_archive_action, "
 				"       file_path, file_checksum, remote_path "
 				"FROM `tabMemora Archive Job` "
 				"WHERE status = %s "
@@ -208,6 +210,71 @@ def _fail_job(config: Config, job_name: str, error_msg: str, retry_count: int, c
 
 
 # ---------------------------------------------------------------------------
+# Derived dimension helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_ids_from_parquet(parquet_path: str, column_name: str) -> set:
+	"""Read a Parquet file and extract unique non-null values from a column."""
+	table = pq.read_table(parquet_path, columns=[column_name])
+	col = table.column(column_name)
+	return {val.as_py() for val in col if val.as_py() is not None}
+
+
+def _export_derived_dimensions(
+	config: Config,
+	log: StructuredLogger,
+	staging_dir: str,
+	meta: dict,
+	player_dim_path: str,
+	archive_scope: str,
+) -> list[dict]:
+	"""Export derived dimensions (season, plan) based on player dimension data.
+
+	Reads the already-exported player dimension Parquet to extract unique
+	season_id and plan_id values, then exports season and plan dimensions.
+	"""
+	results = []
+
+	for rt in meta.get("related_tables", []):
+		if rt.get("scope_source") != "derived":
+			continue
+
+		entity = rt["entity"]
+		schema_version = rt["schema_version"]
+		dim_schema = load_dimension_schema(config.schema_registry_path, entity, schema_version)
+
+		# Determine which column in the player dimension provides IDs
+		if entity == "season":
+			ids = _extract_ids_from_parquet(player_dim_path, "season_id")
+			# Also include the archive_scope (which is a season ID)
+			if archive_scope:
+				ids.add(archive_scope)
+		elif entity == "plan":
+			ids = _extract_ids_from_parquet(player_dim_path, "plan_id")
+		else:
+			log.warning("unknown_derived_dimension", entity=entity)
+			continue
+
+		dim_path, dim_row_count = export_dimension(
+			config=config,
+			staging_dir=staging_dir,
+			dim_schema=dim_schema,
+			referenced_ids=ids,
+		)
+
+		results.append({
+			"entity": entity,
+			"schema_version": schema_version,
+			"scope_source": "derived",
+			"path": dim_path,
+			"row_count": dim_row_count,
+		})
+
+	return results
+
+
+# ---------------------------------------------------------------------------
 # Pipeline phases
 # ---------------------------------------------------------------------------
 
@@ -291,12 +358,23 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 	job_name = job["name"]
 
 	# Parse meta JSON
-	meta = json.loads(job["meta"]) if isinstance(job["meta"], str) else (job["meta"] or {})
+	meta = json.loads(job["job_meta"]) if isinstance(job["job_meta"], str) else (job["job_meta"] or {})
 	archive_type_key = job.get("archive_type") or "practice_log"
 	source_table = f"tab{job['source_doctype']}"
 
 	# Create staging directory
 	os.makedirs(staging_dir, exist_ok=True)
+
+	# Record snapshot timestamp
+	snapshot_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+	# Build export_metadata dict for injection into fact rows
+	export_metadata = {
+		"archive_scope": job["archive_scope"] or "",
+		"archive_job_id": job_name,
+		"schema_version": job["schema_version"] or "",
+		"exported_at": snapshot_ts,
+	}
 
 	# --- Export fact data ---
 	_update_stage(config, job_name, "exporting_fact")
@@ -308,17 +386,21 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 		meta=meta,
 		source_table=source_table,
 		archive_type_name=archive_type_key,
+		export_metadata=export_metadata,
 	)
-
-	# Record snapshot timestamp
-	snapshot_ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
 
 	# --- Export dimension snapshots ---
 	_update_stage(config, job_name, "exporting_dimensions")
 	log.info("exporting_dimensions", job=job_name)
 
 	dimension_results = []
+	player_dim_path = None
+
+	# Pass 1: Direct dimensions (those with a join_column, no scope_source)
 	for rt in meta.get("related_tables", []):
+		if rt.get("scope_source") == "derived":
+			continue
+
 		entity = rt["entity"]
 		schema_version = rt["schema_version"]
 
@@ -334,6 +416,10 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 			dim_schema=dim_schema,
 			referenced_ids=ids_for_dim,
 		)
+
+		if entity == "player":
+			player_dim_path = dim_path
+
 		dimension_results.append(
 			{
 				"entity": entity,
@@ -343,6 +429,48 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 				"row_count": dim_row_count,
 			}
 		)
+
+	# Pass 2: Derived dimensions (season, plan) — scoped from player dimension
+	if player_dim_path:
+		derived_results = _export_derived_dimensions(
+			config=config,
+			log=log,
+			staging_dir=staging_dir,
+			meta=meta,
+			player_dim_path=player_dim_path,
+			archive_scope=job.get("archive_scope", ""),
+		)
+		dimension_results.extend(derived_results)
+
+	# --- Validate fact data quality ---
+	_update_stage(config, job_name, "validating_dq")
+	log.info("validating_dq", job=job_name)
+
+	# Build paths for DQ validation
+	dim_player_path = None
+	dim_review_item_path = None
+	for dr in dimension_results:
+		if dr["entity"] == "player":
+			dim_player_path = dr["path"]
+		elif dr["entity"] == "review_item":
+			dim_review_item_path = dr["path"]
+
+	query_filter = meta.get("query_filter", {})
+	dq_result = validate_fact_quality(
+		fact_path=fact_path,
+		dim_player_path=dim_player_path,
+		dim_review_item_path=dim_review_item_path,
+		scope_date_from=query_filter.get("date_from"),
+		scope_date_to=query_filter.get("date_to"),
+	)
+
+	if not dq_result["passed"]:
+		failed_rules = [r["rule"] for r in dq_result["results"] if not r["passed"]]
+		raise RuntimeError(f"Data quality validation failed: {', '.join(failed_rules)}")
+
+	if dq_result.get("warnings"):
+		for w in dq_result["warnings"]:
+			log.warning("dq_warning", job=job_name, warning=w)
 
 	# --- Validate all files ---
 	_update_stage(config, job_name, "verifying")
@@ -358,6 +486,7 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 	file_entries.append(
 		{
 			"role": "fact",
+			"entity": job["archive_type"],
 			"filename": fact_validation["filename"],
 			"row_count": fact_validation["row_count"],
 			"checksum": fact_validation["checksum"],
@@ -373,28 +502,26 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 				f"Dimension {dim_result['entity']} validation failed: {dim_validation['errors']}"
 			)
 
-		file_entries.append(
-			{
-				"role": "dimension",
-				"entity": dim_result["entity"],
-				"snapshot_schema_version": dim_result["schema_version"],
-				"scope": "batch_referenced",
-				"referenced_by": dim_result["fact_column"],
-				"filename": dim_validation["filename"],
-				"row_count": dim_validation["row_count"],
-				"checksum": dim_validation["checksum"],
-				"size_bytes": dim_validation["size_bytes"],
-			}
-		)
+		entry = {
+			"role": "dimension",
+			"entity": dim_result["entity"],
+			"snapshot_schema_version": dim_result["schema_version"],
+			"filename": dim_validation["filename"],
+			"row_count": dim_validation["row_count"],
+			"checksum": dim_validation["checksum"],
+			"size_bytes": dim_validation["size_bytes"],
+		}
+		file_entries.append(entry)
 
 	# --- Build manifest ---
 	build_manifest(
 		staging_dir=staging_dir,
 		batch_id=job_name,
-		source_doctype=job["source_doctype"],
-		archive_scope=job["archive_scope"],
-		schema_version=job["schema_version"],
-		snapshot_taken_at=snapshot_ts,
+		dataset_key=f"{job['archive_type']}_archive",
+		kind="archive",
+		schema_version="1.0",
+		source="memora_admin",
+		scope_key=job.get("archive_scope") or None,
 		files=file_entries,
 	)
 
@@ -448,6 +575,12 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 		duration_s=round(duration, 2),
 		dimensions=len(dimension_results),
 	)
+
+	# 0-row batches: no data to transfer/ingest — mark Completed immediately
+	if fact_row_count == 0:
+		_mark_ingested(config, job_name)
+		_mark_completed(config, job_name)
+		log.info("job_completed_empty", job=job_name, reason="fact_has_0_rows")
 
 
 def _process_exported_jobs(config: Config, log: StructuredLogger) -> int:
@@ -590,7 +723,7 @@ def _process_ingested_jobs(config: Config, log: StructuredLogger) -> int:
 			_update_stage(config, job_name, "handoff")
 
 			# Parse query_filter from meta for date range
-			meta = json.loads(job["meta"]) if isinstance(job["meta"], str) else (job["meta"] or {})
+			meta = json.loads(job["job_meta"]) if isinstance(job["job_meta"], str) else (job["job_meta"] or {})
 			query_filter = meta.get("query_filter", {})
 
 			# Call handoff — analytics server removes overlapping live data

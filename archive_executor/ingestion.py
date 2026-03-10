@@ -5,12 +5,13 @@ The analytics server has a CLI tool at config.analytics_cmd_path that accepts
 structured commands and returns JSON results.
 
 Interface contract (analytics-side tool):
-  memora-analytics ingest-archive --manifest <path> --db <duckdb_path>
-  memora-analytics ingest-live --manifest <path> --db <duckdb_path>
-  memora-analytics handoff --archive-path <path> --filter '<json>' --db <duckdb_path>
-  memora-analytics verify --manifest <path> --db <duckdb_path>
+  memora-analytics ingest-archive [--batch-dir DIR]
+  memora-analytics ingest-live [--batch-dir DIR]
+  memora-analytics handoff [--archive-batch-dir DIR] --date-column COL --from DATE --to DATE
+  memora-analytics verify
 
-Each command outputs JSON to stdout and exits with code 0 (success) or 1 (failure).
+Each command outputs JSON to stdout and exits with code 0 (success) or non-zero (failure).
+Log lines are written to stderr before the final JSON block.
 """
 
 import json
@@ -26,13 +27,26 @@ class IngestionError(Exception):
 
 
 def _parse_remote_json(stdout: str, stderr: str, operation: str) -> dict:
-	"""Parse JSON response from analytics-side command."""
+	"""Parse JSON response from analytics-side command.
+
+	The CLI writes log lines before the final JSON block; extract the last
+	top-level JSON object from stdout.
+	"""
+	# Try direct parse first (analytics CLI outputs JSON-only to stdout)
 	try:
-		return json.loads(stdout)
-	except (json.JSONDecodeError, TypeError):
-		raise IngestionError(
-			f"{operation} returned invalid JSON. stdout={stdout[:1000]}, stderr={stderr[:1000]}"
-		)
+		return json.loads(stdout.strip())
+	except json.JSONDecodeError:
+		pass
+	# Fallback: find the first top-level '{' (handles log lines prepended to JSON)
+	first_brace = stdout.find("{")
+	if first_brace >= 0:
+		try:
+			return json.loads(stdout[first_brace:])
+		except json.JSONDecodeError:
+			pass
+	raise IngestionError(
+		f"{operation} returned invalid JSON. stdout={stdout[:1000]}, stderr={stderr[:1000]}"
+	)
 
 
 def ingest_archive_batch(
@@ -46,26 +60,28 @@ def ingest_archive_batch(
 	The remote script loads Parquet into archive tables and verifies row counts.
 
 	Returns:
-		Dict with {success: bool, tables_loaded: int, errors: list}.
+		Dict with {status, batches_ok, batches_error, ...}.
 	"""
-	manifest_path = f"{remote_path.rstrip('/')}/manifest.json"
 	command = (
 		f"{shlex.quote(config.analytics_cmd_path)} ingest-archive "
-		f"--manifest {shlex.quote(manifest_path)} "
-		f"--db {shlex.quote(config.duckdb_path)}"
+		f"--batch-dir {shlex.quote(remote_path.rstrip('/'))}"
 	)
 
 	log.info("ingest_archive_started", remote_path=remote_path)
 
 	returncode, stdout, stderr = _run_ssh_command(config, command, timeout=config.ssh_timeout)
 
-	if returncode != 0:
-		result = _parse_remote_json(stdout, stderr, "ingest-archive")
-		errors = result.get("errors", [stderr[:1000]])
+	result = _parse_remote_json(stdout, stderr, "ingest-archive")
+
+	if returncode != 0 or result.get("batches_error", 0) > 0:
+		errors = (
+			result.get("error")
+			or result.get("batches", [{}])[0].get("error")
+			or stderr[:500]
+		)
 		raise IngestionError(f"Archive ingestion failed: {errors}")
 
-	result = _parse_remote_json(stdout, stderr, "ingest-archive")
-	log.info("ingest_archive_completed", tables_loaded=result.get("tables_loaded", 0))
+	log.info("ingest_archive_completed", batches_ok=result.get("batches_ok", 0))
 	return result
 
 
@@ -77,29 +93,29 @@ def ingest_live_snapshot(
 ) -> dict:
 	"""Call analytics-side ingest command for live snapshot.
 
-	The remote script: staging table -> verify -> atomic swap.
-
 	Returns:
-		Dict with {success: bool, tables_swapped: int, errors: list}.
+		Dict with {status, batches_ok, batches_error, ...}.
 	"""
-	manifest_path = f"{remote_path.rstrip('/')}/manifest.json"
 	command = (
 		f"{shlex.quote(config.analytics_cmd_path)} ingest-live "
-		f"--manifest {shlex.quote(manifest_path)} "
-		f"--db {shlex.quote(config.duckdb_path)}"
+		f"--batch-dir {shlex.quote(remote_path.rstrip('/'))}"
 	)
 
 	log.info("ingest_live_started", remote_path=remote_path)
 
 	returncode, stdout, stderr = _run_ssh_command(config, command, timeout=config.ssh_timeout)
 
-	if returncode != 0:
-		result = _parse_remote_json(stdout, stderr, "ingest-live")
-		errors = result.get("errors", [stderr[:1000]])
+	result = _parse_remote_json(stdout, stderr, "ingest-live")
+
+	if returncode != 0 or result.get("batches_error", 0) > 0:
+		errors = (
+			result.get("error")
+			or result.get("batches", [{}])[0].get("error")
+			or stderr[:500]
+		)
 		raise IngestionError(f"Live ingestion failed: {errors}")
 
-	result = _parse_remote_json(stdout, stderr, "ingest-live")
-	log.info("ingest_live_completed", tables_swapped=result.get("tables_swapped", 0))
+	log.info("ingest_live_completed", batches_ok=result.get("batches_ok", 0))
 	return result
 
 
@@ -111,36 +127,35 @@ def handoff_archive(
 ) -> dict:
 	"""Call analytics-side handoff command after archive ingestion.
 
-	The remote script:
-	1. Verifies archive data is queryable
-	2. Removes overlapping date range from live DuckDB tables
-	3. Confirms handoff success
+	Removes the archived date range from live DuckDB tables to prevent
+	double-counting.
 
 	Returns:
-		Dict with {success: bool, rows_removed_from_live: int, errors: list}.
+		Dict with analytics-side response.
 	"""
-	filter_json = json.dumps(query_filter)
+	date_from = query_filter.get("date_from", "")
+	date_to = query_filter.get("date_to", "")
+	date_column = query_filter.get("filter_column", "last_seen_at")
+
 	command = (
 		f"{shlex.quote(config.analytics_cmd_path)} handoff "
-		f"--archive-path {shlex.quote(archive_path)} "
-		f"--filter {shlex.quote(filter_json)} "
-		f"--db {shlex.quote(config.duckdb_path)}"
+		f"--archive-batch-dir {shlex.quote(archive_path.rstrip('/'))} "
+		f"--date-column {shlex.quote(date_column)} "
+		f"--from {shlex.quote(str(date_from))} "
+		f"--to {shlex.quote(str(date_to))}"
 	)
 
 	log.info("handoff_started", archive_path=archive_path)
 
 	returncode, stdout, stderr = _run_ssh_command(config, command, timeout=config.ssh_timeout)
 
+	result = _parse_remote_json(stdout, stderr, "handoff")
+
 	if returncode != 0:
-		result = _parse_remote_json(stdout, stderr, "handoff")
-		errors = result.get("errors", [stderr[:1000]])
+		errors = result.get("error", stderr[:500])
 		raise IngestionError(f"Handoff failed: {errors}")
 
-	result = _parse_remote_json(stdout, stderr, "handoff")
-	log.info(
-		"handoff_completed",
-		rows_removed_from_live=result.get("rows_removed_from_live", 0),
-	)
+	log.info("handoff_completed", status=result.get("status"))
 	return result
 
 
@@ -153,24 +168,19 @@ def verify_ingestion(
 	"""Call analytics-side verify command.
 
 	Returns:
-		Dict with {valid: bool, errors: list}.
+		Dict with {status, checks}.
 	"""
-	manifest_path = f"{remote_path.rstrip('/')}/manifest.json"
-	command = (
-		f"{shlex.quote(config.analytics_cmd_path)} verify "
-		f"--manifest {shlex.quote(manifest_path)} "
-		f"--db {shlex.quote(config.duckdb_path)}"
-	)
+	command = shlex.quote(config.analytics_cmd_path) + " verify"
 
 	log.info("verify_ingestion_started", remote_path=remote_path)
 
 	returncode, stdout, stderr = _run_ssh_command(config, command, timeout=config.ssh_timeout)
 
-	if returncode != 0:
-		result = _parse_remote_json(stdout, stderr, "verify")
-		errors = result.get("errors", [stderr[:1000]])
-		return {"valid": False, "errors": errors}
-
 	result = _parse_remote_json(stdout, stderr, "verify")
-	log.info("verify_ingestion_completed", valid=result.get("valid", False))
-	return result
+
+	if returncode != 0 or result.get("status") != "ok":
+		log.warning("verify_ingestion_failed", status=result.get("status"))
+		return {"valid": False, "errors": [result.get("status", "unknown")]}
+
+	log.info("verify_ingestion_completed", status=result.get("status"))
+	return {"valid": True, "checks": result.get("checks", {})}

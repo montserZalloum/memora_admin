@@ -214,12 +214,23 @@ Live sync includes all data for seasons that are **NOT yet archived-and-validate
 
 **Export-time metadata columns** (added to Parquet, not in source table):
 
+**For archive exports**:
+
 | Column | Source | Purpose |
 |--------|--------|---------|
 | `archive_scope` | Archive Job `archive_scope` | Season ID for this batch |
 | `archive_job_id` | Archive Job `name` | Export run identifier |
 | `schema_version` | Archive Job `schema_version` | Schema contract version |
 | `exported_at` | Current timestamp at export | Lineage/debugging |
+
+**For live sync exports**:
+
+| Column | Source | Purpose |
+|--------|--------|---------|
+| `scope_type` | Literal `'live'` | Distinguishes from archive rows |
+| `sync_batch_id` | Generated sync run identifier | Identifies the specific sync run |
+| `schema_version` | Sync YAML `version` | Schema contract version |
+| `synced_at` | Current timestamp at sync | When this snapshot was taken |
 
 ### 8.2 Grain
 
@@ -247,10 +258,9 @@ One row per `(player_id, item_id)` — same as source. Single fact table, no spl
 | `player_id` | `name` | Primary key |
 | `grade` | `grade` | Segmentation |
 | `major` | `major` | Segmentation |
-| `season` | `season` | Season link |
+| `season_id` | `season` | Season link (renamed for consistency) |
 | `plan_id` | `plan` | Plan link |
 | `plan_name` | Joined from Academic Plan | Denormalized for convenience |
-| `plan_type` | Joined from Academic Plan | Denormalized for convenience |
 
 **Excluded (privacy)**:
 - `mobile` — direct PII, not analytically needed
@@ -307,9 +317,9 @@ All dimensions are **batch-scoped**: only records referenced by the fact rows in
 |-------|-------|
 | `dataset_key` | `practice_log` |
 | `kind` | `archive` or `live_sync` |
-| `scope_key` | Season ID (e.g., `SEAS-00027`) |
+| `scope_key` | **Archive**: Season ID (e.g., `SEAS-00027`). **Live sync**: `active_snapshot` |
 | `schema_version` | `v1` |
-| `batch_id` | Archive Job name (e.g., `ARCH-00042`) |
+| `batch_id` | **Archive**: Archive Job name (e.g., `ARCH-00042`). **Live sync**: sync run ID (e.g., `SYNC-20260310-0200`) |
 
 ### 10.2 Files Array
 
@@ -432,6 +442,8 @@ Rollups: `item × season`, `item × plan`, `item` (global all-time).
 | `last_practice_date` | `MAX(last_seen_at)` |
 
 Player attributes: `plan_id`, `plan_name`, `grade`, `major`.
+
+> **Note**: `plan_name` is denormalized from the Plan dimension into the Player snapshot for convenience. `plan_type` does not exist on `Memora Academic Plan` and is not included.
 
 #### Mart 2b: Student Subject Practice
 
@@ -698,7 +710,7 @@ CREATE INDEX idx_last_seen_at ON `tabMemora Practice Log` (last_seen_at);
 | 6 | Dataset registry entry | `practice_log` registration |
 | 7 | DuckDB raw layer definitions | `raw_practice_log_archive`, `raw_practice_log_live` |
 | 8 | DuckDB curated layer definition | `curated_practice_log` with derived fields |
-| 9 | DuckDB mart definitions | 7 marts (1, 2a, 2b, 3, 4, 5, 6) |
+| 9 | DuckDB mart definitions | 5 materialized marts (1, 2a, 2b, 3, 4, 6) + 1 rollup view family (5) + 1 optional drill-down (4b) |
 | 10 | DQ validation rules implementation | 16 hard-fail rules |
 | 11 | Acceptance test specifications | 19 test scenarios |
 | 12 | Monitoring/alerting configuration | 4 new alert types |

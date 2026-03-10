@@ -62,7 +62,7 @@ def trigger_daily_live_sync():
 				"schema_version": version,
 				"status": "Pending",
 				"triggered_by": "Cron",
-				"meta": json.dumps(meta),
+				"job_meta": json.dumps(meta),
 			})
 			job.flags.programmatic_creation = True
 			job.insert(ignore_permissions=True)
@@ -148,7 +148,7 @@ def trigger_manual_sync():
 			"schema_version": version,
 			"status": "Pending",
 			"triggered_by": "Manual",
-			"meta": json.dumps(meta),
+			"job_meta": json.dumps(meta),
 		})
 		job.flags.programmatic_creation = True
 		job.insert(ignore_permissions=True)
@@ -175,7 +175,7 @@ def _load_sync_types(registry_path: str) -> list[dict]:
 
 def _build_live_sync_meta(sync_type: dict) -> dict:
 	"""Build the meta JSON for a live sync job from sync type data."""
-	return {
+	meta = {
 		"sync_type": sync_type.get("sync_type"),
 		"source_table": sync_type.get("source_table"),
 		"mode": sync_type.get("mode", "full_snapshot"),
@@ -183,10 +183,18 @@ def _build_live_sync_meta(sync_type: dict) -> dict:
 		"schema_snapshot": sync_type.get("schema_snapshot", {}),
 		"related_tables": [
 			{
-				"entity": d["entity"],
-				"schema_version": d["schema_version"],
-				"fact_column": d["join_column"],
+				k: v
+				for k, v in {
+					"entity": d["entity"],
+					"schema_version": d["schema_version"],
+					"fact_column": d.get("join_column"),
+					"scope_source": d.get("scope_source"),
+				}.items()
+				if v is not None
 			}
 			for d in sync_type.get("dimensions", [])
 		],
 	}
+	if "fact_sql" in sync_type:
+		meta["fact_sql"] = sync_type["fact_sql"]
+	return meta

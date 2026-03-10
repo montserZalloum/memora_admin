@@ -28,16 +28,18 @@ def check_seasons_for_archive():
 	"""
 	today = frappe.utils.today()
 
-	# Step 1: Find recently ended seasons (unpublished + end_date in the past, within 90 days)
+	cutoff = frappe.utils.add_days(today, -90)
+
+	# Step 1: Find recently ended, unpublished seasons (within the last 90 days)
 	ended_seasons = frappe.db.sql(
 		"""
 		SELECT name, start_date, end_date
 		FROM `tabMemora Season`
 		WHERE is_published = 0
-			AND end_date < %s
-			AND end_date >= DATE_SUB(%s, INTERVAL 90 DAY)
+		  AND end_date < %s
+		  AND end_date >= %s
 		""",
-		(today, today),
+		(today, cutoff),
 		as_dict=True,
 	)
 
@@ -48,7 +50,7 @@ def check_seasons_for_archive():
 	# Step 2: Load all archive type definitions from YAML registry
 	archive_types = _load_archive_types(_SCHEMA_REGISTRY_PATH)
 	if not archive_types:
-		frappe.logger().warning("Archive trigger: No archive type YAMLs found in registry")
+		frappe.logger().info("Archive trigger: No archive type YAMLs found in registry")
 		return
 
 	jobs_created = 0
@@ -85,7 +87,7 @@ def check_seasons_for_archive():
 						"archive_type": archive_type_name,
 						"status": "Pending",
 						"post_archive_action": "Keep",
-						"meta": json.dumps(meta),
+						"job_meta": json.dumps(meta),
 					}
 				)
 				job.flags.programmatic_creation = True
@@ -136,22 +138,28 @@ def _build_meta_json(season: dict, archive_type: dict) -> dict:
 	for dim in archive_type.get("dimensions", []):
 		# Load the dimension schema to get source_table and id_column
 		dim_schema = _load_dimension_schema(_SCHEMA_REGISTRY_PATH, dim["entity"], dim["schema_version"])
-		related_tables.append(
-			{
-				"entity": dim["entity"],
-				"schema_version": dim["schema_version"],
-				"source_table": dim_schema["source_table"],
-				"join_column": dim_schema["id_column"],
-				"fact_column": dim["join_column"],
-			}
-		)
+		entry = {
+			"entity": dim["entity"],
+			"schema_version": dim["schema_version"],
+			"source_table": dim_schema["source_table"],
+			"join_column": dim_schema["id_column"],
+		}
+		# Direct dimensions have a join_column in the YAML; derived ones don't
+		if "join_column" in dim:
+			entry["fact_column"] = dim["join_column"]
+		if dim.get("scope_source"):
+			entry["scope_source"] = dim["scope_source"]
+		related_tables.append(entry)
 
-	return {
+	meta = {
 		"query_filter": query_filter,
 		"export_columns": archive_type.get("fact_columns", []),
 		"related_tables": related_tables,
 		"schema_snapshot": archive_type.get("schema_snapshot", {}),
 	}
+	if "fact_sql" in archive_type:
+		meta["fact_sql"] = archive_type["fact_sql"]
+	return meta
 
 
 def _load_dimension_schema(registry_path: str, entity: str, version: str) -> dict:

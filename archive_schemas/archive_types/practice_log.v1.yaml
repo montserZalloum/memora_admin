@@ -9,14 +9,44 @@ fact_columns:
   - last_result
   - attempt_count
   - correct_count
+  - season_id
+  - plan_id
 scope_column: last_seen_at
+fact_sql:
+  filtered: |
+    SELECT
+      pl.`player_id`, pl.`item_id`, pl.`first_seen_at`, pl.`last_seen_at`,
+      pl.`last_result`, pl.`attempt_count`, pl.`correct_count`,
+      pp.`season` AS season_id, pp.`plan` AS plan_id
+    FROM `tabMemora Practice Log` pl
+    LEFT JOIN `tabMemora Player Profile` pp ON pl.`player_id` = pp.`name`
+    WHERE pl.`{filter_column}` >= %s AND pl.`{filter_column}` < %s
+    ORDER BY pl.`{filter_column}`
+  full_snapshot: |
+    SELECT
+      pl.`player_id`, pl.`item_id`, pl.`first_seen_at`, pl.`last_seen_at`,
+      pl.`last_result`, pl.`attempt_count`, pl.`correct_count`,
+      pp.`season` AS season_id, pp.`plan` AS plan_id
+    FROM `tabMemora Practice Log` pl
+    LEFT JOIN `tabMemora Player Profile` pp ON pl.`player_id` = pp.`name`
+export_metadata:
+  - {name: archive_scope, type: "VARCHAR(140)"}
+  - {name: archive_job_id, type: "VARCHAR(140)"}
+  - {name: schema_version, type: "VARCHAR(10)"}
+  - {name: exported_at, type: DATETIME}
 dimensions:
   - entity: player
-    schema_version: v1
+    schema_version: v3
     join_column: player_id
   - entity: review_item
-    schema_version: v1
+    schema_version: v2
     join_column: item_id
+  - entity: season
+    schema_version: v1
+    scope_source: derived
+  - entity: plan
+    schema_version: v1
+    scope_source: derived
 schema_snapshot:
   columns:
     - {name: player_id, type: "VARCHAR(140)"}
@@ -26,4 +56,6 @@ schema_snapshot:
     - {name: last_result, type: "ENUM('Correct','Incorrect')"}
     - {name: attempt_count, type: "INT UNSIGNED"}
     - {name: correct_count, type: "INT UNSIGNED"}
+    - {name: season_id, type: "VARCHAR(140)"}
+    - {name: plan_id, type: "VARCHAR(140)"}
   primary_key: [player_id, item_id]

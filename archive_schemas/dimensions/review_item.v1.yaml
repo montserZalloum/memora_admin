@@ -4,8 +4,18 @@ source_table: "tabMemora Review Item"
 id_column: item_id
 fields:
   - item_id
-  - player_id
+  - subject
   - topic
   - lesson
-  - stage
-  - question_text
+  - item_type
+  - difficulty
+query: >
+  SELECT
+    ri.`item_id`,
+    ri.`subject`,
+    ri.`topic`,
+    ri.`lesson`,
+    ri.`stage_type` AS item_type,
+    NULL AS difficulty
+  FROM `tabMemora Review Item` ri
+  WHERE ri.`item_id` IN ({placeholders})

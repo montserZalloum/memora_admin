@@ -46,7 +46,7 @@
   "sync_paused_at",
   "clear_pause_btn",
   "section_meta",
-  "meta"
+  "job_meta"
  ],
  "fields": [
   {
@@ -301,9 +301,9 @@
    "label": "Metadata"
   },
   {
-   "fieldname": "meta",
+   "fieldname": "job_meta",
    "fieldtype": "JSON",
-   "label": "Meta",
+   "label": "Job Meta",
    "read_only": 1
   }
  ],

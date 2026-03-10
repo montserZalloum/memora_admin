@@ -76,7 +76,7 @@ def _get_paused_filters() -> list[dict]:
 		jobs = frappe.get_all(
 			"Memora Archive Job",
 			filters={"sync_paused": 1},
-			fields=["source_doctype", "meta"],
+			fields=["source_doctype", "job_meta"],
 		)
 	except Exception:
 		# If query fails (e.g., column not yet migrated), return empty
@@ -87,7 +87,7 @@ def _get_paused_filters() -> list[dict]:
 	result = []
 	for job in jobs:
 		try:
-			meta = json.loads(job.meta) if isinstance(job.meta, str) else (job.meta or {})
+			meta = json.loads(job.job_meta) if isinstance(job.job_meta, str) else (job.job_meta or {})
 			qf = meta.get("query_filter", {})
 			if qf.get("date_from") and qf.get("date_to"):
 				result.append({

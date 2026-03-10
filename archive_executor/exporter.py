@@ -8,7 +8,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .config import Config
-from .db import streaming_cursor, validate_identifier
+from .db import get_connection, streaming_cursor, validate_identifier
 
 
 def _sql_type_to_arrow(sql_type: str) -> pa.DataType:
@@ -36,11 +36,19 @@ def _build_arrow_schema(schema_snapshot: dict) -> pa.Schema:
 
 def _coerce_value(val, target_type: pa.DataType | None = None):
 	"""Coerce Python values to types pyarrow handles cleanly."""
+	if val is None:
+		return None
 	if isinstance(val, date) and not isinstance(val, datetime):
-		# Only promote to datetime if the target schema expects timestamp;
-		# leave as date if schema expects pa.date32().
 		if target_type is not None and pa.types.is_timestamp(target_type):
 			return datetime(val.year, val.month, val.day)
+	# SSDictCursor sometimes returns numeric columns as strings
+	if isinstance(val, str) and target_type is not None:
+		if pa.types.is_integer(target_type):
+			return int(val)
+		if pa.types.is_floating(target_type):
+			return float(val)
+		if pa.types.is_timestamp(target_type):
+			return datetime.fromisoformat(val)
 	return val
 
 
@@ -52,6 +60,25 @@ def _rows_to_batch(rows: list[dict], columns: list[str], schema: pa.Schema) -> p
 	return pa.RecordBatch.from_pydict(col_data, schema=schema)
 
 
+def _extend_schema_with_metadata(arrow_schema: pa.Schema, export_metadata: dict) -> pa.Schema:
+	"""Extend an arrow schema with export_metadata columns."""
+	extra_fields = []
+	for key in export_metadata:
+		if key == "exported_at" or key == "synced_at":
+			extra_fields.append(pa.field(key, pa.timestamp("us")))
+		else:
+			extra_fields.append(pa.field(key, pa.string()))
+	return pa.schema(list(arrow_schema) + extra_fields)
+
+
+def _inject_metadata_into_rows(rows: list[dict], export_metadata: dict) -> list[dict]:
+	"""Inject export_metadata values into each row dict."""
+	for row in rows:
+		for key, val in export_metadata.items():
+			row[key] = val
+	return rows
+
+
 def export_fact_data(
 	config: Config,
 	staging_dir: str,
@@ -59,6 +86,8 @@ def export_fact_data(
 	source_table: str,
 	archive_type_name: str,
 	mode: str = "filtered",
+	export_metadata: dict | None = None,
+	exclusion_ranges: list[tuple[str, str]] | None = None,
 ) -> tuple[str, int, dict[str, set]]:
 	"""Export fact data to a Parquet file using server-side streaming.
 
@@ -70,6 +99,9 @@ def export_fact_data(
 		archive_type_name: Archive type key for the output filename.
 		mode: "filtered" (default) uses WHERE clause from query_filter;
 		      "full_snapshot" exports all rows with no WHERE clause.
+		export_metadata: Optional dict of metadata columns to inject into each row.
+		exclusion_ranges: Optional list of (date_from, date_to) tuples. When mode="full_snapshot",
+		      rows with scope_column within these ranges are excluded.
 
 	Returns:
 		Tuple of (file_path, row_count, referenced_ids) where referenced_ids
@@ -79,35 +111,71 @@ def export_fact_data(
 	schema_snapshot = meta.get("schema_snapshot", {})
 	related_tables = meta.get("related_tables", [])
 
-	# Determine which fact columns to track for dimension scoping
-	dimension_fact_columns = [rt["fact_column"] for rt in related_tables]
+	# Determine which fact columns to track for dimension scoping (skip derived dims)
+	dimension_fact_columns = [rt["fact_column"] for rt in related_tables if rt.get("fact_column")]
 
 	# Validate all identifiers against allowlist before SQL interpolation
 	validate_identifier(source_table)
 	for col in export_columns:
 		validate_identifier(col)
 
+	# Check for custom fact SQL templates (used when fact requires JOIN enrichment)
+	fact_sql_templates = meta.get("fact_sql", {})
+
 	# Build SQL query
 	columns_sql = ", ".join(f"`{col}`" for col in export_columns)
 
 	if mode == "full_snapshot":
 		# Full snapshot: no WHERE clause, export all rows
-		sql = f"SELECT {columns_sql} FROM `{source_table}`"
-		params = ()
+		if fact_sql_templates.get("full_snapshot"):
+			sql = fact_sql_templates["full_snapshot"].strip()
+			params: list = []
+		else:
+			sql = f"SELECT {columns_sql} FROM `{source_table}`"
+			params = []
+
+		# Apply exclusion ranges if provided
+		if exclusion_ranges:
+			scope_col = meta.get("scope_column") or meta.get("query_filter", {}).get("filter_column")
+			if scope_col:
+				validate_identifier(scope_col)
+				exclusion_clauses = []
+				for date_from, date_to in exclusion_ranges:
+					if fact_sql_templates.get("full_snapshot"):
+						exclusion_clauses.append(f"NOT (pl.`{scope_col}` >= %s AND pl.`{scope_col}` < %s)")
+					else:
+						exclusion_clauses.append(f"NOT (`{scope_col}` >= %s AND `{scope_col}` < %s)")
+					params.extend([date_from, date_to])
+				if exclusion_clauses:
+					sql += " WHERE " + " AND ".join(exclusion_clauses)
+
+		params = tuple(params)
 	else:
 		# Filtered: use query_filter date range
 		query_filter = meta["query_filter"]
 		filter_col = query_filter["filter_column"]
 		validate_identifier(filter_col)
-		sql = (
-			f"SELECT {columns_sql} FROM `{source_table}` "
-			f"WHERE `{filter_col}` >= %s AND `{filter_col}` < %s "
-			f"ORDER BY `{filter_col}`"
-		)
+		if fact_sql_templates.get("filtered"):
+			sql = fact_sql_templates["filtered"].strip().replace("{filter_column}", filter_col)
+		else:
+			sql = (
+				f"SELECT {columns_sql} FROM `{source_table}` "
+				f"WHERE `{filter_col}` >= %s AND `{filter_col}` < %s "
+				f"ORDER BY `{filter_col}`"
+			)
 		params = (query_filter["date_from"], query_filter["date_to"])
 
 	# Build pyarrow schema from snapshot
 	arrow_schema = _build_arrow_schema(schema_snapshot) if schema_snapshot.get("columns") else None
+
+	# Extend schema with metadata columns if provided
+	if export_metadata and arrow_schema:
+		arrow_schema = _extend_schema_with_metadata(arrow_schema, export_metadata)
+
+	# Build the full list of columns for batch construction (source + metadata)
+	all_columns = list(export_columns)
+	if export_metadata:
+		all_columns.extend(export_metadata.keys())
 
 	output_path = os.path.join(staging_dir, f"fact_{archive_type_name}.parquet")
 	row_count = 0
@@ -127,12 +195,16 @@ def export_fact_data(
 				for fact_col in dimension_fact_columns:
 					referenced_ids[fact_col].update(row[fact_col] for row in rows if row.get(fact_col))
 
+				# Inject metadata columns into rows
+				if export_metadata:
+					rows = _inject_metadata_into_rows(rows, export_metadata)
+
 				# Build batch
 				if arrow_schema:
-					batch = _rows_to_batch(rows, export_columns, arrow_schema)
+					batch = _rows_to_batch(rows, all_columns, arrow_schema)
 				else:
 					# Infer schema from first batch
-					col_data = {col: [_coerce_value(row.get(col)) for row in rows] for col in export_columns}
+					col_data = {col: [_coerce_value(row.get(col)) for row in rows] for col in all_columns}
 					batch = pa.RecordBatch.from_pydict(col_data)
 					arrow_schema = batch.schema
 
@@ -154,11 +226,64 @@ def export_fact_data(
 		else:
 			# No schema snapshot and no rows — create a minimal empty file
 			# with string columns so downstream validators find a valid Parquet file
-			fallback_schema = pa.schema([pa.field(col, pa.string()) for col in export_columns])
+			fallback_fields = [pa.field(col, pa.string()) for col in all_columns]
+			fallback_schema = pa.schema(fallback_fields)
 			writer = pq.ParquetWriter(output_path, fallback_schema)
 			writer.close()
 
 	return output_path, row_count, dict(referenced_ids)
+
+
+def _export_dimension_query(
+	config: Config,
+	staging_dir: str,
+	dim_schema: dict,
+	referenced_ids: set,
+) -> tuple[str, int]:
+	"""Export a dimension using a custom JOIN query from the schema.
+
+	The query must contain a {placeholders} token that will be replaced
+	with parameterized %s placeholders for the IN clause.
+	"""
+	entity = dim_schema["entity"]
+	fields = dim_schema["fields"]
+	query_template = dim_schema["query"]
+
+	output_path = os.path.join(staging_dir, f"dim_{entity}.parquet")
+
+	if not referenced_ids:
+		empty_data = {f: [] for f in fields}
+		table = pa.table(empty_data)
+		pq.write_table(table, output_path)
+		return output_path, 0
+
+	all_rows = []
+	id_list = list(referenced_ids)
+	batch_size = 10000
+
+	conn = get_connection(config)
+	try:
+		with conn.cursor() as cursor:
+			for i in range(0, len(id_list), batch_size):
+				batch_ids = id_list[i : i + batch_size]
+				placeholders = ", ".join(["%s"] * len(batch_ids))
+				sql = query_template.replace("{placeholders}", placeholders)
+				cursor.execute(sql, batch_ids)
+				all_rows.extend(cursor.fetchall())
+	finally:
+		conn.close()
+
+	if not all_rows:
+		empty_data = {f: [] for f in fields}
+		table = pa.table(empty_data)
+		pq.write_table(table, output_path)
+		return output_path, 0
+
+	col_data = {f: [_coerce_value(row.get(f)) for row in all_rows] for f in fields}
+	table = pa.table(col_data)
+	pq.write_table(table, output_path)
+
+	return output_path, len(all_rows)
 
 
 def export_dimension(
@@ -178,6 +303,10 @@ def export_dimension(
 	Returns:
 		Tuple of (file_path, row_count).
 	"""
+	# If the schema has a custom query, use the JOIN-based export
+	if "query" in dim_schema:
+		return _export_dimension_query(config, staging_dir, dim_schema, referenced_ids)
+
 	entity = dim_schema["entity"]
 	source_table = dim_schema["source_table"]
 	id_column = dim_schema["id_column"]
@@ -204,8 +333,6 @@ def export_dimension(
 	# Batch the IN clause to avoid exceeding max_allowed_packet
 	id_list = list(referenced_ids)
 	batch_size = 10000
-
-	from .db import get_connection
 
 	conn = get_connection(config)
 	try:
