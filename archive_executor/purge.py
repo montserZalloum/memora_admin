@@ -15,6 +15,7 @@ from datetime import datetime, timezone
 from .config import Config
 from .db import atomic_update, get_connection, validate_identifier
 from .logger import StructuredLogger
+from .safety_gates import check_all_gates
 
 PURGE_BATCH_SIZE = 10_000
 PURGE_SLEEP_SECONDS = 2
@@ -102,6 +103,108 @@ def _log_delete_audit(config, log, *, job_id, season_id, rows_deleted,
 		log.warning("audit_log_failed", job=job_id, error=str(exc))
 
 
+def _purge_partition(config: Config, job: dict, meta: dict, log: StructuredLogger):
+	"""Purge a season-scoped job via DROP PARTITION with safety gates.
+
+	Checks all four safety gates before executing the irreversible
+	ALTER TABLE ... DROP PARTITION. Leaves the job in Completed state
+	if any gate fails (will be retried on the next run).
+	"""
+	job_name = job["name"]
+	query_filter = meta.get("query_filter", {})
+	season_seq = query_filter["season_seq"]
+	season_name = query_filter.get("season_name", "")
+	partition_name = f"p_season_{season_seq}"
+
+	# Verify archive files exist on disk before executing the irreversible DROP PARTITION
+	file_path = job.get("file_path") if isinstance(job, dict) else getattr(job, "file_path", None)
+	if not file_path or not os.path.isdir(file_path):
+		log.warning("purge_skipped", job=job_name, reason="archive_files_missing", path=file_path)
+		return
+
+	log.info("partition_purge_gates_checking", job=job_name, season_seq=season_seq)
+
+	gate_result = check_all_gates(config, season_name, season_seq)
+
+	# Log each gate result
+	for gate in gate_result.gates:
+		level = "info" if gate.passed else "warning"
+		getattr(log, level)(
+			"safety_gate_result",
+			job=job_name,
+			gate=gate.gate_name,
+			passed=gate.passed,
+			message=gate.message,
+		)
+
+	if not gate_result.passed:
+		log.warning(
+			"partition_purge_blocked",
+			job=job_name,
+			season_seq=season_seq,
+			blockers=gate_result.blockers,
+		)
+		return
+
+	# All gates passed — execute DROP PARTITION
+	log.info("partition_purge_executing", job=job_name, partition=partition_name)
+
+	purge_start = time.monotonic()
+	season_id = job.get("archive_scope")
+
+	try:
+		conn = get_connection(config)
+		try:
+			with conn.cursor() as cursor:
+				# Count rows in the partition before dropping (for audit)
+				cursor.execute(
+					"SELECT COUNT(*) AS cnt FROM `tabMemora Memory State` "
+					"WHERE `season_seq` = %s",
+					(season_seq,),
+				)
+				estimated_rows = cursor.fetchone()["cnt"]
+
+				cursor.execute(
+					f"ALTER TABLE `tabMemora Memory State` DROP PARTITION `{partition_name}`"
+				)
+			conn.commit()
+		finally:
+			conn.close()
+
+		# Mark job as Purged
+		_mark_purged(config, job_name)
+		duration_ms = int((time.monotonic() - purge_start) * 1000)
+
+		log.info(
+			"partition_purge_completed",
+			job=job_name,
+			partition=partition_name,
+			rows_dropped=estimated_rows,
+			duration_ms=duration_ms,
+		)
+
+		_log_delete_audit(
+			config, log, job_id=job_name, season_id=season_id,
+			rows_deleted=estimated_rows, duration_ms=duration_ms,
+			status="success", error_msg=None,
+			total_rows_estimated=estimated_rows,
+			batch_size=0, num_batches=1,
+		)
+
+	except Exception as exc:
+		duration_ms = int((time.monotonic() - purge_start) * 1000)
+		log.error("partition_purge_failed", job=job_name, partition=partition_name, error=str(exc))
+
+		_log_delete_audit(
+			config, log, job_id=job_name, season_id=season_id,
+			rows_deleted=0, duration_ms=duration_ms,
+			status="failed", error_msg=str(exc),
+			total_rows_estimated=0,
+			batch_size=0, num_batches=0,
+		)
+		raise
+
+
 def purge_completed_jobs(config: Config, log: StructuredLogger):
 	"""Purge source data for all eligible Completed archive jobs.
 
@@ -122,6 +225,11 @@ def purge_completed_jobs(config: Config, log: StructuredLogger):
 		job_name = job["name"]
 		meta = json.loads(job["job_meta"]) if isinstance(job["job_meta"], str) else (job["job_meta"] or {})
 		query_filter = meta.get("query_filter", {})
+
+		# Season-scoped jobs use DROP PARTITION instead of batched DELETE
+		if query_filter.get("filter_type") == "season":
+			_purge_partition(config, job, meta, log)
+			continue
 
 		date_from = query_filter.get("date_from")
 		date_to = query_filter.get("date_to")

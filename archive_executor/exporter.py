@@ -1,5 +1,6 @@
 """Parquet export for fact data and dimension snapshots."""
 
+import decimal
 import os
 from collections import defaultdict
 from datetime import date, datetime
@@ -38,6 +39,8 @@ def _coerce_value(val, target_type: pa.DataType | None = None):
 	"""Coerce Python values to types pyarrow handles cleanly."""
 	if val is None:
 		return None
+	if isinstance(val, decimal.Decimal):
+		return float(val)
 	if isinstance(val, date) and not isinstance(val, datetime):
 		if target_type is not None and pa.types.is_timestamp(target_type):
 			return datetime(val.year, val.month, val.day)
@@ -151,19 +154,33 @@ def export_fact_data(
 
 		params = tuple(params)
 	else:
-		# Filtered: use query_filter date range
+		# Filtered: use query_filter
 		query_filter = meta["query_filter"]
 		filter_col = query_filter["filter_column"]
 		validate_identifier(filter_col)
-		if fact_sql_templates.get("filtered"):
-			sql = fact_sql_templates["filtered"].strip().replace("{filter_column}", filter_col)
+
+		if query_filter.get("filter_type") == "season":
+			# Season-scoped: single season_seq parameter
+			if fact_sql_templates.get("filtered"):
+				sql = fact_sql_templates["filtered"].strip()
+			else:
+				sql = (
+					f"SELECT {columns_sql} FROM `{source_table}` "
+					f"WHERE `{filter_col}` = %s "
+					f"ORDER BY `{filter_col}`"
+				)
+			params = (query_filter["season_seq"],)
 		else:
-			sql = (
-				f"SELECT {columns_sql} FROM `{source_table}` "
-				f"WHERE `{filter_col}` >= %s AND `{filter_col}` < %s "
-				f"ORDER BY `{filter_col}`"
-			)
-		params = (query_filter["date_from"], query_filter["date_to"])
+			# Date-range: existing behavior
+			if fact_sql_templates.get("filtered"):
+				sql = fact_sql_templates["filtered"].strip().replace("{filter_column}", filter_col)
+			else:
+				sql = (
+					f"SELECT {columns_sql} FROM `{source_table}` "
+					f"WHERE `{filter_col}` >= %s AND `{filter_col}` < %s "
+					f"ORDER BY `{filter_col}`"
+				)
+			params = (query_filter["date_from"], query_filter["date_to"])
 
 	# Build pyarrow schema from snapshot
 	arrow_schema = _build_arrow_schema(schema_snapshot) if schema_snapshot.get("columns") else None

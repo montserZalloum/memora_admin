@@ -1,0 +1,79 @@
+archive_type: interaction_log
+version: v1
+source_table: "tabMemora Interaction Log"
+fact_columns:
+  - name
+  - player
+  - lesson
+  - stage_id
+  - item_id
+  - event_type
+  - time_spent
+  - errors_count
+  - timestamp
+  - season_id
+  - plan_id
+scope_column: timestamp
+fact_sql:
+  filtered: |
+    SELECT
+      il.`name`, il.`player`, il.`lesson`, il.`stage_id`, il.`item_id`,
+      il.`event_type`, il.`time_spent`, il.`errors_count`, il.`timestamp`,
+      pp.`season` AS season_id, pp.`plan` AS plan_id
+    FROM `tabMemora Interaction Log` il
+    LEFT JOIN `tabMemora Player Profile` pp ON il.`player` = pp.`name`
+    WHERE il.`{filter_column}` >= %s AND il.`{filter_column}` < %s
+    ORDER BY il.`{filter_column}`
+  full_snapshot: |
+    SELECT
+      il.`name`, il.`player`, il.`lesson`, il.`stage_id`, il.`item_id`,
+      il.`event_type`, il.`time_spent`, il.`errors_count`, il.`timestamp`,
+      pp.`season` AS season_id, pp.`plan` AS plan_id
+    FROM `tabMemora Interaction Log` il
+    LEFT JOIN `tabMemora Player Profile` pp ON il.`player` = pp.`name`
+export_metadata:
+  - {name: archive_scope, type: "VARCHAR(140)"}
+  - {name: archive_job_id, type: "VARCHAR(140)"}
+  - {name: schema_version, type: "VARCHAR(10)"}
+  - {name: exported_at, type: DATETIME}
+dimensions:
+  - entity: player
+    schema_version: v3
+    join_column: player
+  - entity: lesson
+    schema_version: v1
+    join_column: lesson
+  - entity: season
+    schema_version: v1
+    scope_source: derived
+  - entity: plan
+    schema_version: v1
+    scope_source: derived
+schema_snapshot:
+  columns:
+    - {name: name, type: "VARCHAR(140)"}
+    - {name: player, type: "VARCHAR(140)"}
+    - {name: lesson, type: "VARCHAR(140)"}
+    - {name: stage_id, type: "VARCHAR(140)"}
+    - {name: item_id, type: "VARCHAR(140)"}
+    - {name: event_type, type: "VARCHAR(20)"}
+    - {name: time_spent, type: INT}
+    - {name: errors_count, type: INT}
+    - {name: timestamp, type: DATETIME}
+    - {name: season_id, type: "VARCHAR(140)"}
+    - {name: plan_id, type: "VARCHAR(140)"}
+  primary_key: [name]
+dq_rules:
+  - {id: DQ-01, type: not_null, column: name}
+  - {id: DQ-02, type: not_null, column: player}
+  - {id: DQ-03, type: not_null, column: lesson}
+  - {id: DQ-04, type: not_null, column: stage_id}
+  - {id: DQ-05, type: not_null, column: event_type}
+  - {id: DQ-06, type: not_null, column: timestamp}
+  - {id: DQ-07, type: enum_values, column: event_type, values: [Started, Completed, Failed, Skipped]}
+  - {id: DQ-08, type: min_value, column: time_spent, min: 0}
+  - {id: DQ-09, type: min_value, column: errors_count, min: 0}
+  - {id: DQ-10, type: scope_range, column: timestamp}
+  - {id: DQ-11, type: referential, column: player, dimension: player}
+  - {id: DQ-12, type: referential, column: lesson, dimension: lesson}
+  - {id: DQ-13, type: unique_key, columns: [name]}

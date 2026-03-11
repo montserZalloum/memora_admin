@@ -1,0 +1,79 @@
+archive_type: memory_state
+version: v1
+source_table: "tabMemora Memory State"
+fact_columns:
+  - name
+  - season_seq
+  - subject
+  - player
+  - item_id
+  - stage_id
+  - stability
+  - difficulty
+  - next_review
+  - lesson
+  - state
+  - step
+  - last_review
+  - modified
+scope_column: season_seq
+fact_sql:
+  filtered: |
+    SELECT
+      ms.`name`, ms.`season_seq`, ms.`subject`, ms.`player`,
+      BIN_TO_UUID(ms.`item_id`) AS item_id,
+      ms.`stage_id`, ms.`stability`, ms.`difficulty`, ms.`next_review`,
+      ms.`lesson`, ms.`state`, ms.`step`, ms.`last_review`, ms.`modified`
+    FROM `tabMemora Memory State` ms
+    WHERE ms.`season_seq` = %s
+    ORDER BY ms.`name`
+  incremental: |
+    SELECT
+      ms.`name`, ms.`season_seq`, ms.`subject`, ms.`player`,
+      BIN_TO_UUID(ms.`item_id`) AS item_id,
+      ms.`stage_id`, ms.`stability`, ms.`difficulty`, ms.`next_review`,
+      ms.`lesson`, ms.`state`, ms.`step`, ms.`last_review`, ms.`modified`
+    FROM `tabMemora Memory State` ms
+    WHERE ms.`season_seq` = %s AND ms.`modified` >= %s
+    ORDER BY ms.`modified`
+export_metadata:
+  - {name: archive_scope, type: "VARCHAR(140)"}
+  - {name: archive_job_id, type: "VARCHAR(140)"}
+  - {name: schema_version, type: "VARCHAR(10)"}
+  - {name: exported_at, type: DATETIME}
+dimensions:
+  - entity: player
+    schema_version: v3
+    join_column: player
+  - entity: season
+    schema_version: v1
+    scope_source: derived
+schema_snapshot:
+  columns:
+    - {name: name, type: BIGINT}
+    - {name: season_seq, type: INT}
+    - {name: subject, type: "VARCHAR(140)"}
+    - {name: player, type: "VARCHAR(140)"}
+    - {name: item_id, type: "VARCHAR(36)"}
+    - {name: stage_id, type: "VARCHAR(140)"}
+    - {name: stability, type: FLOAT}
+    - {name: difficulty, type: FLOAT}
+    - {name: next_review, type: DATETIME}
+    - {name: lesson, type: "VARCHAR(140)"}
+    - {name: state, type: TINYINT}
+    - {name: step, type: TINYINT}
+    - {name: last_review, type: DATETIME}
+    - {name: modified, type: DATETIME}
+  primary_key: [name, season_seq]
+dq_rules:
+  - {id: DQ-01, type: not_null, column: name}
+  - {id: DQ-02, type: not_null, column: season_seq}
+  - {id: DQ-03, type: not_null, column: player}
+  - {id: DQ-04, type: not_null, column: item_id}
+  - {id: DQ-05, type: not_null, column: stability}
+  - {id: DQ-06, type: not_null, column: difficulty}
+  - {id: DQ-07, type: min_value, column: stability, min: 0}
+  - {id: DQ-08, type: min_value, column: difficulty, min: 0}
+  - {id: DQ-09, type: max_value, column: difficulty, max: 1}
+  - {id: DQ-10, type: unique_key, columns: [name, season_seq]}
+  - {id: DQ-11, type: referential, column: player, dimension: player}

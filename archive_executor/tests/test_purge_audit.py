@@ -39,6 +39,9 @@ def config():
         remote_archive_path="", remote_live_path="",
         analytics_cmd_path="", duckdb_path="",
         live_output_path="/tmp/live/", live_lock_file="/tmp/live.lock",
+        sync_state_path="/tmp/sync_state/", sync_output_path="/tmp/sync_output/",
+        sync_overlap_seconds=300, sync_remote_path="",
+        purge_grace_days=7,
     )
 
 

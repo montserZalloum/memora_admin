@@ -8,6 +8,7 @@ Interface contract (analytics-side tool):
   memora-analytics ingest-archive [--batch-dir DIR]
   memora-analytics ingest-live [--batch-dir DIR]
   memora-analytics handoff [--archive-batch-dir DIR] --date-column COL --from DATE --to DATE
+  memora-analytics handoff [--archive-batch-dir DIR] --season-seq N --archive-type TYPE
   memora-analytics verify
 
 Each command outputs JSON to stdout and exits with code 0 (success) or non-zero (failure).
@@ -151,11 +152,160 @@ def handoff_archive(
 
 	result = _parse_remote_json(stdout, stderr, "handoff")
 
-	if returncode != 0:
+	if returncode != 0 or result.get("status") == "error":
 		errors = result.get("error", stderr[:500])
 		raise IngestionError(f"Handoff failed: {errors}")
 
 	log.info("handoff_completed", status=result.get("status"))
+	return result
+
+
+def handoff_season(
+	config: Config,
+	archive_path: str,
+	season_seq: int,
+	archive_type: str,
+	log: StructuredLogger,
+) -> dict:
+	"""Call analytics-side handoff command for season-based mirror cleanup.
+
+	Removes the archived season's rows from the analytics current mirror
+	(e.g. DELETE FROM memory_state_current WHERE season_seq = N).
+
+	Returns:
+		Dict with {status, mode, season_seq, rows_removed, duration_ms}.
+	"""
+	command = (
+		f"{shlex.quote(config.analytics_cmd_path)} handoff "
+		f"--archive-batch-dir {shlex.quote(archive_path.rstrip('/'))} "
+		f"--season-seq {int(season_seq)} "
+		f"--archive-type {shlex.quote(archive_type)}"
+	)
+
+	log.info("handoff_season_started", archive_path=archive_path, season_seq=season_seq)
+
+	returncode, stdout, stderr = _run_ssh_command(config, command, timeout=config.ssh_timeout)
+
+	result = _parse_remote_json(stdout, stderr, "handoff-season")
+
+	if returncode != 0 or result.get("status") == "error":
+		errors = result.get("error", stderr[:500])
+		raise IngestionError(f"Season handoff failed: {errors}")
+
+	log.info(
+		"handoff_season_completed",
+		status=result.get("status"),
+		rows_removed=result.get("rows_removed", 0),
+	)
+	return result
+
+
+def refresh_recent(
+	config: Config,
+	archive_type: str,
+	log: StructuredLogger,
+	window_days: int = 90,
+) -> dict:
+	"""Call analytics-side refresh-recent command to rebuild the rolling recent layer.
+
+	Best-effort: callers should catch exceptions and log as warnings.
+
+	Returns:
+		Dict with {status, row_count, window_days, oldest_record, duration_ms}.
+	"""
+	command = (
+		f"{shlex.quote(config.analytics_cmd_path)} refresh-recent "
+		f"--archive-type {shlex.quote(archive_type)} "
+		f"--window-days {window_days}"
+	)
+
+	log.info("refresh_recent_started", archive_type=archive_type, window_days=window_days)
+
+	returncode, stdout, stderr = _run_ssh_command(config, command, timeout=config.ssh_timeout)
+
+	result = _parse_remote_json(stdout, stderr, "refresh-recent")
+
+	if returncode != 0 or result.get("status") != "ok":
+		raise IngestionError(
+			f"refresh-recent failed: {result.get('error', stderr[:500])}"
+		)
+
+	log.info("refresh_recent_completed", row_count=result.get("row_count"), window_days=window_days)
+	return result
+
+
+def refresh_aggregates(
+	config: Config,
+	archive_type: str,
+	log: StructuredLogger,
+) -> dict:
+	"""Call analytics-side refresh-aggregates command to rebuild daily/monthly agg tables.
+
+	Best-effort: callers should catch exceptions and log as warnings.
+
+	Returns:
+		Dict with {status, daily_rows, monthly_rows, duration_ms}.
+	"""
+	command = (
+		f"{shlex.quote(config.analytics_cmd_path)} refresh-aggregates "
+		f"--archive-type {shlex.quote(archive_type)}"
+	)
+
+	log.info("refresh_aggregates_started", archive_type=archive_type)
+
+	returncode, stdout, stderr = _run_ssh_command(config, command, timeout=config.ssh_timeout)
+
+	result = _parse_remote_json(stdout, stderr, "refresh-aggregates")
+
+	if returncode != 0 or result.get("status") != "ok":
+		raise IngestionError(
+			f"refresh-aggregates failed: {result.get('error', stderr[:500])}"
+		)
+
+	log.info(
+		"refresh_aggregates_completed",
+		daily_rows=result.get("daily_rows"),
+		monthly_rows=result.get("monthly_rows"),
+	)
+	return result
+
+
+def get_mirror_status(
+	config: Config,
+	archive_type: str,
+	log: StructuredLogger,
+) -> dict:
+	"""Call analytics-side mirror-status command for monitoring.
+
+	Returns per-season row counts, latest modified timestamps for the
+	current mirror, and archived season Parquet locations.
+
+	Returns:
+		Dict with {status, archive_type, current_mirror, archived_seasons}.
+	"""
+	command = (
+		f"{shlex.quote(config.analytics_cmd_path)} mirror-status "
+		f"--archive-type {shlex.quote(archive_type)}"
+	)
+
+	log.info("mirror_status_started", archive_type=archive_type)
+
+	returncode, stdout, stderr = _run_ssh_command(config, command, timeout=config.ssh_timeout)
+
+	result = _parse_remote_json(stdout, stderr, "mirror-status")
+
+	if returncode != 0 or result.get("status") != "ok":
+		raise IngestionError(
+			f"mirror-status failed: {result.get('error', stderr[:500])}"
+		)
+
+	log.info(
+		"mirror_status_completed",
+		archive_type=archive_type,
+		total_rows=result.get("current_mirror", {}).get("total_rows", 0),
+		active_seasons=len(result.get("current_mirror", {}).get("seasons", [])),
+		archived_seasons=len(result.get("archived_seasons", [])),
+	)
 	return result
 
 

@@ -329,3 +329,214 @@ def validate_fact_quality(
 		"results": results,
 		"warnings": warnings,
 	}
+
+
+# ---------------------------------------------------------------------------
+# Generic DQ validation engine — YAML-driven rule execution
+# ---------------------------------------------------------------------------
+
+
+def validate_fact_quality_generic(
+	fact_path: str,
+	dq_rules: list[dict],
+	dimension_paths: dict[str, str] | None = None,
+	scope_date_from: str | None = None,
+	scope_date_to: str | None = None,
+) -> dict:
+	"""Validate fact data against DQ rules defined in the archive type YAML.
+
+	Args:
+		fact_path: Path to the fact Parquet file.
+		dq_rules: List of DQ rule dicts from the archive type YAML.
+		dimension_paths: Map of dimension entity name → Parquet file path.
+		scope_date_from: Archive scope start date (inclusive).
+		scope_date_to: Archive scope end date (exclusive).
+
+	Returns:
+		Dict with: passed (bool), results (list), warnings (list).
+	"""
+	results = []
+	warnings = []
+	dimension_paths = dimension_paths or {}
+
+	fact_table = pq.read_table(fact_path)
+	row_count = fact_table.num_rows
+
+	if row_count == 0:
+		warnings.append("DQ-WARN: Fact table has 0 rows — valid but flagged")
+		return {"passed": True, "results": [], "warnings": warnings}
+
+	fact_columns = set(fact_table.column_names)
+
+	for rule in dq_rules:
+		rule_id = rule.get("id", "DQ-?")
+		rule_type = rule.get("type")
+
+		if rule_type == "not_null":
+			col_name = rule["column"]
+			if col_name not in fact_columns:
+				results.append({"rule": rule_id, "passed": False, "detail": f"Column {col_name} missing from fact"})
+				continue
+			null_count = fact_table.column(col_name).null_count
+			passed = null_count == 0
+			results.append({
+				"rule": rule_id,
+				"passed": passed,
+				"detail": f"{col_name} null_count={null_count}" if not passed else f"{col_name} OK",
+			})
+
+		elif rule_type == "enum_values":
+			col_name = rule["column"]
+			allowed = set(rule.get("values", []))
+			if col_name not in fact_columns:
+				results.append({"rule": rule_id, "passed": False, "detail": f"Column {col_name} missing from fact"})
+				continue
+			col = fact_table.column(col_name)
+			unique_vals = pc.unique(col).to_pylist()
+			invalid_vals = {v for v in unique_vals if v is not None and v not in allowed}
+			passed = len(invalid_vals) == 0
+			results.append({
+				"rule": rule_id,
+				"passed": passed,
+				"detail": f"Invalid {col_name} values: {invalid_vals}" if not passed else f"{col_name} enum OK",
+			})
+
+		elif rule_type == "min_value":
+			col_name = rule["column"]
+			min_threshold = rule["min"]
+			if col_name not in fact_columns:
+				results.append({"rule": rule_id, "passed": False, "detail": f"Column {col_name} missing from fact"})
+				continue
+			col = fact_table.column(col_name)
+			col_no_nulls = col.drop_null()
+			if len(col_no_nulls) == 0:
+				results.append({"rule": rule_id, "passed": True, "detail": f"{col_name} all null — skipped"})
+				continue
+			min_val = pc.min(col_no_nulls).as_py()
+			passed = min_val is not None and min_val >= min_threshold
+			results.append({
+				"rule": rule_id,
+				"passed": passed,
+				"detail": f"{col_name} min={min_val} < {min_threshold}" if not passed else f"{col_name} >= {min_threshold} OK",
+			})
+
+		elif rule_type == "max_value":
+			col_name = rule["column"]
+			max_threshold = rule["max"]
+			if col_name not in fact_columns:
+				results.append({"rule": rule_id, "passed": False, "detail": f"Column {col_name} missing from fact"})
+				continue
+			col = fact_table.column(col_name)
+			col_no_nulls = col.drop_null()
+			if len(col_no_nulls) == 0:
+				results.append({"rule": rule_id, "passed": True, "detail": f"{col_name} all null — skipped"})
+				continue
+			max_val = pc.max(col_no_nulls).as_py()
+			passed = max_val is not None and max_val <= max_threshold
+			results.append({
+				"rule": rule_id,
+				"passed": passed,
+				"detail": f"{col_name} max={max_val} > {max_threshold}" if not passed else f"{col_name} <= {max_threshold} OK",
+			})
+
+		elif rule_type == "column_lte_column":
+			left_name = rule["left"]
+			right_name = rule["right"]
+			if left_name not in fact_columns or right_name not in fact_columns:
+				missing = [c for c in (left_name, right_name) if c not in fact_columns]
+				results.append({"rule": rule_id, "passed": False, "detail": f"Columns missing: {missing}"})
+				continue
+			left_col = fact_table.column(left_name)
+			right_col = fact_table.column(right_name)
+			if pa.types.is_string(left_col.type) or pa.types.is_large_string(left_col.type):
+				left_col = pc.cast(left_col, pa.timestamp("us"))
+			if pa.types.is_string(right_col.type) or pa.types.is_large_string(right_col.type):
+				right_col = pc.cast(right_col, pa.timestamp("us"))
+			violations = pc.sum(pc.greater(left_col, right_col)).as_py() or 0
+			passed = violations == 0
+			results.append({
+				"rule": rule_id,
+				"passed": passed,
+				"detail": f"{left_name} > {right_name} in {violations} rows" if not passed else f"{left_name} <= {right_name} OK",
+			})
+
+		elif rule_type == "scope_range":
+			col_name = rule["column"]
+			if not scope_date_from or not scope_date_to:
+				results.append({"rule": rule_id, "passed": True, "detail": "Skipped (no scope dates provided)"})
+				continue
+			if col_name not in fact_columns:
+				results.append({"rule": rule_id, "passed": False, "detail": f"Column {col_name} missing from fact"})
+				continue
+			col = fact_table.column(col_name)
+			if pa.types.is_string(col.type) or pa.types.is_large_string(col.type):
+				col = pc.cast(col, pa.timestamp("us"))
+			scope_from = pa.scalar(datetime.fromisoformat(scope_date_from), type=pa.timestamp("us"))
+			scope_to = pa.scalar(datetime.fromisoformat(scope_date_to), type=pa.timestamp("us"))
+			below = pc.sum(pc.less(col, scope_from)).as_py() or 0
+			above_or_eq = pc.sum(pc.greater_equal(col, scope_to)).as_py() or 0
+			out_of_range = below + above_or_eq
+			passed = out_of_range == 0
+			results.append({
+				"rule": rule_id,
+				"passed": passed,
+				"detail": f"{out_of_range} rows outside scope [{scope_date_from}, {scope_date_to})"
+				if not passed else f"{col_name} within scope OK",
+			})
+
+		elif rule_type == "referential":
+			col_name = rule["column"]
+			dim_entity = rule["dimension"]
+			dim_path = dimension_paths.get(dim_entity)
+			if not dim_path:
+				results.append({"rule": rule_id, "passed": True, "detail": f"Skipped (no path for dimension '{dim_entity}')"})
+				continue
+			if col_name not in fact_columns:
+				results.append({"rule": rule_id, "passed": False, "detail": f"Column {col_name} missing from fact"})
+				continue
+			dim_table = pq.read_table(dim_path)
+			dim_col_names = dim_table.column_names
+			# Prefer {entity}_id, then "name", else first column
+			if f"{dim_entity}_id" in dim_col_names:
+				id_col = f"{dim_entity}_id"
+			elif "name" in dim_col_names:
+				id_col = "name"
+			else:
+				id_col = dim_col_names[0]
+			dim_ids = set(dim_table.column(id_col).to_pylist())
+			fact_ids = set(fact_table.column(col_name).to_pylist())
+			orphans = fact_ids - dim_ids - {None}
+			passed = len(orphans) == 0
+			results.append({
+				"rule": rule_id,
+				"passed": passed,
+				"detail": f"{len(orphans)} {col_name} values not in dimension '{dim_entity}'"
+				if not passed else f"{col_name} referential OK",
+			})
+
+		elif rule_type == "unique_key":
+			columns = rule.get("columns", [])
+			missing_cols = [c for c in columns if c not in fact_columns]
+			if missing_cols:
+				results.append({"rule": rule_id, "passed": False, "detail": f"Columns missing: {missing_cols}"})
+				continue
+			grouped = fact_table.group_by(columns).aggregate([(columns[0], "count")])
+			dup_count_col = grouped.column(f"{columns[0]}_count")
+			max_dup = pc.max(dup_count_col).as_py()
+			has_dups = max_dup is not None and max_dup > 1
+			if has_dups:
+				dups = pc.sum(pc.greater(dup_count_col, pa.scalar(1, type=dup_count_col.type))).as_py()
+				results.append({
+					"rule": rule_id,
+					"passed": False,
+					"detail": f"{dups} duplicate combinations in {columns}",
+				})
+			else:
+				results.append({"rule": rule_id, "passed": True, "detail": f"unique_key {columns} OK"})
+
+		else:
+			warnings.append(f"{rule_id}: Unknown rule type '{rule_type}' — skipped")
+			results.append({"rule": rule_id, "passed": True, "detail": f"Unknown rule type '{rule_type}' — skipped"})
+
+	all_passed = all(r["passed"] for r in results)
+	return {"passed": all_passed, "results": results, "warnings": warnings}

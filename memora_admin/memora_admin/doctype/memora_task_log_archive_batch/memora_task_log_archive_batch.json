@@ -1,0 +1,138 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "TLBATCH-.#####.",
+ "creation": "2026-03-11 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "source_doctype",
+  "date_from",
+  "date_to",
+  "cutoff_date",
+  "row_count",
+  "file_path",
+  "file_checksum",
+  "status",
+  "exported_at",
+  "synced_at",
+  "purged_at",
+  "last_error",
+  "retry_count",
+  "archive_job_id"
+ ],
+ "fields": [
+  {
+   "fieldname": "source_doctype",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Source DocType",
+   "reqd": 1
+  },
+  {
+   "fieldname": "date_from",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date From",
+   "reqd": 1
+  },
+  {
+   "fieldname": "date_to",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Date To",
+   "reqd": 1
+  },
+  {
+   "fieldname": "cutoff_date",
+   "fieldtype": "Date",
+   "label": "Cutoff Date"
+  },
+  {
+   "default": "0",
+   "fieldname": "row_count",
+   "fieldtype": "Int",
+   "label": "Row Count"
+  },
+  {
+   "fieldname": "file_path",
+   "fieldtype": "Data",
+   "label": "File Path",
+   "length": 500
+  },
+  {
+   "fieldname": "file_checksum",
+   "fieldtype": "Data",
+   "label": "File Checksum",
+   "length": 64
+  },
+  {
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Pending\nExported\nSynced\nPurged\nFailed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "exported_at",
+   "fieldtype": "Datetime",
+   "label": "Exported At"
+  },
+  {
+   "fieldname": "synced_at",
+   "fieldtype": "Datetime",
+   "label": "Synced At"
+  },
+  {
+   "fieldname": "purged_at",
+   "fieldtype": "Datetime",
+   "label": "Purged At"
+  },
+  {
+   "fieldname": "last_error",
+   "fieldtype": "Text",
+   "label": "Last Error"
+  },
+  {
+   "default": "0",
+   "fieldname": "retry_count",
+   "fieldtype": "Int",
+   "label": "Retry Count"
+  },
+  {
+   "fieldname": "archive_job_id",
+   "fieldtype": "Data",
+   "label": "Archive Job ID",
+   "length": 140
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-03-11 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Task Log Archive Batch",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager"
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "export": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Task Admin",
+   "write": 1
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "track_changes": 0
+}

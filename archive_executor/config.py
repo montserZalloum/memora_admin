@@ -35,6 +35,15 @@ class Config:
 	live_output_path: str
 	live_lock_file: str
 
+	# Incremental Sync (Memory State)
+	sync_state_path: str
+	sync_output_path: str
+	sync_overlap_seconds: int
+	sync_remote_path: str
+
+	# Purge safety
+	purge_grace_days: int
+
 	@classmethod
 	def from_env(cls) -> "Config":
 		return cls(
@@ -63,6 +72,13 @@ class Config:
 			# Live Sync
 			live_output_path=os.environ.get("LIVE_OUTPUT_PATH", "/data/memora/live/"),
 			live_lock_file=os.environ.get("LIVE_LOCK_FILE", "/var/run/memora-live-sync.lock"),
+			# Incremental Sync (Memory State)
+			sync_state_path=os.environ.get("SYNC_STATE_PATH", "/data/memora/sync_state/"),
+			sync_output_path=os.environ.get("SYNC_OUTPUT_PATH", "/data/memora/sync_output/"),
+			sync_overlap_seconds=int(os.environ.get("SYNC_OVERLAP_SECONDS", "300")),
+			sync_remote_path=os.environ.get("SYNC_REMOTE_PATH", ""),
+			# Purge safety
+			purge_grace_days=int(os.environ.get("PURGE_GRACE_DAYS", "7")),
 		)
 
 	def has_ssh_config(self) -> bool:

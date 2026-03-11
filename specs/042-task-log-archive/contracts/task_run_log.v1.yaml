@@ -1,0 +1,61 @@
+archive_type: task_run_log
+version: v1
+source_table: "tabMemora Task Run Log"
+fact_columns:
+  - name
+  - task_name
+  - run_date
+  - started_at
+  - completed_at
+  - duration_sec
+  - status
+  - triggered_by
+  - processed_count
+  - failed_count
+  - error_message
+scope_column: completed_at
+fact_sql:
+  filtered: |
+    SELECT
+      trl.`name`, trl.`task_name`, trl.`run_date`,
+      trl.`started_at`, trl.`completed_at`, trl.`duration_sec`,
+      trl.`status`, trl.`triggered_by`,
+      trl.`processed_count`, trl.`failed_count`, trl.`error_message`
+    FROM `tabMemora Task Run Log` trl
+    WHERE trl.`completed_at` >= %s AND trl.`completed_at` < %s
+      AND trl.`status` IN ('Success', 'Failed', 'Partial')
+      AND trl.`completed_at` IS NOT NULL
+    ORDER BY trl.`completed_at`, trl.`name`
+export_metadata:
+  - {name: archive_scope, type: "VARCHAR(140)"}
+  - {name: archive_job_id, type: "VARCHAR(140)"}
+  - {name: schema_version, type: "VARCHAR(10)"}
+  - {name: exported_at, type: DATETIME}
+dimensions: []
+schema_snapshot:
+  columns:
+    - {name: name, type: "VARCHAR(140)"}
+    - {name: task_name, type: "VARCHAR(140)"}
+    - {name: run_date, type: DATE}
+    - {name: started_at, type: DATETIME}
+    - {name: completed_at, type: DATETIME}
+    - {name: duration_sec, type: FLOAT}
+    - {name: status, type: "VARCHAR(20)"}
+    - {name: triggered_by, type: "VARCHAR(20)"}
+    - {name: processed_count, type: INT}
+    - {name: failed_count, type: INT}
+    - {name: error_message, type: TEXT}
+  primary_key: [name]
+dq_rules:
+  - {id: DQ-01, type: not_null, column: name}
+  - {id: DQ-02, type: not_null, column: task_name}
+  - {id: DQ-03, type: not_null, column: run_date}
+  - {id: DQ-04, type: not_null, column: started_at}
+  - {id: DQ-05, type: not_null, column: completed_at}
+  - {id: DQ-06, type: not_null, column: status}
+  - {id: DQ-07, type: enum_values, column: status, values: [Success, Failed, Partial]}
+  - {id: DQ-08, type: enum_values, column: triggered_by, values: [Scheduler, Manual, Catch-up]}
+  - {id: DQ-09, type: min_value, column: processed_count, min: 0}
+  - {id: DQ-10, type: min_value, column: failed_count, min: 0}
+  - {id: DQ-11, type: scope_range, column: completed_at}
+  - {id: DQ-12, type: unique_key, columns: [name]}

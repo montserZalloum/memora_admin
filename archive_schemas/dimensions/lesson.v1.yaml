@@ -1,0 +1,30 @@
+entity: lesson
+version: v1
+source_table: "tabMemora Lesson"
+id_column: name
+fields:
+  - lesson_id
+  - lesson_title
+  - topic
+  - topic_title
+  - subject
+  - track
+  - unit
+  - base_xp
+  - is_published
+  - is_reviewable
+query: >
+  SELECT
+    l.`name` AS lesson_id,
+    l.`lesson_title`,
+    l.`topic`,
+    t.`topic_title`,
+    l.`subject`,
+    l.`track`,
+    l.`unit`,
+    l.`base_xp`,
+    l.`is_published`,
+    l.`is_reviewable`
+  FROM `tabMemora Lesson` l
+  LEFT JOIN `tabMemora Topic` t ON l.`topic` = t.`name`
+  WHERE l.`name` IN ({placeholders})

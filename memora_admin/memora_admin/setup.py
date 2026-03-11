@@ -56,6 +56,10 @@ def before_migrate():
 	All schema changes MUST go through setup.py with proper safety checks.
 	"""
 	_guard_memory_state_schema()
+	try:
+		_ensure_task_log_archive_index()
+	except Exception as e:
+		print(f"[before_migrate] Task log archive index setup failed: {e}")
 
 
 def _guard_memory_state_schema():
@@ -776,6 +780,32 @@ def _ensure_challenge_query_indexes():
 			CREATE INDEX `{index_name}` ON `{table}` {columns}
 		""")
 		print(f"[after_migrate] Created INDEX {index_name} on {table}")
+
+
+def _ensure_task_log_archive_index():
+	"""Create covering index on tabMemora Task Run Log for archive eligibility queries.
+
+	Index: idx_task_log_archive (status, completed_at, name)
+
+	Supports the archive eligibility query:
+	  SELECT name FROM `tabMemora Task Run Log`
+	  WHERE status IN ('Success', 'Failed', 'Partial')
+	    AND completed_at IS NOT NULL
+	    AND completed_at < :cutoff
+	  ORDER BY completed_at LIMIT 50000
+
+	Including `name` allows index-only scans for the select-then-delete purge pattern.
+	Idempotent: uses ADD INDEX IF NOT EXISTS (MariaDB 10.1.4+).
+	"""
+	tables = frappe.db.get_tables()
+	if "tabMemora Task Run Log" not in tables:
+		return
+
+	frappe.db.sql_ddl("""
+		ALTER TABLE `tabMemora Task Run Log`
+		ADD INDEX IF NOT EXISTS `idx_task_log_archive` (`status`, `completed_at`, `name`)
+	""")
+	print("[before_migrate] Ensured idx_task_log_archive on tabMemora Task Run Log")
 
 
 def _ensure_archive_delete_audit_table():

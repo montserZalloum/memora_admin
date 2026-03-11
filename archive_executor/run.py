@@ -22,19 +22,28 @@ import time
 import traceback
 from datetime import datetime, timezone
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 
 from .config import Config
 from .db import atomic_update, get_connection
 from .exporter import export_dimension, export_fact_data
-from .ingestion import IngestionError, handoff_archive, ingest_archive_batch, verify_ingestion
+from .ingestion import (
+	IngestionError,
+	handoff_archive,
+	handoff_season,
+	ingest_archive_batch,
+	refresh_aggregates,
+	refresh_recent,
+	verify_ingestion,
+)
 from .locking import acquire_lock, release_lock
 from .logger import StructuredLogger
 from .manifest import build_manifest
 from .purge import cleanup_local_copies, purge_completed_jobs
-from .schemas import load_dimension_schema
+from .schemas import load_archive_type, load_dimension_schema
 from .transfer import TransferError, transfer_batch, verify_remote_checksums
-from .validator import validate_fact_quality, validate_file
+from .validator import validate_fact_quality, validate_fact_quality_generic, validate_file
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +121,21 @@ def _update_stage(config: Config, job_name: str, stage: str):
 	)
 
 
+def _read_stage(config: Config, job_name: str) -> str | None:
+	"""Read the current execution_stage from the DB (used in failure handlers)."""
+	conn = get_connection(config)
+	try:
+		with conn.cursor() as cursor:
+			cursor.execute(
+				"SELECT execution_stage FROM `tabMemora Archive Job` WHERE name = %s",
+				(job_name,),
+			)
+			row = cursor.fetchone()
+			return row["execution_stage"] if row else None
+	finally:
+		conn.close()
+
+
 def _claim_job(config: Config, job_name: str) -> bool:
 	"""Atomically claim a Pending job. Returns True if successfully claimed."""
 	sql = (
@@ -180,12 +204,25 @@ def _mark_completed(config: Config, job_name: str):
 	atomic_update(config, sql, (job_name,))
 
 
-def _fail_job(config: Config, job_name: str, error_msg: str, retry_count: int, current_status: str = "Processing"):
+def _fail_job(
+	config: Config,
+	job_name: str,
+	error_msg: str,
+	retry_count: int,
+	current_status: str = "Processing",
+	stage: str | None = None,
+):
 	"""Handle job failure with automatic retry up to 3 attempts.
 
 	If retry_count < 3: resets to the same state for retry with incremented retry_count.
 	If retry_count >= 3: permanently fails with completed_at timestamp.
+
+	stage: Optional execution stage at failure time (e.g. 'exporting_fact').
+	       Prepended to error_log for observability since execution_stage is
+	       cleared to NULL on retry reset (FR-014: failure phase logging).
 	"""
+	if stage:
+		error_msg = f"Phase: {stage}\n{error_msg}" if error_msg else f"Phase: {stage}"
 	error_msg = error_msg[:60000] if error_msg else ""
 
 	if retry_count < 3:
@@ -221,6 +258,47 @@ def _extract_ids_from_parquet(parquet_path: str, column_name: str) -> set:
 	return {val.as_py() for val in col if val.as_py() is not None}
 
 
+def _export_season_dimension_by_seq(
+	config: Config,
+	staging_dir: str,
+	dim_schema: dict,
+	season_seq: int,
+) -> tuple[str, int]:
+	"""Export season dimension by querying season_seq directly.
+
+	Used for season-scoped archive jobs where the season IS the scope,
+	rather than being derived from the player dimension.
+	"""
+	entity = dim_schema["entity"]
+	fields = dim_schema["fields"]
+	output_path = os.path.join(staging_dir, f"dim_{entity}.parquet")
+
+	conn = get_connection(config)
+	try:
+		with conn.cursor() as cursor:
+			cursor.execute(
+				"SELECT s.`name` AS season_id, s.`season_title`, "
+				"s.`start_date`, s.`end_date` "
+				"FROM `tabMemora Season` s WHERE s.`season_seq` = %s",
+				(season_seq,),
+			)
+			rows = cursor.fetchall()
+	finally:
+		conn.close()
+
+	if not rows:
+		empty_data = {f: [] for f in fields}
+		table = pa.table(empty_data)
+		pq.write_table(table, output_path)
+		return output_path, 0
+
+	col_data = {f: [row.get(f) for row in rows] for f in fields}
+	table = pa.table(col_data)
+	pq.write_table(table, output_path)
+
+	return output_path, len(rows)
+
+
 def _export_derived_dimensions(
 	config: Config,
 	log: StructuredLogger,
@@ -228,6 +306,7 @@ def _export_derived_dimensions(
 	meta: dict,
 	player_dim_path: str,
 	archive_scope: str,
+	query_filter: dict | None = None,
 ) -> list[dict]:
 	"""Export derived dimensions (season, plan) based on player dimension data.
 
@@ -246,6 +325,20 @@ def _export_derived_dimensions(
 
 		# Determine which column in the player dimension provides IDs
 		if entity == "season":
+			# Season-scoped jobs: query directly by season_seq
+			if query_filter and query_filter.get("filter_type") == "season":
+				dim_path, dim_row_count = _export_season_dimension_by_seq(
+					config, staging_dir, dim_schema, query_filter["season_seq"],
+				)
+				results.append({
+					"entity": entity,
+					"schema_version": schema_version,
+					"scope_source": "derived",
+					"path": dim_path,
+					"row_count": dim_row_count,
+				})
+				continue
+
 			ids = _extract_ids_from_parquet(player_dim_path, "season_id")
 			# Also include the archive_scope (which is a season ID)
 			if archive_scope:
@@ -340,8 +433,9 @@ def _process_pending_jobs(config: Config, log: StructuredLogger) -> tuple[int, i
 			_cleanup_staging(staging_dir)
 			error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
 			retry_count = job.get("retry_count", 0) or 0
+			failed_stage = _read_stage(config, job_name)
 			try:
-				_fail_job(config, job_name, error_msg, retry_count, "Processing")
+				_fail_job(config, job_name, error_msg, retry_count, "Processing", stage=failed_stage)
 			except Exception as fail_exc:
 				log.error("fail_job_error", job=job_name, original_error=str(exc), fail_error=str(fail_exc))
 			if retry_count < 3:
@@ -431,6 +525,7 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 		)
 
 	# Pass 2: Derived dimensions (season, plan) — scoped from player dimension
+	query_filter = meta.get("query_filter", {})
 	if player_dim_path:
 		derived_results = _export_derived_dimensions(
 			config=config,
@@ -439,6 +534,7 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 			meta=meta,
 			player_dim_path=player_dim_path,
 			archive_scope=job.get("archive_scope", ""),
+			query_filter=query_filter,
 		)
 		dimension_results.extend(derived_results)
 
@@ -446,23 +542,36 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 	_update_stage(config, job_name, "validating_dq")
 	log.info("validating_dq", job=job_name)
 
-	# Build paths for DQ validation
-	dim_player_path = None
-	dim_review_item_path = None
-	for dr in dimension_results:
-		if dr["entity"] == "player":
-			dim_player_path = dr["path"]
-		elif dr["entity"] == "review_item":
-			dim_review_item_path = dr["path"]
+	# Build dimension path map for DQ validation
+	dimension_path_map = {dr["entity"]: dr["path"] for dr in dimension_results}
 
-	query_filter = meta.get("query_filter", {})
-	dq_result = validate_fact_quality(
-		fact_path=fact_path,
-		dim_player_path=dim_player_path,
-		dim_review_item_path=dim_review_item_path,
-		scope_date_from=query_filter.get("date_from"),
-		scope_date_to=query_filter.get("date_to"),
-	)
+	# Dispatch to generic DQ engine if archive type YAML defines dq_rules; else legacy
+	archive_schema = None
+	try:
+		schema_ver = job.get("schema_version") or "v1"
+		archive_schema = load_archive_type(config.schema_registry_path, archive_type_key, schema_ver)
+	except FileNotFoundError:
+		pass
+
+	dq_rules = archive_schema.get("dq_rules") if archive_schema else None
+
+	if dq_rules:
+		dq_result = validate_fact_quality_generic(
+			fact_path=fact_path,
+			dq_rules=dq_rules,
+			dimension_paths=dimension_path_map,
+			scope_date_from=query_filter.get("date_from"),
+			scope_date_to=query_filter.get("date_to"),
+		)
+	else:
+		# Legacy: Practice Log (no dq_rules in YAML)
+		dq_result = validate_fact_quality(
+			fact_path=fact_path,
+			dim_player_path=dimension_path_map.get("player"),
+			dim_review_item_path=dimension_path_map.get("review_item"),
+			scope_date_from=query_filter.get("date_from"),
+			scope_date_to=query_filter.get("date_to"),
+		)
 
 	if not dq_result["passed"]:
 		failed_rules = [r["rule"] for r in dq_result["results"] if not r["passed"]]
@@ -629,8 +738,9 @@ def _process_exported_jobs(config: Config, log: StructuredLogger) -> int:
 		except Exception as exc:
 			error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
 			retry_count = job.get("retry_count", 0) or 0
+			failed_stage = _read_stage(config, job_name)
 			try:
-				_fail_job(config, job_name, error_msg, retry_count, "Exported")
+				_fail_job(config, job_name, error_msg, retry_count, "Exported", stage=failed_stage)
 			except Exception:
 				log.error("fail_job_error", job=job_name, error=str(exc))
 			if retry_count >= 3:
@@ -688,8 +798,9 @@ def _process_transferred_jobs(config: Config, log: StructuredLogger) -> int:
 		except Exception as exc:
 			error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
 			retry_count = job.get("retry_count", 0) or 0
+			failed_stage = _read_stage(config, job_name)
 			try:
-				_fail_job(config, job_name, error_msg, retry_count, "Transferred")
+				_fail_job(config, job_name, error_msg, retry_count, "Transferred", stage=failed_stage)
 			except Exception:
 				log.error("fail_job_error", job=job_name, error=str(exc))
 			if retry_count >= 3:
@@ -727,7 +838,28 @@ def _process_ingested_jobs(config: Config, log: StructuredLogger) -> int:
 			query_filter = meta.get("query_filter", {})
 
 			# Call handoff — analytics server removes overlapping live data
-			handoff_archive(config, remote_path, query_filter, log)
+			# Season-scoped jobs use season-based handoff (mirror cleanup by season_seq)
+			if query_filter.get("filter_type") == "season":
+				archive_type = job.get("archive_type") or "memory_state"
+				handoff_season(
+					config, remote_path, query_filter["season_seq"], archive_type, log,
+				)
+			else:
+				handoff_archive(config, remote_path, query_filter, log)
+
+			# Refresh analytics layers (best-effort — failure does not block Completed)
+			archive_type = job.get("archive_type") or "practice_log"
+			try:
+				_update_stage(config, job_name, "refreshing_recent")
+				refresh_recent(config, archive_type, log)
+			except Exception as refresh_exc:
+				log.warning("refresh_recent_failed", job=job_name, error=str(refresh_exc))
+
+			try:
+				_update_stage(config, job_name, "refreshing_aggregates")
+				refresh_aggregates(config, archive_type, log)
+			except Exception as refresh_exc:
+				log.warning("refresh_aggregates_failed", job=job_name, error=str(refresh_exc))
 
 			_mark_completed(config, job_name)
 			processed += 1
@@ -736,8 +868,9 @@ def _process_ingested_jobs(config: Config, log: StructuredLogger) -> int:
 		except Exception as exc:
 			error_msg = f"{exc.__class__.__name__}: {exc}\n{traceback.format_exc()}"
 			retry_count = job.get("retry_count", 0) or 0
+			failed_stage = _read_stage(config, job_name)
 			try:
-				_fail_job(config, job_name, error_msg, retry_count, "Ingested")
+				_fail_job(config, job_name, error_msg, retry_count, "Ingested", stage=failed_stage)
 			except Exception:
 				log.error("fail_job_error", job=job_name, error=str(exc))
 			if retry_count >= 3:

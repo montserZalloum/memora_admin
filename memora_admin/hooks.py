@@ -320,6 +320,14 @@ scheduler_events = {
 		"0 6 * * *": ["memora_admin.tasks.archive_notify.notify_failed_archive_jobs"],
 		# Daily at 07:00: Check for stale sync_paused on archive jobs
 		"0 7 * * *": ["memora_admin.tasks.archive_stale_pause.check_stale_archive_pauses"],
+		# Daily at 04:00: Clean up old terminal rows from Memora Build Queue
+		"0 4 * * *": ["memora_admin.tasks.build_cleanup.cleanup_build_queue"],
+		# Daily at 05:00: Delete old Memora Sync Log rows (7-day retention)
+		"0 5 * * *": ["memora_admin.tasks.sync_log_cleanup.cleanup_sync_logs"],
+		# Daily at 02:00: Archive eligible task run log rows
+		"0 2 * * *": ["memora_admin.tasks.archive_task_log.archive_task_log"],
+		# Daily at 03:30: Purge source rows for Synced task log batches
+		"30 3 * * *": ["memora_admin.tasks.purge_task_log.purge_task_log"],
 	}
 }
 
