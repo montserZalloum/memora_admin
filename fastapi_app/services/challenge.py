@@ -23,6 +23,7 @@ from fastapi_app.core.redis_keys import (
 	ch_progress_key,
 	ch_settings_key,
 	dirty_ch_progress_key,
+	stats_key,
 	interaction_buffer_key,
 )
 from fastapi_app.models.challenge import (
@@ -43,6 +44,7 @@ if TYPE_CHECKING:
 	from fastapi_app.services.frappe_client import FrappeClient
 	from fastapi_app.services.hierarchy import HierarchyService
 	from fastapi_app.services.plan import PlanService
+	from fastapi_app.services.progress import ProgressService
 	from fastapi_app.services.stats import StatsService
 
 logger = structlog.get_logger()
@@ -93,6 +95,7 @@ class ChallengeService:
 		settings: dict | None = None,
 		hierarchy_service: HierarchyService | None = None,
 		access_service: AccessService | None = None,
+		progress_service: ProgressService | None = None,
 		stats_service: StatsService | None = None,
 		plan_service: PlanService | None = None,
 	):
@@ -101,6 +104,7 @@ class ChallengeService:
 		self.settings = settings or {}
 		self.hierarchy_svc = hierarchy_service
 		self.access_svc = access_service
+		self.progress_svc = progress_service
 		self.stats_svc = stats_service
 		self.plan_svc = plan_service
 		self._rank_tiers_script = self.redis.register_script(_RANK_TIERS_ABOVE_LUA)
@@ -414,17 +418,128 @@ class ChallengeService:
 
 		return result
 
+	async def _recompute_subject_stats(
+		self,
+		player_id: str,
+		subject_id: str,
+		hierarchy,
+	) -> dict[str, str] | None:
+		"""Recompute one subject's stats from the progress bitmap when needed."""
+		if not self.stats_svc or not self.progress_svc:
+			return None
+
+		completed_bits = await self.progress_svc.get_completed_bits(
+			player_id,
+			subject_id,
+			hierarchy.bit_range,
+			hierarchy.version,
+		)
+		return await self.stats_svc.get_or_recompute(
+			user_id=player_id,
+			subject_id=subject_id,
+			version=hierarchy.version,
+			content_hash=hierarchy.content_hash,
+			completed_bits=completed_bits,
+			hierarchy=hierarchy,
+		)
+
+	async def _get_valid_stats(
+		self,
+		player_id: str,
+		subject_id: str,
+		hierarchy,
+	) -> dict[str, str] | None:
+		"""Return fresh stats for one subject, recomputing when the cache is stale."""
+		if not self.stats_svc:
+			return None
+
+		stats = await self.stats_svc.get_stats(player_id, subject_id, hierarchy.version)
+		if stats is not None and "total" in stats and stats.get("_content_hash") == hierarchy.content_hash:
+			return stats
+
+		return await self._recompute_subject_stats(player_id, subject_id, hierarchy)
+
+	async def _get_valid_stats_bulk(
+		self,
+		player_id: str,
+		hierarchies: dict[str, object],
+	) -> dict[str, dict[str, str] | None]:
+		"""Bulk-read fresh stats, recomputing only missing or stale subjects."""
+		if not hierarchies:
+			return {}
+
+		subject_ids = list(hierarchies)
+		if not self.stats_svc:
+			return {sid: None for sid in subject_ids}
+
+		pipe = self.redis.pipeline()
+		for sid in subject_ids:
+			hierarchy = hierarchies[sid]
+			pipe.hgetall(stats_key(player_id, sid, hierarchy.version))
+		raw_results = await pipe.execute()
+
+		result: dict[str, dict[str, str] | None] = {}
+		stale_ids: list[str] = []
+		for sid, raw in zip(subject_ids, raw_results):
+			hierarchy = hierarchies[sid]
+			if raw and "total" in raw and raw.get("_content_hash") == hierarchy.content_hash:
+				result[sid] = raw
+				continue
+			result[sid] = None
+			stale_ids.append(sid)
+
+		if stale_ids and self.progress_svc:
+			recomputed = await asyncio.gather(
+				*(self._recompute_subject_stats(player_id, sid, hierarchies[sid]) for sid in stale_ids)
+			)
+			for sid, stats in zip(stale_ids, recomputed):
+				result[sid] = stats
+
+		return result
+
+	async def _get_subject_access_map(
+		self,
+		player_id: str,
+		plan_id: str | None,
+		subject_ids: list[str],
+	) -> dict[str, bool]:
+		"""Resolve subject-level access once for all subjects in the summary response."""
+		if not subject_ids:
+			return {}
+		if not self.access_svc:
+			return {sid: True for sid in subject_ids}
+
+		grants, free_subjects = await asyncio.gather(
+			self.access_svc.get_player_grants(player_id),
+			self.access_svc.get_plan_free_subjects(plan_id),
+		)
+		return {
+			sid: (f"SUB-{sid}" in grants or sid in free_subjects)
+			for sid in subject_ids
+		}
+
 	@staticmethod
 	def _compute_subject_stats(
 		hierarchy,
 		progress_map: dict[str, dict],
+		stats: dict[str, str] | None,
+		subject_has_access: bool,
 	) -> tuple[int, int]:
-		"""Walk hierarchy and count total/stamped topics. Pure CPU, no I/O."""
+		"""Count visible challenge progress using the same rules as the detail view.
+
+		The list endpoint keeps the historical `stamped_topics` field name for
+		backward compatibility, but the landing card should not show `0` when the
+		first challenge topic is already open from normal-path completion. We
+		therefore count topics that are either explicitly stamped or currently open.
+		"""
 		total_topics = 0
 		stamped_topics = 0
+		free_units_set = set(hierarchy.free_units)
+		free_topics_set = set(hierarchy.free_topics)
 
 		for track in hierarchy.tracks:
 			for unit in track.units:
+				unit_is_free = unit.unit_id in free_units_set
 				prev_stamped = True
 				for topic in unit.topics:
 					if topic.mcq_count == 0:
@@ -435,12 +550,16 @@ class ChallengeService:
 					total_topics += 1
 					tp = progress_map.get(topic.topic_id, {})
 					is_stamped = bool(tp.get("stamped", 0))
+					topic_is_free = unit_is_free or topic.topic_id in free_topics_set
+					has_access = subject_has_access or topic_is_free
+					topic_completed = int(stats.get(f"{topic.topic_id}:completed", 0)) if stats else 0
+					topic_total = int(stats.get(f"{topic.topic_id}:total", 0)) if stats else 0
+					normal_path_complete = topic_total > 0 and topic_completed >= topic_total
+					is_open = has_access and normal_path_complete and prev_stamped
 
-					if is_stamped:
+					if is_stamped or is_open:
 						stamped_topics += 1
-						prev_stamped = True
-					else:
-						prev_stamped = False
+					prev_stamped = is_stamped
 
 		return total_topics, stamped_topics
 
@@ -491,7 +610,13 @@ class ChallengeService:
 		# Step 3: Bulk HGETALL all progress maps (1 pipeline)
 		progress_maps = await self._get_progress_maps_bulk(player_id, valid_ids)
 
-		# Step 4: Try ZSCORE from leaderboard for XP (1 pipeline, fast path)
+		# Step 4: Bulk-read fresh stats + subject access for summary state evaluation.
+		stats_maps, subject_access = await asyncio.gather(
+			self._get_valid_stats_bulk(player_id, valid_hierarchies),
+			self._get_subject_access_map(player_id, plan_id, valid_ids),
+		)
+
+		# Step 5: Try ZSCORE from leaderboard for XP (1 pipeline, fast path)
 		xp_from_leaderboard: dict[str, int | None] = {}
 		if season_id and plan_id:
 			lb_pipe = self.redis.pipeline()
@@ -501,13 +626,19 @@ class ChallengeService:
 			for sid, score in zip(valid_ids, lb_scores):
 				xp_from_leaderboard[sid] = int(score) if score is not None else None
 
-		# Step 5: CPU walk — compute summaries (no I/O)
+		# Step 6: CPU walk — compute summaries (no I/O)
 		summaries = []
 		for sid in valid_ids:
 			hierarchy = valid_hierarchies[sid]
 			progress_map = progress_maps.get(sid, {})
+			stats = stats_maps.get(sid)
 
-			total_topics, stamped_topics = self._compute_subject_stats(hierarchy, progress_map)
+			total_topics, stamped_topics = self._compute_subject_stats(
+				hierarchy,
+				progress_map,
+				stats,
+				subject_access.get(sid, True),
+			)
 
 			# XP: use leaderboard ZSCORE (fast path), fallback to summing progress map
 			total_xp = xp_from_leaderboard.get(sid)
@@ -572,9 +703,7 @@ class ChallengeService:
 		progress_map = await self._get_progress_map(player_id, subject_id)
 
 		# Get stats for topic completion check
-		stats = None
-		if self.stats_svc:
-			stats = await self.stats_svc.get_stats(player_id, subject_id, hierarchy.version)
+		stats = await self._get_valid_stats(player_id, subject_id, hierarchy)
 
 		# Access check is subject-level for this endpoint; avoid per-topic repetition.
 		subject_has_access = True

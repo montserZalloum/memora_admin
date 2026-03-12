@@ -414,6 +414,7 @@ async def get_challenge_service(redis_client: RedisClient) -> ChallengeService:
 	frappe_client = await get_frappe_client()
 	hierarchy_service = HierarchyService(redis_client, frappe_client)
 	access_service = AccessService(redis_client, frappe_client=frappe_client)
+	progress_service = ProgressService(redis_client, frappe_client=frappe_client)
 	stats_service = StatsService(redis_client)
 	plan_service = PlanService(redis_client, frappe_client)
 	return ChallengeService(
@@ -421,6 +422,7 @@ async def get_challenge_service(redis_client: RedisClient) -> ChallengeService:
 		frappe_client=frappe_client,
 		hierarchy_service=hierarchy_service,
 		access_service=access_service,
+		progress_service=progress_service,
 		stats_service=stats_service,
 		plan_service=plan_service,
 	)

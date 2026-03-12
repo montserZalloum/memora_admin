@@ -47,6 +47,166 @@ def _make_service(redis_client: redis.Redis, **kwargs) -> ChallengeService:
 
 
 # =============================================================================
+# Challenge subject summary tests
+# =============================================================================
+
+
+class TestChallengeSubjectSummaries:
+	"""Landing-page summary should mirror topic availability in Challenge Hub."""
+
+	def _make_mock_plan_svc(self, subject_id: str = "SUBJ-TEST-CH") -> AsyncMock:
+		from datetime import datetime
+
+		from fastapi_app.models.plan import PlanManifest, PlanSubject
+
+		mock_plan_svc = AsyncMock()
+		mock_plan_svc.get_manifest = AsyncMock(
+			return_value=PlanManifest(
+				version=1,
+				generated_at=datetime.now(),
+				plan_id="PLAN-TEST",
+				title="Test Plan",
+				subjects=[PlanSubject(id=subject_id, title="Challenge Subject", hierarchy_url="")],
+			)
+		)
+		return mock_plan_svc
+
+	def _make_hierarchy(self, topics: list[dict], subject_id: str = "SUBJ-TEST-CH") -> dict:
+		return {
+			"subject_id": subject_id,
+			"version": 1,
+			"is_linear": False,
+			"bit_range": 10,
+			"excluded_bits": [],
+			"free_units": [],
+			"free_topics": [],
+			"content_hash": "935fa06f",
+			"tracks": [
+				{
+					"track_id": "TRK-1",
+					"track_title": "Track 1",
+					"is_linear": False,
+					"units": [
+						{
+							"unit_id": "UNIT-1",
+							"unit_title": "Unit 1",
+							"is_linear": False,
+							"topics": topics,
+						}
+					],
+				}
+			],
+		}
+
+	def _make_topic(self, topic_id: str, bit_index: int) -> dict:
+		return {
+			"topic_id": topic_id,
+			"topic_title": topic_id,
+			"is_linear": False,
+			"is_free": False,
+			"mcq_count": 4,
+			"lessons": [{"lesson_id": f"L-{topic_id}-1", "bit_index": bit_index, "xp": 10, "max_hearts": 3}],
+		}
+
+	@pytest.mark.asyncio
+	async def test_counts_single_open_topic_in_summary(self, redis_client: redis.Redis):
+		"""A normal-path-complete first topic should count on the subject card."""
+		from fastapi_app.core.redis_keys import hierarchy_key, stats_key
+		from fastapi_app.services.hierarchy import HierarchyService
+		from fastapi_app.services.progress import ProgressService
+		from fastapi_app.services.stats import StatsService
+
+		player_id = "PLAYER-TEST-CH-SUM-1"
+		subject_id = "SUBJ-TEST-CH-SUM-1"
+		hierarchy_json = self._make_hierarchy([self._make_topic("T1", bit_index=0)], subject_id=subject_id)
+		await redis_client.set(hierarchy_key(subject_id), json.dumps(hierarchy_json), ex=3600)
+		await redis_client.hset(
+			stats_key(player_id, subject_id, 1),
+			mapping={
+				"_content_hash": "935fa06f",
+				"T1:completed": "1",
+				"T1:total": "1",
+				"UNIT-1:completed": "1",
+				"UNIT-1:total": "1",
+				"TRK-1:completed": "1",
+				"TRK-1:total": "1",
+				"completed": "1",
+				"total": "1",
+			},
+		)
+
+		mock_access = AsyncMock()
+		mock_access.get_player_grants = AsyncMock(return_value={f"SUB-{subject_id}"})
+		mock_access.get_plan_free_subjects = AsyncMock(return_value=set())
+
+		svc = ChallengeService(
+			redis_client=redis_client,
+			hierarchy_service=HierarchyService(redis_client, AsyncMock()),
+			access_service=mock_access,
+			progress_service=ProgressService(redis_client),
+			stats_service=StatsService(redis_client),
+			plan_service=self._make_mock_plan_svc(subject_id=subject_id),
+		)
+
+		result = await svc.get_challenge_subjects(player_id, "PLAN-TEST", "SEAS-TEST")
+
+		assert len(result) == 1
+		assert result[0].total_topics == 1
+		assert result[0].stamped_topics == 1
+
+	@pytest.mark.asyncio
+	async def test_does_not_count_later_topics_before_previous_stamp(self, redis_client: redis.Redis):
+		"""Summary should follow the same sequential gate as the detail endpoint."""
+		from fastapi_app.core.redis_keys import hierarchy_key, stats_key
+		from fastapi_app.services.hierarchy import HierarchyService
+		from fastapi_app.services.progress import ProgressService
+		from fastapi_app.services.stats import StatsService
+
+		player_id = "PLAYER-TEST-CH-SUM-2"
+		subject_id = "SUBJ-TEST-CH-SUM-2"
+		hierarchy_json = self._make_hierarchy([
+			self._make_topic("T1", bit_index=0),
+			self._make_topic("T2", bit_index=1),
+		], subject_id=subject_id)
+		await redis_client.set(hierarchy_key(subject_id), json.dumps(hierarchy_json), ex=3600)
+		await redis_client.hset(
+			stats_key(player_id, subject_id, 1),
+			mapping={
+				"_content_hash": "935fa06f",
+				"T1:completed": "1",
+				"T1:total": "1",
+				"T2:completed": "1",
+				"T2:total": "1",
+				"UNIT-1:completed": "2",
+				"UNIT-1:total": "2",
+				"TRK-1:completed": "2",
+				"TRK-1:total": "2",
+				"completed": "2",
+				"total": "2",
+			},
+		)
+
+		mock_access = AsyncMock()
+		mock_access.get_player_grants = AsyncMock(return_value={f"SUB-{subject_id}"})
+		mock_access.get_plan_free_subjects = AsyncMock(return_value=set())
+
+		svc = ChallengeService(
+			redis_client=redis_client,
+			hierarchy_service=HierarchyService(redis_client, AsyncMock()),
+			access_service=mock_access,
+			progress_service=ProgressService(redis_client),
+			stats_service=StatsService(redis_client),
+			plan_service=self._make_mock_plan_svc(subject_id=subject_id),
+		)
+
+		result = await svc.get_challenge_subjects(player_id, "PLAN-TEST", "SEAS-TEST")
+
+		assert len(result) == 1
+		assert result[0].total_topics == 2
+		assert result[0].stamped_topics == 1
+
+
+# =============================================================================
 # T033: Pure tests for _grade_attempt
 # =============================================================================
 
@@ -349,6 +509,7 @@ class TestEmptyTopicAutoStampChain:
 			"excluded_bits": [],
 			"free_units": [],
 			"free_topics": [],
+			"content_hash": "935fa06f",
 			"tracks": [
 				{
 					"track_id": "TRK-1",
@@ -397,7 +558,15 @@ class TestEmptyTopicAutoStampChain:
 
 		# Seed stats: all topics completed on normal path
 		from fastapi_app.core.redis_keys import stats_key
-		stats_data = {"T1:completed": "1", "T1:total": "1", "T4:completed": "1", "T4:total": "1"}
+		stats_data = {
+			"_content_hash": "935fa06f",
+			"T1:completed": "1",
+			"T1:total": "1",
+			"T4:completed": "1",
+			"T4:total": "1",
+			"completed": "2",
+			"total": "2",
+		}
 		await redis_client.hset(stats_key("PLAYER-TEST-CH", "SUBJ-TEST-CH", 1), mapping=stats_data)
 
 		# Mock access service (grant access)
