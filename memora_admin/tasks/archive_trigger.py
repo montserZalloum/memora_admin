@@ -112,7 +112,12 @@ def check_seasons_for_archive():
 
 
 def check_season_scoped_archives():
-	"""Scan ended seasons and create Pending archive jobs for season-scoped types."""
+	"""Scan all ended seasons and create Pending archive jobs for season-scoped types.
+
+	Unlike date-window archive jobs, season-scoped jobs do not apply a recency
+	cutoff. Delayed runs and schema-version backfills must still discover older
+	ended seasons that have no non-Failed job yet.
+	"""
 	today = frappe.utils.today()
 
 	ended_seasons = frappe.db.sql(

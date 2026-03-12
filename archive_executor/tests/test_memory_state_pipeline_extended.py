@@ -93,6 +93,30 @@ ALL_EXEC_JOBS = [
     EXEC_JOB_HVOL,
 ]
 
+
+def _scoped_process_pending_jobs(cfg, log, allowed_names=None):
+    """Call _process_pending_jobs but only process jobs in *allowed_names*.
+
+    Patches _get_jobs_by_status so the executor never touches real production
+    jobs that happen to be Pending in the shared database.  If *allowed_names*
+    is ``None`` the ``ALL_EXEC_JOBS`` set (plus the invalid-name test job) is
+    used.
+    """
+    if allowed_names is None:
+        allowed_names = set(ALL_EXEC_JOBS) | {"ARCH-MS-EXEC"}
+    else:
+        allowed_names = set(allowed_names)
+
+    _original = _get_jobs_by_status
+
+    def _filtered(config, status):
+        jobs = _original(config, status)
+        return [j for j in jobs if j["name"] in allowed_names]
+
+    with patch("archive_executor.run._get_jobs_by_status", side_effect=_filtered):
+        return _process_pending_jobs(cfg, log)
+
+
 # Seasons for executor tests (high seqs avoid production collision)
 EXEC_SEASON_SEQ_1  = 9910
 EXEC_SEASON_SEQ_2  = 9911
@@ -524,7 +548,7 @@ class TestExecutorRuntimeFlow:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            processed, _ = _process_pending_jobs(cfg, log)
+            processed, _ = _scoped_process_pending_jobs(cfg, log)
 
         # The invalid-name job must not have been claimed
         row = _get_archive_job(db_conn, "ARCH-MS-EXEC")
@@ -542,7 +566,7 @@ class TestExecutorRuntimeFlow:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            processed, failed = _process_pending_jobs(cfg, log)
+            processed, failed = _scoped_process_pending_jobs(cfg, log)
 
         assert processed >= 1
         assert failed == 0
@@ -562,7 +586,7 @@ class TestExecutorRuntimeFlow:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            processed, failed = _process_pending_jobs(cfg, log)
+            processed, failed = _scoped_process_pending_jobs(cfg, log)
 
         assert failed == 0
         db_conn.commit()
@@ -606,7 +630,7 @@ class TestFailureHandlingDuringExecution:
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
             with patch("archive_executor.run._export_job", side_effect=RuntimeError("simulated export error")):
-                _process_pending_jobs(cfg, log)
+                _scoped_process_pending_jobs(cfg, log)
 
         db_conn.commit()
         row = _get_archive_job(db_conn, EXEC_JOB_FAIL1)
@@ -626,7 +650,7 @@ class TestFailureHandlingDuringExecution:
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
             with patch("archive_executor.run._export_job", side_effect=RuntimeError("permanent error")):
-                _process_pending_jobs(cfg, log)
+                _scoped_process_pending_jobs(cfg, log)
 
         db_conn.commit()
         row = _get_archive_job(db_conn, EXEC_JOB_FAIL2)
@@ -681,7 +705,7 @@ class TestFailureHandlingDuringExecution:
             open(os.path.join(staging_dir, "test.parquet"), "w").close()
 
             with patch("archive_executor.run._export_job", side_effect=RuntimeError("export failure")):
-                _process_pending_jobs(cfg, log)
+                _scoped_process_pending_jobs(cfg, log)
 
         # Staging directory must be cleaned up after failure
         assert not os.path.isdir(staging_dir)
@@ -699,7 +723,7 @@ class TestFailureHandlingDuringExecution:
                 "archive_executor.run._export_job",
                 side_effect=RuntimeError("Data quality validation failed: DQ-05"),
             ):
-                _process_pending_jobs(cfg, log)
+                _scoped_process_pending_jobs(cfg, log)
 
         db_conn.commit()
         row = _get_archive_job(db_conn, EXEC_JOB_FAIL3)
@@ -1498,7 +1522,7 @@ class TestRealisticHighVolumeData:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            _process_pending_jobs(cfg, log)
+            _scoped_process_pending_jobs(cfg, log)
 
         db_conn.commit()
         row = _get_archive_job(db_conn, EXEC_JOB_HVOL)
@@ -1521,7 +1545,7 @@ class TestRealisticHighVolumeData:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            _process_pending_jobs(cfg, log)
+            _scoped_process_pending_jobs(cfg, log)
 
         db_conn.commit()
         row = _get_archive_job(db_conn, EXEC_JOB_HVOL)
@@ -1543,7 +1567,7 @@ class TestRealisticHighVolumeData:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            _process_pending_jobs(cfg, log)
+            _scoped_process_pending_jobs(cfg, log)
 
             db_conn.commit()
             row = _get_archive_job(db_conn, EXEC_JOB_HVOL)
@@ -1574,7 +1598,7 @@ class TestRealisticHighVolumeData:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            _process_pending_jobs(cfg, log)
+            _scoped_process_pending_jobs(cfg, log)
 
             db_conn.commit()
             row = _get_archive_job(db_conn, EXEC_JOB_HVOL)
@@ -1605,7 +1629,7 @@ class TestRealisticHighVolumeData:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            _process_pending_jobs(cfg, log)
+            _scoped_process_pending_jobs(cfg, log)
 
             db_conn.commit()
             row = _get_archive_job(db_conn, EXEC_JOB_HVOL)
@@ -1652,7 +1676,7 @@ class TestEndToEndBranches:
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
             with patch("archive_executor.run._export_job", side_effect=RuntimeError("export failure")):
-                processed, failed = _process_pending_jobs(cfg, log)
+                processed, failed = _scoped_process_pending_jobs(cfg, log)
 
         assert failed == 0  # retry_count=0 → not permanent failure
         db_conn.commit()
@@ -1675,7 +1699,7 @@ class TestEndToEndBranches:
                 "archive_executor.run._export_job",
                 side_effect=RuntimeError("Data quality validation failed: DQ-05"),
             ):
-                _process_pending_jobs(cfg, log)
+                _scoped_process_pending_jobs(cfg, log)
 
         db_conn.commit()
         row = _get_archive_job(db_conn, EXEC_JOB_E2E2)
@@ -1695,7 +1719,7 @@ class TestEndToEndBranches:
         log = _make_mock_log()
         with tempfile.TemporaryDirectory() as tmpdir:
             cfg = _config_with_archive_dir(integration_db_config, tmpdir)
-            _process_pending_jobs(cfg, log)
+            _scoped_process_pending_jobs(cfg, log)
 
         db_conn.commit()
         row = _get_archive_job(db_conn, EXEC_JOB_E2E3)

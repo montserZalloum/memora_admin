@@ -363,6 +363,17 @@ class TestCheckSeasonScopedArchives:
         sql: str = fake_frappe.db.sql.call_args[0][0]
         assert "season_seq" in sql
 
+    def test_sql_has_no_lower_bound_cutoff(self):
+        mod, fake_frappe = _load_archive_trigger()
+        fake_frappe.db.sql.return_value = []
+
+        mod.check_season_scoped_archives()
+
+        sql: str = fake_frappe.db.sql.call_args[0][0]
+        params = fake_frappe.db.sql.call_args[0][1]
+        assert "end_date >= %s" not in sql
+        assert len(params) == 1
+
     def test_job_doc_uses_season_scope_and_filter_type(self):
         mod, fake_frappe = _load_archive_trigger()
 

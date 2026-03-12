@@ -333,6 +333,8 @@ scheduler_events = {
 		"0 5 * * *": ["memora_admin.tasks.sync_log_cleanup.cleanup_sync_logs"],
 		# Daily at 05:30: Delete old Memora Voucher Redemption Log rows (100-day retention)
 		"30 5 * * *": ["memora_admin.tasks.voucher_log_cleanup.cleanup_voucher_redemption_logs"],
+		# Daily at 06:30: Delete old terminal Memora Archive Job rows
+		"30 6 * * *": ["memora_admin.tasks.archive_job_cleanup.cleanup_archive_jobs"],
 		# Daily at 02:00: Archive eligible task run log rows
 		"0 2 * * *": ["memora_admin.tasks.archive_task_log.archive_task_log"],
 		# Daily at 03:30: Purge source rows for Synced task log batches

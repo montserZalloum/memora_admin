@@ -1185,8 +1185,9 @@ class TestBatchLogging:
         FR-014 fields: batch ID (name), source_doctype, batch time range (job_meta),
         started_at, completed_at, row_count, status, retry_count.
         """
-        from archive_executor.run import _process_pending_jobs
+        from archive_executor.run import _process_pending_jobs, _get_jobs_by_status
         from archive_executor.logger import StructuredLogger
+        from unittest.mock import patch
 
         # Use a date range with no IL rows — triggers zero-row graceful completion
         date_from = "2099-12-01"
@@ -1233,8 +1234,16 @@ class TestBatchLogging:
             )
         db_conn.commit()
 
+        # Scope to only the test job so we never touch real Pending jobs
+        _allowed = {IL_TEST_JOB_LOGGING}
+        _orig_get = _get_jobs_by_status
+
+        def _filtered(config, status):
+            return [j for j in _orig_get(config, status) if j["name"] in _allowed]
+
         log = StructuredLogger(integration_db_config.log_path)
-        _process_pending_jobs(integration_db_config, log)
+        with patch("archive_executor.run._get_jobs_by_status", side_effect=_filtered):
+            _process_pending_jobs(integration_db_config, log)
 
         db_conn.commit()
         job = _get_archive_job(db_conn, IL_TEST_JOB_LOGGING)
