@@ -42,6 +42,8 @@ def config():
         sync_state_path="/tmp/sync_state/", sync_output_path="/tmp/sync_output/",
         sync_overlap_seconds=300, sync_remote_path="",
         purge_grace_days=7,
+        snapshot_output_path="/tmp/snapshots/",
+        remote_snapshot_path="",
     )
 
 

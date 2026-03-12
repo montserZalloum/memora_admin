@@ -38,6 +38,8 @@ def _make_config() -> Config:
         live_output_path="/tmp/live/", live_lock_file="/tmp/live.lock",
         sync_state_path="/tmp/sync_state/", sync_output_path="/tmp/sync_output/",
         sync_overlap_seconds=300, sync_remote_path="",
+        snapshot_output_path="/tmp/snapshots/",
+        remote_snapshot_path="",
         purge_grace_days=7,
     )
 
@@ -312,6 +314,104 @@ class TestCheckSeasonsForArchive:
         }
         with patch.object(mod, "_load_archive_types", return_value=[archive_type]):
             mod.check_seasons_for_archive()
+
+        fake_frappe.get_doc.assert_not_called()
+
+    def test_skips_season_scoped_archive_types(self):
+        mod, fake_frappe = _load_archive_trigger()
+
+        season = MagicMock()
+        season.name = "SEAS-2024-001"
+        season.start_date = "2024-01-01"
+        season.end_date = "2024-03-31"
+        fake_frappe.db.sql.return_value = [season]
+
+        archive_type = {
+            "archive_type": "memory_state",
+            "source_table": "tabMemora Memory State",
+            "version": "v1",
+            "fact_columns": [],
+            "dimensions": [],
+            "trigger_mode": "season",
+        }
+        with patch.object(mod, "_load_archive_types", return_value=[archive_type]):
+            mod.check_seasons_for_archive()
+
+        fake_frappe.get_doc.assert_not_called()
+
+
+class TestCheckSeasonScopedArchives:
+    """Season-scoped trigger must create season-keyed archive jobs."""
+
+    def test_sql_filters_is_published_zero(self):
+        mod, fake_frappe = _load_archive_trigger()
+        fake_frappe.db.sql.return_value = []
+
+        mod.check_season_scoped_archives()
+
+        sql: str = fake_frappe.db.sql.call_args[0][0]
+        assert "is_published" in sql
+        params = fake_frappe.db.sql.call_args[0][1]
+        assert "0" in sql or 0 in params
+
+    def test_sql_requests_season_seq(self):
+        mod, fake_frappe = _load_archive_trigger()
+        fake_frappe.db.sql.return_value = []
+
+        mod.check_season_scoped_archives()
+
+        sql: str = fake_frappe.db.sql.call_args[0][0]
+        assert "season_seq" in sql
+
+    def test_job_doc_uses_season_scope_and_filter_type(self):
+        mod, fake_frappe = _load_archive_trigger()
+
+        season = MagicMock()
+        season.name = "SEAS-2024-001"
+        season.season_seq = 7
+        season.end_date = "2024-03-31"
+        fake_frappe.db.sql.return_value = [season]
+        fake_frappe.db.exists.return_value = False
+        fake_frappe.get_doc.return_value = MagicMock()
+
+        archive_type = {
+            "archive_type": "memory_state",
+            "source_table": "tabMemora Memory State",
+            "version": "v1",
+            "scope_column": "season_seq",
+            "fact_columns": [],
+            "dimensions": [],
+            "trigger_mode": "season",
+        }
+        with patch.object(mod, "_load_archive_types", return_value=[archive_type]):
+            mod.check_season_scoped_archives()
+
+        doc_data: dict = fake_frappe.get_doc.call_args[0][0]
+        assert doc_data["archive_scope"] == "season_7"
+        assert doc_data["post_archive_action"] == "Delete"
+        meta = json.loads(doc_data["job_meta"])
+        assert meta["query_filter"]["filter_type"] == "season"
+        assert meta["query_filter"]["season_seq"] == 7
+        assert meta["query_filter"]["season_name"] == "SEAS-2024-001"
+
+    def test_skips_non_season_scoped_archive_types(self):
+        mod, fake_frappe = _load_archive_trigger()
+
+        season = MagicMock()
+        season.name = "SEAS-2024-001"
+        season.season_seq = 7
+        season.end_date = "2024-03-31"
+        fake_frappe.db.sql.return_value = [season]
+
+        archive_type = {
+            "archive_type": "practice_log",
+            "source_table": "tabMemora Practice Log",
+            "version": "v1",
+            "fact_columns": [],
+            "dimensions": [],
+        }
+        with patch.object(mod, "_load_archive_types", return_value=[archive_type]):
+            mod.check_season_scoped_archives()
 
         fake_frappe.get_doc.assert_not_called()
 

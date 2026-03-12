@@ -44,6 +44,10 @@ class Config:
 	# Purge safety
 	purge_grace_days: int
 
+	# Snapshots
+	snapshot_output_path: str
+	remote_snapshot_path: str
+
 	@classmethod
 	def from_env(cls) -> "Config":
 		return cls(
@@ -79,6 +83,9 @@ class Config:
 			sync_remote_path=os.environ.get("SYNC_REMOTE_PATH", ""),
 			# Purge safety
 			purge_grace_days=int(os.environ.get("PURGE_GRACE_DAYS", "7")),
+			# Snapshots
+			snapshot_output_path=os.environ.get("SNAPSHOT_OUTPUT_PATH", "/data/memora/snapshots/"),
+			remote_snapshot_path=os.environ.get("REMOTE_SNAPSHOT_PATH", ""),
 		)
 
 	def has_ssh_config(self) -> bool:

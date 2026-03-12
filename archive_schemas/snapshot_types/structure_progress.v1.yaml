@@ -1,0 +1,76 @@
+snapshot_type: structure_progress
+version: v1
+source_tables:
+  - "tabMemora Structure Progress"
+  - "tabMemora Player Profile"
+fact_columns:
+  - snapshot_date
+  - player_id
+  - plan_id
+  - subject_id
+  - completion_percentage
+fact_sql:
+  valid_rows: |
+    SELECT
+      %s AS snapshot_date,
+      sp.`player`                AS player_id,
+      pp.`plan`                  AS plan_id,
+      sp.`subject`               AS subject_id,
+      sp.`completion_percentage`
+    FROM `tabMemora Structure Progress` sp
+    INNER JOIN `tabMemora Player Profile` pp
+      ON sp.`player` = pp.`name`
+    WHERE pp.`plan` IS NOT NULL
+    ORDER BY sp.`player`, sp.`subject`
+  rejected_count: |
+    SELECT
+      SUM(CASE WHEN pp.`name` IS NULL THEN 1 ELSE 0 END) AS no_profile,
+      SUM(CASE WHEN pp.`name` IS NOT NULL AND pp.`plan` IS NULL THEN 1 ELSE 0 END) AS null_plan
+    FROM `tabMemora Structure Progress` sp
+    LEFT JOIN `tabMemora Player Profile` pp
+      ON sp.`player` = pp.`name`
+    WHERE pp.`name` IS NULL OR pp.`plan` IS NULL
+arrow_types:
+  snapshot_date: date32
+  player_id: utf8
+  plan_id: utf8
+  subject_id: utf8
+  completion_percentage: float64
+dq_rules:
+  - id: DQ-SP-01
+    type: not_null
+    column: snapshot_date
+    description: Every row must have a snapshot date
+  - id: DQ-SP-02
+    type: not_null
+    column: player_id
+    description: Every row must have a player
+  - id: DQ-SP-03
+    type: not_null
+    column: plan_id
+    description: Every row must have a plan
+  - id: DQ-SP-04
+    type: not_null
+    column: subject_id
+    description: Every row must have a subject
+  - id: DQ-SP-05
+    type: not_null
+    column: completion_percentage
+    description: Completion must be present
+  - id: DQ-SP-06
+    type: min_value
+    column: completion_percentage
+    min: 0
+    description: Percentage cannot be negative
+  - id: DQ-SP-07
+    type: max_value
+    column: completion_percentage
+    max: 100
+    description: Percentage cannot exceed 100
+  - id: DQ-SP-08
+    type: unique_key
+    columns:
+      - player_id
+      - plan_id
+      - subject_id
+    description: No duplicate grain within a snapshot

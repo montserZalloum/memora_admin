@@ -202,6 +202,11 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Archive delete audit table setup failed: {e}")
 
+	try:
+		_ensure_task_log_archive_batch_cleanup_index()
+	except Exception as e:
+		print(f"[after_migrate] Task log archive batch cleanup index setup failed: {e}")
+
 
 def _ensure_uuid_polyfill_functions():
 	"""Create UUID_TO_BIN and BIN_TO_UUID polyfill stored functions.
@@ -837,3 +842,29 @@ def _ensure_archive_delete_audit_table():
 			KEY `idx_timestamp` (`timestamp`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 	""")
+
+
+def _ensure_task_log_archive_batch_cleanup_index():
+	"""Create covering index for archive-batch metadata cleanup queries.
+
+	Index: idx_tlbatch_cleanup (status, purged_at, name)
+
+	Supports the cleanup selector:
+	  SELECT name FROM `tabMemora Task Log Archive Batch`
+	  WHERE status = 'Purged'
+	    AND purged_at < :cutoff
+	  ORDER BY purged_at, name
+	  LIMIT 500
+
+	Including `name` keeps the select-then-delete batch loop deterministic and
+	avoids OFFSET-based pagination on a growing table.
+	"""
+	tables = frappe.db.get_tables()
+	if "tabMemora Task Log Archive Batch" not in tables:
+		return
+
+	frappe.db.sql_ddl("""
+		ALTER TABLE `tabMemora Task Log Archive Batch`
+		ADD INDEX IF NOT EXISTS `idx_tlbatch_cleanup` (`status`, `purged_at`, `name`)
+	""")
+	print("[after_migrate] Ensured idx_tlbatch_cleanup on tabMemora Task Log Archive Batch")

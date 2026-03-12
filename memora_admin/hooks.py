@@ -315,15 +315,24 @@ scheduler_events = {
 		# Daily at 01:00: Delete expired Memora Announcements
 		"0 1 * * *": ["memora_admin.tasks.announcement_cleanup.cleanup_expired_announcements"],
 		# Daily at 01:20: Create archive jobs for ended seasons
-		"20 1 * * *": ["memora_admin.tasks.archive_trigger.check_seasons_for_archive"],
+		"20 1 * * *": [
+			"memora_admin.tasks.archive_trigger.check_seasons_for_archive",
+			"memora_admin.tasks.archive_trigger.check_season_scoped_archives",
+		],
 		# Daily at 06:00: Notify admins of permanently failed archive jobs
 		"0 6 * * *": ["memora_admin.tasks.archive_notify.notify_failed_archive_jobs"],
 		# Daily at 07:00: Check for stale sync_paused on archive jobs
 		"0 7 * * *": ["memora_admin.tasks.archive_stale_pause.check_stale_archive_pauses"],
 		# Daily at 04:00: Clean up old terminal rows from Memora Build Queue
 		"0 4 * * *": ["memora_admin.tasks.build_cleanup.cleanup_build_queue"],
+		# Daily at 04:30: Delete old Purged Memora Task Log Archive Batch rows
+		"30 4 * * *": [
+			"memora_admin.tasks.task_log_archive_batch_cleanup.cleanup_task_log_archive_batches"
+		],
 		# Daily at 05:00: Delete old Memora Sync Log rows (7-day retention)
 		"0 5 * * *": ["memora_admin.tasks.sync_log_cleanup.cleanup_sync_logs"],
+		# Daily at 05:30: Delete old Memora Voucher Redemption Log rows (100-day retention)
+		"30 5 * * *": ["memora_admin.tasks.voucher_log_cleanup.cleanup_voucher_redemption_logs"],
 		# Daily at 02:00: Archive eligible task run log rows
 		"0 2 * * *": ["memora_admin.tasks.archive_task_log.archive_task_log"],
 		# Daily at 03:30: Purge source rows for Synced task log batches

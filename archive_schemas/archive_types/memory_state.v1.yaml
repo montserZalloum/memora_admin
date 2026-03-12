@@ -1,6 +1,7 @@
 archive_type: memory_state
 version: v1
 source_table: "tabMemora Memory State"
+trigger_mode: season
 fact_columns:
   - name
   - season_seq

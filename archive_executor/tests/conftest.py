@@ -93,6 +93,8 @@ def integration_db_config() -> Config:
         sync_overlap_seconds=300,
         sync_remote_path="",
         purge_grace_days=7,
+        snapshot_output_path="/tmp/memora_inttest_snapshots/",
+        remote_snapshot_path="",
     )
 
 

@@ -4,7 +4,8 @@ Phase 0: Retry Failed batches — re-links each Failed batch to a non-Failed arc
          (creating one if needed), resets to Pending, and increments retry_count.
          Batches at MAX_RETRY_COUNT are skipped with a frappe.log_error() alert.
 Phase 1: Sync batch statuses — transitions Pending/Exported batches to Synced
-         when the linked archive job is Completed.
+         when the linked archive job is Completed, and reconciles to Purged when
+         the generic archive executor has already deleted the source rows.
 Phase 2: Create new archive jobs — calls scheduler.create_pending_jobs() for
          task_run_log archive type and creates a linked batch for each new job.
 
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 from datetime import date, timedelta
 
@@ -41,6 +43,25 @@ RETENTION_DAYS = 90
 MAX_RETRY_COUNT = 3
 
 
+def _normalize_file_checksum(value: str | None) -> str:
+    """Store checksums in the batch tracker as a bare SHA-256 hex digest."""
+    if not value:
+        return ""
+
+    checksum = str(value).strip()
+    if checksum.lower().startswith("sha256:"):
+        checksum = checksum.split(":", 1)[1]
+
+    if len(checksum) <= 64:
+        return checksum
+
+    match = re.search(r"[0-9a-fA-F]{64}", checksum)
+    if match:
+        return match.group(0)
+
+    return checksum[:64]
+
+
 def archive_task_log(triggered_by: str = "Scheduler") -> None:
     """Daily archive task for Memora Task Run Log.
 
@@ -52,8 +73,9 @@ def archive_task_log(triggered_by: str = "Scheduler") -> None:
         - Reset batch to Pending, increment retry_count, clear last_error
 
     Phase 1 — Sync batch statuses:
-      For each Pending/Exported batch with a linked archive job:
+      For each Pending/Exported/Synced batch with a linked archive job:
         - If archive job is Completed -> transition batch to Synced
+        - If archive job is Purged -> transition batch to Purged
 
     Phase 2 — Create new archive jobs:
       Calls scheduler.create_pending_jobs(config, "task_run_log", retention_days)
@@ -297,17 +319,18 @@ def _get_or_create_archive_job(source_doctype: str, archive_scope: str) -> str:
 
 
 def _sync_batch_statuses() -> tuple[int, int]:
-    """Scan Pending/Exported batches and transition based on linked archive job status.
+    """Scan active batches and transition based on linked archive job status.
 
     - Pending + job Exported/Transferred/Ingested → Exported (with file metadata)
     - Pending/Exported + job Completed → Synced (with file metadata)
+    - Pending/Exported/Synced + job Purged → Purged (with file metadata)
     - On exception: persist last_error to the batch record
 
     Returns (synced_count, failed_count).
     """
     batches = frappe.get_all(
         "Memora Task Log Archive Batch",
-        filters={"status": ["in", ["Pending", "Exported"]], "archive_job_id": ["is", "set"]},
+        filters={"status": ["in", ["Pending", "Exported", "Synced"]], "archive_job_id": ["is", "set"]},
         fields=["name", "archive_job_id", "status"],
     )
 
@@ -327,7 +350,7 @@ def _sync_batch_statuses() -> tuple[int, int]:
 
             job_status = job["status"]
             job_file_path = job.get("file_path") or ""
-            job_file_checksum = job.get("file_checksum") or ""
+            job_file_checksum = _normalize_file_checksum(job.get("file_checksum"))
             job_row_count = job.get("row_count") or 0
 
             if batch.status == "Pending" and job_status in ("Exported", "Transferred", "Ingested"):
@@ -340,6 +363,7 @@ def _sync_batch_statuses() -> tuple[int, int]:
                         "file_path": job_file_path,
                         "file_checksum": job_file_checksum,
                         "row_count": job_row_count,
+                        "last_error": "",
                     },
                 )
                 frappe.db.commit()
@@ -348,16 +372,18 @@ def _sync_batch_statuses() -> tuple[int, int]:
                     f"(job {batch.archive_job_id} {job_status})"
                 )
 
-            elif job_status == "Completed":
+            elif job_status == "Completed" and batch.status in ("Pending", "Exported"):
+                transition_time = now_datetime()
                 update = {
                     "status": "Synced",
-                    "synced_at": now_datetime(),
+                    "synced_at": transition_time,
                     "file_path": job_file_path,
                     "file_checksum": job_file_checksum,
                     "row_count": job_row_count,
+                    "last_error": "",
                 }
                 if batch.status == "Pending":
-                    update["exported_at"] = now_datetime()
+                    update["exported_at"] = transition_time
                 frappe.db.set_value(
                     "Memora Task Log Archive Batch",
                     batch.name,
@@ -368,6 +394,33 @@ def _sync_batch_statuses() -> tuple[int, int]:
                 logger.info(
                     f"{TASK_NAME}: batch {batch.name} -> Synced "
                     f"(job {batch.archive_job_id} Completed)"
+                )
+
+            elif job_status == "Purged":
+                transition_time = now_datetime()
+                update = {
+                    "status": "Purged",
+                    "purged_at": transition_time,
+                    "file_path": job_file_path,
+                    "file_checksum": job_file_checksum,
+                    "row_count": job_row_count,
+                    "last_error": "",
+                }
+                if batch.status == "Pending":
+                    update["exported_at"] = transition_time
+                    update["synced_at"] = transition_time
+                elif batch.status == "Exported":
+                    update["synced_at"] = transition_time
+                frappe.db.set_value(
+                    "Memora Task Log Archive Batch",
+                    batch.name,
+                    update,
+                )
+                frappe.db.commit()
+                synced_count += 1
+                logger.info(
+                    f"{TASK_NAME}: batch {batch.name} -> Purged "
+                    f"(job {batch.archive_job_id} Purged)"
                 )
 
         except Exception as e:

@@ -20,6 +20,7 @@ fact_sql:
       pl.`last_result`, pl.`attempt_count`, pl.`correct_count`,
       pp.`season` AS season_id, pp.`plan` AS plan_id
     FROM `tabMemora Practice Log` pl
+    INNER JOIN `tabMemora Review Item` ri ON pl.`item_id` = ri.`item_id`
     LEFT JOIN `tabMemora Player Profile` pp ON pl.`player_id` = pp.`name`
 sync_metadata:
   - {name: scope_type, type: "VARCHAR(20)"}

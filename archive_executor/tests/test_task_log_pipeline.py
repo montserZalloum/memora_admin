@@ -374,6 +374,7 @@ class TestArchiveTaskLog:
     def test_no_eligible_rows_creates_no_batches(self):
         """If create_pending_jobs returns [], no batches are created."""
         with (
+            patch(f"{_ARC}.Config.from_env", return_value=MagicMock()),
             patch(f"{_ARC}.create_pending_jobs", return_value=[]),
             patch("frappe.get_all", return_value=[]),
             patch("frappe.db.set_value"),
@@ -418,6 +419,7 @@ class TestArchiveTaskLog:
             return MagicMock()
 
         with (
+            patch(f"{_ARC}.Config.from_env", return_value=MagicMock()),
             patch(f"{_ARC}.create_pending_jobs", return_value=[new_job]),
             patch("frappe.get_all", return_value=[]),
             patch("frappe.get_doc", side_effect=_mock_get_doc),
@@ -448,7 +450,7 @@ class TestArchiveTaskLog:
                 return_value=_make_job_dict(
                     status="Completed",
                     file_path="/tmp/arch/job1",
-                    file_checksum="a" * 64,
+                    file_checksum=f"sha256:{'a' * 64}",
                     row_count=99,
                 ),
             ),
@@ -465,6 +467,7 @@ class TestArchiveTaskLog:
         assert "exported_at" in synced_vals  # Pending → Synced skips Exported
         assert synced_vals["row_count"] == 99
         assert synced_vals["file_path"] == "/tmp/arch/job1"
+        assert synced_vals["file_checksum"] == "a" * 64
 
     # Scenario 1 — Exported + Completed job → Synced (no exported_at re-set)
     def test_sync_exported_batch_to_synced(self):
@@ -487,6 +490,62 @@ class TestArchiveTaskLog:
         assert synced == 1
         synced_vals = next(v for v in set_calls if v.get("status") == "Synced")
         assert "exported_at" not in synced_vals  # already Exported, don't overwrite
+
+    def test_sync_pending_batch_to_purged_when_job_purged(self):
+        """_sync_batch_statuses: Pending batch whose job is Purged → transitions to Purged."""
+        batch = _make_batch(status="Pending", archive_job_id=TL_JOB_1)
+        set_calls = []
+
+        with (
+            patch("frappe.get_all", return_value=[batch]),
+            patch(
+                "frappe.db.get_value",
+                return_value=_make_job_dict(
+                    status="Purged",
+                    file_path="/tmp/arch/job1",
+                    file_checksum=f"sha256:{'d' * 64}",
+                    row_count=12,
+                ),
+            ),
+            patch("frappe.db.set_value", side_effect=lambda *a: set_calls.append(a[2])),
+            patch("frappe.db.commit"),
+            patch("frappe.log_error"),
+        ):
+            synced, failed = _sync_batch_statuses()
+
+        assert synced == 1
+        assert failed == 0
+        purged_vals = next(v for v in set_calls if v.get("status") == "Purged")
+        assert "exported_at" in purged_vals
+        assert "synced_at" in purged_vals
+        assert "purged_at" in purged_vals
+        assert purged_vals["row_count"] == 12
+        assert purged_vals["file_path"] == "/tmp/arch/job1"
+        assert purged_vals["file_checksum"] == "d" * 64
+
+    def test_sync_synced_batch_to_purged_when_job_purged(self):
+        """_sync_batch_statuses: Synced batch whose job is Purged → transitions to Purged."""
+        batch = _make_batch(status="Synced", archive_job_id=TL_JOB_1)
+        set_calls = []
+
+        with (
+            patch("frappe.get_all", return_value=[batch]),
+            patch(
+                "frappe.db.get_value",
+                return_value=_make_job_dict(status="Purged", row_count=5),
+            ),
+            patch("frappe.db.set_value", side_effect=lambda *a: set_calls.append(a[2])),
+            patch("frappe.db.commit"),
+            patch("frappe.log_error"),
+        ):
+            synced, failed = _sync_batch_statuses()
+
+        assert synced == 1
+        assert failed == 0
+        purged_vals = next(v for v in set_calls if v.get("status") == "Purged")
+        assert "purged_at" in purged_vals
+        assert "synced_at" not in purged_vals
+        assert "exported_at" not in purged_vals
 
     # Pending + in-flight Exported job → batch transitions to Exported
     def test_sync_pending_batch_to_exported_when_job_in_flight(self):
@@ -527,6 +586,7 @@ class TestArchiveTaskLog:
             return MagicMock()
 
         with (
+            patch(f"{_ARC}.Config.from_env", return_value=MagicMock()),
             patch(f"{_ARC}.create_pending_jobs", return_value=[]),
             patch("frappe.get_all", return_value=[]),
             patch("frappe.get_doc", side_effect=_mock_get_doc),
@@ -670,6 +730,7 @@ class TestArchiveTaskLog:
                 batch_state.update(vals)
 
         with (
+            patch(f"{_ARC}.Config.from_env", return_value=MagicMock()),
             patch("frappe.get_all", side_effect=_get_all),
             patch(
                 "frappe.db.get_value",
