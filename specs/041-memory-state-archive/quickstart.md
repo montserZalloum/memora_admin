@@ -45,8 +45,7 @@
 ### Phase 6: Analytics-Side Extensions
 
 1. Extend `handoff` command with `--season-seq` mode
-2. Add `mirror-status` command
-3. Create `memory_state_current` DuckDB table
+2. Create `memory_state_current` DuckDB table
 4. Ensure `ingest-live` upserts correctly for composite PK `(name, season_seq)`
 
 ### Phase 7: Integration Testing

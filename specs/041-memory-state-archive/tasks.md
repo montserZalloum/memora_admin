@@ -108,7 +108,7 @@
 
 ### Implementation for User Story 5
 
-- [x] T016 [US5] Add `get_mirror_status()` function to `archive_executor/ingestion.py` calling `memora-analytics mirror-status --archive-type memory_state` via SSH — returns per-season row counts, latest modified timestamps for current mirror, and archived season Parquet locations
+- [x] ~~T016 [US5] Add `get_mirror_status()` function~~ — **Removed from production contract**: `mirror-status` is not called by the production executor pipeline
 
 **Checkpoint**: Per-season metadata is observable — operators can monitor sync state, mirror state, and archive state independently for each season
 
@@ -208,7 +208,7 @@ Task: T011 "Modify _export_job() for season scope"
 | Archive ingest | `run.py` (existing) | `ingest-archive` |
 | Mirror cleanup | `ingestion.py` → `run.py` | `handoff --season-seq` |
 | Archive verify | `run.py` (existing) | `verify` |
-| Mirror monitoring | `ingestion.py` | `mirror-status` |
+| ~~Mirror monitoring~~ | ~~`ingestion.py`~~ | ~~`mirror-status`~~ (removed from production contract) |
 
 ---
 

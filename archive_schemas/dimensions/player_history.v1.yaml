@@ -1,0 +1,34 @@
+entity: player_history
+version: v1
+source_table: "tabMemora Player Plan History"
+id_column: name
+fields:
+  - player_id
+  - plan_id
+  - plan_name
+  - grade
+  - major
+  - season_id
+  - valid_from
+  - valid_to
+  - is_current
+  - trigger_reason
+query: >
+  SELECT
+    h.`player` AS player_id,
+    h.`new_plan` AS plan_id,
+    ap.`plan_name`,
+    h.`new_grade` AS grade,
+    h.`new_major` AS major,
+    h.`new_season` AS season_id,
+    h.`changed_at` AS valid_from,
+    LEAD(h.`changed_at`) OVER (
+      PARTITION BY h.`player` ORDER BY h.`changed_at`
+    ) AS valid_to,
+    CASE WHEN LEAD(h.`changed_at`) OVER (
+      PARTITION BY h.`player` ORDER BY h.`changed_at`
+    ) IS NULL THEN 1 ELSE 0 END AS is_current,
+    h.`trigger_reason`
+  FROM `tabMemora Player Plan History` h
+  LEFT JOIN `tabMemora Academic Plan` ap ON h.`new_plan` = ap.`name`
+  ORDER BY h.`player`, h.`changed_at`

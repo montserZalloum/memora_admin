@@ -41,32 +41,9 @@ memora-analytics handoff --archive-batch-dir DIR --season-seq N --archive-type m
 
 **Backward compatibility**: The existing date-based mode continues to work unchanged. The command detects the mode from the presence of `--season-seq` vs `--from`/`--to`.
 
-## New Command: mirror-status
+## ~~New Command: mirror-status~~ (Removed from production contract)
 
-Reports the current state of the Memory State mirror for monitoring.
-
-```
-memora-analytics mirror-status --archive-type memory_state
-```
-
-**Output (JSON)**:
-```json
-{
-  "status": "ok",
-  "archive_type": "memory_state",
-  "current_mirror": {
-    "table": "memory_state_current",
-    "total_rows": 450000,
-    "seasons": [
-      {"season_seq": 3, "row_count": 200000, "latest_modified": "2026-03-11T14:30:00"},
-      {"season_seq": 4, "row_count": 250000, "latest_modified": "2026-03-11T14:45:00"}
-    ]
-  },
-  "archived_seasons": [
-    {"season_seq": 1, "parquet_path": "archive/memory_state/season_1/", "row_count": 180000},
-    {"season_seq": 2, "parquet_path": "archive/memory_state/season_2/", "row_count": 210000}
-  ]
-}
+> `mirror-status` is an analytics-only utility for manual monitoring. It is not called by the production executor pipeline and is not part of the production-to-analytics integration contract.
 ```
 
 ## Modified Executor Flow for Memory State

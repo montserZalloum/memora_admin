@@ -1351,6 +1351,15 @@ CH_PROGRESS_SCAN_PATTERN = "memora:ch:progress:*"
 """SCAN pattern for all challenge progress keys (used by season reset)."""
 
 
+def player_ch_progress_pattern(player_id: str) -> str:
+	"""SCAN pattern matching all challenge progress hashes for a player.
+
+	Matches keys produced by ch_progress_key(player_id, *).
+	Consumers: season_change_sync.on_player_profile_season_changed()
+	"""
+	return f"memora:ch:progress:{player_id}:*"
+
+
 def ch_leaderboard_scan_pattern(season_id: str) -> str:
 	"""SCAN pattern for Challenge leaderboard keys in one season."""
 	return f"{LB_PREFIX}:ch:{season_id}:*"

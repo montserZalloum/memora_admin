@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "memora-analytics"
+version = "0.1.0"
+description = "Memora Analytics CLI — DuckDB-based data lake management"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+    "duckdb>=1.0",
+    "pyarrow>=15.0",
+    "pyyaml>=6.0",
+]
+
+[project.scripts]
+memora-analytics = "analytics_cli.__main__:cli"
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["analytics_cli*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".."]

@@ -414,58 +414,15 @@ def _process_pending_live_jobs(config: Config, log: StructuredLogger) -> int:
 			)
 
 			if fact_row_count == 0:
-				# Publish the empty dataset so analytics replaces any stale
-				# non-empty snapshot with a correct empty state.
-				fact_validation = validate_file(fact_path, fact_row_count)
-				if not fact_validation["valid"]:
-					raise RuntimeError(f"Empty fact file validation failed: {fact_validation['errors']}")
-
-				build_manifest(
-					staging_dir=staging_dir,
-					batch_id=job_name,
-					dataset_key=f"{sync_type_name}_live",
-					kind="live",
-					schema_version="1.0",
-					source="memora_admin",
-					files=[{
-						"role": "fact",
-						"entity": sync_type_name,
-						"filename": fact_validation["filename"],
-						"row_count": 0,
-						"checksum": fact_validation["checksum"],
-						"size_bytes": fact_validation["size_bytes"],
-					}],
-				)
-
-				_update_stage(config, job_name, "publishing")
-				if os.path.isdir(final_dir):
-					old_dir = final_dir + ".old"
-					if os.path.isdir(old_dir):
-						shutil.rmtree(old_dir)
-					os.rename(final_dir, old_dir)
-				else:
-					old_dir = None
-				try:
-					os.rename(staging_dir, final_dir)
-				except OSError:
-					shutil.copytree(staging_dir, final_dir)
-					shutil.rmtree(staging_dir)
-				if old_dir and os.path.isdir(old_dir):
-					shutil.rmtree(old_dir, ignore_errors=True)
-
-				os.chmod(final_dir, 0o700)
-				for entry in os.listdir(final_dir):
-					os.chmod(os.path.join(final_dir, entry), 0o600)
-
+				# No rows to sync — skip transfer/ingest and complete immediately.
+				# The analytics server manifest validation rejects row_count=0,
+				# so there is nothing useful to transfer.
+				shutil.rmtree(staging_dir, ignore_errors=True)
 				duration = time.monotonic() - start_time
-				_mark_exported(
-					config, job_name, 0, final_dir,
-					fact_validation["checksum"], fact_validation["size_bytes"],
-					round(duration, 2),
-				)
+				_mark_completed_empty(config, job_name, round(duration, 2))
 				processed += 1
 				log.info(
-					"live_job_exported_empty",
+					"live_job_completed_empty",
 					job=job_name,
 					reason="fact_has_0_rows_after_exclusions",
 					duration_s=round(duration, 2),

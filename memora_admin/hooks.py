@@ -156,7 +156,10 @@ fixtures = [
 doc_events = {
 	"Memora Season": {
 		"after_insert": "memora_admin.events.access_sync.on_season_updated",
-		"on_update": "memora_admin.events.access_sync.on_season_updated",
+		"on_update": [
+			"memora_admin.events.access_sync.on_season_updated",
+			"memora_admin.events.dimension_sync.on_season_changed",
+		],
 		"on_trash": "memora_admin.events.access_sync.on_season_deleted",
 	},
 	"Memora Player Subscription": {
@@ -165,11 +168,16 @@ doc_events = {
 		"on_trash": "memora_admin.events.access_sync.on_subscription_deleted",
 	},
 	"Memora Player Profile": {
-		"after_insert": "memora_admin.events.profile_sync.on_player_profile_updated",
+		"after_insert": [
+			"memora_admin.events.profile_sync.on_player_profile_updated",
+			"memora_admin.events.dimension_sync.on_player_changed",
+		],
 		"on_update": [
 			"memora_admin.events.device_sync.on_player_profile_update",
 			"memora_admin.events.profile_sync.on_player_profile_updated",
 			"memora_admin.events.plan_change_sync.on_player_profile_plan_changed",
+			"memora_admin.events.season_change_sync.on_player_profile_season_changed",
+			"memora_admin.events.dimension_sync.on_player_changed",
 		],
 	},
 	# Product catalog cache invalidation
@@ -219,6 +227,7 @@ doc_events = {
 		"on_update": [
 			"memora_admin.events.build_trigger.on_content_updated",
 			"memora_admin.events.review_item_sync.on_lesson_save",
+			"memora_admin.events.dimension_sync.on_lesson_changed",
 		],
 		"on_trash": [
 			"memora_admin.events.build_trigger.on_content_updated",
@@ -227,7 +236,10 @@ doc_events = {
 	},
 	# Plan build trigger events (debounced)
 	"Memora Academic Plan": {
-		"on_update": "memora_admin.events.build_trigger.on_plan_updated",
+		"on_update": [
+			"memora_admin.events.build_trigger.on_plan_updated",
+			"memora_admin.events.dimension_sync.on_plan_changed",
+		],
 		"on_trash": "memora_admin.events.build_trigger.on_plan_deleted",
 	},
 	"Memora Plan Subject": {
@@ -260,6 +272,10 @@ doc_events = {
 		"after_insert": "memora_admin.events.announcement_sync.on_announcement_changed",
 		"on_update": "memora_admin.events.announcement_sync.on_announcement_changed",
 		"on_trash": "memora_admin.events.announcement_sync.on_announcement_changed",
+	},
+	# Analytics dimension refresh
+	"Memora Review Item": {
+		"on_update": "memora_admin.events.dimension_sync.on_review_item_changed",
 	},
 }
 
@@ -339,6 +355,8 @@ scheduler_events = {
 		"0 2 * * *": ["memora_admin.tasks.archive_task_log.archive_task_log"],
 		# Daily at 03:30: Purge source rows for Synced task log batches
 		"30 3 * * *": ["memora_admin.tasks.purge_task_log.purge_task_log"],
+		# Daily at 04:15: Full dimension reconciliation (safety net for missed events)
+		"15 4 * * *": ["memora_admin.tasks.dimension_sync.reconcile_dimensions"],
 	}
 }
 

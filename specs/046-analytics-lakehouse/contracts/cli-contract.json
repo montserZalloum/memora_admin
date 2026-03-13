@@ -1,0 +1,230 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "memora-analytics CLI Contract",
+  "description": "JSON response schemas for each analytics CLI command. All commands write JSON to stdout and logs to stderr. Exit code 0 = success, non-zero = failure.",
+  "commands": {
+    "ingest-archive": {
+      "usage": "memora-analytics ingest-archive --batch-dir DIR",
+      "description": "Load archive Parquet files from batch directory into DuckDB archive views. Creates/updates Hive-partitioned lake directory.",
+      "args": {
+        "--batch-dir": {
+          "type": "string",
+          "required": true,
+          "description": "Path to transferred batch directory containing Parquet files and manifest.json"
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["status", "batches_ok", "batches_error"],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": ["ok", "error"]
+          },
+          "batches_ok": {
+            "type": "integer",
+            "description": "Number of successfully ingested Parquet files"
+          },
+          "batches_error": {
+            "type": "integer",
+            "description": "Number of failed ingestions"
+          },
+          "batches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string" },
+                "rows": { "type": "integer" },
+                "status": { "type": "string", "enum": ["ok", "error"] },
+                "error": { "type": "string" },
+                "destination": { "type": "string", "description": "Final Hive partition path" }
+              }
+            }
+          },
+          "views_refreshed": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "List of DuckDB views that were re-created"
+          },
+          "duration_ms": { "type": "integer" },
+          "error": { "type": "string" }
+        }
+      }
+    },
+
+    "ingest-live": {
+      "usage": "memora-analytics ingest-live --batch-dir DIR",
+      "description": "Load live snapshot Parquet into DuckDB live table via atomic staging-swap.",
+      "args": {
+        "--batch-dir": {
+          "type": "string",
+          "required": true,
+          "description": "Path to transferred live snapshot directory"
+        }
+      },
+      "response": {
+        "type": "object",
+        "required": ["status", "batches_ok", "batches_error"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "error"] },
+          "batches_ok": { "type": "integer" },
+          "batches_error": { "type": "integer" },
+          "batches": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": { "type": "string" },
+                "rows": { "type": "integer" },
+                "status": { "type": "string" }
+              }
+            }
+          },
+          "duration_ms": { "type": "integer" },
+          "error": { "type": "string" }
+        }
+      }
+    },
+
+    "handoff (date-range)": {
+      "usage": "memora-analytics handoff --archive-batch-dir DIR --date-column COL --from DATE --to DATE",
+      "description": "Remove archived date range from live DuckDB tables to prevent double-counting.",
+      "args": {
+        "--archive-batch-dir": { "type": "string", "required": true },
+        "--date-column": { "type": "string", "required": true },
+        "--from": { "type": "string", "format": "date", "required": true },
+        "--to": { "type": "string", "format": "date", "required": true }
+      },
+      "response": {
+        "type": "object",
+        "required": ["status", "mode"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "error"] },
+          "mode": { "type": "string", "const": "date_range" },
+          "rows_removed": { "type": "integer" },
+          "date_column": { "type": "string" },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "duration_ms": { "type": "integer" },
+          "error": { "type": "string" }
+        }
+      }
+    },
+
+    "handoff (season)": {
+      "usage": "memora-analytics handoff --archive-batch-dir DIR --season-seq N --archive-type TYPE",
+      "description": "Remove archived season from current mirror table.",
+      "args": {
+        "--archive-batch-dir": { "type": "string", "required": true },
+        "--season-seq": { "type": "integer", "required": true },
+        "--archive-type": { "type": "string", "required": true }
+      },
+      "response": {
+        "type": "object",
+        "required": ["status", "mode"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "error"] },
+          "mode": { "type": "string", "const": "season" },
+          "season_seq": { "type": "integer" },
+          "rows_removed": { "type": "integer" },
+          "duration_ms": { "type": "integer" },
+          "error": { "type": "string" }
+        }
+      }
+    },
+
+    "refresh-recent": {
+      "usage": "memora-analytics refresh-recent --archive-type TYPE --window-days N",
+      "description": "Rebuild rolling recent-N-days materialized table from combined view.",
+      "args": {
+        "--archive-type": { "type": "string", "required": true },
+        "--window-days": { "type": "integer", "default": 90 }
+      },
+      "response": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "error"] },
+          "row_count": { "type": "integer" },
+          "window_days": { "type": "integer" },
+          "oldest_record": { "type": "string", "format": "date-time" },
+          "duration_ms": { "type": "integer" },
+          "error": { "type": "string" }
+        }
+      }
+    },
+
+    "refresh-aggregates": {
+      "usage": "memora-analytics refresh-aggregates --archive-type TYPE",
+      "description": "Rebuild daily and monthly aggregate tables from combined view.",
+      "args": {
+        "--archive-type": { "type": "string", "required": true }
+      },
+      "response": {
+        "type": "object",
+        "required": ["status"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "error"] },
+          "daily_rows": { "type": "integer" },
+          "monthly_rows": { "type": "integer" },
+          "duration_ms": { "type": "integer" },
+          "error": { "type": "string" }
+        }
+      }
+    },
+
+    "verify": {
+      "usage": "memora-analytics verify",
+      "description": "Run all health checks and return structured results.",
+      "args": {},
+      "response": {
+        "type": "object",
+        "required": ["status", "checks"],
+        "properties": {
+          "status": { "type": "string", "enum": ["ok", "warning", "error"] },
+          "checks": {
+            "type": "object",
+            "properties": {
+              "duplicates": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["pass", "fail"] },
+                  "duplicate_count": { "type": "integer" },
+                  "sample_rows": { "type": "array" }
+                }
+              },
+              "checksums": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["pass", "fail"] },
+                  "files_checked": { "type": "integer" },
+                  "mismatches": { "type": "array" }
+                }
+              },
+              "dimension_coverage": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["pass", "fail"] },
+                  "missing_players": { "type": "integer" },
+                  "sample_ids": { "type": "array" }
+                }
+              },
+              "partition_sizes": {
+                "type": "object",
+                "properties": {
+                  "status": { "type": "string", "enum": ["pass", "warning"] },
+                  "total_partitions": { "type": "integer" },
+                  "undersized_partitions": { "type": "integer" },
+                  "details": { "type": "array" }
+                }
+              }
+            }
+          },
+          "duration_ms": { "type": "integer" },
+          "error": { "type": "string" }
+        }
+      }
+    }
+  }
+}
