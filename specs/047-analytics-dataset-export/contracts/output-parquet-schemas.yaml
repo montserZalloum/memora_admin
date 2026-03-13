@@ -1,0 +1,185 @@
+# Analytics Dataset Export — Output Parquet Contracts
+# Version: 1.0.0
+# These define the guaranteed schema for each output file produced by analytics_exporter.
+# All files are written to {ANALYTICS_OUTPUT_PATH}/ (default: analytics_exports/).
+
+datasets:
+
+  - dataset: practice_log
+    output_file: practice_log.parquet
+    mode: incremental_watermark          # Full on first run; delta-merge on subsequent runs
+    watermark_column: last_seen_at
+    primary_key: [player_id, item_id]
+    columns:
+      - {name: player_id,     type: string,        nullable: false, notes: "Student identifier"}
+      - {name: item_id,       type: string,        nullable: false, notes: "Review item FK → item_mapping.item_id"}
+      - {name: attempt_count, type: int64,         nullable: false, notes: "Total review attempts; >= 0"}
+      - {name: correct_count, type: int64,         nullable: false, notes: "Correct attempts; 0 is valid"}
+      - {name: first_seen_at, type: timestamp[us], nullable: false, notes: "First review timestamp"}
+      - {name: last_seen_at,  type: timestamp[us], nullable: false, notes: "Last review timestamp; watermark column"}
+      - {name: last_result,   type: string,        nullable: false, notes: "Correct or Incorrect"}
+    dq_rules:
+      - {id: DQ-PL-01, type: unique_key, columns: [player_id, item_id]}
+      - {id: DQ-PL-02, type: not_null,   column: player_id}
+      - {id: DQ-PL-03, type: not_null,   column: item_id}
+      - {id: DQ-PL-04, type: min_value,  column: attempt_count, min: 0}
+      - {id: DQ-PL-05, type: min_value,  column: correct_count, min: 0}
+
+  - dataset: item_mapping
+    output_file: item_mapping.parquet
+    mode: full_snapshot
+    primary_key: [item_id]
+    columns:
+      - {name: item_id,    type: string, nullable: false, notes: "Review item PK"}
+      - {name: lesson_id,  type: string, nullable: false, notes: "FK → lessons.id"}
+      - {name: topic_id,   type: string, nullable: false, notes: "FK → topics.id"}
+      - {name: unit_id,    type: string, nullable: false, notes: "FK → units.id"}
+      - {name: track_id,   type: string, nullable: false, notes: "FK → tracks.id"}
+      - {name: subject_id, type: string, nullable: false, notes: "FK → subjects.id"}
+    dq_rules:
+      - {id: DQ-IM-01, type: unique_key, columns: [item_id]}
+      - {id: DQ-IM-02, type: not_null,   column: item_id}
+      - {id: DQ-IM-03, type: not_null,   column: lesson_id}
+      - {id: DQ-IM-04, type: not_null,   column: subject_id}
+
+  - dataset: subjects
+    output_file: subjects.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,   type: string, nullable: false, notes: "tabMemora Subject.name"}
+      - {name: name, type: string, nullable: false, notes: "subject_title"}
+    dq_rules:
+      - {id: DQ-SU-01, type: unique_key, columns: [id]}
+      - {id: DQ-SU-02, type: not_null,   column: id}
+      - {id: DQ-SU-03, type: min_rows,   min: 1}
+
+  - dataset: tracks
+    output_file: tracks.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,         type: string, nullable: false, notes: "tabMemora Track.name"}
+      - {name: name,       type: string, nullable: false, notes: "track_title"}
+      - {name: subject_id, type: string, nullable: false, notes: "FK → subjects.id"}
+    dq_rules:
+      - {id: DQ-TR-01, type: unique_key, columns: [id]}
+      - {id: DQ-TR-02, type: not_null,   column: id}
+      - {id: DQ-TR-03, type: not_null,   column: subject_id}
+
+  - dataset: units
+    output_file: units.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,         type: string, nullable: false, notes: "tabMemora Unit.name"}
+      - {name: name,       type: string, nullable: false, notes: "unit_title"}
+      - {name: track_id,   type: string, nullable: false, notes: "FK → tracks.id"}
+      - {name: subject_id, type: string, nullable: false, notes: "Denormalized from Unit DocType"}
+    dq_rules:
+      - {id: DQ-UN-01, type: unique_key, columns: [id]}
+      - {id: DQ-UN-02, type: not_null,   column: id}
+      - {id: DQ-UN-03, type: not_null,   column: track_id}
+
+  - dataset: topics
+    output_file: topics.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,         type: string, nullable: false, notes: "tabMemora Topic.name"}
+      - {name: name,       type: string, nullable: false, notes: "topic_title"}
+      - {name: unit_id,    type: string, nullable: false, notes: "FK → units.id"}
+      - {name: track_id,   type: string, nullable: false, notes: "Denormalized from Topic DocType"}
+      - {name: subject_id, type: string, nullable: false, notes: "Denormalized from Topic DocType"}
+    dq_rules:
+      - {id: DQ-TP-01, type: unique_key, columns: [id]}
+      - {id: DQ-TP-02, type: not_null,   column: id}
+      - {id: DQ-TP-03, type: not_null,   column: unit_id}
+
+  - dataset: lessons
+    output_file: lessons.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,         type: string, nullable: false, notes: "tabMemora Lesson.name"}
+      - {name: name,       type: string, nullable: false, notes: "lesson_title"}
+      - {name: topic_id,   type: string, nullable: false, notes: "FK → topics.id"}
+      - {name: unit_id,    type: string, nullable: false, notes: "Denormalized from Lesson DocType"}
+      - {name: track_id,   type: string, nullable: false, notes: "Denormalized from Lesson DocType"}
+      - {name: subject_id, type: string, nullable: false, notes: "Denormalized from Lesson DocType"}
+    dq_rules:
+      - {id: DQ-LS-01, type: unique_key, columns: [id]}
+      - {id: DQ-LS-02, type: not_null,   column: id}
+      - {id: DQ-LS-03, type: not_null,   column: topic_id}
+
+  - dataset: seasons
+    output_file: seasons.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,         type: string,  nullable: false, notes: "tabMemora Season.name"}
+      - {name: name,       type: string,  nullable: false, notes: "season_title"}
+      - {name: season_seq, type: int64,   nullable: false, notes: "Stable integer ordering key"}
+      - {name: start_date, type: date32,  nullable: true,  notes: "Season start date"}
+      - {name: end_date,   type: date32,  nullable: true,  notes: "Season end date"}
+    dq_rules:
+      - {id: DQ-SE-01, type: unique_key, columns: [id]}
+      - {id: DQ-SE-02, type: unique_key, columns: [season_seq]}
+      - {id: DQ-SE-03, type: not_null,   column: id}
+      - {id: DQ-SE-04, type: not_null,   column: season_seq}
+      - {id: DQ-SE-05, type: min_rows,   min: 1}
+
+  - dataset: grades
+    output_file: grades.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,         type: string, nullable: false, notes: "tabMemora Grade.name"}
+      - {name: name,       type: string, nullable: false, notes: "grade_title"}
+      - {name: sort_order, type: int64,  nullable: true,  notes: "Display ordering"}
+    dq_rules:
+      - {id: DQ-GR-01, type: unique_key, columns: [id]}
+      - {id: DQ-GR-02, type: not_null,   column: id}
+      - {id: DQ-GR-03, type: min_rows,   min: 1}
+
+  - dataset: majors
+    output_file: majors.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,   type: string, nullable: false, notes: "tabMemora Major.name"}
+      - {name: name, type: string, nullable: false, notes: "major_title"}
+    dq_rules:
+      - {id: DQ-MJ-01, type: unique_key, columns: [id]}
+      - {id: DQ-MJ-02, type: not_null,   column: id}
+      - {id: DQ-MJ-03, type: min_rows,   min: 1}
+
+  - dataset: academic_plans
+    output_file: academic_plans.parquet
+    mode: full_snapshot
+    primary_key: [id]
+    columns:
+      - {name: id,           type: string, nullable: false, notes: "tabMemora Academic Plan.name"}
+      - {name: name,         type: string, nullable: false, notes: "plan_name"}
+      - {name: season,       type: string, nullable: false, notes: "FK → seasons.id"}
+      - {name: grade,        type: string, nullable: false, notes: "FK → grades.id"}
+      - {name: major,        type: string, nullable: false, notes: "FK → majors.id"}
+      - {name: is_published, type: int64,  nullable: false, notes: "0 or 1; drafts included per FR-019"}
+    dq_rules:
+      - {id: DQ-AP-01, type: unique_key, columns: [id]}
+      - {id: DQ-AP-02, type: not_null,   column: id}
+      - {id: DQ-AP-03, type: not_null,   column: season}
+      - {id: DQ-AP-04, type: not_null,   column: grade}
+      - {id: DQ-AP-05, type: not_null,   column: major}
+
+  - dataset: grade_majors
+    output_file: grade_majors.parquet
+    mode: full_snapshot
+    primary_key: [grade, major]
+    columns:
+      - {name: grade, type: string, nullable: false, notes: "FK → grades.id (from tabMemora Grade Major.parent)"}
+      - {name: major, type: string, nullable: false, notes: "FK → majors.id"}
+    dq_rules:
+      - {id: DQ-GM-01, type: unique_key, columns: [grade, major]}
+      - {id: DQ-GM-02, type: not_null,   column: grade}
+      - {id: DQ-GM-03, type: not_null,   column: major}

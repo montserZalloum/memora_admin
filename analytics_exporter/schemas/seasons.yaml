@@ -1,0 +1,27 @@
+# Seasons export schema — US4
+# Mode: full_snapshot — all season records (all statuses included, FR-013).
+
+dataset: seasons
+output_file: seasons.parquet
+mode: full_snapshot
+primary_key:
+  - id
+
+sql_full: >-
+  SELECT `name` AS id, `season_title` AS name, `season_seq`, `start_date`, `end_date`
+  FROM `tabMemora Season`
+  ORDER BY `season_seq`
+
+columns:
+  - {name: id,         type: VARCHAR}
+  - {name: name,       type: VARCHAR}
+  - {name: season_seq, type: INT}
+  - {name: start_date, type: DATE}
+  - {name: end_date,   type: DATE}
+
+dq_rules:
+  - {id: DQ-SE-01, type: unique_key, columns: [id]}
+  - {id: DQ-SE-02, type: unique_key, columns: [season_seq]}
+  - {id: DQ-SE-03, type: not_null,   column: id}
+  - {id: DQ-SE-04, type: not_null,   column: season_seq}
+  - {id: DQ-SE-05, type: min_rows,   min: 1}

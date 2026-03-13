@@ -1,0 +1,41 @@
+# Practice Log export schema — US1
+# Mode: incremental_watermark
+#   Full snapshot on first run; delta-merge on subsequent runs.
+#   Watermark key: max(last_seen_at) from the merged output file.
+
+dataset: practice_log
+output_file: practice_log.parquet
+mode: incremental_watermark
+watermark_column: last_seen_at
+primary_key:
+  - player_id
+  - item_id
+
+sql_full: >-
+  SELECT `player_id`, `item_id`, `attempt_count`, `correct_count`,
+         `first_seen_at`, `last_seen_at`, `last_result`
+  FROM `tabMemora Practice Log`
+  ORDER BY `last_seen_at`
+
+sql_incremental: >-
+  SELECT `player_id`, `item_id`, `attempt_count`, `correct_count`,
+         `first_seen_at`, `last_seen_at`, `last_result`
+  FROM `tabMemora Practice Log`
+  WHERE `last_seen_at` > %s
+  ORDER BY `last_seen_at`
+
+columns:
+  - {name: player_id,     type: VARCHAR}
+  - {name: item_id,       type: VARCHAR}
+  - {name: attempt_count, type: INT}
+  - {name: correct_count, type: INT}
+  - {name: first_seen_at, type: DATETIME}
+  - {name: last_seen_at,  type: DATETIME}
+  - {name: last_result,   type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-PL-01, type: unique_key, columns: [player_id, item_id]}
+  - {id: DQ-PL-02, type: not_null,   column: player_id}
+  - {id: DQ-PL-03, type: not_null,   column: item_id}
+  - {id: DQ-PL-04, type: min_value,  column: attempt_count, min: 0}
+  - {id: DQ-PL-05, type: min_value,  column: correct_count, min: 0}

@@ -1,0 +1,27 @@
+# Lessons export schema — US3
+# Mode: full_snapshot — all lesson records including unpublished (FR-012).
+
+dataset: lessons
+output_file: lessons.parquet
+mode: full_snapshot
+primary_key:
+  - id
+
+sql_full: >-
+  SELECT `name` AS id, `lesson_title` AS name, `topic` AS topic_id,
+         `unit` AS unit_id, `track` AS track_id, `subject` AS subject_id
+  FROM `tabMemora Lesson`
+  ORDER BY `name`
+
+columns:
+  - {name: id,         type: VARCHAR}
+  - {name: name,       type: VARCHAR}
+  - {name: topic_id,   type: VARCHAR}
+  - {name: unit_id,    type: VARCHAR}
+  - {name: track_id,   type: VARCHAR}
+  - {name: subject_id, type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-LS-01, type: unique_key, columns: [id]}
+  - {id: DQ-LS-02, type: not_null,   column: id}
+  - {id: DQ-LS-03, type: not_null,   column: topic_id}

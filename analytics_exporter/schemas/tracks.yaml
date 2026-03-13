@@ -1,0 +1,23 @@
+# Tracks export schema — US3
+# Mode: full_snapshot — all track records regardless of published status (FR-012).
+
+dataset: tracks
+output_file: tracks.parquet
+mode: full_snapshot
+primary_key:
+  - id
+
+sql_full: >-
+  SELECT `name` AS id, `track_title` AS name, `subject` AS subject_id
+  FROM `tabMemora Track`
+  ORDER BY `name`
+
+columns:
+  - {name: id,         type: VARCHAR}
+  - {name: name,       type: VARCHAR}
+  - {name: subject_id, type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-TR-01, type: unique_key, columns: [id]}
+  - {id: DQ-TR-02, type: not_null,   column: id}
+  - {id: DQ-TR-03, type: not_null,   column: subject_id}

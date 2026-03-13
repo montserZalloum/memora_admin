@@ -1,0 +1,25 @@
+# Grade Majors export schema — US4
+# Source: tabMemora Grade Major (Frappe child table of Memora Grade).
+# Filter: WHERE parenttype = 'Memora Grade' per R-008.
+
+dataset: grade_majors
+output_file: grade_majors.parquet
+mode: full_snapshot
+primary_key:
+  - grade
+  - major
+
+sql_full: >-
+  SELECT `parent` AS grade, `major`
+  FROM `tabMemora Grade Major`
+  WHERE `parenttype` = 'Memora Grade'
+  ORDER BY `parent`, `major`
+
+columns:
+  - {name: grade, type: VARCHAR}
+  - {name: major, type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-GM-01, type: unique_key, columns: [grade, major]}
+  - {id: DQ-GM-02, type: not_null,   column: grade}
+  - {id: DQ-GM-03, type: not_null,   column: major}
