@@ -1,0 +1,35 @@
+# Dimension: Review Item (expanded with stage_id, stage_type, question_text, correct_choice)
+# Mode: full_snapshot
+
+dataset: dim_review_item
+output_file: dim_review_item.parquet
+mode: full_snapshot
+primary_key:
+  - item_id
+
+sql_full: >-
+  SELECT
+    `item_id`,
+    `subject` AS subject_id,
+    `topic` AS topic_id,
+    `lesson` AS lesson_id,
+    `stage_id`,
+    `stage_type`,
+    `question_text`,
+    `correct_choice`
+  FROM `tabMemora Review Item`
+  ORDER BY `item_id`
+
+columns:
+  - {name: item_id,        type: VARCHAR}
+  - {name: subject_id,     type: VARCHAR}
+  - {name: topic_id,       type: VARCHAR}
+  - {name: lesson_id,      type: VARCHAR}
+  - {name: stage_id,       type: VARCHAR}
+  - {name: stage_type,     type: VARCHAR}
+  - {name: question_text,  type: VARCHAR}
+  - {name: correct_choice, type: INT}
+
+dq_rules:
+  - {id: DQ-RI-01, type: unique_key, columns: [item_id]}
+  - {id: DQ-RI-02, type: not_null,   column: item_id}

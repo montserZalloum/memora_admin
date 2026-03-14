@@ -1,0 +1,43 @@
+# Fact: Archive Job — export of archive pipeline jobs
+# Mode: full_snapshot
+# Source: tabMemora Archive Job
+
+dataset: fact_archive_job
+output_file: fact_archive_job.parquet
+mode: full_snapshot
+primary_key:
+  - job_id
+
+sql_full: >-
+  SELECT
+    `name` AS job_id,
+    `source_doctype`,
+    `status`,
+    `archive_scope`,
+    `started_at`,
+    `completed_at`,
+    `duration_seconds`,
+    `row_count`,
+    `file_size_bytes`,
+    `retry_count`,
+    `error_log`
+  FROM `tabMemora Archive Job`
+  ORDER BY `name`
+
+columns:
+  - {name: job_id,           type: VARCHAR}
+  - {name: source_doctype,   type: VARCHAR}
+  - {name: status,           type: VARCHAR}
+  - {name: archive_scope,    type: VARCHAR}
+  - {name: started_at,       type: DATETIME}
+  - {name: completed_at,     type: DATETIME}
+  - {name: duration_seconds, type: INT}
+  - {name: row_count,        type: INT}
+  - {name: file_size_bytes,  type: INT}
+  - {name: retry_count,      type: INT}
+  - {name: error_log,        type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-AJ-01, type: unique_key, columns: [job_id]}
+  - {id: DQ-AJ-02, type: not_null,   column: job_id}
+  - {id: DQ-AJ-03, type: not_null,   column: source_doctype}

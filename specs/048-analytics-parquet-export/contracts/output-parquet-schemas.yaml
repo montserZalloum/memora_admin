@@ -1,0 +1,415 @@
+# Analytics Dataset Export — Output Parquet Contracts
+# Version: 2.0.0 (supersedes 047 v1.0.0 — expanded to 18 datasets)
+# These define the guaranteed schema for each output file produced by analytics_exporter.
+# All files are written to {ANALYTICS_OUTPUT_PATH}/ (default: analytics_exports/).
+
+datasets:
+
+  # ============================================================
+  # DIMENSION DATASETS (5)
+  # ============================================================
+
+  - dataset: dim_player
+    output_file: dim_player.parquet
+    mode: full_snapshot
+    primary_key: [player_id]
+    columns:
+      - {name: player_id,      type: string,        nullable: false, notes: "tabMemora Player Profile.name — PLAYER-XXXXX"}
+      - {name: display_name,   type: string,        nullable: true,  notes: "Player display name"}
+      - {name: grade_id,       type: string,        nullable: true,  notes: "FK -> Grade"}
+      - {name: major_id,       type: string,        nullable: true,  notes: "FK -> Major"}
+      - {name: season_id,      type: string,        nullable: true,  notes: "FK -> dim_season"}
+      - {name: gender,         type: string,        nullable: true,  notes: "Male/Female/NULL"}
+      - {name: language,       type: string,        nullable: true,  notes: "ar/en"}
+      - {name: registered_at,  type: timestamp[us], nullable: false, notes: "creation timestamp"}
+    dq_rules:
+      - {id: DQ-DP-01, type: unique_key, columns: [player_id]}
+      - {id: DQ-DP-02, type: not_null,   column: player_id}
+      - {id: DQ-DP-03, type: min_rows,   min: 1}
+
+  - dataset: dim_content_hierarchy
+    output_file: dim_content_hierarchy.parquet
+    mode: full_snapshot
+    primary_key: [lesson_id]
+    columns:
+      - {name: lesson_id,      type: string, nullable: false, notes: "tabMemora Lesson.name — PK"}
+      - {name: lesson_title,   type: string, nullable: true,  notes: "lesson_title"}
+      - {name: subject_id,     type: string, nullable: true,  notes: "FK -> Subject"}
+      - {name: subject_title,  type: string, nullable: true,  notes: "Denormalized subject_title"}
+      - {name: track_id,       type: string, nullable: true,  notes: "FK -> Track"}
+      - {name: track_title,    type: string, nullable: true,  notes: "Denormalized track_title"}
+      - {name: unit_id,        type: string, nullable: true,  notes: "FK -> Unit"}
+      - {name: unit_title,     type: string, nullable: true,  notes: "Denormalized unit_title"}
+      - {name: topic_id,       type: string, nullable: true,  notes: "FK -> Topic"}
+      - {name: topic_title,    type: string, nullable: true,  notes: "Denormalized topic_title"}
+      - {name: base_xp,        type: int64,  nullable: true,  notes: "XP reward for lesson"}
+      - {name: max_hearts,     type: int64,  nullable: true,  notes: "Max hearts for lesson"}
+      - {name: is_reviewable,  type: int64,  nullable: true,  notes: "0/1 — can be reviewed"}
+      - {name: bit_index,      type: int64,  nullable: true,  notes: "Unique within subject"}
+      - {name: stage_count,    type: int64,  nullable: true,  notes: "COUNT of stages"}
+      - {name: stage_types,    type: string, nullable: true,  notes: "GROUP_CONCAT of distinct stage types"}
+    dq_rules:
+      - {id: DQ-CH-01, type: unique_key, columns: [lesson_id]}
+      - {id: DQ-CH-02, type: not_null,   column: lesson_id}
+      - {id: DQ-CH-03, type: min_rows,   min: 1}
+
+  - dataset: dim_review_item
+    output_file: dim_review_item.parquet
+    mode: full_snapshot
+    primary_key: [item_id]
+    columns:
+      - {name: item_id,        type: string, nullable: false, notes: "UUID — Review Item PK"}
+      - {name: subject_id,     type: string, nullable: true,  notes: "FK -> Subject"}
+      - {name: topic_id,       type: string, nullable: true,  notes: "FK -> Topic"}
+      - {name: lesson_id,      type: string, nullable: true,  notes: "FK -> dim_content_hierarchy"}
+      - {name: stage_id,       type: string, nullable: true,  notes: "Stage identifier"}
+      - {name: stage_type,     type: string, nullable: true,  notes: "Stage type name"}
+      - {name: question_text,  type: string, nullable: true,  notes: "Full question text"}
+      - {name: correct_choice, type: int64,  nullable: true,  notes: "Correct answer 1-4"}
+    dq_rules:
+      - {id: DQ-RI-01, type: unique_key, columns: [item_id]}
+      - {id: DQ-RI-02, type: not_null,   column: item_id}
+
+  - dataset: dim_season
+    output_file: dim_season.parquet
+    mode: full_snapshot
+    primary_key: [season_id]
+    columns:
+      - {name: season_id,     type: string, nullable: false, notes: "tabMemora Season.name — PK"}
+      - {name: season_title,  type: string, nullable: true,  notes: "Display name"}
+      - {name: season_seq,    type: int64,  nullable: false, notes: "Stable integer ordering key"}
+      - {name: start_date,    type: date32, nullable: true,  notes: "Season start"}
+      - {name: end_date,      type: date32, nullable: true,  notes: "Season end"}
+      - {name: is_published,  type: int64,  nullable: false, notes: "0/1"}
+    dq_rules:
+      - {id: DQ-DS-01, type: unique_key, columns: [season_id]}
+      - {id: DQ-DS-02, type: unique_key, columns: [season_seq]}
+      - {id: DQ-DS-03, type: not_null,   column: season_id}
+      - {id: DQ-DS-04, type: not_null,   column: season_seq}
+      - {id: DQ-DS-05, type: min_rows,   min: 1}
+
+  - dataset: dim_academic_plan
+    output_file: dim_academic_plan.parquet
+    mode: full_snapshot
+    primary_key: [plan_id]
+    columns:
+      - {name: plan_id,        type: string, nullable: false, notes: "tabMemora Academic Plan.name — PK"}
+      - {name: plan_name,      type: string, nullable: true,  notes: "Display name"}
+      - {name: grade_id,       type: string, nullable: true,  notes: "FK -> Grade"}
+      - {name: grade_title,    type: string, nullable: true,  notes: "Denormalized grade_title"}
+      - {name: major_id,       type: string, nullable: true,  notes: "FK -> Major"}
+      - {name: major_title,    type: string, nullable: true,  notes: "Denormalized major_title"}
+      - {name: season_id,      type: string, nullable: true,  notes: "FK -> dim_season"}
+      - {name: is_published,   type: int64,  nullable: false, notes: "0/1; drafts included"}
+      - {name: total_subjects, type: int64,  nullable: true,  notes: "Subject count"}
+      - {name: total_lessons,  type: int64,  nullable: true,  notes: "Lesson count"}
+      - {name: subject_list,   type: string, nullable: true,  notes: "GROUP_CONCAT of subjects"}
+    dq_rules:
+      - {id: DQ-AP-01, type: unique_key, columns: [plan_id]}
+      - {id: DQ-AP-02, type: not_null,   column: plan_id}
+
+  # ============================================================
+  # CORE FACT DATASETS (6 datasets, 8 files)
+  # ============================================================
+
+  - dataset: fact_interaction
+    output_file: fact_interaction.parquet
+    mode: date_range                           # Filtered by ANALYTICS_INTERACTION_FROM/TO
+    primary_key: [event_id]
+    columns:
+      - {name: event_id,         type: string,        nullable: false, notes: "LOG-XXXXX"}
+      - {name: player_id,        type: string,        nullable: false, notes: "FK -> dim_player"}
+      - {name: lesson_id,        type: string,        nullable: true,  notes: "FK -> dim_content_hierarchy"}
+      - {name: stage_id,         type: string,        nullable: true,  notes: "Stage identifier"}
+      - {name: item_id,          type: string,        nullable: true,  notes: "FK -> dim_review_item (nullable)"}
+      - {name: event_type,       type: string,        nullable: true,  notes: "Started/Completed"}
+      - {name: time_spent_sec,   type: int64,         nullable: true,  notes: "Seconds"}
+      - {name: errors_count,     type: int64,         nullable: true,  notes: "Error count"}
+      - {name: event_ts,         type: timestamp[us], nullable: false, notes: "DATETIME(6) event timestamp"}
+      - {name: client_metadata,  type: string,        nullable: true,  notes: "JSON string"}
+    dq_rules:
+      - {id: DQ-FI-01, type: unique_key, columns: [event_id]}
+      - {id: DQ-FI-02, type: not_null,   column: event_id}
+      - {id: DQ-FI-03, type: not_null,   column: player_id}
+
+  - dataset: fact_memory_state
+    output_file: fact_memory_state.parquet
+    mode: full_snapshot                        # All seasons in one file
+    primary_key: [ms_id]
+    columns:
+      - {name: ms_id,        type: int64,         nullable: false, notes: "BIGINT PK"}
+      - {name: player_id,    type: string,        nullable: false, notes: "FK -> dim_player"}
+      - {name: item_id,      type: string,        nullable: false, notes: "BIN_TO_UUID() — UUID text"}
+      - {name: season_seq,   type: int64,         nullable: false, notes: "Partition key"}
+      - {name: subject_id,   type: string,        nullable: true,  notes: "FK -> Subject"}
+      - {name: lesson_id,    type: string,        nullable: true,  notes: "FK -> Lesson"}
+      - {name: stability,    type: float64,       nullable: true,  notes: "CAST from DECIMAL(21,9)"}
+      - {name: difficulty,   type: float64,       nullable: true,  notes: "CAST from DECIMAL(21,9)"}
+      - {name: next_review,  type: date32,        nullable: true,  notes: "Next review date"}
+      - {name: last_review,  type: timestamp[us], nullable: true,  notes: "Last review timestamp"}
+      - {name: fsrs_state,   type: int64,         nullable: true,  notes: "0=New,1=Learning,2=Review,3=Relearning"}
+      - {name: fsrs_step,    type: int64,         nullable: true,  notes: "Current step"}
+    dq_rules:
+      - {id: DQ-MS-01, type: unique_key, columns: [ms_id]}
+      - {id: DQ-MS-02, type: not_null,   column: ms_id}
+      - {id: DQ-MS-03, type: not_null,   column: player_id}
+      - {id: DQ-MS-04, type: not_null,   column: item_id}
+
+  - dataset: fact_practice
+    output_file: fact_practice.parquet
+    mode: incremental_watermark
+    watermark_column: last_seen_at
+    primary_key: [player_id, item_id]
+    columns:
+      - {name: player_id,     type: string,        nullable: false, notes: "Composite PK part 1"}
+      - {name: item_id,       type: string,        nullable: false, notes: "Composite PK part 2"}
+      - {name: first_seen_at, type: timestamp[us], nullable: false, notes: "First review"}
+      - {name: last_seen_at,  type: timestamp[us], nullable: false, notes: "Watermark column"}
+      - {name: last_result,   type: string,        nullable: false, notes: "Correct/Incorrect"}
+      - {name: attempt_count, type: int64,         nullable: false, notes: ">= 0"}
+      - {name: correct_count, type: int64,         nullable: false, notes: ">= 0"}
+    dq_rules:
+      - {id: DQ-FP-01, type: unique_key, columns: [player_id, item_id]}
+      - {id: DQ-FP-02, type: not_null,   column: player_id}
+      - {id: DQ-FP-03, type: not_null,   column: item_id}
+      - {id: DQ-FP-04, type: min_value,  column: attempt_count, min: 0}
+      - {id: DQ-FP-05, type: min_value,  column: correct_count, min: 0}
+
+  - dataset: fact_subscription
+    output_file: fact_subscription.parquet
+    mode: full_snapshot
+    primary_key: [player_id, access_key]
+    columns:
+      - {name: player_id,      type: string,        nullable: false, notes: "FK -> dim_player"}
+      - {name: access_key,     type: string,        nullable: false, notes: "SUB-SUBJ-XXX or TRK-Track-XXX"}
+      - {name: is_active,      type: int64,         nullable: false, notes: "0/1"}
+      - {name: expires_at,     type: date32,        nullable: true,  notes: "Expiry date"}
+      - {name: subscribed_at,  type: timestamp[us], nullable: false, notes: "creation timestamp"}
+      - {name: payment_method, type: string,        nullable: true,  notes: "From transaction"}
+      - {name: amount_paid,    type: float64,       nullable: true,  notes: "From transaction — DECIMAL"}
+      - {name: txn_status,     type: string,        nullable: true,  notes: "Transaction status"}
+    dq_rules:
+      - {id: DQ-FS-01, type: not_null, column: player_id}
+      - {id: DQ-FS-02, type: not_null, column: access_key}
+
+  - dataset: fact_voucher
+    output_file: fact_voucher.parquet
+    mode: full_snapshot
+    primary_key: [serial_no]
+    columns:
+      - {name: serial_no,        type: string,        nullable: false, notes: "Voucher card PK"}
+      - {name: batch_id,         type: string,        nullable: false, notes: "FK -> Batch"}
+      - {name: batch_name,       type: string,        nullable: true,  notes: "Denormalized"}
+      - {name: batch_purpose,    type: string,        nullable: true,  notes: "Denormalized"}
+      - {name: face_value,       type: float64,       nullable: true,  notes: "DECIMAL -> float"}
+      - {name: card_status,      type: string,        nullable: false, notes: "State machine value"}
+      - {name: library,          type: string,        nullable: true,  notes: "B2B customer"}
+      - {name: sale_model,       type: string,        nullable: true,  notes: "Prepaid/Consignment"}
+      - {name: redeemed_by,      type: string,        nullable: true,  notes: "Player who redeemed"}
+      - {name: redeemed_at,      type: timestamp[us], nullable: true,  notes: "Redemption time"}
+      - {name: allocation_date,  type: date32,        nullable: true,  notes: "From allocation"}
+      - {name: allocated_to,     type: string,        nullable: true,  notes: "Customer from allocation"}
+    dq_rules:
+      - {id: DQ-FV-01, type: unique_key, columns: [serial_no]}
+      - {id: DQ-FV-02, type: not_null,   column: serial_no}
+      - {id: DQ-FV-03, type: not_null,   column: batch_id}
+      - {id: DQ-FV-04, type: min_rows,   min: 1}
+
+  - dataset: fact_challenge_attempt
+    output_file: fact_challenge_attempt.parquet
+    mode: full_snapshot
+    primary_key: [attempt_id]
+    multi_file_group: fact_challenge           # Atomic with fact_challenge_detail
+    columns:
+      - {name: attempt_id,      type: string,        nullable: false, notes: "PK"}
+      - {name: player_id,       type: string,        nullable: false, notes: "FK -> dim_player"}
+      - {name: topic_id,        type: string,        nullable: true,  notes: "FK -> Topic"}
+      - {name: subject_id,      type: string,        nullable: true,  notes: "FK -> Subject"}
+      - {name: season_id,       type: string,        nullable: true,  notes: "FK -> dim_season"}
+      - {name: attempt_number,  type: int64,         nullable: true,  notes: "Attempt sequence"}
+      - {name: total_questions,  type: int64,        nullable: true,  notes: "Questions in challenge"}
+      - {name: correct_count,   type: int64,         nullable: true,  notes: "Correct answers"}
+      - {name: score_pct,       type: float64,       nullable: true,  notes: "Score percentage"}
+      - {name: passed,          type: int64,         nullable: true,  notes: "0/1"}
+      - {name: time_spent_sec,  type: int64,         nullable: true,  notes: "Seconds"}
+      - {name: xp_earned,       type: int64,         nullable: true,  notes: "XP reward"}
+      - {name: submitted_at,    type: timestamp[us], nullable: true,  notes: "Submission time"}
+    dq_rules:
+      - {id: DQ-CA-01, type: unique_key, columns: [attempt_id]}
+      - {id: DQ-CA-02, type: not_null,   column: attempt_id}
+      - {id: DQ-CA-03, type: not_null,   column: player_id}
+
+  - dataset: fact_challenge_detail
+    output_file: fact_challenge_detail.parquet
+    mode: full_snapshot
+    primary_key: [attempt_id, item_id]
+    multi_file_group: fact_challenge           # Atomic with fact_challenge_attempt
+    columns:
+      - {name: attempt_id,     type: string, nullable: false, notes: "FK -> fact_challenge_attempt"}
+      - {name: item_id,        type: string, nullable: false, notes: "FK -> dim_review_item"}
+      - {name: is_correct,     type: int64,  nullable: true,  notes: "0/1"}
+      - {name: time_spent_sec, type: int64,  nullable: true,  notes: "Seconds"}
+      - {name: chosen_answer,  type: int64,  nullable: true,  notes: "1-4"}
+    dq_rules:
+      - {id: DQ-CD-01, type: not_null, column: attempt_id}
+      - {id: DQ-CD-02, type: not_null, column: item_id}
+
+  # ============================================================
+  # SUPPLEMENTARY DATASETS (7 datasets, 9 files)
+  # ============================================================
+
+  - dataset: fact_structure_progress
+    output_file: fact_structure_progress.parquet
+    mode: full_snapshot
+    primary_key: [player_id, subject_id]
+    columns:
+      - {name: player_id,             type: string,  nullable: false, notes: "FK -> dim_player"}
+      - {name: subject_id,            type: string,  nullable: false, notes: "FK -> Subject"}
+      - {name: completion_pct,        type: float64, nullable: true,  notes: "DECIMAL -> float"}
+      - {name: passed_lessons_bitset, type: string,  nullable: true,  notes: "LONGTEXT bitset"}
+    dq_rules:
+      - {id: DQ-SP-01, type: not_null, column: player_id}
+      - {id: DQ-SP-02, type: not_null, column: subject_id}
+
+  - dataset: fact_player_wallet
+    output_file: fact_player_wallet.parquet
+    mode: full_snapshot
+    primary_key: [player_id]
+    columns:
+      - {name: player_id,     type: string,        nullable: false, notes: "FK -> dim_player"}
+      - {name: total_xp,      type: int64,         nullable: true,  notes: "Cumulative XP"}
+      - {name: total_lessons,  type: int64,        nullable: true,  notes: "Completed lessons"}
+      - {name: total_time_min, type: int64,        nullable: true,  notes: "Minutes"}
+      - {name: current_streak, type: int64,        nullable: true,  notes: "Current streak days"}
+      - {name: daily_xp_json,  type: string,       nullable: true,  notes: "JSON string"}
+      - {name: last_sync_at,   type: timestamp[us], nullable: true, notes: "Last sync"}
+    dq_rules:
+      - {id: DQ-PW-01, type: unique_key, columns: [player_id]}
+      - {id: DQ-PW-02, type: not_null,   column: player_id}
+
+  - dataset: dim_lesson_stage
+    output_file: dim_lesson_stage.parquet
+    mode: full_snapshot
+    primary_key: [stage_id]
+    columns:
+      - {name: stage_id,            type: string, nullable: false, notes: "PK"}
+      - {name: lesson_id,           type: string, nullable: false, notes: "FK -> dim_content_hierarchy"}
+      - {name: stage_type,          type: string, nullable: true,  notes: "Stage type name"}
+      - {name: is_skippable,        type: int64,  nullable: true,  notes: "0/1"}
+      - {name: default_stage_time,  type: int64,  nullable: true,  notes: "From settings — nullable"}
+      - {name: is_time_calculated,  type: int64,  nullable: true,  notes: "From settings — nullable"}
+    dq_rules:
+      - {id: DQ-LS-01, type: unique_key, columns: [stage_id]}
+      - {id: DQ-LS-02, type: not_null,   column: stage_id}
+      - {id: DQ-LS-03, type: not_null,   column: lesson_id}
+
+  - dataset: fact_content_report
+    output_file: fact_content_report.parquet
+    mode: full_snapshot
+    primary_key: []                            # No stable PK exported; use row uniqueness
+    columns:
+      - {name: player_id,   type: string,        nullable: false, notes: "FK -> dim_player"}
+      - {name: subject_id,  type: string,        nullable: true,  notes: "FK -> Subject"}
+      - {name: lesson_id,   type: string,        nullable: true,  notes: "FK -> Lesson"}
+      - {name: report_type, type: string,        nullable: true,  notes: "Report category"}
+      - {name: description, type: string,        nullable: true,  notes: "Report text"}
+      - {name: status,      type: string,        nullable: true,  notes: "Report status"}
+      - {name: created_at,  type: timestamp[us], nullable: false, notes: "creation"}
+      - {name: resolved_at, type: timestamp[us], nullable: true,  notes: "modified"}
+    dq_rules:
+      - {id: DQ-CR-01, type: not_null, column: player_id}
+
+  - dataset: fact_live_challenge_event
+    output_file: fact_live_challenge_event.parquet
+    mode: full_snapshot
+    primary_key: [event_id]
+    multi_file_group: fact_live_challenge      # Atomic with participation
+    columns:
+      - {name: event_id,          type: string,        nullable: false, notes: "PK"}
+      - {name: event_name,        type: string,        nullable: true,  notes: "Display name"}
+      - {name: status,            type: string,        nullable: true,  notes: "Event status"}
+      - {name: scheduled_start,   type: timestamp[us], nullable: true,  notes: "Scheduled start"}
+      - {name: exam_duration,     type: int64,         nullable: true,  notes: "Minutes"}
+      - {name: capacity,          type: int64,         nullable: true,  notes: "Max participants"}
+      - {name: participant_count, type: int64,         nullable: true,  notes: "Joined count"}
+      - {name: submitted_count,   type: int64,         nullable: true,  notes: "Submitted count"}
+      - {name: is_paid,           type: int64,         nullable: true,  notes: "0/1"}
+    dq_rules:
+      - {id: DQ-LE-01, type: unique_key, columns: [event_id]}
+      - {id: DQ-LE-02, type: not_null,   column: event_id}
+
+  - dataset: fact_live_challenge_participation
+    output_file: fact_live_challenge_participation.parquet
+    mode: full_snapshot
+    primary_key: [event_id, player_id]
+    multi_file_group: fact_live_challenge      # Atomic with event
+    columns:
+      - {name: event_id,     type: string,        nullable: false, notes: "FK -> fact_live_challenge_event"}
+      - {name: player_id,    type: string,        nullable: false, notes: "FK -> dim_player"}
+      - {name: joined_at,    type: timestamp[us], nullable: true,  notes: "Join time"}
+      - {name: submitted_at, type: timestamp[us], nullable: true,  notes: "Submission time"}
+      - {name: score,        type: int64,         nullable: true,  notes: "Score"}
+      - {name: rank,         type: int64,         nullable: true,  notes: "Rank"}
+      - {name: xp_awarded,   type: int64,         nullable: true,  notes: "XP reward"}
+    dq_rules:
+      - {id: DQ-LP-01, type: not_null, column: event_id}
+      - {id: DQ-LP-02, type: not_null, column: player_id}
+
+  - dataset: fact_archive_job
+    output_file: fact_archive_job.parquet
+    mode: full_snapshot
+    primary_key: [job_id]
+    columns:
+      - {name: job_id,            type: string,        nullable: false, notes: "PK — ARCH-XXXXX"}
+      - {name: source_doctype,    type: string,        nullable: false, notes: "Source DocType"}
+      - {name: status,            type: string,        nullable: false, notes: "State machine value"}
+      - {name: archive_scope,     type: string,        nullable: true,  notes: "Scope identifier"}
+      - {name: started_at,        type: timestamp[us], nullable: true,  notes: "Job start"}
+      - {name: completed_at,      type: timestamp[us], nullable: true,  notes: "Job end"}
+      - {name: duration_seconds,  type: int64,         nullable: true,  notes: "Duration"}
+      - {name: row_count,         type: int64,         nullable: true,  notes: "Exported rows"}
+      - {name: file_size_bytes,   type: int64,         nullable: true,  notes: "File size"}
+      - {name: retry_count,       type: int64,         nullable: true,  notes: "Retries"}
+      - {name: error_log,         type: string,        nullable: true,  notes: "Error details"}
+    dq_rules:
+      - {id: DQ-AJ-01, type: unique_key, columns: [job_id]}
+      - {id: DQ-AJ-02, type: not_null,   column: job_id}
+      - {id: DQ-AJ-03, type: not_null,   column: source_doctype}
+
+  - dataset: fact_task_run_log
+    output_file: fact_task_run_log.parquet
+    mode: full_snapshot
+    primary_key: [task_name, run_date]
+    multi_file_group: fact_task_run            # Atomic with build queue
+    columns:
+      - {name: task_name,       type: string,        nullable: false, notes: "Task identifier"}
+      - {name: run_date,        type: date32,        nullable: false, notes: "Run date"}
+      - {name: started_at,      type: timestamp[us], nullable: true,  notes: "Start time"}
+      - {name: completed_at,    type: timestamp[us], nullable: true,  notes: "End time"}
+      - {name: duration_sec,    type: int64,         nullable: true,  notes: "Duration seconds"}
+      - {name: status,          type: string,        nullable: true,  notes: "Task status"}
+      - {name: triggered_by,    type: string,        nullable: true,  notes: "Trigger source"}
+      - {name: processed_count, type: int64,         nullable: true,  notes: "Rows processed"}
+      - {name: failed_count,    type: int64,         nullable: true,  notes: "Rows failed"}
+      - {name: error_message,   type: string,        nullable: true,  notes: "Error details"}
+    dq_rules:
+      - {id: DQ-TL-01, type: not_null, column: task_name}
+      - {id: DQ-TL-02, type: not_null, column: run_date}
+
+  - dataset: fact_build_queue
+    output_file: fact_build_queue.parquet
+    mode: full_snapshot
+    primary_key: []                            # Frappe name not exported
+    multi_file_group: fact_task_run            # Atomic with task run log
+    columns:
+      - {name: target_type,    type: string,        nullable: false, notes: "Build target type"}
+      - {name: target_name,    type: string,        nullable: false, notes: "Build target name"}
+      - {name: status,         type: string,        nullable: true,  notes: "Pending/Processing/Completed/Failed"}
+      - {name: started_at,     type: timestamp[us], nullable: true,  notes: "Start time"}
+      - {name: completed_at,   type: timestamp[us], nullable: true,  notes: "End time"}
+      - {name: duration_sec,   type: int64,         nullable: true,  notes: "Duration seconds"}
+      - {name: files_generated, type: int64,        nullable: true,  notes: "Files produced"}
+      - {name: trigger_reason, type: string,        nullable: true,  notes: "Why build was triggered"}
+    dq_rules:
+      - {id: DQ-BQ-01, type: not_null, column: target_type}
+      - {id: DQ-BQ-02, type: not_null, column: target_name}

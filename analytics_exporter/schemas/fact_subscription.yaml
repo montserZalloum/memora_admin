@@ -1,0 +1,39 @@
+# Fact: Player Subscription with optional transaction details
+# Mode: full_snapshot
+# Source: tabMemora Player Subscription LEFT JOIN tabMemora Subscription Transaction
+
+dataset: fact_subscription
+output_file: fact_subscription.parquet
+mode: full_snapshot
+primary_key:
+  - player_id
+  - access_key
+
+sql_full: >-
+  SELECT
+    ps.`player` AS player_id,
+    ps.`access_key`,
+    ps.`is_active`,
+    ps.`expires_at`,
+    ps.`creation` AS subscribed_at,
+    st.`payment_method`,
+    st.`amount_paid`,
+    st.`status` AS txn_status
+  FROM `tabMemora Player Subscription` ps
+  LEFT JOIN `tabMemora Subscription Transaction` st
+    ON st.`player` = ps.`player`
+  ORDER BY ps.`player`, ps.`access_key`
+
+columns:
+  - {name: player_id,      type: VARCHAR}
+  - {name: access_key,     type: VARCHAR}
+  - {name: is_active,      type: INT}
+  - {name: expires_at,     type: DATE}
+  - {name: subscribed_at,  type: DATETIME}
+  - {name: payment_method, type: VARCHAR}
+  - {name: amount_paid,    type: DECIMAL}
+  - {name: txn_status,     type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-FS-01, type: not_null, column: player_id}
+  - {id: DQ-FS-02, type: not_null, column: access_key}

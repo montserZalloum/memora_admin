@@ -1,0 +1,42 @@
+# Fact: Interaction Log (date-range filtered)
+# Mode: date_range — filtered by ANALYTICS_INTERACTION_FROM/TO, default last 30 days
+# Source: tabMemora Interaction Log
+
+dataset: fact_interaction
+output_file: fact_interaction.parquet
+mode: date_range
+primary_key:
+  - event_id
+
+sql_full: >-
+  SELECT
+    `name` AS event_id,
+    `player` AS player_id,
+    `lesson` AS lesson_id,
+    `stage_id`,
+    `item_id`,
+    `event_type`,
+    `time_spent` AS time_spent_sec,
+    `errors_count`,
+    `timestamp` AS event_ts,
+    `client_metadata`
+  FROM `tabMemora Interaction Log`
+  WHERE `timestamp` BETWEEN %s AND %s
+  ORDER BY `timestamp`
+
+columns:
+  - {name: event_id,        type: VARCHAR}
+  - {name: player_id,       type: VARCHAR}
+  - {name: lesson_id,       type: VARCHAR}
+  - {name: stage_id,        type: VARCHAR}
+  - {name: item_id,         type: VARCHAR}
+  - {name: event_type,      type: VARCHAR}
+  - {name: time_spent_sec,  type: INT}
+  - {name: errors_count,    type: INT}
+  - {name: event_ts,        type: DATETIME}
+  - {name: client_metadata, type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-FI-01, type: unique_key, columns: [event_id]}
+  - {id: DQ-FI-02, type: not_null,   column: event_id}
+  - {id: DQ-FI-03, type: not_null,   column: player_id}

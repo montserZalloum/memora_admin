@@ -1,0 +1,47 @@
+# Fact: Memory State (all seasons, full snapshot)
+# Mode: full_snapshot
+# Source: tabMemora Memory State
+# Note: BIN_TO_UUID for item_id, CAST for stability/difficulty (R-005)
+
+dataset: fact_memory_state
+output_file: fact_memory_state.parquet
+mode: full_snapshot
+primary_key:
+  - ms_id
+
+sql_full: >-
+  SELECT
+    `name` AS ms_id,
+    `player` AS player_id,
+    BIN_TO_UUID(`item_id`) AS item_id,
+    `season_seq`,
+    `subject` AS subject_id,
+    `lesson` AS lesson_id,
+    CAST(`stability` AS DOUBLE) AS stability,
+    CAST(`difficulty` AS DOUBLE) AS difficulty,
+    `next_review`,
+    `last_review`,
+    `state` AS fsrs_state,
+    `step` AS fsrs_step
+  FROM `tabMemora Memory State`
+  ORDER BY `season_seq`, `name`
+
+columns:
+  - {name: ms_id,       type: BIGINT}
+  - {name: player_id,   type: VARCHAR}
+  - {name: item_id,     type: VARCHAR}
+  - {name: season_seq,  type: INT}
+  - {name: subject_id,  type: VARCHAR}
+  - {name: lesson_id,   type: VARCHAR}
+  - {name: stability,   type: DOUBLE}
+  - {name: difficulty,   type: DOUBLE}
+  - {name: next_review, type: DATE}
+  - {name: last_review, type: DATETIME}
+  - {name: fsrs_state,  type: INT}
+  - {name: fsrs_step,   type: INT}
+
+dq_rules:
+  - {id: DQ-MS-01, type: unique_key, columns: [ms_id]}
+  - {id: DQ-MS-02, type: not_null,   column: ms_id}
+  - {id: DQ-MS-03, type: not_null,   column: player_id}
+  - {id: DQ-MS-04, type: not_null,   column: item_id}

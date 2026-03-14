@@ -17,6 +17,8 @@ class Config:
 	analytics_log_path: str
 	analytics_mode: str
 	analytics_datasets: list
+	analytics_interaction_from: str | None = None
+	analytics_interaction_to: str | None = None
 
 	@classmethod
 	def from_env(cls) -> "Config":
@@ -34,4 +36,6 @@ class Config:
 			analytics_log_path=os.environ.get("ANALYTICS_LOG_PATH", "logs/analytics_exporter.log"),
 			analytics_mode=os.environ.get("ANALYTICS_MODE", "auto"),
 			analytics_datasets=datasets,
+			analytics_interaction_from=os.environ.get("ANALYTICS_INTERACTION_FROM") or None,
+			analytics_interaction_to=os.environ.get("ANALYTICS_INTERACTION_TO") or None,
 		)

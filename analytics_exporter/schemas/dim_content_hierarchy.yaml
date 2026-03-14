@@ -1,0 +1,61 @@
+# Dimension: Denormalized Content Hierarchy (Lesson -> Topic -> Unit -> Track -> Subject)
+# Mode: full_snapshot
+# Filter: only published lessons (is_published = 1)
+# Includes correlated subqueries for stage_count and stage_types
+
+dataset: dim_content_hierarchy
+output_file: dim_content_hierarchy.parquet
+mode: full_snapshot
+primary_key:
+  - lesson_id
+
+sql_full: >-
+  SELECT
+    l.name AS lesson_id,
+    l.lesson_title,
+    l.subject AS subject_id,
+    sub.subject_title,
+    l.track AS track_id,
+    t.track_title,
+    l.unit AS unit_id,
+    u.unit_title,
+    l.topic AS topic_id,
+    tp.topic_title,
+    l.base_xp,
+    l.max_hearts,
+    l.is_reviewable,
+    l.bit_index,
+    (SELECT COUNT(*) FROM `tabMemora Lesson Stage` ls
+     WHERE ls.parent = l.name) AS stage_count,
+    (SELECT GROUP_CONCAT(DISTINCT ls.stage_type) FROM `tabMemora Lesson Stage` ls
+     WHERE ls.parent = l.name) AS stage_types
+  FROM `tabMemora Lesson` l
+  LEFT JOIN `tabMemora Subject` sub ON sub.name = l.subject
+  LEFT JOIN `tabMemora Track` t ON t.name = l.track
+  LEFT JOIN `tabMemora Unit` u ON u.name = l.unit
+  LEFT JOIN `tabMemora Topic` tp ON tp.name = l.topic
+  WHERE l.is_published = 1
+  ORDER BY l.name
+
+columns:
+  - {name: lesson_id,     type: VARCHAR}
+  - {name: lesson_title,  type: VARCHAR}
+  - {name: subject_id,    type: VARCHAR}
+  - {name: subject_title, type: VARCHAR}
+  - {name: track_id,      type: VARCHAR}
+  - {name: track_title,   type: VARCHAR}
+  - {name: unit_id,       type: VARCHAR}
+  - {name: unit_title,    type: VARCHAR}
+  - {name: topic_id,      type: VARCHAR}
+  - {name: topic_title,   type: VARCHAR}
+  - {name: base_xp,       type: INT}
+  - {name: max_hearts,    type: INT}
+  - {name: is_reviewable, type: INT}
+  - {name: bit_index,     type: INT}
+  - {name: stage_count,   type: INT}
+  - {name: stage_types,   type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-CH-01, type: unique_key, columns: [lesson_id]}
+  - {id: DQ-CH-02, type: not_null,   column: lesson_id}
+  - {id: DQ-CH-03, type: min_rows,   min: 1}

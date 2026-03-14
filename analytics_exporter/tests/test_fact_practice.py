@@ -1,16 +1,16 @@
-"""Integration tests for Practice Log export — US1.
+"""Integration tests for Fact Practice export (was practice_log in 047).
 
 Scenarios:
-  PL-FULL:   Full export → 7-field Parquet, no duplicate PKs, watermark written.
-  PL-INCR:   Incremental re-export → delta merged, watermark updated.
-  PL-ZERO:   Rows with correct_count=0 / last_result='Incorrect' included unchanged.
-  PL-RC:     Connection uses READ COMMITTED isolation.
-  PL-EMPTY:  Zero-row export → valid empty Parquet with correct schema;
+  FP-FULL:   Full export -> 7-field Parquet, no duplicate PKs, watermark written.
+  FP-INCR:   Incremental re-export -> delta merged, watermark updated.
+  FP-ZERO:   Rows with correct_count=0 / last_result='Incorrect' included unchanged.
+  FP-RC:     Connection uses READ COMMITTED isolation.
+  FP-EMPTY:  Zero-row export -> valid empty Parquet with correct schema;
              watermark not written by export_snapshot (only orchestrate writes it).
 
 Run:
     DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=... DB_PASSWORD=... DB_NAME=... \\
-        python3 -m pytest analytics_exporter/tests/test_practice_log.py -v
+        python3 -m pytest analytics_exporter/tests/test_fact_practice.py -v
 """
 
 import dataclasses
@@ -37,18 +37,18 @@ from analytics_exporter.tests.conftest import (
 # ---------------------------------------------------------------------------
 
 def _make_config(base: Config, output_dir: str, mode: str = "auto") -> Config:
-	"""Return a Config copy with overridden output/schema paths and datasets=['practice_log']."""
+	"""Return a Config copy with overridden output/schema paths and datasets=['fact_practice']."""
 	schema_path = os.path.join(os.path.dirname(__file__), "..", "schemas")
 	return dataclasses.replace(
 		base,
 		analytics_output_path=output_dir,
 		analytics_schema_path=str(os.path.abspath(schema_path)),
-		analytics_datasets=["practice_log"],
+		analytics_datasets=["fact_practice"],
 		analytics_mode=mode,
 	)
 
 
-def _make_logger(name: str = "test_practice_log") -> logging.Logger:
+def _make_logger(name: str = "test_fact_practice") -> logging.Logger:
 	log = logging.getLogger(name)
 	if not log.handlers:
 		h = logging.StreamHandler()
@@ -59,13 +59,13 @@ def _make_logger(name: str = "test_practice_log") -> logging.Logger:
 
 
 # ---------------------------------------------------------------------------
-# PL-FULL: Full snapshot
+# FP-FULL: Full snapshot
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
 def test_full_export_produces_correct_parquet(analytics_db_config, db_conn, tmp_path):
 	"""Full export produces 7-field Parquet with no duplicate PKs; watermark written."""
-	prefix = "PLFUL"
+	prefix = "FPFUL"
 	cleanup_practice_log_rows(db_conn, prefix)
 	try:
 		practice_log_rows(db_conn, prefix, 10)
@@ -73,12 +73,12 @@ def test_full_export_produces_correct_parquet(analytics_db_config, db_conn, tmp_
 		cfg = _make_config(analytics_db_config, str(tmp_path))
 		results = orchestrate_exports(cfg, _make_logger())
 
-		assert "practice_log" in results, "practice_log not dispatched by orchestrate_exports"
-		result = results["practice_log"]
+		assert "fact_practice" in results, "fact_practice not dispatched by orchestrate_exports"
+		result = results["fact_practice"]
 		assert result.success, f"Export failed: {result.error}; violations: {result.violations}"
 		assert result.violations == []
 
-		out_path = os.path.join(str(tmp_path), "practice_log.parquet")
+		out_path = os.path.join(str(tmp_path), "fact_practice.parquet")
 		assert os.path.exists(out_path)
 
 		table = pq.read_table(out_path)
@@ -99,20 +99,20 @@ def test_full_export_produces_correct_parquet(analytics_db_config, db_conn, tmp_
 		wm_path = os.path.join(str(tmp_path), ".watermark.json")
 		assert os.path.exists(wm_path)
 		wm = load_watermark(wm_path)
-		assert "practice_log" in wm
-		assert wm["practice_log"]["last_watermark"] is not None
+		assert "fact_practice" in wm
+		assert wm["fact_practice"]["last_watermark"] is not None
 	finally:
 		cleanup_practice_log_rows(db_conn, prefix)
 
 
 # ---------------------------------------------------------------------------
-# PL-INCR: Incremental merge
+# FP-INCR: Incremental merge
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
 def test_incremental_export_merges_delta(analytics_db_config, db_conn, tmp_path):
 	"""Incremental re-export: only delta rows queried; merged file grows; watermark updated."""
-	prefix = "PLICR"
+	prefix = "FPICR"
 	cleanup_practice_log_rows(db_conn, prefix)
 	try:
 		# Insert 5 rows (n=1..5): timestamps 2099-06-01 00:01 to 00:05
@@ -120,26 +120,24 @@ def test_incremental_export_merges_delta(analytics_db_config, db_conn, tmp_path)
 
 		cfg = _make_config(analytics_db_config, str(tmp_path))
 
-		# First run — full snapshot
-		results1 = orchestrate_exports(cfg, _make_logger("pl_incr_r1"))
-		assert results1["practice_log"].success
+		# First run -- full snapshot
+		results1 = orchestrate_exports(cfg, _make_logger("fp_incr_r1"))
+		assert results1["fact_practice"].success
 
-		out_path = os.path.join(str(tmp_path), "practice_log.parquet")
+		out_path = os.path.join(str(tmp_path), "fact_practice.parquet")
 		row_count_1 = pq.read_table(out_path).num_rows
-		# row_count_1 includes all rows in the DB (production + test prefix rows)
 
 		wm_path = os.path.join(str(tmp_path), ".watermark.json")
 		wm_before = load_watermark(wm_path)
-		assert wm_before["practice_log"]["last_watermark"] is not None
+		assert wm_before["fact_practice"]["last_watermark"] is not None
 
-		# Insert 3 more rows (n=6..8) — rows 1-5 are skipped by INSERT IGNORE
-		# These have timestamps 2099-06-01 00:06 to 00:08, all > watermark
-		db_conn.commit()  # flush any open read snapshot
+		# Insert 3 more rows (n=6..8)
+		db_conn.commit()
 		practice_log_rows(db_conn, prefix, 8)
 
-		# Second run — incremental
-		results2 = orchestrate_exports(cfg, _make_logger("pl_incr_r2"))
-		assert results2["practice_log"].success
+		# Second run -- incremental
+		results2 = orchestrate_exports(cfg, _make_logger("fp_incr_r2"))
+		assert results2["fact_practice"].success
 
 		merged = pq.read_table(out_path)
 		assert merged.num_rows == row_count_1 + 3, (
@@ -149,21 +147,21 @@ def test_incremental_export_merges_delta(analytics_db_config, db_conn, tmp_path)
 		# Watermark advanced
 		wm_after = load_watermark(wm_path)
 		assert (
-			wm_after["practice_log"]["last_watermark"]
-			> wm_before["practice_log"]["last_watermark"]
+			wm_after["fact_practice"]["last_watermark"]
+			> wm_before["fact_practice"]["last_watermark"]
 		)
 	finally:
 		cleanup_practice_log_rows(db_conn, prefix)
 
 
 # ---------------------------------------------------------------------------
-# PL-ZERO: Zero-value rows included without modification
+# FP-ZERO: Zero-value rows included without modification
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
 def test_zero_value_rows_included(analytics_db_config, db_conn, tmp_path):
 	"""Rows with correct_count=0 and last_result='Incorrect' appear in output unchanged."""
-	prefix = "PLZRO"
+	prefix = "FPZRO"
 	cleanup_practice_log_rows(db_conn, prefix)
 	try:
 		# The helper generates n=9 with attempt_count=1, correct_count=0, last_result='Incorrect'
@@ -171,12 +169,12 @@ def test_zero_value_rows_included(analytics_db_config, db_conn, tmp_path):
 
 		cfg = _make_config(analytics_db_config, str(tmp_path))
 		results = orchestrate_exports(cfg, _make_logger())
-		assert results["practice_log"].success
+		assert results["fact_practice"].success
 
-		table = pq.read_table(os.path.join(str(tmp_path), "practice_log.parquet"))
+		table = pq.read_table(os.path.join(str(tmp_path), "fact_practice.parquet"))
 		item_ids = table.column("item_id").to_pylist()
 
-		# Row n=9: item_id TEST-RI-PLZRO-000009
+		# Row n=9: item_id TEST-RI-FPZRO-000009
 		zero_item = f"TEST-RI-{prefix}-000009"
 		assert zero_item in item_ids, f"Zero-value row {zero_item!r} not found in output"
 
@@ -188,7 +186,7 @@ def test_zero_value_rows_included(analytics_db_config, db_conn, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# PL-RC: READ COMMITTED isolation
+# FP-RC: READ COMMITTED isolation
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
@@ -218,30 +216,30 @@ def test_read_committed_isolation(analytics_db_config):
 
 
 # ---------------------------------------------------------------------------
-# PL-EMPTY: Zero-row source produces valid empty Parquet with correct schema
+# FP-EMPTY: Zero-row source produces valid empty Parquet with correct schema
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
 def test_empty_source_produces_valid_parquet(analytics_db_config, tmp_path):
 	"""export_snapshot with zero-row result produces an empty Parquet with correct schema."""
 	cfg = _make_config(analytics_db_config, str(tmp_path))
-	out_path = os.path.join(str(tmp_path), "practice_log.parquet")
+	out_path = os.path.join(str(tmp_path), "fact_practice.parquet")
 
 	schema_def = [
 		{"name": "player_id",     "type": "VARCHAR"},
 		{"name": "item_id",       "type": "VARCHAR"},
-		{"name": "attempt_count", "type": "INT"},
-		{"name": "correct_count", "type": "INT"},
 		{"name": "first_seen_at", "type": "DATETIME"},
 		{"name": "last_seen_at",  "type": "DATETIME"},
 		{"name": "last_result",   "type": "VARCHAR"},
+		{"name": "attempt_count", "type": "INT"},
+		{"name": "correct_count", "type": "INT"},
 	]
 	columns = [c["name"] for c in schema_def]
 
 	# Query that returns zero rows
 	sql = (
-		"SELECT `player_id`, `item_id`, `attempt_count`, `correct_count`, "
-		"       `first_seen_at`, `last_seen_at`, `last_result` "
+		"SELECT `player_id`, `item_id`, `first_seen_at`, `last_seen_at`, "
+		"       `last_result`, `attempt_count`, `correct_count` "
 		"FROM `tabMemora Practice Log` WHERE 1=0"
 	)
 
@@ -254,6 +252,6 @@ def test_empty_source_produces_valid_parquet(analytics_db_config, tmp_path):
 	assert table.num_rows == 0
 	assert set(table.schema.names) == set(columns)
 
-	# Watermark NOT written — export_snapshot has no side effects on watermark state
+	# Watermark NOT written -- export_snapshot has no side effects on watermark state
 	wm_path = os.path.join(str(tmp_path), ".watermark.json")
 	assert not os.path.exists(wm_path)

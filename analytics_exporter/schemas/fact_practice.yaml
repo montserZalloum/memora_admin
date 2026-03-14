@@ -1,10 +1,10 @@
-# Practice Log export schema — US1
+# Fact Practice export schema (was practice_log in 047)
 # Mode: incremental_watermark
 #   Full snapshot on first run; delta-merge on subsequent runs.
 #   Watermark key: max(last_seen_at) from the merged output file.
 
-dataset: practice_log
-output_file: practice_log.parquet
+dataset: fact_practice
+output_file: fact_practice.parquet
 mode: incremental_watermark
 watermark_column: last_seen_at
 primary_key:
@@ -27,15 +27,15 @@ sql_incremental: >-
 columns:
   - {name: player_id,     type: VARCHAR}
   - {name: item_id,       type: VARCHAR}
-  - {name: attempt_count, type: INT}
-  - {name: correct_count, type: INT}
   - {name: first_seen_at, type: DATETIME}
   - {name: last_seen_at,  type: DATETIME}
   - {name: last_result,   type: VARCHAR}
+  - {name: attempt_count, type: INT}
+  - {name: correct_count, type: INT}
 
 dq_rules:
-  - {id: DQ-PL-01, type: unique_key, columns: [player_id, item_id]}
-  - {id: DQ-PL-02, type: not_null,   column: player_id}
-  - {id: DQ-PL-03, type: not_null,   column: item_id}
-  - {id: DQ-PL-04, type: min_value,  column: attempt_count, min: 0}
-  - {id: DQ-PL-05, type: min_value,  column: correct_count, min: 0}
+  - {id: DQ-FP-01, type: unique_key, columns: [player_id, item_id]}
+  - {id: DQ-FP-02, type: not_null,   column: player_id}
+  - {id: DQ-FP-03, type: not_null,   column: item_id}
+  - {id: DQ-FP-04, type: min_value,  column: attempt_count, min: 0}
+  - {id: DQ-FP-05, type: min_value,  column: correct_count, min: 0}

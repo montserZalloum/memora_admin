@@ -72,6 +72,8 @@ def analytics_db_config() -> Config:
 		analytics_log_path="/tmp/memora_analytics_inttest/analytics.log",
 		analytics_mode="auto",
 		analytics_datasets=[],
+		analytics_interaction_from=None,
+		analytics_interaction_to=None,
 	)
 
 
@@ -109,6 +111,28 @@ GRADE_TABLE         = "tabMemora Grade"
 MAJOR_TABLE         = "tabMemora Major"
 ACADEMIC_PLAN_TABLE = "tabMemora Academic Plan"
 GRADE_MAJOR_TABLE   = "tabMemora Grade Major"
+
+# New tables added in feature 048
+PLAYER_PROFILE_TABLE             = "tabMemora Player Profile"
+INTERACTION_LOG_TABLE            = "tabMemora Interaction Log"
+SUBSCRIPTION_TABLE               = "tabMemora Player Subscription"
+SUBSCRIPTION_TRANSACTION_TABLE   = "tabMemora Subscription Transaction"
+VOUCHER_CARD_TABLE               = "tabMemora Voucher Card"
+VOUCHER_BATCH_TABLE              = "tabMemora Voucher Batch"
+VOUCHER_ALLOCATION_TABLE         = "tabMemora Voucher Allocation"
+CHALLENGE_ATTEMPT_TABLE          = "tabMemora Challenge Attempt"
+CHALLENGE_ATTEMPT_DETAIL_TABLE   = "tabMemora Challenge Attempt Detail"
+STRUCTURE_PROGRESS_TABLE         = "tabMemora Structure Progress"
+PLAYER_WALLET_TABLE              = "tabMemora Player Wallet"
+LESSON_STAGE_TABLE               = "tabMemora Lesson Stage"
+LESSON_STAGE_SETTINGS_TABLE      = "tabMemora Lesson Stage Settings"
+CONTENT_REPORT_TABLE             = "tabMemora Content Report"
+LIVE_CHALLENGE_EVENT_TABLE       = "tabMemora Live Challenge Event"
+LIVE_CHALLENGE_PARTICIPATION_TABLE = "tabMemora Live Challenge Participation"
+ARCHIVE_JOB_TABLE                = "tabMemora Archive Job"
+TASK_RUN_LOG_TABLE               = "tabMemora Task Run Log"
+BUILD_QUEUE_TABLE                = "tabMemora Build Queue"
+MEMORY_STATE_TABLE               = "tabMemora Memory State"
 
 # Prefixes for test data isolation
 PL_PLAYER_PREFIX = "TEST-PL"

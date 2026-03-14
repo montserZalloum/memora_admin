@@ -1,0 +1,42 @@
+# Fact: Task Run Log (part of fact_task_run multi-file group)
+# Mode: full_snapshot
+# Source: tabMemora Task Run Log
+
+dataset: fact_task_run_log
+output_file: fact_task_run_log.parquet
+mode: full_snapshot
+multi_file_group: fact_task_run
+primary_key:
+  - task_name
+  - run_date
+
+sql_full: >-
+  SELECT
+    `task_name`,
+    `run_date`,
+    `started_at`,
+    `completed_at`,
+    `duration_sec`,
+    `status`,
+    `triggered_by`,
+    `processed_count`,
+    `failed_count`,
+    `error_message`
+  FROM `tabMemora Task Run Log`
+  ORDER BY `task_name`, `run_date`
+
+columns:
+  - {name: task_name,       type: VARCHAR}
+  - {name: run_date,        type: DATE}
+  - {name: started_at,      type: DATETIME}
+  - {name: completed_at,    type: DATETIME}
+  - {name: duration_sec,    type: DECIMAL}
+  - {name: status,          type: VARCHAR}
+  - {name: triggered_by,    type: VARCHAR}
+  - {name: processed_count, type: INT}
+  - {name: failed_count,    type: INT}
+  - {name: error_message,   type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-TL-01, type: not_null, column: task_name}
+  - {id: DQ-TL-02, type: not_null, column: run_date}

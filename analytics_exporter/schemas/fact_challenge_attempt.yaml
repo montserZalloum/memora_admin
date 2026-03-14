@@ -1,0 +1,48 @@
+# Fact: Challenge Attempt (part of fact_challenge multi-file group)
+# Mode: full_snapshot
+# Source: tabMemora Challenge Attempt
+
+dataset: fact_challenge_attempt
+output_file: fact_challenge_attempt.parquet
+mode: full_snapshot
+multi_file_group: fact_challenge
+primary_key:
+  - attempt_id
+
+sql_full: >-
+  SELECT
+    `name` AS attempt_id,
+    `player` AS player_id,
+    `topic` AS topic_id,
+    `subject` AS subject_id,
+    `season` AS season_id,
+    `attempt_number`,
+    `total_questions`,
+    `correct_count`,
+    `score_pct`,
+    `passed`,
+    `time_spent` AS time_spent_sec,
+    `xp_earned`,
+    `submitted_at`
+  FROM `tabMemora Challenge Attempt`
+  ORDER BY `name`
+
+columns:
+  - {name: attempt_id,      type: VARCHAR}
+  - {name: player_id,       type: VARCHAR}
+  - {name: topic_id,        type: VARCHAR}
+  - {name: subject_id,      type: VARCHAR}
+  - {name: season_id,       type: VARCHAR}
+  - {name: attempt_number,  type: INT}
+  - {name: total_questions, type: INT}
+  - {name: correct_count,   type: INT}
+  - {name: score_pct,       type: DECIMAL}
+  - {name: passed,          type: INT}
+  - {name: time_spent_sec,  type: INT}
+  - {name: xp_earned,       type: INT}
+  - {name: submitted_at,    type: DATETIME}
+
+dq_rules:
+  - {id: DQ-CA-01, type: unique_key, columns: [attempt_id]}
+  - {id: DQ-CA-02, type: not_null,   column: attempt_id}
+  - {id: DQ-CA-03, type: not_null,   column: player_id}

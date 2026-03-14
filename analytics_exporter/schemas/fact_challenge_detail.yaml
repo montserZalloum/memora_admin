@@ -1,0 +1,32 @@
+# Fact: Challenge Attempt Detail (part of fact_challenge multi-file group)
+# Mode: full_snapshot
+# Source: tabMemora Challenge Attempt Detail
+
+dataset: fact_challenge_detail
+output_file: fact_challenge_detail.parquet
+mode: full_snapshot
+multi_file_group: fact_challenge
+primary_key:
+  - attempt_id
+  - item_id
+
+sql_full: >-
+  SELECT
+    `parent` AS attempt_id,
+    `item_id`,
+    `correct` AS is_correct,
+    `time_spent` AS time_spent_sec,
+    `chosen_answer`
+  FROM `tabMemora Challenge Attempt Detail`
+  ORDER BY `parent`, `item_id`
+
+columns:
+  - {name: attempt_id,     type: VARCHAR}
+  - {name: item_id,        type: VARCHAR}
+  - {name: is_correct,     type: INT}
+  - {name: time_spent_sec, type: INT}
+  - {name: chosen_answer,  type: INT}
+
+dq_rules:
+  - {id: DQ-CD-01, type: not_null, column: attempt_id}
+  - {id: DQ-CD-02, type: not_null, column: item_id}

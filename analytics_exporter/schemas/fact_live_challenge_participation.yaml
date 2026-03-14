@@ -1,0 +1,36 @@
+# Fact: Live Challenge Participation (part of fact_live_challenge multi-file group)
+# Mode: full_snapshot
+# Source: tabMemora Live Challenge Participation
+
+dataset: fact_live_challenge_participation
+output_file: fact_live_challenge_participation.parquet
+mode: full_snapshot
+multi_file_group: fact_live_challenge
+primary_key:
+  - event_id
+  - player_id
+
+sql_full: >-
+  SELECT
+    `event` AS event_id,
+    `player` AS player_id,
+    `joined_at`,
+    `submitted_at`,
+    `score`,
+    `rank`,
+    `xp_awarded`
+  FROM `tabMemora Live Challenge Participation`
+  ORDER BY `event`, `player`
+
+columns:
+  - {name: event_id,     type: VARCHAR}
+  - {name: player_id,    type: VARCHAR}
+  - {name: joined_at,    type: DATETIME}
+  - {name: submitted_at, type: DATETIME}
+  - {name: score,        type: INT}
+  - {name: rank,         type: INT}
+  - {name: xp_awarded,   type: INT}
+
+dq_rules:
+  - {id: DQ-LP-01, type: not_null, column: event_id}
+  - {id: DQ-LP-02, type: not_null, column: player_id}

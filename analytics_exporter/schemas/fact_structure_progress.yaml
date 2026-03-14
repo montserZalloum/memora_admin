@@ -1,0 +1,29 @@
+# Fact: Structure Progress per player/subject
+# Mode: full_snapshot
+# Source: tabMemora Structure Progress
+
+dataset: fact_structure_progress
+output_file: fact_structure_progress.parquet
+mode: full_snapshot
+primary_key:
+  - player_id
+  - subject_id
+
+sql_full: >-
+  SELECT
+    `player` AS player_id,
+    `subject` AS subject_id,
+    `completion_percentage` AS completion_pct,
+    `passed_lessons_bitset`
+  FROM `tabMemora Structure Progress`
+  ORDER BY `player`, `subject`
+
+columns:
+  - {name: player_id,             type: VARCHAR}
+  - {name: subject_id,            type: VARCHAR}
+  - {name: completion_pct,        type: DECIMAL}
+  - {name: passed_lessons_bitset, type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-SP-01, type: not_null, column: player_id}
+  - {id: DQ-SP-02, type: not_null, column: subject_id}

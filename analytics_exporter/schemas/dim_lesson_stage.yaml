@@ -1,0 +1,36 @@
+# Dimension: Lesson Stage with optional settings
+# Mode: full_snapshot
+# Source: tabMemora Lesson Stage LEFT JOIN tabMemora Lesson Stage Settings
+
+dataset: dim_lesson_stage
+output_file: dim_lesson_stage.parquet
+mode: full_snapshot
+primary_key:
+  - stage_id
+
+sql_full: >-
+  SELECT
+    ls.`stage_id`,
+    ls.`parent` AS lesson_id,
+    ls.`stage_type`,
+    ls.`is_skippable`,
+    lss.`default_stage_time`,
+    lss.`is_time_calculated`
+  FROM `tabMemora Lesson Stage` ls
+  LEFT JOIN `tabMemora Lesson Stage Settings` lss
+    ON lss.`stage_title` = ls.`stage_type`
+  WHERE ls.`stage_id` IS NOT NULL
+  ORDER BY ls.`parent`, ls.`stage_id`
+
+columns:
+  - {name: stage_id,           type: VARCHAR}
+  - {name: lesson_id,          type: VARCHAR}
+  - {name: stage_type,         type: VARCHAR}
+  - {name: is_skippable,       type: INT}
+  - {name: default_stage_time, type: INT}
+  - {name: is_time_calculated, type: INT}
+
+dq_rules:
+  - {id: DQ-LS-01, type: unique_key, columns: [stage_id]}
+  - {id: DQ-LS-02, type: not_null,   column: stage_id}
+  - {id: DQ-LS-03, type: not_null,   column: lesson_id}

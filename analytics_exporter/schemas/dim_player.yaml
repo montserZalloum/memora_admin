@@ -1,0 +1,37 @@
+# Dimension: Player Profile
+# Mode: full_snapshot
+# Excludes sensitive fields: mobile, password (FR-002)
+
+dataset: dim_player
+output_file: dim_player.parquet
+mode: full_snapshot
+primary_key:
+  - player_id
+
+sql_full: >-
+  SELECT
+    `name` AS player_id,
+    `display_name`,
+    `grade` AS grade_id,
+    `major` AS major_id,
+    `season` AS season_id,
+    `gender`,
+    `preferred_lang` AS language,
+    `creation` AS registered_at
+  FROM `tabMemora Player Profile`
+  ORDER BY `name`
+
+columns:
+  - {name: player_id,     type: VARCHAR}
+  - {name: display_name,  type: VARCHAR}
+  - {name: grade_id,      type: VARCHAR}
+  - {name: major_id,      type: VARCHAR}
+  - {name: season_id,     type: VARCHAR}
+  - {name: gender,        type: VARCHAR}
+  - {name: language,      type: VARCHAR}
+  - {name: registered_at, type: DATETIME}
+
+dq_rules:
+  - {id: DQ-DP-01, type: unique_key, columns: [player_id]}
+  - {id: DQ-DP-02, type: not_null,   column: player_id}
+  - {id: DQ-DP-03, type: min_rows,   min: 1}

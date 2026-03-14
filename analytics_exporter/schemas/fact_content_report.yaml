@@ -1,0 +1,34 @@
+# Fact: Content Report from players
+# Mode: full_snapshot
+# Source: tabMemora Content Report
+
+dataset: fact_content_report
+output_file: fact_content_report.parquet
+mode: full_snapshot
+primary_key: []
+
+sql_full: >-
+  SELECT
+    `player` AS player_id,
+    `subject` AS subject_id,
+    `lesson` AS lesson_id,
+    `report_type`,
+    `description`,
+    `status`,
+    `creation` AS created_at,
+    `modified` AS resolved_at
+  FROM `tabMemora Content Report`
+  ORDER BY `creation`
+
+columns:
+  - {name: player_id,   type: VARCHAR}
+  - {name: subject_id,  type: VARCHAR}
+  - {name: lesson_id,   type: VARCHAR}
+  - {name: report_type, type: VARCHAR}
+  - {name: description, type: VARCHAR}
+  - {name: status,      type: VARCHAR}
+  - {name: created_at,  type: DATETIME}
+  - {name: resolved_at, type: DATETIME}
+
+dq_rules:
+  - {id: DQ-CR-01, type: not_null, column: player_id}

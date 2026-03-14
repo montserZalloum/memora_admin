@@ -1,0 +1,48 @@
+# Fact: Voucher Card with batch and allocation details
+# Mode: full_snapshot
+# Source: tabMemora Voucher Card JOIN Batch + LEFT JOIN Allocation
+
+dataset: fact_voucher
+output_file: fact_voucher.parquet
+mode: full_snapshot
+primary_key:
+  - serial_no
+
+sql_full: >-
+  SELECT
+    vc.`serial_no`,
+    vc.`batch` AS batch_id,
+    vb.`batch_name`,
+    vb.`batch_purpose`,
+    vb.`face_value`,
+    vc.`status` AS card_status,
+    vc.`library`,
+    vc.`sale_model`,
+    vc.`redeemed_by`,
+    vc.`redeemed_at`,
+    va.`allocation_date`,
+    va.`customer` AS allocated_to
+  FROM `tabMemora Voucher Card` vc
+  JOIN `tabMemora Voucher Batch` vb ON vb.`name` = vc.`batch`
+  LEFT JOIN `tabMemora Voucher Allocation` va ON va.`name` = vc.`allocation`
+  ORDER BY vc.`serial_no`
+
+columns:
+  - {name: serial_no,       type: VARCHAR}
+  - {name: batch_id,        type: VARCHAR}
+  - {name: batch_name,      type: VARCHAR}
+  - {name: batch_purpose,   type: VARCHAR}
+  - {name: face_value,      type: DECIMAL}
+  - {name: card_status,     type: VARCHAR}
+  - {name: library,         type: VARCHAR}
+  - {name: sale_model,      type: VARCHAR}
+  - {name: redeemed_by,     type: VARCHAR}
+  - {name: redeemed_at,     type: DATETIME}
+  - {name: allocation_date, type: DATE}
+  - {name: allocated_to,    type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-FV-01, type: unique_key, columns: [serial_no]}
+  - {id: DQ-FV-02, type: not_null,   column: serial_no}
+  - {id: DQ-FV-03, type: not_null,   column: batch_id}
+  - {id: DQ-FV-04, type: min_rows,   min: 1}

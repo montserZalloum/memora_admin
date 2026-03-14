@@ -1,0 +1,39 @@
+# Fact: Live Challenge Event (part of fact_live_challenge multi-file group)
+# Mode: full_snapshot
+# Source: tabMemora Live Challenge Event
+
+dataset: fact_live_challenge_event
+output_file: fact_live_challenge_event.parquet
+mode: full_snapshot
+multi_file_group: fact_live_challenge
+primary_key:
+  - event_id
+
+sql_full: >-
+  SELECT
+    `name` AS event_id,
+    `event_name`,
+    `status`,
+    `scheduled_start`,
+    `exam_duration`,
+    `capacity`,
+    `participant_count`,
+    `submitted_count`,
+    `is_paid`
+  FROM `tabMemora Live Challenge Event`
+  ORDER BY `name`
+
+columns:
+  - {name: event_id,          type: VARCHAR}
+  - {name: event_name,        type: VARCHAR}
+  - {name: status,            type: VARCHAR}
+  - {name: scheduled_start,   type: DATETIME}
+  - {name: exam_duration,     type: INT}
+  - {name: capacity,          type: INT}
+  - {name: participant_count, type: INT}
+  - {name: submitted_count,   type: INT}
+  - {name: is_paid,           type: INT}
+
+dq_rules:
+  - {id: DQ-LE-01, type: unique_key, columns: [event_id]}
+  - {id: DQ-LE-02, type: not_null,   column: event_id}

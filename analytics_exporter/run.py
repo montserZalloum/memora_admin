@@ -11,8 +11,9 @@ Exit codes:
 import logging
 import os
 import sys
+import time
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import pyarrow.parquet as pq
@@ -20,24 +21,77 @@ import yaml
 
 from .config import Config
 from .exporter import export_incremental, export_snapshot
+from .manifest import compute_sha256, write_manifest
 from .validator import validate_export
 from .watermark import load_watermark, save_watermark
 
-# All dataset names known to this exporter — used to validate ANALYTICS_DATASETS (T029).
+# ---------------------------------------------------------------------------
+# Dataset catalog
+# ---------------------------------------------------------------------------
+
+# All individual dataset names + multi-file group aliases.
 KNOWN_DATASETS: frozenset[str] = frozenset({
-	"practice_log",
-	"item_mapping",
-	"subjects",
-	"tracks",
-	"units",
-	"topics",
-	"lessons",
-	"seasons",
-	"grades",
-	"majors",
-	"academic_plans",
-	"grade_majors",
+	# Dimensions
+	"dim_player",
+	"dim_content_hierarchy",
+	"dim_review_item",
+	"dim_season",
+	"dim_academic_plan",
+	# Core facts
+	"fact_interaction",
+	"fact_memory_state",
+	"fact_practice",
+	"fact_subscription",
+	"fact_voucher",
+	"fact_challenge_attempt",
+	"fact_challenge_detail",
+	# Supplementary
+	"fact_structure_progress",
+	"fact_player_wallet",
+	"dim_lesson_stage",
+	"fact_content_report",
+	"fact_live_challenge_event",
+	"fact_live_challenge_participation",
+	"fact_archive_job",
+	"fact_task_run_log",
+	"fact_build_queue",
+	# Multi-file group aliases (selecting any member or the alias exports the full group)
+	"fact_challenge",
+	"fact_live_challenge",
+	"fact_task_run",
 })
+
+# Multi-file group definitions: group_alias -> [schema_name, ...]
+MULTI_FILE_GROUPS: dict[str, list[str]] = {
+	"fact_challenge": ["fact_challenge_attempt", "fact_challenge_detail"],
+	"fact_live_challenge": ["fact_live_challenge_event", "fact_live_challenge_participation"],
+	"fact_task_run": ["fact_task_run_log", "fact_build_queue"],
+}
+
+# Dimension datasets (exported first — reference data for fact table joins)
+_DIMENSION_DATASETS: list[str] = [
+	"dim_player",
+	"dim_content_hierarchy",
+	"dim_review_item",
+	"dim_season",
+	"dim_academic_plan",
+]
+
+# Core fact datasets (exported after dimensions)
+_CORE_FACT_SNAPSHOTS: list[str] = [
+	"fact_memory_state",
+	"fact_subscription",
+	"fact_voucher",
+]
+
+# Supplementary snapshot datasets
+_SUPPLEMENTARY_SNAPSHOTS: list[str] = [
+	"fact_structure_progress",
+	"fact_player_wallet",
+	"dim_lesson_stage",
+	"fact_content_report",
+	"fact_archive_job",
+]
 
 
 @dataclass
@@ -48,6 +102,8 @@ class ExportResult:
 	output_path: str
 	violations: list[str] = field(default_factory=list)
 	error: Optional[str] = None
+	duration_sec: float = 0.0
+	mode: str = ""
 
 
 def load_schema(schema_path: str) -> dict:
@@ -61,40 +117,272 @@ def create_output_dir(path: str) -> None:
 	os.makedirs(path, exist_ok=True)
 
 
+# ---------------------------------------------------------------------------
+# Helpers: should a dataset be exported?
+# ---------------------------------------------------------------------------
+
+def _is_active(name: str, active: set[str] | None) -> bool:
+	"""Check if a dataset or group should be exported given the active filter."""
+	if active is None:
+		return True
+	if name in active:
+		return True
+	# Check if any member of a multi-file group is in active set
+	for group_alias, members in MULTI_FILE_GROUPS.items():
+		if name == group_alias and any(m in active for m in members):
+			return True
+		if name in members and group_alias in active:
+			return True
+	return False
+
+
+# ---------------------------------------------------------------------------
+# Export wrappers with manifest generation
+# ---------------------------------------------------------------------------
+
+def _export_snapshot_with_manifest(
+	config: Config, log: logging.Logger, schema_name: str
+) -> ExportResult:
+	"""Export a full_snapshot dataset and write its manifest."""
+	result = _export_full_snapshot_dataset(config, log, schema_name)
+	if result.success:
+		_write_single_manifest(config.analytics_output_path, result)
+	return result
+
+
+def _export_date_range_dataset(
+	config: Config, log: logging.Logger, schema_name: str
+) -> ExportResult:
+	"""Export a date-range filtered dataset with manifest."""
+	schema_path = os.path.join(config.analytics_schema_path, f"{schema_name}.yaml")
+	schema = load_schema(schema_path)
+
+	dataset = schema["dataset"]
+	output_path = os.path.join(config.analytics_output_path, schema["output_file"])
+	columns = [c["name"] for c in schema["columns"]]
+	schema_def = schema["columns"]
+	dq_rules = schema["dq_rules"]
+
+	# Compute date range
+	if config.analytics_interaction_from and config.analytics_interaction_to:
+		from_date = config.analytics_interaction_from
+		to_date = config.analytics_interaction_to
+	else:
+		today = datetime.utcnow().date()
+		from_date = (today - timedelta(days=30)).isoformat()
+		to_date = today.isoformat()
+
+	try:
+		log.info("%s: date-range export [%s, %s]", dataset, from_date, to_date)
+		path, count = export_snapshot(
+			config,
+			schema["sql_full"],
+			(from_date, to_date),
+			columns,
+			schema_def,
+			output_path,
+		)
+
+		violations = validate_export(path, dq_rules)
+		if violations:
+			log.warning("%s: DQ violations: %s", dataset, violations)
+			return ExportResult(
+				dataset=dataset, success=False, row_count=count,
+				output_path=path, violations=violations,
+			)
+
+		log.info("%s: exported %d rows to %s", dataset, count, path)
+		result = ExportResult(
+			dataset=dataset, success=True, row_count=count,
+			output_path=path, violations=[],
+		)
+		_write_single_manifest(config.analytics_output_path, result)
+		return result
+
+	except Exception as exc:
+		log.error("%s: export failed: %s", dataset, exc, exc_info=True)
+		return ExportResult(
+			dataset=dataset, success=False, row_count=0,
+			output_path=output_path, error=str(exc),
+		)
+
+
+def _export_multi_file_dataset(
+	config: Config, log: logging.Logger, group_key: str, schema_names: list[str]
+) -> dict[str, ExportResult]:
+	"""Export a multi-file dataset atomically. Both succeed or both fail.
+
+	Returns a dict of schema_name -> ExportResult for each member.
+	On failure, cleans up any partial files.
+	"""
+	results: dict[str, ExportResult] = {}
+	try:
+		for name in schema_names:
+			result = _export_full_snapshot_dataset(config, log, name)
+			results[name] = result
+			if not result.success:
+				raise _ExportError(
+					f"{name} failed: {result.error or result.violations}"
+				)
+
+		# All succeeded — write combined manifest
+		files_info = []
+		for name in schema_names:
+			r = results[name]
+			filename = os.path.basename(r.output_path)
+			checksum = compute_sha256(r.output_path)
+			size_bytes = os.path.getsize(r.output_path)
+			files_info.append({
+				"filename": filename,
+				"row_count": r.row_count,
+				"checksum": checksum,
+				"size_bytes": size_bytes,
+			})
+		write_manifest(config.analytics_output_path, group_key, files_info)
+		return results
+
+	except Exception:
+		# Clean up any partial files on failure
+		for r in results.values():
+			if r.success and os.path.exists(r.output_path):
+				try:
+					os.remove(r.output_path)
+				except OSError:
+					pass
+		# Mark all as failed if any failed
+		for name in schema_names:
+			if name not in results:
+				schema_path = os.path.join(
+					config.analytics_schema_path, f"{name}.yaml"
+				)
+				output_path = os.path.join(
+					config.analytics_output_path, f"{name}.parquet"
+				)
+				results[name] = ExportResult(
+					dataset=name, success=False, row_count=0,
+					output_path=output_path,
+					error="skipped due to group failure",
+				)
+		return results
+
+
+class _ExportError(Exception):
+	pass
+
+
+def _write_single_manifest(output_dir: str, result: ExportResult) -> None:
+	"""Write manifest for a single-file export result."""
+	filename = os.path.basename(result.output_path)
+	checksum = compute_sha256(result.output_path)
+	size_bytes = os.path.getsize(result.output_path)
+	write_manifest(output_dir, result.dataset, [{
+		"filename": filename,
+		"row_count": result.row_count,
+		"checksum": checksum,
+		"size_bytes": size_bytes,
+	}])
+
+
+# ---------------------------------------------------------------------------
+# Orchestration
+# ---------------------------------------------------------------------------
+
 def orchestrate_exports(config: Config, log: logging.Logger) -> dict[str, ExportResult]:
 	"""Dispatch exports for each configured dataset.
 
-	Returns a dict mapping dataset name → ExportResult.
+	Returns a dict mapping dataset name -> ExportResult.
 	Datasets are filtered by config.analytics_datasets when non-empty.
+	Export order: dimensions -> core facts -> supplementary.
 	"""
 	results: dict[str, ExportResult] = {}
 
 	active = set(config.analytics_datasets) if config.analytics_datasets else None
 
-	# --- US1: practice_log ---
-	if active is None or "practice_log" in active:
-		results["practice_log"] = _export_practice_log(config, log)
+	# --- Dimension datasets (full snapshot with manifest) ---
+	for ds in _DIMENSION_DATASETS:
+		if _is_active(ds, active):
+			t0 = time.monotonic()
+			results[ds] = _export_snapshot_with_manifest(config, log, ds)
+			results[ds].duration_sec = time.monotonic() - t0
 
-	# --- US2: item_mapping ---
-	if active is None or "item_mapping" in active:
-		results["item_mapping"] = _export_item_mapping(config, log)
+	# --- Core fact datasets ---
 
-	# --- US3: content hierarchy ---
-	for schema_name in ("subjects", "tracks", "units", "topics", "lessons"):
-		if active is None or schema_name in active:
-			results[schema_name] = _export_full_snapshot_dataset(config, log, schema_name)
+	# fact_interaction (date-range)
+	if _is_active("fact_interaction", active):
+		t0 = time.monotonic()
+		results["fact_interaction"] = _export_date_range_dataset(
+			config, log, "fact_interaction"
+		)
+		results["fact_interaction"].duration_sec = time.monotonic() - t0
 
-	# --- US4: academic context ---
-	for schema_name in ("seasons", "grades", "majors", "academic_plans", "grade_majors"):
-		if active is None or schema_name in active:
-			results[schema_name] = _export_full_snapshot_dataset(config, log, schema_name)
+	# fact_memory_state, fact_subscription, fact_voucher (full snapshot)
+	for ds in _CORE_FACT_SNAPSHOTS:
+		if _is_active(ds, active):
+			t0 = time.monotonic()
+			results[ds] = _export_snapshot_with_manifest(config, log, ds)
+			results[ds].duration_sec = time.monotonic() - t0
+
+	# fact_practice (incremental watermark)
+	if _is_active("fact_practice", active):
+		t0 = time.monotonic()
+		results["fact_practice"] = _export_fact_practice(config, log)
+		results["fact_practice"].duration_sec = time.monotonic() - t0
+
+	# fact_challenge (multi-file)
+	if _is_active("fact_challenge", active):
+		t0 = time.monotonic()
+		group_results = _export_multi_file_dataset(
+			config, log, "fact_challenge",
+			MULTI_FILE_GROUPS["fact_challenge"],
+		)
+		elapsed = time.monotonic() - t0
+		for r in group_results.values():
+			r.duration_sec = elapsed / max(len(group_results), 1)
+		results.update(group_results)
+
+	# --- Supplementary datasets ---
+
+	# Single-file snapshots
+	for ds in _SUPPLEMENTARY_SNAPSHOTS:
+		if _is_active(ds, active):
+			t0 = time.monotonic()
+			results[ds] = _export_snapshot_with_manifest(config, log, ds)
+			results[ds].duration_sec = time.monotonic() - t0
+
+	# fact_live_challenge (multi-file)
+	if _is_active("fact_live_challenge", active):
+		t0 = time.monotonic()
+		group_results = _export_multi_file_dataset(
+			config, log, "fact_live_challenge",
+			MULTI_FILE_GROUPS["fact_live_challenge"],
+		)
+		elapsed = time.monotonic() - t0
+		for r in group_results.values():
+			r.duration_sec = elapsed / max(len(group_results), 1)
+		results.update(group_results)
+
+	# fact_task_run (multi-file)
+	if _is_active("fact_task_run", active):
+		t0 = time.monotonic()
+		group_results = _export_multi_file_dataset(
+			config, log, "fact_task_run",
+			MULTI_FILE_GROUPS["fact_task_run"],
+		)
+		elapsed = time.monotonic() - t0
+		for r in group_results.values():
+			r.duration_sec = elapsed / max(len(group_results), 1)
+		results.update(group_results)
 
 	return results
 
 
-def _export_practice_log(config: Config, log: logging.Logger) -> ExportResult:
-	"""Export the practice_log dataset (US1)."""
-	schema_path = os.path.join(config.analytics_schema_path, "practice_log.yaml")
+# ---------------------------------------------------------------------------
+# Dataset-specific exporters
+# ---------------------------------------------------------------------------
+
+def _export_fact_practice(config: Config, log: logging.Logger) -> ExportResult:
+	"""Export the fact_practice dataset (incremental watermark) with manifest."""
+	schema_path = os.path.join(config.analytics_schema_path, "fact_practice.yaml")
 	schema = load_schema(schema_path)
 
 	output_path = os.path.join(config.analytics_output_path, schema["output_file"])
@@ -106,7 +394,7 @@ def _export_practice_log(config: Config, log: logging.Logger) -> ExportResult:
 	dq_rules = schema["dq_rules"]
 
 	watermark_data = load_watermark(wm_path) or {}
-	dataset_wm = watermark_data.get("practice_log", {})
+	dataset_wm = watermark_data.get("fact_practice", {})
 	last_wm = dataset_wm.get("last_watermark")
 
 	try:
@@ -118,7 +406,7 @@ def _export_practice_log(config: Config, log: logging.Logger) -> ExportResult:
 		)
 
 		if use_incremental:
-			log.info("practice_log: incremental export (watermark=%s)", last_wm)
+			log.info("fact_practice: incremental export (watermark=%s)", last_wm)
 			wm_dt = datetime.fromisoformat(last_wm)
 			path, count = export_incremental(
 				config,
@@ -130,7 +418,7 @@ def _export_practice_log(config: Config, log: logging.Logger) -> ExportResult:
 				pk_columns,
 			)
 		else:
-			log.info("practice_log: full snapshot export")
+			log.info("fact_practice: full snapshot export")
 			path, count = export_snapshot(
 				config,
 				schema["sql_full"],
@@ -142,9 +430,9 @@ def _export_practice_log(config: Config, log: logging.Logger) -> ExportResult:
 
 		violations = validate_export(path, dq_rules)
 		if violations:
-			log.warning("practice_log: DQ violations: %s", violations)
+			log.warning("fact_practice: DQ violations: %s", violations)
 			return ExportResult(
-				dataset="practice_log",
+				dataset="fact_practice",
 				success=False,
 				row_count=count,
 				output_path=path,
@@ -161,7 +449,7 @@ def _export_practice_log(config: Config, log: logging.Logger) -> ExportResult:
 
 		new_wm_data = {
 			**watermark_data,
-			"practice_log": {
+			"fact_practice": {
 				"last_watermark": new_last_wm,
 				"last_export_at": datetime.utcnow().isoformat(),
 				"last_row_count": count,
@@ -169,71 +457,23 @@ def _export_practice_log(config: Config, log: logging.Logger) -> ExportResult:
 		}
 		save_watermark(wm_path, new_wm_data)
 
-		log.info("practice_log: exported %d rows to %s", count, path)
-		return ExportResult(
-			dataset="practice_log",
+		log.info("fact_practice: exported %d rows to %s", count, path)
+		result = ExportResult(
+			dataset="fact_practice",
 			success=True,
 			row_count=count,
 			output_path=path,
 			violations=[],
+			mode="incremental" if use_incremental else "full",
 		)
+		# Generate manifest for fact_practice
+		_write_single_manifest(config.analytics_output_path, result)
+		return result
 
 	except Exception as exc:
-		log.error("practice_log: export failed: %s", exc, exc_info=True)
+		log.error("fact_practice: export failed: %s", exc, exc_info=True)
 		return ExportResult(
-			dataset="practice_log",
-			success=False,
-			row_count=0,
-			output_path=output_path,
-			error=str(exc),
-		)
-
-
-def _export_item_mapping(config: Config, log: logging.Logger) -> ExportResult:
-	"""Export the item_mapping dataset (US2)."""
-	schema_path = os.path.join(config.analytics_schema_path, "item_mapping.yaml")
-	schema = load_schema(schema_path)
-
-	output_path = os.path.join(config.analytics_output_path, schema["output_file"])
-	columns = [c["name"] for c in schema["columns"]]
-	schema_def = schema["columns"]
-	dq_rules = schema["dq_rules"]
-
-	try:
-		log.info("item_mapping: full snapshot export")
-		path, count = export_snapshot(
-			config,
-			schema["sql_full"],
-			(),
-			columns,
-			schema_def,
-			output_path,
-		)
-
-		violations = validate_export(path, dq_rules)
-		if violations:
-			log.warning("item_mapping: DQ violations: %s", violations)
-			return ExportResult(
-				dataset="item_mapping",
-				success=False,
-				row_count=count,
-				output_path=path,
-				violations=violations,
-			)
-
-		log.info("item_mapping: exported %d rows to %s", count, path)
-		return ExportResult(
-			dataset="item_mapping",
-			success=True,
-			row_count=count,
-			output_path=path,
-			violations=[],
-		)
-
-	except Exception as exc:
-		log.error("item_mapping: export failed: %s", exc, exc_info=True)
-		return ExportResult(
-			dataset="item_mapping",
+			dataset="fact_practice",
 			success=False,
 			row_count=0,
 			output_path=output_path,
@@ -296,6 +536,10 @@ def _export_full_snapshot_dataset(
 		)
 
 
+# ---------------------------------------------------------------------------
+# Logger + main
+# ---------------------------------------------------------------------------
+
 def _setup_logger(log_path: str) -> logging.Logger:
 	"""Configure and return the analytics_exporter logger."""
 	log = logging.getLogger("analytics_exporter")
@@ -334,7 +578,7 @@ def main() -> int:
 	log = _setup_logger(config.analytics_log_path)
 	log.info("Analytics exporter starting")
 
-	# T029: Validate dataset names at startup
+	# Validate dataset names at startup
 	if config.analytics_datasets:
 		unknown = set(config.analytics_datasets) - KNOWN_DATASETS
 		if unknown:
@@ -347,20 +591,31 @@ def main() -> int:
 
 	create_output_dir(config.analytics_output_path)
 
-	# T030: ANALYTICS_MODE=incremental requires an existing watermark for practice_log
+	# ANALYTICS_MODE=incremental requires an existing watermark for fact_practice
 	active = set(config.analytics_datasets) if config.analytics_datasets else None
-	if config.analytics_mode == "incremental" and (active is None or "practice_log" in active):
+	if config.analytics_mode == "incremental" and (active is None or "fact_practice" in active):
 		wm_path = os.path.join(config.analytics_output_path, ".watermark.json")
 		wm_data = load_watermark(wm_path)
-		if wm_data is None or "practice_log" not in wm_data:
+		if wm_data is None or "fact_practice" not in wm_data:
 			log.error(
-				"ANALYTICS_MODE=incremental but no practice_log watermark found at %s. "
+				"ANALYTICS_MODE=incremental but no fact_practice watermark found at %s. "
 				"Run in full or auto mode first.",
 				wm_path,
 			)
 			return 2
 
 	results = orchestrate_exports(config, log)
+
+	# Print per-dataset summary lines
+	for result in results.values():
+		label = f"[{result.dataset}]"
+		rows_field = f"rows={result.row_count}"
+		dur = int(result.duration_sec)
+		dur_field = f"duration={dur}s"
+		status = "ok" if result.success else "failed"
+		mode_suffix = f"  mode={result.mode}" if result.mode else ""
+		line = f"{label:<40}{rows_field:<12}{dur_field:<14}status={status}{mode_suffix}"
+		log.info(line)
 
 	failures = [r for r in results.values() if not r.success]
 	if failures:

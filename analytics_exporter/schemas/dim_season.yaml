@@ -1,0 +1,34 @@
+# Dimension: Season (expanded with is_published column)
+# Mode: full_snapshot
+
+dataset: dim_season
+output_file: dim_season.parquet
+mode: full_snapshot
+primary_key:
+  - season_id
+
+sql_full: >-
+  SELECT
+    `name` AS season_id,
+    `season_title`,
+    `season_seq`,
+    `start_date`,
+    `end_date`,
+    `is_published`
+  FROM `tabMemora Season`
+  ORDER BY `season_seq`
+
+columns:
+  - {name: season_id,     type: VARCHAR}
+  - {name: season_title,  type: VARCHAR}
+  - {name: season_seq,    type: INT}
+  - {name: start_date,    type: DATE}
+  - {name: end_date,      type: DATE}
+  - {name: is_published,  type: INT}
+
+dq_rules:
+  - {id: DQ-DS-01, type: unique_key, columns: [season_id]}
+  - {id: DQ-DS-02, type: unique_key, columns: [season_seq]}
+  - {id: DQ-DS-03, type: not_null,   column: season_id}
+  - {id: DQ-DS-04, type: not_null,   column: season_seq}
+  - {id: DQ-DS-05, type: min_rows,   min: 1}

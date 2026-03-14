@@ -1,0 +1,44 @@
+# Dimension: Academic Plan (denormalized with grade/major titles and subject_list)
+# Mode: full_snapshot
+
+dataset: dim_academic_plan
+output_file: dim_academic_plan.parquet
+mode: full_snapshot
+primary_key:
+  - plan_id
+
+sql_full: >-
+  SELECT
+    ap.name AS plan_id,
+    ap.plan_name,
+    ap.grade AS grade_id,
+    g.grade_title,
+    ap.major AS major_id,
+    m.major_title,
+    ap.season AS season_id,
+    ap.is_published,
+    ap.total_subjects,
+    ap.total_lessons,
+    (SELECT GROUP_CONCAT(ps.subject ORDER BY ps.idx) FROM `tabMemora Plan Subject` ps
+     WHERE ps.parent = ap.name) AS subject_list
+  FROM `tabMemora Academic Plan` ap
+  LEFT JOIN `tabMemora Grade` g ON g.name = ap.grade
+  LEFT JOIN `tabMemora Major` m ON m.name = ap.major
+  ORDER BY ap.name
+
+columns:
+  - {name: plan_id,        type: VARCHAR}
+  - {name: plan_name,      type: VARCHAR}
+  - {name: grade_id,       type: VARCHAR}
+  - {name: grade_title,    type: VARCHAR}
+  - {name: major_id,       type: VARCHAR}
+  - {name: major_title,    type: VARCHAR}
+  - {name: season_id,      type: VARCHAR}
+  - {name: is_published,   type: INT}
+  - {name: total_subjects, type: INT}
+  - {name: total_lessons,  type: INT}
+  - {name: subject_list,   type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-AP-01, type: unique_key, columns: [plan_id]}
+  - {id: DQ-AP-02, type: not_null,   column: plan_id}

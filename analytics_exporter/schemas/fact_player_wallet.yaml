@@ -1,0 +1,34 @@
+# Fact: Player Wallet — aggregate XP, lessons, streak data
+# Mode: full_snapshot
+# Source: tabMemora Player Wallet
+
+dataset: fact_player_wallet
+output_file: fact_player_wallet.parquet
+mode: full_snapshot
+primary_key:
+  - player_id
+
+sql_full: >-
+  SELECT
+    `player` AS player_id,
+    `total_xp`,
+    `total_lessons`,
+    `total_time_min`,
+    `current_streak`,
+    `daily_xp_json`,
+    `last_sync_at`
+  FROM `tabMemora Player Wallet`
+  ORDER BY `player`
+
+columns:
+  - {name: player_id,      type: VARCHAR}
+  - {name: total_xp,       type: INT}
+  - {name: total_lessons,  type: INT}
+  - {name: total_time_min, type: INT}
+  - {name: current_streak, type: INT}
+  - {name: daily_xp_json,  type: VARCHAR}
+  - {name: last_sync_at,   type: DATETIME}
+
+dq_rules:
+  - {id: DQ-PW-01, type: unique_key, columns: [player_id]}
+  - {id: DQ-PW-02, type: not_null,   column: player_id}

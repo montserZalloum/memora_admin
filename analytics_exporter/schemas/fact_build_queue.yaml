@@ -1,0 +1,36 @@
+# Fact: Build Queue (part of fact_task_run multi-file group)
+# Mode: full_snapshot
+# Source: tabMemora Build Queue
+
+dataset: fact_build_queue
+output_file: fact_build_queue.parquet
+mode: full_snapshot
+multi_file_group: fact_task_run
+primary_key: []
+
+sql_full: >-
+  SELECT
+    `target_type`,
+    `target_name`,
+    `status`,
+    `started_at`,
+    `completed_at`,
+    `duration_sec`,
+    `files_generated`,
+    `trigger_reason`
+  FROM `tabMemora Build Queue`
+  ORDER BY `target_type`, `target_name`
+
+columns:
+  - {name: target_type,     type: VARCHAR}
+  - {name: target_name,     type: VARCHAR}
+  - {name: status,          type: VARCHAR}
+  - {name: started_at,      type: DATETIME}
+  - {name: completed_at,    type: DATETIME}
+  - {name: duration_sec,    type: DECIMAL}
+  - {name: files_generated, type: INT}
+  - {name: trigger_reason,  type: VARCHAR}
+
+dq_rules:
+  - {id: DQ-BQ-01, type: not_null, column: target_type}
+  - {id: DQ-BQ-02, type: not_null, column: target_name}
