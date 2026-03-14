@@ -31,6 +31,7 @@ The pipeline has two independent executors that run as cron jobs under the `core
 |----------|--------|---------|----------|
 | **Archive Executor** | `archive_executor.run` | Processes archive jobs (export, transfer, ingest, purge) | Daily 02:00 |
 | **Live Sync Executor** | `archive_executor.live_sync` | Processes live sync jobs (daily snapshot to analytics) | Daily 03:05 |
+| **Analytics Exporter** | `analytics_exporter` | Exports all fact/dimension datasets to Parquet + rsync to analytics server | Daily 06:45 |
 
 Both executors:
 - Are standalone Python scripts (no Frappe dependency)
@@ -39,13 +40,17 @@ Both executors:
 - Connect to MariaDB via TCP (not socket)
 - Transfer Parquet files to the analytics server via rsync over SSH
 
+Additionally, the **dimension sync** service runs inside the Frappe worker process (event-driven + daily reconciliation at 04:15). It loads SSH credentials from `/etc/memora-archive.env` via `python-dotenv` as a fallback, since the Frappe process does not source the env file.
+
 Frappe handles job *creation* via its scheduler (hooks.py). The executors handle job *processing*.
 
 ```
 Frappe Scheduler (hooks.py)          External Cron (crontab)
   01:20  create archive jobs    -->    02:00  archive executor processes them
   03:00  create live sync jobs  -->    03:05  live sync executor processes them
+  04:15  dimension reconcile         (runs inside Frappe worker, rsyncs dimensions)
   06:00  send failure alerts
+                                       06:45  analytics exporter (all fact + dim datasets)
 ```
 
 ---
@@ -96,6 +101,7 @@ Create the following directories. All must be owned by the user that runs cron (
 # Data directories
 sudo mkdir -p /data/memora/archives/.staging
 sudo mkdir -p /data/memora/live/.staging
+sudo mkdir -p /data/memora/analytics_exports
 
 # Log directory
 sudo mkdir -p /var/log/memora-archive
@@ -106,6 +112,7 @@ sudo mkdir -p /etc/memora-archive
 # Fix ownership (replace corex with your user)
 sudo chown -R corex:corex /data/memora/archives
 sudo chown -R corex:corex /data/memora/live
+sudo chown -R corex:corex /data/memora/analytics_exports
 sudo chown -R corex:corex /var/log/memora-archive
 ```
 
@@ -117,6 +124,7 @@ Final layout:
     .staging/         # Temporary staging during export
   live/               # Live sync Parquet batches (LSYNC-XXXXX directories)
     .staging/         # Temporary staging during export
+  analytics_exports/  # Analytics exporter output (fact + dim Parquet + manifests)
 
 /var/log/memora-archive/
   archive.log         # Structured JSON log (both executors write here)
@@ -194,7 +202,7 @@ EOF
 sudo chmod 644 /etc/memora-archive.env
 ```
 
-> **Important**: The file must be readable by the cron user. Use `644` (readable by all) or `640` with group ownership matching the cron user. Do NOT use `600` if cron runs as a non-root user different from the file owner.
+> **Important**: The file must be readable by the cron user **and** the Frappe worker user. The dimension sync service (running inside Frappe workers) loads this file via `python-dotenv` as a fallback for SSH credentials. Use `644` (readable by all) or `640` with group ownership matching both the cron user and the Frappe worker user. Do NOT use `600` if cron runs as a non-root user different from the file owner.
 
 ---
 
@@ -245,6 +253,7 @@ USER=corex
 # Data directories
 sudo chown -R $USER:$USER /data/memora/archives
 sudo chown -R $USER:$USER /data/memora/live
+sudo chown -R $USER:$USER /data/memora/analytics_exports
 
 # Log directory
 sudo chown -R $USER:$USER /var/log/memora-archive
@@ -275,6 +284,9 @@ Add these to the crontab for the `corex` user (`crontab -e`):
 
 # Daily at 03:05: Run live sync executor (daily snapshot to analytics)
 5 3 * * * cd /home/corex/aurevia-bench/apps/memora_admin && set -a && . /etc/memora-archive.env && set +a && /usr/bin/python3 -m archive_executor.live_sync >> /var/log/memora-archive/live_sync_cron.log 2>&1
+
+# Daily at 06:45: Run analytics exporter (all fact/dimension datasets + rsync)
+45 6 * * * cd /home/corex/aurevia-bench/apps/memora_admin && set -a && . /etc/memora-archive.env && set +a && /usr/bin/python3 -m analytics_exporter >> /var/log/memora-archive/analytics_export_cron.log 2>&1
 ```
 
 Key points:
@@ -292,7 +304,9 @@ The Frappe scheduler (via `hooks.py`) creates the jobs. The cron executors proce
 02:00  Archive executor runs and processes them         <-- cron
 03:00  Frappe creates live sync jobs (trigger_daily_live_sync)
 03:05  Live sync executor runs and processes them       <-- cron
+04:15  Frappe dimension reconciliation                  <-- Frappe scheduler
 06:00  Frappe sends failure notifications (notify_failed_archive_jobs)
+06:45  Analytics exporter (fact + dim datasets)         <-- cron
 ```
 
 ---
@@ -452,6 +466,7 @@ rsync --version | head -1
 cd /home/corex/aurevia-bench/apps/memora_admin
 python3 -c "from archive_executor.run import main; print('archive executor OK')"
 python3 -c "from archive_executor.live_sync import main; print('live sync executor OK')"
+python3 -c "from analytics_exporter.run import main; print('analytics exporter OK')"
 
 # 9. Required packages
 python3 -c "
@@ -466,8 +481,8 @@ print('pydantic', pydantic.__version__)
 
 ```bash
 # 10. Cron entries exist
-crontab -l | grep archive_executor
-# Expected: two entries (run + live_sync)
+crontab -l | grep -E 'archive_executor|analytics_exporter'
+# Expected: three entries (archive run + live_sync + analytics_exporter)
 ```
 
 ### F. Frappe scheduler
@@ -481,7 +496,7 @@ bench doctor
 ### G. Dry run
 
 ```bash
-# 12. Run both executors manually and check logs
+# 12. Run all executors manually and check logs
 cd /home/corex/aurevia-bench/apps/memora_admin
 set -a && . /etc/memora-archive.env && set +a
 
@@ -490,6 +505,9 @@ tail -5 /var/log/memora-archive/archive.log
 
 python3 -m archive_executor.live_sync
 tail -5 /var/log/memora-archive/archive.log
+
+python3 -m analytics_exporter
+tail -5 /var/log/memora-archive/analytics_exporter.log
 ```
 
 ---
@@ -502,7 +520,7 @@ This is the #1 issue on fresh setups. Everything was initially run as root, leav
 
 ```bash
 # Fix everything at once
-sudo chown -R corex:corex /data/memora/archives /data/memora/live /var/log/memora-archive
+sudo chown -R corex:corex /data/memora/archives /data/memora/live /data/memora/analytics_exports /var/log/memora-archive
 sudo chown corex:corex /var/run/memora-archive.lock /var/run/memora-live-sync.lock
 sudo chown corex:corex /etc/memora-archive/id_rsa_analytics
 ```
@@ -531,6 +549,15 @@ The SSH private key is not readable by the cron user:
 sudo chown corex:corex /etc/memora-archive/id_rsa_analytics
 sudo chmod 600 /etc/memora-archive/id_rsa_analytics
 ```
+
+### Dimensions exported but not transferred
+
+The dimension sync runs inside the Frappe worker process, which does not source `/etc/memora-archive.env`. The `_transfer_dimensions()` function loads the env file via `python-dotenv` as a fallback. If dimensions are exported locally but never reach the analytics server:
+
+1. Verify `/etc/memora-archive.env` exists and contains `ANALYTICS_SSH_HOST`
+2. Verify the file is readable by the Frappe worker user (`chmod 644`)
+3. Check the Frappe worker log for `"ANALYTICS_SSH_HOST not set — skipping dimension transfer"`
+4. To override the env file path, set `MEMORA_ARCHIVE_ENV_FILE` in the Frappe supervisor config
 
 ### Job stuck at "Pending" forever
 
@@ -585,7 +612,7 @@ MariaDB                                        DuckDB + Parquet Lake
   |                                               ^
   | SQL query                                     | ingest CLI
   v                                               |
-archive_executor/                                 |
+archive_executor/ (cron, standalone)              |
   run.py (archives)     -- rsync over SSH -->   /data/analytics/archives/
   live_sync.py (live)   -- rsync over SSH -->   /data/analytics/live/
   |
@@ -593,6 +620,17 @@ archive_executor/                                 |
 /data/memora/
   archives/ARCH-XXXXX/    (Parquet: fact + dimensions + manifest.json)
   live/LSYNC-XXXXX/       (Parquet: fact + dimensions + manifest.json)
+
+analytics_exporter/ (cron, standalone, daily 06:45)
+  run.py (all facts+dims) -- rsync over SSH --> /data/analytics/datasets/
+  |
+  v
+/data/memora/
+  analytics_exports/      (Parquet: all fact + dim datasets + manifests)
+
+Frappe worker (dimension_refresh.py)
+  reconcile / events    -- rsync over SSH -->   /data/analytics/dimensions/
+  (loads /etc/memora-archive.env via dotenv)
 ```
 
 ### Schema Registry
@@ -634,6 +672,7 @@ APP_DIR=/home/corex/aurevia-bench/apps/memora_admin
 echo "=== Creating directories ==="
 mkdir -p /data/memora/archives/.staging
 mkdir -p /data/memora/live/.staging
+mkdir -p /data/memora/analytics_exports
 mkdir -p /var/log/memora-archive
 mkdir -p /etc/memora-archive
 

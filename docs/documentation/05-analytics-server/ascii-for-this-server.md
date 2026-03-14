@@ -1,627 +1,581 @@
-# Archivable & Transferable Parquet Data Hierarchy
-
-## Pipeline Overview
+# Data Movement & Analytics Platform — Full Architecture
 
 ```
-Memora Admin (Source)                                   Analytics Server
-│                                                       │
-├── ARCHIVE Pipeline ──── rsync/SSH ──────────────────► │── Hive Lake (Parquet)
-├── LIVE SYNC Pipeline ── rsync/SSH ──────────────────► │── DuckDB Live Tables
-├── SNAPSHOT Pipeline ─── rsync/SSH ──────────────────► │── Hive Lake (Parquet)
-└── DIMENSION REFRESH ─── rsync/SSH ──────────────────► │── Dimension Parquets
-                                                        │
-                                                        └── DuckDB Semantic Layer
-                                                            ├── Archive Views
-                                                            ├── Dimension Views
-                                                            ├── Combined Views
-                                                            └── Aggregate Tables
-```
+╔════════════════════════════════════════════════════════════════════════════════════╗
+║                      DATA MOVEMENT & ANALYTICS PLATFORM                          ║
+║                                                                                  ║
+║   4 data streams  ·  21 source tables  ·  rsync over SSH  ·  DuckDB warehouse   ║
+╚════════════════════════════════════════════════════════════════════════════════════╝
 
----
 
-## A. Source-Side: Exported Parquet Batches
+PRODUCTION SERVER (MariaDB / Frappe)                    ANALYTICS SERVER (DuckDB)
+────────────────────────────────────                    ──────────────────────────
 
-```
-/data/memora/
-│
-├── archives/                                         ── ARCHIVE BATCHES
-│   └── {BATCH_ID}/                                   ── e.g. ARCH-00027
-│       ├── manifest.json
-│       │
-│       ├──────────────────────────────────────────────── PRACTICE LOG (v1)
-│       │   │                                            source: tabMemora Practice Log
-│       │   │                                            scope_column: last_seen_at
-│       │   │                                            trigger_mode: date-window
-│       │   │
-│       │   ├── fact_practice_log.parquet
-│       │   │   ├── player_id          VARCHAR(140)
-│       │   │   ├── item_id            VARCHAR(36)
-│       │   │   ├── first_seen_at      DATETIME
-│       │   │   ├── last_seen_at       DATETIME       ◄── scope column
-│       │   │   ├── last_result        ENUM(Correct, Incorrect)
-│       │   │   ├── attempt_count      INT UNSIGNED
-│       │   │   ├── correct_count      INT UNSIGNED
-│       │   │   ├── season_id          VARCHAR(140)    ── derived via Player Profile
-│       │   │   ├── plan_id            VARCHAR(140)    ── derived via Player Profile
-│       │   │   ├── archive_scope      VARCHAR(140)    ── export metadata
-│       │   │   ├── archive_job_id     VARCHAR(140)    ── export metadata
-│       │   │   ├── schema_version     VARCHAR(10)     ── export metadata
-│       │   │   └── exported_at        DATETIME        ── export metadata
-│       │   │
-│       │   ├── dim_player.parquet                     ── player.v3
-│       │   │   ├── player_id          VARCHAR(140)
-│       │   │   ├── grade              VARCHAR
-│       │   │   ├── major              VARCHAR
-│       │   │   ├── season_id          VARCHAR(140)
-│       │   │   ├── season_title       VARCHAR
-│       │   │   ├── plan_id            VARCHAR(140)
-│       │   │   └── plan_name          VARCHAR
-│       │   │
-│       │   ├── dim_review_item.parquet                ── review_item.v2
-│       │   │   ├── item_id            VARCHAR(36)
-│       │   │   ├── subject            VARCHAR
-│       │   │   ├── subject_title      VARCHAR
-│       │   │   ├── topic              VARCHAR
-│       │   │   ├── topic_title        VARCHAR
-│       │   │   ├── lesson             VARCHAR
-│       │   │   ├── lesson_title       VARCHAR
-│       │   │   ├── question_text      VARCHAR
-│       │   │   ├── item_type          VARCHAR
-│       │   │   └── difficulty         FLOAT
-│       │   │
-│       │   ├── dim_season.parquet                     ── season.v1 (derived)
-│       │   │   ├── season_id          VARCHAR(140)
-│       │   │   ├── season_title       VARCHAR
-│       │   │   ├── start_date         DATE
-│       │   │   └── end_date           DATE
-│       │   │
-│       │   └── dim_plan.parquet                       ── plan.v1 (derived)
-│       │       ├── plan_id            VARCHAR(140)
-│       │       ├── plan_name          VARCHAR
-│       │       ├── grade              VARCHAR
-│       │       ├── major              VARCHAR
-│       │       ├── season             VARCHAR(140)
-│       │       ├── season_title       VARCHAR
-│       │       └── is_published       BOOLEAN
-│       │
-│       ├──────────────────────────────────────────────── MEMORY STATE (v1)
-│       │   │                                            source: tabMemora Memory State
-│       │   │                                            scope_column: season_seq
-│       │   │                                            trigger_mode: season
-│       │   │
-│       │   ├── fact_memory_state.parquet
-│       │   │   ├── name               BIGINT          ── PK (non-auto-increment)
-│       │   │   ├── season_seq         INT             ◄── scope column (partition key)
-│       │   │   ├── subject            VARCHAR(140)
-│       │   │   ├── player             VARCHAR(140)
-│       │   │   ├── item_id            VARCHAR(36)     ── UUID (BIN_TO_UUID in SQL)
-│       │   │   ├── stage_id           VARCHAR(140)
-│       │   │   ├── stability          FLOAT           ── DECIMAL(21,9) in DB
-│       │   │   ├── difficulty         FLOAT           ── DECIMAL(21,9) in DB
-│       │   │   ├── next_review        DATETIME
-│       │   │   ├── lesson             VARCHAR(140)
-│       │   │   ├── state              TINYINT
-│       │   │   ├── step               TINYINT
-│       │   │   ├── last_review        DATETIME
-│       │   │   ├── modified           DATETIME
-│       │   │   ├── archive_scope      VARCHAR(140)    ── export metadata
-│       │   │   ├── archive_job_id     VARCHAR(140)    ── export metadata
-│       │   │   ├── schema_version     VARCHAR(10)     ── export metadata
-│       │   │   └── exported_at        DATETIME        ── export metadata
-│       │   │
-│       │   ├── dim_player.parquet                     ── player.v3
-│       │   │   └── (same schema as above)
-│       │   │
-│       │   └── dim_season.parquet                     ── season.v1 (derived)
-│       │       └── (same schema as above)
-│       │
-│       ├──────────────────────────────────────────────── INTERACTION LOG (v1)
-│       │   │                                            source: tabMemora Interaction Log
-│       │   │                                            scope_column: timestamp
-│       │   │                                            trigger_mode: date-window
-│       │   │
-│       │   ├── fact_interaction_log.parquet
-│       │   │   ├── name               VARCHAR(140)
-│       │   │   ├── player             VARCHAR(140)
-│       │   │   ├── lesson             VARCHAR(140)
-│       │   │   ├── stage_id           VARCHAR(140)
-│       │   │   ├── item_id            VARCHAR(140)
-│       │   │   ├── event_type         VARCHAR(20)     ── ENUM(Started, Completed, Failed, Skipped)
-│       │   │   ├── time_spent         INT
-│       │   │   ├── errors_count       INT
-│       │   │   ├── timestamp          DATETIME        ◄── scope column
-│       │   │   ├── season_id          VARCHAR(140)    ── derived via Player Profile
-│       │   │   ├── plan_id            VARCHAR(140)    ── derived via Player Profile
-│       │   │   ├── archive_scope      VARCHAR(140)    ── export metadata
-│       │   │   ├── archive_job_id     VARCHAR(140)    ── export metadata
-│       │   │   ├── schema_version     VARCHAR(10)     ── export metadata
-│       │   │   └── exported_at        DATETIME        ── export metadata
-│       │   │
-│       │   ├── dim_player.parquet                     ── player.v3
-│       │   │   └── (same schema as above)
-│       │   │
-│       │   ├── dim_lesson.parquet                     ── lesson.v1
-│       │   │   ├── lesson_id          VARCHAR(140)
-│       │   │   ├── lesson_title       VARCHAR
-│       │   │   ├── topic              VARCHAR
-│       │   │   ├── topic_title        VARCHAR
-│       │   │   ├── subject            VARCHAR
-│       │   │   ├── track              VARCHAR
-│       │   │   ├── unit               VARCHAR
-│       │   │   ├── base_xp            INT
-│       │   │   ├── is_published       BOOLEAN
-│       │   │   └── is_reviewable      BOOLEAN
-│       │   │
-│       │   ├── dim_season.parquet                     ── season.v1 (derived)
-│       │   │   └── (same schema as above)
-│       │   │
-│       │   └── dim_plan.parquet                       ── plan.v1 (derived)
-│       │       └── (same schema as above)
-│       │
-│       └──────────────────────────────────────────────── TASK RUN LOG (v1)
-│           │                                            source: tabMemora Task Run Log
-│           │                                            scope_column: completed_at
-│           │                                            trigger_mode: date-window
-│           │
-│           └── fact_task_run_log.parquet
-│               ├── name               VARCHAR(140)
-│               ├── task_name          VARCHAR(140)
-│               ├── run_date           DATE
-│               ├── started_at         DATETIME
-│               ├── completed_at       DATETIME        ◄── scope column
-│               ├── duration_sec       FLOAT
-│               ├── status             VARCHAR(20)     ── ENUM(Success, Failed, Partial)
-│               ├── triggered_by       VARCHAR(20)     ── ENUM(Scheduler, Manual, Catch-up)
-│               ├── processed_count    INT
-│               ├── failed_count       INT
-│               ├── error_message      TEXT
-│               ├── archive_scope      VARCHAR(140)    ── export metadata
-│               ├── archive_job_id     VARCHAR(140)    ── export metadata
-│               ├── schema_version     VARCHAR(10)     ── export metadata
-│               └── exported_at        DATETIME        ── export metadata
-│               (no dimensions)
-│
-├── live/                                              ── LIVE SYNC BATCHES
-│   └── {SYNC_BATCH_ID}/
-│       ├── manifest.json
-│       │
-│       └──────────────────────────────────────────────── PRACTICE LOG LIVE (v1)
-│           │                                            source: tabMemora Practice Log
-│           │                                            mode: full_snapshot
-│           │                                            excludes: completed archive date ranges
-│           │
-│           ├── fact_practice_log.parquet
-│           │   ├── player_id          VARCHAR(140)
-│           │   ├── item_id            VARCHAR(36)
-│           │   ├── first_seen_at      DATETIME
-│           │   ├── last_seen_at       DATETIME
-│           │   ├── last_result        ENUM(Correct, Incorrect)
-│           │   ├── attempt_count      INT UNSIGNED
-│           │   ├── correct_count      INT UNSIGNED
-│           │   ├── season_id          VARCHAR(140)
-│           │   ├── plan_id            VARCHAR(140)
-│           │   ├── scope_type         VARCHAR(20)     ── sync metadata
-│           │   ├── sync_batch_id      VARCHAR(140)    ── sync metadata
-│           │   ├── schema_version     VARCHAR(10)     ── sync metadata
-│           │   └── synced_at          DATETIME        ── sync metadata
-│           │
-│           ├── dim_player.parquet                     ── player.v3
-│           │   └── (same schema as archives)
-│           │
-│           ├── dim_review_item.parquet                ── review_item.v2
-│           │   └── (same schema as archives)
-│           │
-│           ├── dim_season.parquet                     ── season.v1 (derived)
-│           │   └── (same schema as archives)
-│           │
-│           └── dim_plan.parquet                       ── plan.v1 (derived)
-│               └── (same schema as archives)
-│
-└── snapshots/                                         ── SNAPSHOT BATCHES
-    └── {SNAPSHOT_BATCH_ID}/
-        ├── manifest.json
-        │
-        └──────────────────────────────────────────────── STRUCTURE PROGRESS (v1)
-            │                                            source: tabMemora Structure Progress
-            │                                            mode: point-in-time snapshot
-            │
-            └── fact_structure_progress.parquet
-                ├── snapshot_date       DATE
-                ├── player_id          VARCHAR(140)
-                ├── plan_id            VARCHAR(140)
-                ├── subject_id         VARCHAR(140)
-                └── completion_percentage  FLOAT        ── 0..100
-```
-
-## Dimension Reuse Matrix
-
-```
-                          dim_      dim_         dim_      dim_      dim_
-                         player   review_item   season    plan     lesson
-                         (v3)       (v2)         (v1)     (v1)      (v1)
-                        ───────  ───────────   ───────  ───────  ─────────
-Practice Log (archive)    X          X            X        X
-Memory State (archive)    X                       X
-Interaction Log (archive) X                       X        X        X
-Task Run Log (archive)
-Practice Log (live sync)  X          X            X        X
-Structure Progress (snap)
-```
-
-## Archive Job Lifecycle
-
-```
-                    ┌──────────────────────────────────────────────────────┐
-                    │              Archive Job Stages                      │
-                    │                                                      │
- Scheduler ──►  Pending ──► Processing ──► Exported ──► Transferred       │
-                    │            │              │             │            │
-                    │         export          rsync       ingest-archive   │
-                    │        Parquet +       to analytics + verify         │
-                    │        manifest        server            │           │
-                    │                                       Ingested      │
-                    │                                          │           │
-                    │                                       handoff        │
-                    │                                      + refresh-recent│
-                    │                                      + refresh-agg   │
-                    │                                          │           │
-                    │                                      Completed      │
-                    │                                          │           │
-                    │                                  ┌───────┴──────┐   │
-                    │                                  │  if Delete   │   │
-                    │                                  │  post_action │   │
-                    │                                  └───────┬──────┘   │
-                    │                                          │           │
-                    │                                       Purged        │
-                    │                                    (batched DEL     │
-                    │                                     10k + 2s)       │
-                    │                                                      │
-                    │   On error at any stage ──► Failed (3 retries)      │
-                    └──────────────────────────────────────────────────────┘
-```
-
-## SQL-to-Parquet Type Mapping
-
-```
-SQL Type                    Arrow / Parquet Type
-──────────────────────────  ────────────────────
-INT, BIGINT, TINYINT        int64
-FLOAT, DOUBLE, DECIMAL      float64
-DATETIME, TIMESTAMP         timestamp("us")
-DATE                        date32
-VARCHAR, TEXT, ENUM          string
+ Source DocType Tables                                   /data/analytics/
+ ┌────────────────────────────────┐     rsync / SSH      ├── archives/ARCH-XXXXX/
+ │ tabMemora Practice Log        │─┐   ─────────────►   ├── live/LSYNC-XXXXX/
+ │ tabMemora Memory State        │ │   checksum verify   ├── dimensions/
+ │ tabMemora Interaction Log     │ │                     ├── datasets/
+ │ tabMemora Task Run Log        │ │                     └── memora.duckdb
+ │ tabMemora Player Profile      │ │
+ │ tabMemora Player Plan History │ │   Local staging      /opt/analytics/
+ │ tabMemora Season              │ ├─► /data/memora/      └── memora-analytics (CLI)
+ │ tabMemora Academic Plan       │ │   ├── archives/
+ │ tabMemora Review Item         │ │   ├── live/
+ │ tabMemora Lesson              │ │   └── analytics_exports/
+ │ tabMemora Subject             │ │
+ │ tabMemora Topic               │ │
+ │ tabMemora Structure Progress  │ │
+ │ tabMemora Player Wallet       │ │
+ │ tabMemora Subscription        │ │
+ │ tabMemora Voucher             │ │
+ │ tabMemora Challenge Attempt   │ │
+ │ tabMemora Challenge Detail    │ │
+ │ tabMemora Live Challenge Event│ │
+ │ tabMemora Content Report      │ │
+ │ tabMemora Archive Job         │ │
+ └────────────────────────────────┘ │
+                                    │
+     ┌──────────────────────────────┘
+     │
+     ▼
+ ┌─────────────────────────────────────────────────────────────────────────────┐
+ │                          FOUR DATA STREAMS                                 │
+ │                                                                            │
+ │  [1] Archive Executor ···· cron 02:00 ···· cold-path archival             │
+ │  [2] Live Sync Executor ·· cron 03:05 ···· hot-path daily snapshot        │
+ │  [3] Dimension Refresh ··· cron 04:15 ···· event-driven + safety-net      │
+ │  [4] Analytics Exporter ·· cron 06:45 ···· full analytics dataset export  │
+ │                                                                            │
+ └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## B. Analytics Server: Lakehouse Directory Layout
+## [1] Archive Executor — Cold-Path Archival
 
 ```
-/data/analytics/                                       ── ANALYTICS_REMOTE_PATH
-│
-├── memora.duckdb                                    ── DuckDB database file (REMOTE_DUCKDB_PATH)
-│
-├── lake/                                              ── Hive-partitioned fact data
-│   │
-│   ├── practice_log/                                  ── DATE-PARTITIONED (last_seen_at)
-│   │   └── year={YYYY}/
-│   │       └── month={MM}/
-│   │           └── day={DD}/
-│   │               └── part-{BATCH_ID}.parquet
-│   │
-│   ├── interaction_log/                               ── DATE-PARTITIONED (timestamp)
-│   │   └── year={YYYY}/
-│   │       └── month={MM}/
-│   │           └── day={DD}/
-│   │               └── part-{BATCH_ID}.parquet
-│   │
-│   ├── task_run_log/                                  ── DATE-PARTITIONED (completed_at)
-│   │   └── year={YYYY}/
-│   │       └── month={MM}/
-│   │           └── day={DD}/
-│   │               └── part-{BATCH_ID}.parquet
-│   │
-│   ├── memory_state/                                  ── VALUE-PARTITIONED (season_seq)
-│   │   └── season_seq={N}/
-│   │       └── part-{BATCH_ID}.parquet
-│   │
-│   └── structure_progress/                            ── VALUE-PARTITIONED (snapshot_date)
-│       └── snapshot_date={YYYY-MM-DD}/
-│           └── part-{BATCH_ID}.parquet
-│
-├── dimensions/                                        ── DIMENSION PARQUET FILES
-│   ├── dim_player.parquet                             ── player.v3
-│   │   ├── player_id          VARCHAR
-│   │   ├── grade              VARCHAR
-│   │   ├── major              VARCHAR
-│   │   ├── season_id          VARCHAR
-│   │   ├── season_title       VARCHAR
-│   │   ├── plan_id            VARCHAR
-│   │   └── plan_name          VARCHAR
-│   │
-│   ├── dim_player_history.parquet                     ── player_history.v1 (SCD Type 2)
-│   │   ├── player_id          VARCHAR                 ── source: tabMemora Player Plan History
-│   │   ├── plan_id            VARCHAR
-│   │   ├── plan_name          VARCHAR
-│   │   ├── grade              VARCHAR
-│   │   ├── major              VARCHAR
-│   │   ├── season_id          VARCHAR
-│   │   ├── valid_from         TIMESTAMP               ── LEAD() window boundary
-│   │   ├── valid_to           TIMESTAMP               ── NULL = current record
-│   │   ├── is_current         BOOLEAN                 ── 1 if latest per player
-│   │   └── trigger_reason     VARCHAR
-│   │
-│   ├── dim_season.parquet                             ── season.v1
-│   │   ├── season_id          VARCHAR
-│   │   ├── season_title       VARCHAR
-│   │   ├── start_date         DATE
-│   │   └── end_date           DATE
-│   │
-│   ├── dim_plan.parquet                               ── plan.v1
-│   │   ├── plan_id            VARCHAR
-│   │   ├── plan_name          VARCHAR
-│   │   ├── grade              VARCHAR
-│   │   ├── major              VARCHAR
-│   │   ├── season             VARCHAR
-│   │   ├── season_title       VARCHAR
-│   │   └── is_published       BOOLEAN
-│   │
-│   ├── dim_review_item.parquet                        ── review_item.v2
-│   │   ├── item_id            VARCHAR
-│   │   ├── subject            VARCHAR
-│   │   ├── subject_title      VARCHAR
-│   │   ├── topic              VARCHAR
-│   │   ├── topic_title        VARCHAR
-│   │   ├── lesson             VARCHAR
-│   │   ├── lesson_title       VARCHAR
-│   │   ├── question_text      VARCHAR
-│   │   ├── item_type          VARCHAR
-│   │   └── difficulty         FLOAT
-│   │
-│   └── dim_lesson.parquet                             ── lesson.v1
-│       ├── lesson_id          VARCHAR
-│       ├── lesson_title       VARCHAR
-│       ├── topic              VARCHAR
-│       ├── topic_title        VARCHAR
-│       ├── subject            VARCHAR
-│       ├── track              VARCHAR
-│       ├── unit               VARCHAR
-│       ├── base_xp            INTEGER
-│       ├── is_published       BOOLEAN
-│       └── is_reviewable      BOOLEAN
-│
-└── manifests/                                         ── STORED BATCH MANIFESTS
-    └── archive/
-        └── {BATCH_ID}.json
-```
+cron: 0 2 * * *  (02:00 daily)
+binary: /opt/memora-archive/venv/bin/python -m archive_executor.run
 
----
+Pipeline stages:
+  Pending → Processing → Exported → Transferred → Ingested → Completed → Purged
 
-## C. DuckDB Semantic Layer
+Retry: up to 3 attempts per job, auto-reset to Pending on failure
 
-```
-memora.duckdb
+archive_executor.run
 │
-├── VIEWS (read-only, over Parquet)
-│   │
-│   ├── practice_log_archive ──────► lake/practice_log/**/*.parquet
-│   ├── interaction_log_archive ───► lake/interaction_log/**/*.parquet
-│   ├── memory_state_archive ──────► lake/memory_state/**/*.parquet
-│   ├── task_run_log_archive ──────► lake/task_run_log/**/*.parquet
-│   ├── structure_progress_snapshots ► lake/structure_progress/**/*.parquet
-│   │
-│   ├── dim_player ────────────────► dimensions/dim_player.parquet
-│   ├── dim_player_history ────────► dimensions/dim_player_history.parquet
-│   ├── dim_season ────────────────► dimensions/dim_season.parquet
-│   ├── dim_plan ──────────────────► dimensions/dim_plan.parquet
-│   ├── dim_review_item ───────────► dimensions/dim_review_item.parquet
-│   ├── dim_lesson ────────────────► dimensions/dim_lesson.parquet
-│   │
-│   ├── practice_log_combined ─────► UNION ALL (archive + live)
-│   │   ├── player_id, item_id, first_seen_at, last_seen_at
-│   │   ├── last_result, attempt_count, correct_count
-│   │   ├── season_id, plan_id
-│   │   └── source                 ── 'archive' | 'live'
-│   │
-│   └── memory_state_combined ─────► UNION ALL (archive + current)
-│       ├── name, season_seq, subject, player, item_id
-│       ├── stage_id, stability, difficulty, next_review
-│       ├── lesson, state, step, last_review, modified
-│       └── source                 ── 'archive' | 'current'
+├── tabMemora Archive Job (scheduler + status tracking)
 │
-├── TABLES (mutable, DuckDB-native)
+├── FACT TYPES (4 archive schemas)
 │   │
-│   ├── practice_log_live                              ── atomic staging-swap on ingest
-│   │   ├── player_id          VARCHAR
-│   │   ├── item_id            VARCHAR
-│   │   ├── first_seen_at      TIMESTAMP
-│   │   ├── last_seen_at       TIMESTAMP
-│   │   ├── last_result        VARCHAR
-│   │   ├── attempt_count      INTEGER
-│   │   ├── correct_count      INTEGER
-│   │   ├── season_id          VARCHAR
-│   │   ├── plan_id            VARCHAR
-│   │   ├── scope_type         VARCHAR
-│   │   ├── sync_batch_id      VARCHAR
-│   │   ├── schema_version     VARCHAR
-│   │   └── synced_at          TIMESTAMP
+│   ├── practice_log (v1)
+│   │   ├── source: tabMemora Practice Log
+│   │   ├── scope:  last_seen_at (date-range)
+│   │   ├── PK:     (player_id, item_id)
+│   │   └── cols:   player_id, item_id, first_seen_at, last_seen_at,
+│   │               last_result, attempt_count, correct_count,
+│   │               season_id, plan_id
 │   │
-│   ├── memory_state_current                           ── current season snapshot
-│   │   ├── name               BIGINT
-│   │   ├── season_seq         INTEGER
-│   │   ├── subject            VARCHAR
-│   │   ├── player             VARCHAR
-│   │   ├── item_id            VARCHAR
-│   │   ├── stage_id           VARCHAR
-│   │   ├── stability          DOUBLE
-│   │   ├── difficulty         DOUBLE
-│   │   ├── next_review        TIMESTAMP
-│   │   ├── lesson             VARCHAR
-│   │   ├── state              TINYINT
-│   │   ├── step               TINYINT
-│   │   ├── last_review        TIMESTAMP
-│   │   └── modified           TIMESTAMP
+│   ├── memory_state (v1)
+│   │   ├── source: tabMemora Memory State
+│   │   ├── scope:  season_seq (season-triggered, not date-range)
+│   │   ├── PK:     (name BIGINT, season_seq INT)
+│   │   └── cols:   name, season_seq, subject, player, item_id,
+│   │               stage_id, stability, difficulty, next_review,
+│   │               lesson, state, step, last_review, modified
 │   │
-│   ├── practice_daily_agg                             ── rebuilt by refresh-aggregates
-│   │   ├── date               DATE
-│   │   ├── player_id          VARCHAR
-│   │   ├── season_id          VARCHAR
-│   │   ├── plan_id            VARCHAR
-│   │   ├── total_attempts     BIGINT
-│   │   ├── total_correct      BIGINT
-│   │   └── unique_items       BIGINT
+│   ├── interaction_log (v1)
+│   │   ├── source: tabMemora Interaction Log
+│   │   ├── scope:  timestamp (date-range)
+│   │   ├── PK:     (name)
+│   │   └── cols:   name, player, lesson, stage_id, item_id,
+│   │               event_type, time_spent, errors_count,
+│   │               timestamp, season_id, plan_id
 │   │
-│   └── practice_monthly_agg                           ── rebuilt by refresh-aggregates
-│       ├── year_month         VARCHAR                 ── 'YYYY-MM'
-│       ├── player_id          VARCHAR
-│       ├── season_id          VARCHAR
-│       ├── plan_id            VARCHAR
-│       ├── total_attempts     BIGINT
-│       ├── total_correct      BIGINT
-│       ├── unique_items       BIGINT
-│       └── active_days        BIGINT
+│   └── task_run_log (v1)
+│       ├── source: tabMemora Task Run Log
+│       ├── scope:  completed_at (date-range, completed only)
+│       ├── PK:     (name)
+│       └── cols:   name, task_name, run_date, started_at,
+│                   completed_at, duration_sec, status,
+│                   triggered_by, processed_count,
+│                   failed_count, error_message
 │
-└── HANDOFF (archive ↔ live dedup)
+├── DIMENSIONS (6 bundled per batch)
+│   │
+│   ├── player (v3)
+│   │   ├── source: tabMemora Player Profile
+│   │   │           JOIN Season, Academic Plan
+│   │   └── cols:   player_id, grade, major,
+│   │               season_id, season_title, plan_id, plan_name
+│   │
+│   ├── player_history (v1)
+│   │   ├── source: tabMemora Player Plan History
+│   │   │           (SCD Type 2 via LEAD() window)
+│   │   └── cols:   player_id, plan_id, plan_name, grade, major,
+│   │               season_id, valid_from, valid_to,
+│   │               is_current, trigger_reason
+│   │
+│   ├── season (v1)  [derived]
+│   │   ├── source: tabMemora Season
+│   │   └── cols:   season_id, season_title, start_date, end_date
+│   │
+│   ├── plan (v1)  [derived]
+│   │   ├── source: tabMemora Academic Plan
+│   │   │           JOIN Season
+│   │   └── cols:   plan_id, plan_name, grade, major,
+│   │               season, season_title, is_published
+│   │
+│   ├── review_item (v2)
+│   │   ├── source: tabMemora Review Item
+│   │   │           JOIN Subject, Topic, Lesson
+│   │   └── cols:   item_id, subject, subject_title, topic,
+│   │               topic_title, lesson, lesson_title,
+│   │               question_text, item_type, difficulty
+│   │
+│   └── lesson (v1)
+│       ├── source: tabMemora Lesson
+│       │           JOIN Topic
+│       └── cols:   lesson_id, lesson_title, topic, topic_title,
+│                   subject, track, unit, base_xp,
+│                   is_published, is_reviewable
+│
+├── DERIVED DIMENSION RESOLUTION
+│   ├── Pass 1: export direct dims (player, review_item, lesson)
+│   │           by reading fact parquet → extracting referenced IDs
+│   └── Pass 2: export derived dims (season, plan)
+│               by reading player dim parquet → extracting season_id, plan_id
+│
+└── OUTPUT
+    ├── local:  /data/memora/archives/ARCH-XXXXX/
+    │           ├── manifest.json (SHA-256, row_count, size_bytes)
+    │           ├── fact_practice_log.parquet
+    │           ├── dim_player.parquet
+    │           ├── dim_player_history.parquet
+    │           ├── dim_season.parquet
+    │           ├── dim_plan.parquet
+    │           ├── dim_review_item.parquet
+    │           └── dim_lesson.parquet
     │
-    ├── date-range mode ───► DELETE FROM practice_log_live
-    │                        WHERE {date_column} BETWEEN from AND to
-    │
-    └── season mode ───────► DELETE FROM memory_state_current
-                             WHERE season_seq = ?
+    └── remote: /data/analytics/archives/ARCH-XXXXX/
+                (rsync -avz --checksum --partial --compress -e ssh)
 ```
 
 ---
 
-## D. Dimension Reuse Matrix
+## [2] Live Sync Executor — Hot-Path Daily Snapshot
 
 ```
-                            dim_      dim_          dim_     dim_       dim_      dim_player_
-                           player   review_item    season    plan      lesson     history
-                           (v3)       (v2)          (v1)     (v1)      (v1)        (v1)
-                          ───────  ───────────    ───────  ───────   ─────────  ─────────────
-Practice Log (archive)      X          X             X        X
-Memory State (archive)      X                        X
-Interaction Log (archive)   X                        X        X         X
-Task Run Log (archive)
-Practice Log (live sync)    X          X             X        X
-Structure Progress (snap)
-Dimension Refresh (daily)   X          X             X        X         X            X
-```
+cron: 5 3 * * *  (03:05 daily)
+binary: /opt/memora-archive/venv/bin/python -m archive_executor.live_sync
 
-## E. Dimension Refresh Pipeline
+Pipeline stages:
+  Pending → Processing → Exported → Transferred → Ingested → Completed
+  (NO purge stage — source data is never deleted)
 
-```
- ┌──────────────────────────────────────────────────────────────────────┐
- │                   Dimension Refresh Triggers                        │
- │                                                                     │
- │  doc_events (real-time, deduplicated via frappe.enqueue)            │
- │  ├── Memora Player Profile  ──► dim_player + dim_player_history    │
- │  ├── Memora Academic Plan   ──► dim_plan                           │
- │  ├── Memora Season          ──► dim_season                         │
- │  ├── Memora Review Item     ──► dim_review_item                    │
- │  └── Memora Lesson          ──► dim_lesson                         │
- │                                                                     │
- │  cron (daily safety net at 04:15)                                   │
- │  └── reconcile_dimensions   ──► all 6 dimensions full refresh      │
- │                                                                     │
- │  Flow: SQL query ──► PyArrow table ──► Parquet ──► rsync/SSH       │
- └──────────────────────────────────────────────────────────────────────┘
-```
+Deduplication: excludes date ranges already covered by completed archive jobs
 
-## F. Hive Partition Strategies
-
-```
-Partitioning Type      Entity                  Column           Directory Pattern
-─────────────────────  ──────────────────────  ───────────────  ────────────────────────────
-DATE-PARTITIONED       practice_log            last_seen_at     year=YYYY/month=MM/day=DD/
-DATE-PARTITIONED       interaction_log         timestamp        year=YYYY/month=MM/day=DD/
-DATE-PARTITIONED       task_run_log            completed_at     year=YYYY/month=MM/day=DD/
-VALUE-PARTITIONED      memory_state            season_seq       season_seq=N/
-VALUE-PARTITIONED      structure_progress      snapshot_date    snapshot_date=YYYY-MM-DD/
-```
-
-## G. Archive Job Lifecycle (with CLI commands)
-
-```
-                    ┌──────────────────────────────────────────────────────────┐
-                    │              Archive Job Stages                          │
-                    │                                                          │
- Scheduler ──►  Pending ──► Processing ──► Exported ──► Transferred           │
-                    │            │              │             │                │
-                    │         export          rsync       ingest-archive       │
-                    │        Parquet +       to analytics + verify             │
-                    │        manifest        server            │               │
-                    │                                       Ingested          │
-                    │                                          │               │
-                    │                          handoff (date-range or season)  │
-                    │                         + refresh-recent  (best-effort)  │
-                    │                         + refresh-aggregates (best-effort)
-                    │                                          │               │
-                    │                                      Completed          │
-                    │                                          │               │
-                    │                                  ┌───────┴──────┐       │
-                    │                                  │  if Delete   │       │
-                    │                                  │  post_action │       │
-                    │                                  └───────┬──────┘       │
-                    │                                          │               │
-                    │                                       Purged            │
-                    │                                    (batched DEL         │
-                    │                                     10k + 2s)           │
-                    │                                                          │
-                    │   On error at any stage ──► Failed (3 retries)          │
-                    └──────────────────────────────────────────────────────────┘
-
-Live Sync Jobs (LSYNC):
-
- Trigger ──►  Pending ──► Processing ──► Exported ──► Transferred
-                   │            │              │             │
-                   │         export          rsync       ingest-live
-                   │        Parquet +       to analytics + verify
-                   │        manifest        server            │
-                   │                                       Ingested
-                   │                                          │
-                   │                                      Completed
-                   │                                   (no handoff/refresh)
-                   │
-                   │   On error at any stage ──► Failed (3 retries)
-```
-
-## H. Analytics CLI Commands (production contract)
-
-These 7 commands are the only ones called by the production executor over SSH.
-
-```
-memora-analytics
+archive_executor.live_sync
 │
-├── ingest-archive   --batch-dir PATH                              ── Hive-partition fact + copy dims + refresh views
-│                                                                     Called by: run.py (_process_transferred_jobs)
+├── FACT TYPE (1 sync schema)
+│   │
+│   └── practice_log_live (v1)
+│       ├── source: tabMemora Practice Log
+│       ├── mode:   full_snapshot minus archived ranges
+│       ├── scope:  last_seen_at (exclusion-based)
+│       └── cols:   same as practice_log archive
 │
-├── ingest-live      --batch-dir PATH                              ── Atomic staging-swap into practice_log_live
-│                                                                     Called by: live_sync.py (_process_transferred_live_jobs)
+├── DIMENSIONS (6 bundled per batch — same as archive)
+│   ├── player (v3)
+│   ├── player_history (v1)
+│   ├── season (v1)  [derived]
+│   ├── plan (v1)  [derived]
+│   ├── review_item (v2)
+│   └── lesson (v1)
 │
-├── verify                                                         ── Health checks (checksums, dupes, dims, partitions)
-│                                                                     Called by: run.py + live_sync.py (post-ingest)
-│
-├── handoff          --archive-batch-dir PATH                      ── Remove archived rows from live tables (dedup)
-│                    --date-column COL --from DATE --to DATE           (date-range mode: practice_log, interaction_log, task_run_log)
-│                    --season-seq N --archive-type TYPE                (season mode: memory_state)
-│                                                                     Called by: run.py (_process_ingested_jobs)
-│
-├── refresh-recent   --archive-type TYPE --window-days N           ── Rebuild rolling recent-N-days layer (default 90)
-│                                                                     Called by: run.py (_process_ingested_jobs, best-effort)
-│
-└── refresh-aggregates --archive-type TYPE                         ── Rebuild daily + monthly aggregate tables
-                                                                      Called by: run.py (_process_ingested_jobs, best-effort)
+└── OUTPUT
+    ├── local:  /data/memora/live/LSYNC-XXXXX/
+    │           ├── manifest.json
+    │           ├── fact_practice_log_live.parquet
+    │           └── dim_*.parquet (6 dimension files)
+    │
+    └── remote: /data/analytics/live/LSYNC-XXXXX/
+                (rsync -avz --checksum --partial --compress -e ssh)
 ```
 
-## I. SQL-to-Parquet Type Mapping
+---
+
+## [3] Dimension Refresh — Event-Driven + Safety Net
 
 ```
-SQL Type                    Arrow / Parquet Type     DuckDB Type
-──────────────────────────  ────────────────────     ───────────
-INT, BIGINT, TINYINT        int64                    INTEGER / BIGINT / TINYINT
-FLOAT, DOUBLE, DECIMAL      float64                  DOUBLE
-DATETIME, TIMESTAMP         timestamp("us")          TIMESTAMP
-DATE                        date32                   DATE
-VARCHAR, TEXT, ENUM          string                   VARCHAR
+cron: 15 4 * * *  (04:15 daily — safety-net reconciliation)
+also: Frappe doc_events (on_update, on_trash) — real-time triggers
+
+runtime: Frappe worker process
+module:  memora_admin.services.dimension_refresh
+
+dimension_refresh
+│
+├── DIMENSION REGISTRY (6 dimensions)
+│   │
+│   ├── player (v3)
+│   │   └── source: tabMemora Player Profile JOIN Season, Academic Plan
+│   │
+│   ├── player_history (v1)
+│   │   └── source: tabMemora Player Plan History (SCD2)
+│   │
+│   ├── season (v1)
+│   │   └── source: tabMemora Season
+│   │
+│   ├── plan (v1)
+│   │   └── source: tabMemora Academic Plan JOIN Season
+│   │
+│   ├── review_item (v2)
+│   │   └── source: tabMemora Review Item JOIN Subject, Topic, Lesson
+│   │
+│   └── lesson (v1)
+│       └── source: tabMemora Lesson JOIN Topic
+│
+├── PROCESS
+│   ├── 1. Load YAML schema from archive_schemas/dimensions/
+│   ├── 2. Strip WHERE clause (full refresh, no ID filtering)
+│   ├── 3. Execute frappe.db.sql() query
+│   ├── 4. Write Parquet via pyarrow
+│   └── 5. rsync to analytics server
+│
+└── OUTPUT
+    ├── local:  temp directory (cleaned up after transfer)
+    │           ├── dim_player.parquet
+    │           ├── dim_player_history.parquet
+    │           ├── dim_season.parquet
+    │           ├── dim_plan.parquet
+    │           ├── dim_review_item.parquet
+    │           └── dim_lesson.parquet
+    │
+    └── remote: /data/analytics/dimensions/
+                (rsync -az -e ssh)
+```
+
+---
+
+## [4] Analytics Exporter — Full Dataset Export
+
+```
+cron: 45 6 * * *  (06:45 daily)
+binary: python3 -m analytics_exporter
+
+modes:
+  auto        — switches full/incremental based on watermark
+  full        — force full snapshot
+  incremental — requires existing watermark, updates it
+
+analytics_exporter.run
+│
+├── DIMENSIONS (6 datasets)
+│   │
+│   ├── dim_player
+│   │   └── source: tabMemora Player Profile
+│   │
+│   ├── dim_content_hierarchy
+│   │   └── source: tabMemora Subject / Topic / Lesson (denormalized tree)
+│   │
+│   ├── dim_review_item
+│   │   └── source: tabMemora Review Item JOIN Subject, Topic, Lesson
+│   │
+│   ├── dim_season
+│   │   └── source: tabMemora Season
+│   │
+│   ├── dim_academic_plan
+│   │   └── source: tabMemora Academic Plan
+│   │
+│   └── dim_lesson_stage
+│       └── source: tabMemora Lesson / Stage (supplementary dim)
+│
+├── FACT DATASETS — CORE (5 datasets)
+│   │
+│   ├── fact_interaction
+│   │   ├── source: tabMemora Interaction Log
+│   │   └── mode:   date-range filtered (default last 30 days)
+│   │
+│   ├── fact_memory_state
+│   │   ├── source: tabMemora Memory State
+│   │   └── mode:   full snapshot
+│   │
+│   ├── fact_practice
+│   │   ├── source: tabMemora Practice Log
+│   │   └── mode:   incremental (watermark)
+│   │
+│   ├── fact_subscription
+│   │   ├── source: tabMemora Subscription
+│   │   └── mode:   full snapshot
+│   │
+│   └── fact_voucher
+│       ├── source: tabMemora Voucher
+│       └── mode:   full snapshot
+│
+├── FACT DATASETS — CHALLENGE (2 datasets, group alias: fact_challenge)
+│   │
+│   ├── fact_challenge_attempt
+│   │   └── source: tabMemora Challenge Attempt
+│   │
+│   └── fact_challenge_detail
+│       └── source: tabMemora Challenge Detail
+│
+├── FACT DATASETS — LIVE CHALLENGE (2 datasets, group alias: fact_live_challenge)
+│   │
+│   ├── fact_live_challenge_event
+│   │   └── source: tabMemora Live Challenge Event
+│   │
+│   └── fact_live_challenge_participation
+│       └── source: tabMemora Live Challenge (participation records)
+│
+├── FACT DATASETS — SUPPLEMENTARY (4 datasets)
+│   │
+│   ├── fact_structure_progress
+│   │   └── source: tabMemora Structure Progress
+│   │
+│   ├── fact_player_wallet
+│   │   └── source: tabMemora Player Wallet
+│   │
+│   ├── fact_content_report
+│   │   └── source: tabMemora Content Report
+│   │
+│   └── fact_archive_job
+│       └── source: tabMemora Archive Job
+│
+├── FACT DATASETS — TASK RUN (2 datasets, group alias: fact_task_run)
+│   │
+│   ├── fact_task_run_log
+│   │   └── source: tabMemora Task Run Log
+│   │
+│   └── fact_build_queue
+│       └── source: tabMemora Build Queue
+│
+├── MULTI-FILE GROUP ALIASES
+│   ├── fact_challenge      → [fact_challenge_attempt, fact_challenge_detail]
+│   ├── fact_live_challenge  → [fact_live_challenge_event, fact_live_challenge_participation]
+│   └── fact_task_run        → [fact_task_run_log, fact_build_queue]
+│
+└── OUTPUT
+    ├── local:  /data/memora/analytics_exports/
+    │           ├── manifest per dataset (SHA-256, row_count, size_bytes)
+    │           ├── dim_player.parquet
+    │           ├── dim_content_hierarchy.parquet
+    │           ├── dim_review_item.parquet
+    │           ├── dim_season.parquet
+    │           ├── dim_academic_plan.parquet
+    │           ├── dim_lesson_stage.parquet
+    │           ├── fact_interaction.parquet
+    │           ├── fact_memory_state.parquet
+    │           ├── fact_practice.parquet
+    │           ├── fact_subscription.parquet
+    │           ├── fact_voucher.parquet
+    │           ├── fact_challenge_attempt.parquet
+    │           ├── fact_challenge_detail.parquet
+    │           ├── fact_live_challenge_event.parquet
+    │           ├── fact_live_challenge_participation.parquet
+    │           ├── fact_structure_progress.parquet
+    │           ├── fact_player_wallet.parquet
+    │           ├── fact_content_report.parquet
+    │           ├── fact_archive_job.parquet
+    │           ├── fact_task_run_log.parquet
+    │           └── fact_build_queue.parquet
+    │
+    └── remote: /data/analytics/datasets/
+                (rsync -avz --checksum --partial --compress -e ssh)
+```
+
+---
+
+## Transfer Mechanism
+
+```
+All four streams use rsync over SSH with checksum verification.
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  TRANSFER PROTOCOL                                                        │
+│                                                                           │
+│  command:  rsync -avz --checksum --partial --compress                     │
+│            -e "ssh -i {key} -p {port} -o StrictHostKeyChecking=accept-new │
+│                   -o BatchMode=yes"                                       │
+│            {local_dir}/  {user}@{host}:{remote_path}/                     │
+│                                                                           │
+│  config:   ANALYTICS_SSH_HOST, ANALYTICS_SSH_USER, ANALYTICS_SSH_KEY_PATH │
+│            ANALYTICS_SSH_PORT (default 22)                                │
+│            ANALYTICS_SSH_TIMEOUT (default 300s)                           │
+│                                                                           │
+│  manifest: JSON per batch/dataset                                         │
+│            ├── filename                                                   │
+│            ├── row_count                                                  │
+│            ├── checksum (SHA-256)                                         │
+│            └── size_bytes                                                 │
+│                                                                           │
+│  verify:   post-transfer checksum validation via SSH remote command       │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Analytics Server — Remote Filesystem & Services
+
+```
+ANALYTICS SERVER
+│
+├── /data/analytics/                          ← ANALYTICS_REMOTE_PATH
+│   │
+│   ├── archives/                             ← archive executor output
+│   │   ├── ARCH-00001/
+│   │   │   ├── manifest.json
+│   │   │   ├── fact_practice_log.parquet
+│   │   │   └── dim_*.parquet
+│   │   ├── ARCH-00002/
+│   │   └── ...
+│   │
+│   ├── live/                                 ← live sync executor output
+│   │   ├── LSYNC-00001/
+│   │   │   ├── manifest.json
+│   │   │   ├── fact_practice_log_live.parquet
+│   │   │   └── dim_*.parquet
+│   │   ├── LSYNC-00002/
+│   │   └── ...
+│   │
+│   ├── dimensions/                           ← dimension refresh output
+│   │   ├── dim_player.parquet
+│   │   ├── dim_player_history.parquet
+│   │   ├── dim_season.parquet
+│   │   ├── dim_plan.parquet
+│   │   ├── dim_review_item.parquet
+│   │   └── dim_lesson.parquet
+│   │
+│   ├── datasets/                             ← analytics exporter output
+│   │   ├── dim_player.parquet
+│   │   ├── dim_content_hierarchy.parquet
+│   │   ├── dim_review_item.parquet
+│   │   ├── dim_season.parquet
+│   │   ├── dim_academic_plan.parquet
+│   │   ├── dim_lesson_stage.parquet
+│   │   ├── fact_interaction.parquet
+│   │   ├── fact_memory_state.parquet
+│   │   ├── fact_practice.parquet
+│   │   ├── fact_subscription.parquet
+│   │   ├── fact_voucher.parquet
+│   │   ├── fact_challenge_attempt.parquet
+│   │   ├── fact_challenge_detail.parquet
+│   │   ├── fact_live_challenge_event.parquet
+│   │   ├── fact_live_challenge_participation.parquet
+│   │   ├── fact_structure_progress.parquet
+│   │   ├── fact_player_wallet.parquet
+│   │   ├── fact_content_report.parquet
+│   │   ├── fact_archive_job.parquet
+│   │   ├── fact_task_run_log.parquet
+│   │   └── fact_build_queue.parquet
+│   │
+│   └── memora.duckdb                         ← star-schema data warehouse
+│       ├── ingested archive facts + dims
+│       └── ingested live sync snapshots
+│
+└── /opt/analytics/
+    └── memora-analytics                      ← Analytics CLI
+        ├── ingest   (load parquet into DuckDB)
+        ├── handoff  (remove overlapping live data after archive ingest)
+        └── refresh  (rebuild analytics views)
+```
+
+---
+
+## Cron Schedule Summary
+
+```
+TIME        STREAM                   ENTRY POINT
+──────────  ───────────────────────  ──────────────────────────────────────────────
+01:20       Archive trigger          memora_admin.tasks.archive_trigger
+            (check ended seasons)      .check_seasons_for_archive
+
+02:00       Archive executor         python -m archive_executor.run
+            (cold-path archival)
+
+02:00       Task log archive         memora_admin.tasks.archive_task_log
+            (Frappe-side trigger)       .archive_task_log
+
+03:00       Live sync trigger        memora_admin.tasks.live_sync_trigger
+            (create LSYNC jobs)        .trigger_daily_live_sync
+
+03:05       Live sync executor       python -m archive_executor.live_sync
+            (hot-path snapshot)
+
+04:15       Dimension refresh        memora_admin.tasks.dimension_sync
+            (safety-net full)          .reconcile_dimensions
+
+*/6h        Archive health monitor   memora_admin.tasks.archive_monitor
+                                       .check_archive_health
+
+06:45       Analytics exporter       python -m analytics_exporter
+            (full dataset export)
+```
+
+---
+
+## Schema Registry — File Layout
+
+```
+archive_schemas/
+├── archive_types/                   ← fact schemas for archive executor
+│   ├── practice_log.v1.yaml
+│   ├── memory_state.v1.yaml
+│   ├── interaction_log.v1.yaml
+│   └── task_run_log.v1.yaml
+│
+├── dimensions/                      ← shared dimension schemas
+│   ├── player.v1.yaml
+│   ├── player.v2.yaml
+│   ├── player.v3.yaml               ← current
+│   ├── player_history.v1.yaml
+│   ├── season.v1.yaml
+│   ├── plan.v1.yaml
+│   ├── review_item.v1.yaml
+│   ├── review_item.v2.yaml          ← current
+│   └── lesson.v1.yaml
+│
+├── sync_types/                      ← live sync schemas
+│   └── practice_log_live.v1.yaml
+│
+└── snapshot_types/                  ← point-in-time snapshots
+    └── structure_progress.v1.yaml
+
+analytics_exporter/schemas/          ← analytics exporter schemas (21 YAMLs)
+├── dim_player.yaml
+├── dim_content_hierarchy.yaml
+├── dim_review_item.yaml
+├── dim_season.yaml
+├── dim_academic_plan.yaml
+├── dim_lesson_stage.yaml
+├── fact_interaction.yaml
+├── fact_memory_state.yaml
+├── fact_practice.yaml
+├── fact_subscription.yaml
+├── fact_voucher.yaml
+├── fact_challenge_attempt.yaml
+├── fact_challenge_detail.yaml
+├── fact_live_challenge_event.yaml
+├── fact_live_challenge_participation.yaml
+├── fact_structure_progress.yaml
+├── fact_player_wallet.yaml
+├── fact_content_report.yaml
+├── fact_archive_job.yaml
+├── fact_task_run_log.yaml
+└── fact_build_queue.yaml
+```
+
+---
+
+## Dataset Count Summary
+
+```
+STREAM                    FACTS   DIMS   TOTAL FILES   OUTPUT FORMAT
+────────────────────────  ──────  ─────  ────────────  ──────────────
+[1] Archive Executor       4       6      10 per batch  Parquet + JSON
+[2] Live Sync Executor     1       6       7 per batch  Parquet + JSON
+[3] Dimension Refresh      —       6       6            Parquet
+[4] Analytics Exporter    15       6      21            Parquet + JSON
 ```

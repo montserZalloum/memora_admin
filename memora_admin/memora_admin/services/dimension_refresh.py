@@ -29,6 +29,7 @@ import frappe
 import pyarrow as pa
 import pyarrow.parquet as pq
 import yaml
+from dotenv import dotenv_values
 
 # ---------------------------------------------------------------------------
 # Schema directory — relative to the Frappe app root
@@ -113,32 +114,44 @@ def _export_dimension(entity: str, version: str, output_dir: str):
     return output_path, len(rows)
 
 
+_ENV_FILE = os.environ.get(
+    "MEMORA_ARCHIVE_ENV_FILE", "/etc/memora-archive.env"
+)
+
+
+def _get_ssh_var(name: str, env_overrides: dict, default: str = "") -> str:
+    """Return *name* from os.environ, falling back to *env_overrides*."""
+    return os.environ.get(name) or env_overrides.get(name) or default
+
+
 def _transfer_dimensions(output_dir: str) -> None:
     """Transfer exported Parquet files to the analytics server via rsync.
 
-    Reads connection details from environment variables:
-    - ``ANALYTICS_SSH_HOST``
-    - ``ANALYTICS_SSH_USER``
-    - ``ANALYTICS_SSH_KEY_PATH`` (optional)
-    - ``ANALYTICS_REMOTE_PATH`` (default ``/data/analytics``)
+    Reads connection details from environment variables.  When running
+    inside a Frappe worker (where ``/etc/memora-archive.env`` has not
+    been sourced), the env file is loaded as a fallback so that SSH
+    credentials are still available.
 
-    Silently skips if ``ANALYTICS_SSH_HOST`` is not set.
+    Silently skips if ``ANALYTICS_SSH_HOST`` is not set anywhere.
     """
-    ssh_host = os.environ.get("ANALYTICS_SSH_HOST")
-    ssh_user = os.environ.get("ANALYTICS_SSH_USER")
-    ssh_key = os.environ.get("ANALYTICS_SSH_KEY_PATH")
-    remote_path = os.environ.get("ANALYTICS_REMOTE_PATH", "/data/analytics")
+    # Load env file as fallback — does NOT mutate os.environ.
+    _env = dotenv_values(_ENV_FILE) if os.path.isfile(_ENV_FILE) else {}
 
-    if not ssh_host:
+    ssh_host = _get_ssh_var("ANALYTICS_SSH_HOST", _env)
+    ssh_user = _get_ssh_var("ANALYTICS_SSH_USER", _env)
+    ssh_key = _get_ssh_var("ANALYTICS_SSH_KEY_PATH", _env)
+    remote_path = _get_ssh_var("ANALYTICS_REMOTE_PATH", _env, "/data/analytics")
+
+    if not ssh_host or not ssh_user:
         frappe.logger().warning(
-            "ANALYTICS_SSH_HOST not set — skipping dimension transfer"
+            "ANALYTICS_SSH_HOST/USER not set — skipping dimension transfer"
         )
         return
 
     dims_remote = f"{remote_path}/dimensions/"
     cmd = ["rsync", "-az"]
     if ssh_key:
-        cmd.extend(["-e", f"ssh -i {ssh_key} -o StrictHostKeyChecking=no"])
+        cmd.extend(["-e", f"ssh -i {ssh_key} -o StrictHostKeyChecking=accept-new -o BatchMode=yes"])
     cmd.extend([f"{output_dir}/", f"{ssh_user}@{ssh_host}:{dims_remote}"])
 
     subprocess.run(cmd, check=True, capture_output=True)

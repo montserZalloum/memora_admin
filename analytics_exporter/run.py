@@ -22,6 +22,7 @@ import yaml
 from .config import Config
 from .exporter import export_incremental, export_snapshot
 from .manifest import compute_sha256, write_manifest
+from .transfer import transfer_exports
 from .validator import validate_export
 from .watermark import load_watermark, save_watermark
 
@@ -620,6 +621,11 @@ def main() -> int:
 	failures = [r for r in results.values() if not r.success]
 	if failures:
 		log.error("Export failures: %s", [r.dataset for r in failures])
+		return 1
+
+	# Transfer to analytics server (skipped if SSH not configured)
+	if not transfer_exports(config):
+		log.error("Transfer to analytics server failed")
 		return 1
 
 	log.info("Analytics exporter complete. Datasets exported: %d", len(results))
