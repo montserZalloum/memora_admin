@@ -2,36 +2,33 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from pydantic import BaseModel, Field
+
 
 # ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
 
 
-class PracticeHierarchyParams(BaseModel):
+class StartSessionRequest(BaseModel):
 	subject_id: str
-	filter: Literal["all", "completed"] = "all"
+	track_ids: list[str] = Field(min_length=1)
+	unit_ids: list[str] | None = None
+	topic_ids: list[str] | None = None
 
 
-class StartPracticeRequest(BaseModel):
-	subject_id: str
-	filter: Literal["all", "completed"]
-	tracks: list[str]
-	units: list[str] = Field(default_factory=list)
-	topics: list[str] = Field(default_factory=list)
-
-
-class PracticeResult(BaseModel):
+class ResultItem(BaseModel):
 	item_id: str
 	is_correct: bool
 
 
-class SubmitPracticeRequest(BaseModel):
+class SubmitRequest(BaseModel):
 	batch_seq: int = Field(ge=0)
-	results: list[PracticeResult]
+	results: list[ResultItem] = Field(min_length=1, max_length=20)
+
+
+class ContinueRequest(BaseModel):
+	batch_seq: int = Field(ge=0)
 
 
 # ---------------------------------------------------------------------------
@@ -39,59 +36,33 @@ class SubmitPracticeRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class PracticeTopicInfo(BaseModel):
-	topic_id: str
-	topic_title: str
-	item_count: int
-
-
-class PracticeUnitInfo(BaseModel):
-	unit_id: str
-	unit_title: str
-	item_count: int
-	topics: list[PracticeTopicInfo]
-
-
-class PracticeTrackInfo(BaseModel):
-	track_id: str
-	track_title: str
-	has_access: bool
-	item_count: int
-	units: list[PracticeUnitInfo]
-
-
-class PracticeHierarchyResponse(BaseModel):
-	subject_id: str
-	subject_title: str
-	tracks: list[PracticeTrackInfo]
-
-
-class PracticeQuestion(BaseModel):
-	item_id: str
-	stage_type: str
-	question_text: str | None = None
-	choices: list[str] = Field(default_factory=list)
-	correct_choice: int | None = None
-	content_json: dict | None = None
-
-
-class PracticeBatchResponse(BaseModel):
+class BatchResponse(BaseModel):
 	session_active: bool
 	batch_seq: int
-	questions: list[PracticeQuestion]
+	question_ids: list[str]
+	chunk_refs: list[int]
 	total_available: int
-	all_seen_warning: bool = False
+	all_seen_warning: bool
 
 
-class PracticeSubmitResponse(BaseModel):
+class SubmitResponse(BaseModel):
 	accepted: bool
 	batch_seq: int
 	correct_count: int
 	total_count: int
 	accuracy_percent: float
-	is_duplicate: bool = False
+	is_duplicate: bool
 
 
-class PracticeSubmitAndContinueResponse(BaseModel):
-	submit: PracticeSubmitResponse
-	next_batch: PracticeBatchResponse
+class SessionStatusResponse(BaseModel):
+	session_active: bool
+	subject_id: str
+	track_ids: list[str]
+	batch_seq: int
+	submitted: bool
+	question_ids: list[str] = Field(default_factory=list)
+	chunk_refs: list[int] = Field(default_factory=list)
+
+
+class ErrorResponse(BaseModel):
+	detail: str

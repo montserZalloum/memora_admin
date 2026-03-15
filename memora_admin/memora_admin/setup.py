@@ -207,6 +207,40 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Task log archive batch cleanup index setup failed: {e}")
 
+	# Player Practice Summary table (practice arena)
+	try:
+		_ensure_player_practice_summary_table()
+	except Exception as e:
+		print(f"[after_migrate] Player Practice Summary table setup failed: {e}")
+
+
+def _ensure_player_practice_summary_table():
+	"""Create tabPlayer Practice Summary raw SQL table for practice arena.
+
+	Stores one row per (player_id, track_id) with a denormalized JSON
+	``question_history`` field used for priority-based question selection.
+
+	This is NOT a Frappe DocType — it's a raw SQL table managed via setup.py,
+	following the Practice Log precedent for high-volume tables.
+
+	Idempotent: uses CREATE TABLE IF NOT EXISTS.
+	"""
+	frappe.db.sql_ddl("""
+		CREATE TABLE IF NOT EXISTS `tabPlayer Practice Summary` (
+			`player_id`        VARCHAR(140) NOT NULL,
+			`track_id`         VARCHAR(140) NOT NULL,
+			`subject_id`       VARCHAR(140) NOT NULL,
+			`question_history` LONGTEXT NOT NULL DEFAULT '{}',
+			`total_seen`       INT UNSIGNED NOT NULL DEFAULT 0,
+			`total_correct`    INT UNSIGNED NOT NULL DEFAULT 0,
+			`last_session_at`  DATETIME NULL,
+			`updated_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+			PRIMARY KEY (`player_id`, `track_id`),
+			KEY `idx_player_subject` (`player_id`, `subject_id`),
+			KEY `idx_updated_at` (`updated_at`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+	""")
+
 
 def _ensure_uuid_polyfill_functions():
 	"""Create UUID_TO_BIN and BIN_TO_UUID polyfill stored functions.

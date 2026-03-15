@@ -7,7 +7,6 @@ import pytest
 
 from fastapi_app.core.redis_keys import (
 	hierarchy_key,
-	practice_hierarchy_meta_key,
 	subjects_with_free_content_key,
 )
 from fastapi_app.models.progress import LessonInfo, SubjectHierarchy, TopicInfo, TrackInfo, UnitInfo
@@ -308,69 +307,3 @@ class TestHierarchyFillCoalescing:
 			_hierarchy_fill_locks.clear()
 
 
-class TestMetaFillCoalescing:
-	"""T017: Cache-fill coalescing for PracticeService._load_hierarchy_meta."""
-
-	async def test_concurrent_meta_misses_trigger_single_frappe_call(
-		self, redis_client, test_prefix, mock_frappe
-	):
-		"""5 concurrent _load_hierarchy_meta() calls fire only 1 Frappe call."""
-		from fastapi_app.services.practice import PracticeService, _meta_fill_locks
-
-		_meta_fill_locks.clear()
-
-		meta_result = {
-			"subject_title": "Test",
-			"tracks": {},
-			"units": {},
-			"topics": {},
-			"item_counts": {},
-		}
-
-		call_count = 0
-
-		async def slow_frappe_call(*args, **kwargs):
-			nonlocal call_count
-			call_count += 1
-			await asyncio.sleep(0.05)
-			return meta_result
-
-		mock_frappe.call = AsyncMock(side_effect=slow_frappe_call)
-
-		# Create a minimal PracticeService (only redis + frappe needed for _load_hierarchy_meta)
-		access_mock = AsyncMock()
-		hierarchy_mock = AsyncMock()
-		progress_mock = AsyncMock()
-		config = type("Config", (), {"practice_batch_size": 10})()
-
-		svc = PracticeService(
-			redis_client=redis_client,
-			frappe_client=mock_frappe,
-			config=config,
-			hierarchy_service=hierarchy_mock,
-			access_service=access_mock,
-			progress_service=progress_mock,
-		)
-
-		# Delete any cached meta key
-		cache_key = practice_hierarchy_meta_key(TEST_SUBJECT)
-		await redis_client.delete(cache_key)
-
-		# Fire 5 concurrent calls
-		results = await asyncio.gather(
-			svc._load_hierarchy_meta(TEST_SUBJECT),
-			svc._load_hierarchy_meta(TEST_SUBJECT),
-			svc._load_hierarchy_meta(TEST_SUBJECT),
-			svc._load_hierarchy_meta(TEST_SUBJECT),
-			svc._load_hierarchy_meta(TEST_SUBJECT),
-		)
-
-		# All should return the meta result
-		for r in results:
-			assert r is not None
-			assert r["subject_title"] == "Test"
-
-		# Only 1 Frappe call
-		assert call_count == 1, f"Expected 1 Frappe call, got {call_count}"
-
-		_meta_fill_locks.clear()

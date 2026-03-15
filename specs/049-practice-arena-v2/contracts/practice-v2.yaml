@@ -1,0 +1,434 @@
+openapi: 3.0.3
+info:
+  title: Practice Arena V2 API
+  description: |
+    High-performance practice endpoints for the Memora learning platform.
+    All gameplay operations use Redis and in-memory computation only — zero database
+    queries in the hot path. Background workers handle async persistence.
+  version: 2.0.0
+
+servers:
+  - url: http://localhost:8002
+    description: FastAPI sidecar (development)
+
+paths:
+  /api/v2/practice/start:
+    post:
+      operationId: startPracticeSession
+      summary: Start a practice session
+      description: |
+        Creates a new practice session for the player. Returns the first batch of
+        20 question IDs and their chunk references. If the player has an existing
+        session, it is replaced.
+
+        **Rate limited**: Maximum 5 sessions per player per hour.
+
+        **Cache behavior**: Player summary is read from Redis (2h TTL). On cache miss,
+        a single DB read per track populates the cache.
+      tags: [Practice]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/StartSessionRequest"
+            examples:
+              single_track:
+                summary: Single track, no filters
+                value:
+                  subject_id: "SUBJ-001"
+                  track_ids: ["TRACK-A"]
+                  unit_ids: null
+                  topic_ids: null
+              multi_track:
+                summary: Multiple tracks (no unit/topic filters allowed)
+                value:
+                  subject_id: "SUBJ-001"
+                  track_ids: ["TRACK-A", "TRACK-B"]
+                  unit_ids: null
+                  topic_ids: null
+              filtered_by_topics:
+                summary: Single track filtered by topics
+                value:
+                  subject_id: "SUBJ-001"
+                  track_ids: ["TRACK-A"]
+                  unit_ids: null
+                  topic_ids: ["TOPIC-1A", "TOPIC-1B"]
+      responses:
+        "200":
+          description: Session started, first batch returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchResponse"
+        "400":
+          description: Invalid scope (multi-track with unit/topic filters)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "Cannot filter by units or topics when multiple tracks are selected"
+        "429":
+          description: Rate limit exceeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "Maximum 5 sessions per hour exceeded"
+          headers:
+            Retry-After:
+              description: Seconds until rate limit resets
+              schema:
+                type: integer
+        "503":
+          description: Player summary unavailable (DB and cache both failed)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "Unable to load player history"
+
+  /api/v2/practice/submit:
+    post:
+      operationId: submitPracticeResults
+      summary: Submit answers for current batch
+      description: |
+        Submits the player's answers for the current batch. Returns accuracy statistics
+        immediately. Database persistence happens asynchronously via the write queue.
+
+        **Duplicate detection**: Submitting the same batch_seq twice returns cached
+        statistics with `is_duplicate: true` and does NOT re-enqueue the write.
+
+        **Cache update**: Player summary in Redis is updated immediately so that
+        the next `continue` call reflects the latest answers.
+      tags: [Practice]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SubmitRequest"
+            example:
+              batch_seq: 0
+              results:
+                - item_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+                  is_correct: true
+                - item_id: "ffffffff-gggg-hhhh-iiii-jjjjjjjjjjjj"
+                  is_correct: false
+      responses:
+        "200":
+          description: Results accepted, stats returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmitResponse"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              examples:
+                wrong_batch:
+                  summary: Wrong batch_seq
+                  value:
+                    detail: "batch_seq 1 does not match current batch 0"
+                unknown_item:
+                  summary: Unknown item_id
+                  value:
+                    detail: "item_id 'xyz' is not in the current batch"
+                duplicate_items:
+                  summary: Duplicate item_ids
+                  value:
+                    detail: "Duplicate item_ids in submission"
+        "404":
+          description: No active session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "No active practice session"
+
+  /api/v2/practice/continue:
+    post:
+      operationId: continuePracticeSession
+      summary: Get next batch of questions
+      description: |
+        Requests the next batch of questions after submitting the current batch.
+        Uses the updated player summary (reflecting the latest submission) for
+        question selection. Returns the same format as session start.
+
+        **Prerequisite**: The current batch must have been submitted via `/submit`.
+      tags: [Practice]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ContinueRequest"
+            example:
+              batch_seq: 0
+      responses:
+        "200":
+          description: Next batch returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchResponse"
+        "400":
+          description: Current batch not yet submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "batch_seq 0 has not been submitted yet"
+        "404":
+          description: No active session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "No active practice session"
+
+  /api/v2/practice/session:
+    get:
+      operationId: getPracticeSession
+      summary: Get current session status
+      description: |
+        Returns the current practice session state for the player, if any.
+        Useful for the client to resume after app restart.
+      tags: [Practice]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Session state returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionStatusResponse"
+        "404":
+          description: No active session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                detail: "No active practice session"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    StartSessionRequest:
+      type: object
+      required:
+        - subject_id
+        - track_ids
+      properties:
+        subject_id:
+          type: string
+          description: Subject to practice
+          example: "SUBJ-001"
+        track_ids:
+          type: array
+          items:
+            type: string
+          minItems: 1
+          description: One or more tracks to include. If multiple, unit_ids and topic_ids must be null.
+          example: ["TRACK-A"]
+        unit_ids:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Optional unit filter. Must be null if multiple tracks selected.
+          default: null
+        topic_ids:
+          type: array
+          items:
+            type: string
+          nullable: true
+          description: Optional topic filter. Must be null if multiple tracks or units selected.
+          default: null
+
+    BatchResponse:
+      type: object
+      required:
+        - session_active
+        - batch_seq
+        - question_ids
+        - chunk_refs
+        - total_available
+        - all_seen_warning
+      properties:
+        session_active:
+          type: boolean
+          description: Always true when a batch is returned
+          example: true
+        batch_seq:
+          type: integer
+          description: 0-indexed batch sequence number
+          example: 0
+        question_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Ordered list of question UUIDs for this batch (max 20)
+          maxItems: 20
+        chunk_refs:
+          type: array
+          items:
+            type: integer
+          description: Deduplicated list of chunk IDs the client needs to load
+          example: [3, 7, 12]
+        total_available:
+          type: integer
+          description: Total questions available in the selected scope
+          example: 8500
+        all_seen_warning:
+          type: boolean
+          description: True if all in-scope questions have been seen at least once (wrapping around)
+          example: false
+
+    SubmitRequest:
+      type: object
+      required:
+        - batch_seq
+        - results
+      properties:
+        batch_seq:
+          type: integer
+          description: The batch_seq being submitted (must match current session batch)
+          example: 0
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/ResultItem"
+          minItems: 1
+          maxItems: 20
+          description: Results for each question in the batch
+
+    ResultItem:
+      type: object
+      required:
+        - item_id
+        - is_correct
+      properties:
+        item_id:
+          type: string
+          format: uuid
+          description: Question UUID (must be in the current batch)
+        is_correct:
+          type: boolean
+          description: Whether the player answered correctly (self-assessed)
+
+    SubmitResponse:
+      type: object
+      required:
+        - accepted
+        - batch_seq
+        - correct_count
+        - total_count
+        - accuracy_percent
+        - is_duplicate
+      properties:
+        accepted:
+          type: boolean
+          example: true
+        batch_seq:
+          type: integer
+          example: 0
+        correct_count:
+          type: integer
+          description: Number of correct answers in this batch
+          example: 14
+        total_count:
+          type: integer
+          description: Total questions in this batch
+          example: 20
+        accuracy_percent:
+          type: number
+          format: float
+          description: Accuracy as a percentage (0.0 to 100.0)
+          example: 70.0
+        is_duplicate:
+          type: boolean
+          description: True if this batch_seq was already submitted (cached response returned)
+          example: false
+
+    ContinueRequest:
+      type: object
+      required:
+        - batch_seq
+      properties:
+        batch_seq:
+          type: integer
+          description: The batch_seq that was just submitted (next batch will be batch_seq + 1)
+          example: 0
+
+    SessionStatusResponse:
+      type: object
+      required:
+        - session_active
+        - subject_id
+        - track_ids
+        - batch_seq
+        - submitted
+      properties:
+        session_active:
+          type: boolean
+          example: true
+        subject_id:
+          type: string
+          example: "SUBJ-001"
+        track_ids:
+          type: array
+          items:
+            type: string
+          example: ["TRACK-A"]
+        batch_seq:
+          type: integer
+          description: Current batch number
+          example: 1
+        submitted:
+          type: boolean
+          description: Whether the current batch has been submitted
+          example: false
+        question_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: Question IDs in the current batch
+        chunk_refs:
+          type: array
+          items:
+            type: integer
+          description: Chunk IDs for the current batch
+
+    ErrorResponse:
+      type: object
+      required:
+        - detail
+      properties:
+        detail:
+          type: string
+          description: Human-readable error message

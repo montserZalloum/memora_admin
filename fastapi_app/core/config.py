@@ -56,12 +56,6 @@ class Settings(BaseSettings):
 	session_rate_limit: int = 10  # Max session start/end per player per window
 	ws_max_connections_per_user: int = 5  # Max concurrent WebSocket connections
 
-	# Practice Arena Rate Limits
-	practice_hierarchy_rate_limit: int = 30
-	practice_start_rate_limit: int = 10
-	practice_submit_rate_limit: int = 30
-	practice_continue_rate_limit: int = 30
-
 	# Live Challenge Rate Limits
 	lc_join_rate_limit: int = 5
 	lc_submit_rate_limit: int = 2
@@ -74,7 +68,9 @@ class Settings(BaseSettings):
 	# Practice Arena Session Settings
 	practice_session_size: int = 20
 	practice_session_ttl: int = 3600
-	practice_batched_topic_select_enabled: bool = True
+
+	# Practice Arena — Map file location
+	practice_maps_dir: str = ""  # Path to practice/maps/ directory
 
 	# Scaling: Redis Connection Pool
 	redis_max_connections: int = 20  # Pool size per uvicorn worker

@@ -273,9 +273,14 @@ doc_events = {
 		"on_update": "memora_admin.events.announcement_sync.on_announcement_changed",
 		"on_trash": "memora_admin.events.announcement_sync.on_announcement_changed",
 	},
-	# Analytics dimension refresh
+	# Analytics dimension refresh + Practice content regeneration
 	"Memora Review Item": {
-		"on_update": "memora_admin.events.dimension_sync.on_review_item_changed",
+		"after_insert": "memora_admin.events.practice_content_trigger.on_review_item_changed",
+		"on_update": [
+			"memora_admin.events.dimension_sync.on_review_item_changed",
+			"memora_admin.events.practice_content_trigger.on_review_item_changed",
+		],
+		"on_trash": "memora_admin.events.practice_content_trigger.on_review_item_deleted",
 	},
 }
 
@@ -293,6 +298,7 @@ scheduler_events = {
 			"memora_admin.tasks.fsrs_processor.process_fsrs_reviews",
 			"memora_admin.tasks.build_worker.process_pending_builds",
 			"memora_admin.tasks.live_challenge_transitions.process_live_challenge_transitions",
+			"memora_admin.tasks.practice_writer.process_write_queue",
 		],
 		# Every 2 minutes: Sync dirty Review Item extraction from Redis to MariaDB
 		"*/2 * * * *": [
@@ -302,6 +308,8 @@ scheduler_events = {
 		"5 0 * * *": ["memora_admin.tasks.streak_reset.reset_broken_streaks"],
 		# Hourly at :15: Session cleanup (safety net for orphaned keys)
 		"15 * * * *": ["memora_admin.tasks.session_cleanup.cleanup_expired_sessions"],
+		# Hourly at :00: Practice session cleanup (safety net for orphaned keys)
+		"0 * * * *": ["memora_admin.tasks.practice_writer.cleanup_orphaned_sessions"],
 		# Daily at 00:10: Daily leaderboard archive
 		"10 0 * * *": ["memora_admin.tasks.leaderboard_reset.archive_daily_leaderboard"],
 		# Friday at 00:15: Weekly leaderboard archive (Islamic week ends Thursday)

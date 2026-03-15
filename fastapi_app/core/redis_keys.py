@@ -272,60 +272,6 @@ def dirty_review_items_key() -> str:
 	return "memora:dirty:review_items"
 
 
-def practice_session_key(player_id: str) -> str:
-	"""Active practice session for a player.
-
-	Type: HASH (subject_id, filter, tracks, units, topics, batch_seq,
-	           accessible_lessons, created_at, submitted_{N}, batch_{N}_item_ids)
-	Producers: PracticeService.start_session()
-	Consumers: PracticeService.continue_session(), submit_batch()
-	TTL: practice_session_ttl (default 3600s)
-	"""
-	return f"memora:practice:{player_id}"
-
-
-def practice_served_items_key(player_id: str) -> str:
-	"""Served Review Item IDs for the active practice session.
-
-	Type: SET of item_id strings
-	Producers: PracticeService.start_session(), continue_session()
-	Consumers: PracticeService.continue_session()
-	TTL: practice_session_ttl (kept in sync with the parent practice session)
-	"""
-	return f"{practice_session_key(player_id)}:served"
-
-
-def practice_session_lock_key(player_id: str) -> str:
-	"""Distributed lock key guarding practice session mutations.
-
-	Type: STRING (managed by Redis lock implementation)
-	Producers: PracticeService._session_mutation_guard()
-	Consumers: PracticeService._session_mutation_guard()
-	TTL: SESSION_LOCK_TIMEOUT (set by the Redis lock)
-	"""
-	return f"{practice_session_key(player_id)}:lock"
-
-
-def practice_scope_cache_key(player_id: str, scope_token: str) -> str:
-	"""Short-lived cached topic counts for a resolved practice start scope.
-
-	Type: STRING (JSON: {topic_counts, total_available})
-	Producers: PracticeService.start_session()
-	Consumers: PracticeService.start_session()
-	TTL: short-lived (used to skip repeated count queries for the same scope)
-	"""
-	return f"{practice_session_key(player_id)}:scope:{scope_token}"
-
-
-def practice_hierarchy_meta_key(subject_id: str) -> str:
-	"""Cached practice hierarchy metadata (titles + Review Item counts).
-
-	Type: STRING (JSON: {subject_title, tracks, units, topics, item_counts})
-	Producers: PracticeService._load_hierarchy_meta() on cache miss
-	Consumers: PracticeService.get_practice_hierarchy()
-	TTL: 1 hour
-	"""
-	return f"memora:practice:hierarchy_meta:{subject_id}"
 
 
 # =============================================================================
@@ -1368,6 +1314,112 @@ def ch_leaderboard_scan_pattern(season_id: str) -> str:
 def ch_lbmeta_scan_pattern(season_id: str) -> str:
 	"""SCAN pattern for Challenge leaderboard metadata keys in one season."""
 	return f"{LBMETA_PREFIX}:ch:{season_id}:*"
+
+
+# =============================================================================
+# Practice Arena
+# =============================================================================
+
+PRACTICE_SUMMARY_TTL = 7200
+"""2 hours. Applied to practice:summary:{player}:{track} STRING keys.
+
+Player practice history cache. On cache miss, a single DB read per
+(player, track) pair populates the cache. Background writer updates
+the DB; cache is written on submit via set_player_summary().
+"""
+
+PRACTICE_SESSION_TTL = 3600
+"""1 hour. Applied to practice:session:{player} HASH keys.
+
+Active practice session. Refreshed on submit/continue. Expiry means
+the session is abandoned — unsubmitted batches are discarded (FR-009).
+"""
+
+PRACTICE_RATE_LIMIT_TTL = 3600
+"""1 hour. Applied to practice:rate:{player}:sessions STRING counter.
+
+Sliding-window rate limit: max 5 session starts per hour per player.
+"""
+
+
+def practice_summary_key(player_id: str, track_id: str) -> str:
+	"""Player's cached practice history for a track (JSON string).
+
+	Type: STRING (JSON — same schema as question_history in tabPlayer Practice Summary)
+	Producers: practice.set_player_summary(), background writer
+	Consumers: practice.get_player_summary()
+	TTL: 7200 seconds (PRACTICE_SUMMARY_TTL)
+	"""
+	return f"memora:practice:summary:{player_id}:{track_id}"
+
+
+def practice_session_key(player_id: str) -> str:
+	"""Active practice session hash.
+
+	Type: HASH (session_id, subject_id, track_ids, scope_hash, batch_seq,
+	       current_batch, submitted, batch_stats, served_ids, created_at,
+	       last_activity_at)
+	Producers: practice.create_session()
+	Consumers: practice.submit_results(), continue_session(), endpoints
+	TTL: 3600 seconds (PRACTICE_SESSION_TTL), refreshed on submit/continue
+	"""
+	return f"memora:practice:session:{player_id}"
+
+
+def practice_rate_key(player_id: str) -> str:
+	"""Session creation rate limit counter.
+
+	Type: STRING (integer counter)
+	Producers: practice.check_rate_limit() (INCR)
+	Consumers: practice.check_rate_limit()
+	TTL: 3600 seconds (PRACTICE_RATE_LIMIT_TTL)
+	"""
+	return f"memora:practice:rate:{player_id}:sessions"
+
+
+PRACTICE_WRITE_QUEUE_KEY = "memora:practice:write_queue"
+"""Redis Stream for async practice result persistence.
+
+Type: STREAM
+Consumer Group: practice-writers
+Producers: practice.submit_results() (XADD MAXLEN ~ 100000)
+Consumers: practice_writer.process_write_queue() (XREADGROUP)
+TTL: None (auto-trimmed by MAXLEN)
+"""
+
+PRACTICE_WRITE_QUEUE_DEAD_KEY = "memora:practice:write_queue:dead"
+"""Dead-letter stream for practice results that failed processing after 5 retries.
+
+Type: STREAM
+Producers: practice_writer reclaim logic (after delivery_count >= 5)
+Consumers: Admin reprocess_dead_letters()
+TTL: None (manually reviewed and resolved)
+"""
+
+PRACTICE_MAP_INVALIDATION_CHANNEL = "memora:practice:map_invalidation"
+"""Redis pubsub channel for map file cache invalidation.
+
+Type: PUBSUB channel
+Producers: practice_content.py (Frappe side, after map/chunk regeneration)
+Consumers: practice_map.py (FastAPI workers, evict in-process cache)
+Message: subject_id string
+"""
+
+# Practice content pipeline
+def practice_content_debounce_key(subject_id: str) -> str:
+	"""Debounce key for practice content regeneration (SET NX EX pattern).
+
+	Type: STRING (timestamp)
+	Producers: practice_content_trigger.py on Review Item change
+	Consumers: practice_content_trigger.py (NX check)
+	TTL: 10 seconds (batches rapid edits)
+	"""
+	return f"memora:practice:content:pending:{subject_id}"
+
+
+# Practice SCAN patterns
+PRACTICE_SESSION_SCAN_PATTERN = "memora:practice:session:*"
+"""SCAN pattern for all active practice sessions (used by cleanup task)."""
 
 
 # =============================================================================

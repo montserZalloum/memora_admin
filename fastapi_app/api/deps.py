@@ -29,7 +29,6 @@ from fastapi_app.services.leaderboard import LeaderboardService
 from fastapi_app.services.live_challenge import LiveChallengeService
 from fastapi_app.services.plan import PlanService
 from fastapi_app.services.plan_change import PlanChangeService
-from fastapi_app.services.practice import PracticeService
 from fastapi_app.services.profile import ProfileService
 from fastapi_app.services.profile_page import ProfilePageService
 from fastapi_app.services.progress import ProgressService
@@ -369,28 +368,6 @@ async def get_review_service(redis_client: RedisClient) -> ReviewService:
 ReviewServiceDep = Annotated[ReviewService, Depends(get_review_service)]
 
 
-async def get_practice_service(
-	redis_client: RedisClient,
-	raw_redis: Annotated[redis.Redis | None, Depends(get_redis_raw)],
-	settings: SettingsDep,
-) -> PracticeService:
-	"""Get PracticeService with all required dependencies."""
-	frappe_client = await get_frappe_client()
-	hierarchy_service = HierarchyService(redis_client, frappe_client)
-	access_service = AccessService(redis_client, frappe_client=frappe_client)
-	progress_service = ProgressService(redis_client, frappe_client=frappe_client, raw_redis=raw_redis)
-	return PracticeService(
-		redis_client,
-		frappe_client,
-		settings,
-		hierarchy_service,
-		access_service,
-		progress_service,
-	)
-
-
-PracticeServiceDep = Annotated[PracticeService, Depends(get_practice_service)]
-
 
 async def get_plan_change_service(redis_client: RedisClient) -> PlanChangeService:
 	"""Get PlanChangeService with Redis and FrappeClient."""
@@ -446,10 +423,6 @@ _SCOPE_SETTINGS = {
 	"reviews": "reviews_rate_limit",
 	"session_start": "session_rate_limit",
 	"session_end": "session_rate_limit",
-	"practice_hierarchy": "practice_hierarchy_rate_limit",
-	"practice_start": "practice_start_rate_limit",
-	"practice_submit": "practice_submit_rate_limit",
-	"practice_continue": "practice_continue_rate_limit",
 	"lc_join": "lc_join_rate_limit",
 	"lc_submit": "lc_submit_rate_limit",
 	"ch_hierarchy": "ch_hierarchy_rate_limit",

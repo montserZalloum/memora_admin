@@ -28,6 +28,7 @@ from fastapi_app.services.global_rate_limit import RateLimitExceeded
 from fastapi_app.services.hierarchy import HierarchyService
 from fastapi_app.services.live_challenge import LiveChallengeService
 from fastapi_app.services.plan import PlanService
+from fastapi_app.services.practice_writer import ensure_consumer_group
 from fastapi_app.services.profile import ProfileService
 
 logger = structlog.get_logger()
@@ -117,6 +118,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 	lc_service = LiveChallengeService(redis_client, frappe_client)
 	await lc_service.start_queue_consumer()
 	app.state.live_challenge_service = lc_service
+
+	# Ensure Practice write queue consumer group exists (idempotent)
+	await ensure_consumer_group(redis_client)
 
 	yield
 
