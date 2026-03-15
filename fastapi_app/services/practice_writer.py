@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 
 import redis.asyncio as aioredis
 import structlog
@@ -217,6 +218,15 @@ def process_write_queue(redis_client, db_conn) -> int:
     return processed
 
 
+def _to_mysql_datetime(iso_ts: str) -> str:
+    """Convert ISO 8601 timestamp (e.g. ``2026-03-15T13:43:11.424067+00:00``)
+    to MySQL-compatible UTC format (``2026-03-15 13:43:11.424067``)."""
+    dt = datetime.fromisoformat(iso_ts)
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt.strftime("%Y-%m-%d %H:%M:%S.%f")
+
+
 def _process_message(fields: dict, db_conn) -> None:
     """Process a single write queue message.
 
@@ -227,7 +237,7 @@ def _process_message(fields: dict, db_conn) -> None:
     player_id = fields["player_id"]
     track_id = fields["track_id"]
     subject_id = fields["subject_id"]
-    submitted_at = fields["submitted_at"]
+    submitted_at = _to_mysql_datetime(fields["submitted_at"])
     results = json.loads(fields["results"])
 
     # 1. Practice Log UPSERTs
@@ -499,3 +509,48 @@ def _dead_letter_message(
         error=error,
         player_id=fields.get("player_id"),
     )
+
+
+async def replay_dead_letters(redis_client, db_conn) -> int:
+    """Re-process all messages in the dead-letter stream.
+
+    For each entry, strips the dead-letter metadata (``original_id``,
+    ``error``, ``delivery_count``), calls ``_process_message``, and
+    removes the entry from the dead-letter stream on success.
+
+    Returns the count of successfully replayed messages.
+    """
+    entries = await redis_client.xrange(PRACTICE_WRITE_QUEUE_DEAD_KEY, "-", "+")
+    if not entries:
+        return 0
+
+    replayed = 0
+    for msg_id, fields in entries:
+        payload = {
+            k: v
+            for k, v in fields.items()
+            if k not in ("original_id", "error", "delivery_count")
+        }
+        try:
+            _process_message(payload, db_conn)
+            await redis_client.xdel(PRACTICE_WRITE_QUEUE_DEAD_KEY, msg_id)
+            replayed += 1
+            logger.info(
+                "practice_dead_letter_replayed",
+                message_id=msg_id,
+                player_id=payload.get("player_id"),
+            )
+        except Exception:
+            logger.error(
+                "practice_dead_letter_replay_failed",
+                message_id=msg_id,
+                player_id=payload.get("player_id"),
+                exc_info=True,
+            )
+            try:
+                db_conn.rollback()
+            except Exception:
+                pass
+
+    logger.info("practice_dead_letter_replay_complete", replayed=replayed, total=len(entries))
+    return replayed

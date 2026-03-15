@@ -27,6 +27,8 @@ def execute_plan_change(player_id: str, new_plan_id: str) -> dict:
 	7. Delete all subscriptions for player
 	8. Delete all progress for player
 	8b. Delete all Memory State records for current season (FR-024)
+	8c. Delete Practice Log rows for this player (operational data)
+	8d. Delete Practice Summary rows for this player (derived data)
 	9. Reset wallet to zero
 	10. Update player profile with new plan/grade/major/season
 
@@ -230,6 +232,18 @@ def execute_plan_change(player_id: str, new_plan_id: str) -> dict:
 			WHERE player = %s AND season_seq = %s""",
 			(player_id, current_season_seq),
 		)
+
+	# 8c. Delete Practice Log rows for this player (operational data)
+	frappe.db.sql(
+		"DELETE FROM `tabMemora Practice Log` WHERE `player_id` = %s",
+		(player_id,),
+	)
+
+	# 8d. Delete Practice Summary rows for this player (derived data)
+	frappe.db.sql(
+		"DELETE FROM `tabPlayer Practice Summary` WHERE `player_id` = %s",
+		(player_id,),
+	)
 
 	# 9. Reset wallet
 	if wallet:

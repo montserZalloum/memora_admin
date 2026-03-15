@@ -159,7 +159,11 @@ def export_fact_data(
 		filter_col = query_filter["filter_column"]
 		validate_identifier(filter_col)
 
-		if query_filter.get("filter_type") == "season":
+		if query_filter.get("filter_type") == "player_scope":
+			# Player-scoped: handled below via batched streaming
+			sql = None
+			params = None
+		elif query_filter.get("filter_type") == "season":
 			# Season-scoped: single season_seq parameter
 			if fact_sql_templates.get("filtered"):
 				sql = fact_sql_templates["filtered"].strip()
@@ -199,37 +203,65 @@ def export_fact_data(
 	referenced_ids: dict[str, set] = defaultdict(set)
 	writer = None
 
+	def _process_rows(rows):
+		"""Process a chunk of rows: collect IDs, inject metadata, write batch."""
+		nonlocal writer, row_count, arrow_schema
+
+		for fact_col in dimension_fact_columns:
+			referenced_ids[fact_col].update(row[fact_col] for row in rows if row.get(fact_col))
+
+		if export_metadata:
+			rows = _inject_metadata_into_rows(rows, export_metadata)
+
+		if arrow_schema:
+			batch = _rows_to_batch(rows, all_columns, arrow_schema)
+		else:
+			col_data = {col: [_coerce_value(row.get(col)) for row in rows] for col in all_columns}
+			batch = pa.RecordBatch.from_pydict(col_data)
+			arrow_schema = batch.schema
+
+		if writer is None:
+			writer = pq.ParquetWriter(output_path, arrow_schema)
+
+		writer.write_batch(batch)
+		row_count += len(rows)
+
 	try:
-		with streaming_cursor(config) as cursor:
-			cursor.execute(sql, params)
+		if sql is None and query_filter.get("filter_type") == "player_scope":
+			# Player-scoped: batch player_ids in groups, stream each batch
+			player_ids = query_filter.get("player_ids", [])
+			player_batch_size = 5000
+			player_sql_template = fact_sql_templates.get("player_filtered")
 
-			while True:
-				rows = cursor.fetchmany(config.chunk_size)
-				if not rows:
-					break
+			for i in range(0, len(player_ids), player_batch_size):
+				batch_ids = player_ids[i : i + player_batch_size]
 
-				# Collect referenced IDs for dimension scoping
-				for fact_col in dimension_fact_columns:
-					referenced_ids[fact_col].update(row[fact_col] for row in rows if row.get(fact_col))
-
-				# Inject metadata columns into rows
-				if export_metadata:
-					rows = _inject_metadata_into_rows(rows, export_metadata)
-
-				# Build batch
-				if arrow_schema:
-					batch = _rows_to_batch(rows, all_columns, arrow_schema)
+				placeholders = ", ".join(["%s"] * len(batch_ids))
+				if player_sql_template:
+					batch_sql = player_sql_template.strip().replace("{placeholders}", placeholders)
 				else:
-					# Infer schema from first batch
-					col_data = {col: [_coerce_value(row.get(col)) for row in rows] for col in all_columns}
-					batch = pa.RecordBatch.from_pydict(col_data)
-					arrow_schema = batch.schema
+					validate_identifier(source_table)
+					batch_sql = (
+						f"SELECT {columns_sql} FROM `{source_table}` "
+						f"WHERE `player_id` IN ({placeholders}) "
+						f"ORDER BY `player_id`"
+					)
 
-				if writer is None:
-					writer = pq.ParquetWriter(output_path, arrow_schema)
-
-				writer.write_batch(batch)
-				row_count += len(rows)
+				with streaming_cursor(config) as cursor:
+					cursor.execute(batch_sql, tuple(batch_ids))
+					while True:
+						rows = cursor.fetchmany(config.chunk_size)
+						if not rows:
+							break
+						_process_rows(rows)
+		else:
+			with streaming_cursor(config) as cursor:
+				cursor.execute(sql, params)
+				while True:
+					rows = cursor.fetchmany(config.chunk_size)
+					if not rows:
+						break
+					_process_rows(rows)
 
 	finally:
 		if writer is not None:

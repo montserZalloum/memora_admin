@@ -428,10 +428,7 @@ class PracticeUser(AuthMixin, HttpUser):
 		track = random.choice(accessible_tracks)
 		start_payload = {
 			"subject_id": subject_id,
-			"filter": "all",
-			"tracks": [track["track_id"]],
-			"units": [],
-			"topics": [],
+			"track_ids": [track["track_id"]],
 		}
 
 		start_resp = api_post(
@@ -444,20 +441,19 @@ class PracticeUser(AuthMixin, HttpUser):
 
 		try:
 			batch = start_resp.json()
-			questions = batch.get("questions", [])
+			question_ids = batch.get("question_ids", [])
 			batch_seq = batch.get("batch_seq", 0)
 		except Exception:
 			return
-		if not questions:
+		if not question_ids:
 			return
 
 		results = [
 			{
-				"item_id": q["item_id"],
+				"item_id": qid,
 				"is_correct": random.choice([True, False]),
 			}
-			for q in questions
-			if q.get("item_id")
+			for qid in question_ids
 		]
 		if not results:
 			return
@@ -476,20 +472,19 @@ class PracticeUser(AuthMixin, HttpUser):
 
 		try:
 			next_batch = continue_resp.json()
-			next_questions = next_batch.get("questions", [])
+			next_question_ids = next_batch.get("question_ids", [])
 			next_seq = next_batch.get("batch_seq", batch_seq + 1)
 		except Exception:
 			return
-		if not next_questions:
+		if not next_question_ids:
 			return
 
 		next_results = [
 			{
-				"item_id": q["item_id"],
+				"item_id": qid,
 				"is_correct": random.choice([True, False]),
 			}
-			for q in next_questions
-			if q.get("item_id")
+			for qid in next_question_ids
 		]
 		if not next_results:
 			return

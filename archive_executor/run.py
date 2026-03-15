@@ -555,13 +555,16 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 
 	dq_rules = archive_schema.get("dq_rules") if archive_schema else None
 
+	scope_date_from = query_filter.get("date_from") or query_filter.get("season_date_from")
+	scope_date_to = query_filter.get("date_to") or query_filter.get("season_date_to")
+
 	if dq_rules:
 		dq_result = validate_fact_quality_generic(
 			fact_path=fact_path,
 			dq_rules=dq_rules,
 			dimension_paths=dimension_path_map,
-			scope_date_from=query_filter.get("date_from"),
-			scope_date_to=query_filter.get("date_to"),
+			scope_date_from=scope_date_from,
+			scope_date_to=scope_date_to,
 		)
 	else:
 		# Legacy: Practice Log (no dq_rules in YAML)
@@ -569,8 +572,8 @@ def _export_job(config: Config, job: dict, log: StructuredLogger, staging_dir: s
 			fact_path=fact_path,
 			dim_player_path=dimension_path_map.get("player"),
 			dim_review_item_path=dimension_path_map.get("review_item"),
-			scope_date_from=query_filter.get("date_from"),
-			scope_date_to=query_filter.get("date_to"),
+			scope_date_from=scope_date_from,
+			scope_date_to=scope_date_to,
 		)
 
 	if not dq_result["passed"]:
@@ -844,6 +847,13 @@ def _process_ingested_jobs(config: Config, log: StructuredLogger) -> int:
 				handoff_season(
 					config, remote_path, query_filter["season_seq"], archive_type, log,
 				)
+			elif query_filter.get("filter_type") == "player_scope":
+				handoff_filter = {
+					"date_from": query_filter.get("season_date_from", ""),
+					"date_to": query_filter.get("season_date_to", ""),
+					"filter_column": "last_seen_at",
+				}
+				handoff_archive(config, remote_path, handoff_filter, log)
 			else:
 				handoff_archive(config, remote_path, query_filter, log)
 

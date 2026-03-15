@@ -205,6 +205,174 @@ def _purge_partition(config: Config, job: dict, meta: dict, log: StructuredLogge
 		raise
 
 
+def _purge_cleanup_table(config: Config, table: str, player_column: str,
+                         player_ids: list[str], log: StructuredLogger,
+                         job_name: str) -> int:
+	"""Batched DELETE from a cleanup table by player_id. Returns total rows deleted."""
+	validate_identifier(table)
+	validate_identifier(player_column)
+
+	total_deleted = 0
+	batch_size = 5000
+
+	for i in range(0, len(player_ids), batch_size):
+		batch_ids = player_ids[i : i + batch_size]
+		if not batch_ids:
+			break
+		placeholders = ", ".join(["%s"] * len(batch_ids))
+
+		conn = get_connection(config)
+		try:
+			with conn.cursor() as cursor:
+				sql = (
+					f"DELETE FROM `{table}` "
+					f"WHERE `{player_column}` IN ({placeholders}) "
+					f"LIMIT {PURGE_BATCH_SIZE}"
+				)
+				cursor.execute(sql, tuple(batch_ids))
+				deleted = cursor.rowcount
+			conn.commit()
+		finally:
+			conn.close()
+
+		total_deleted += deleted
+		if deleted:
+			log.info("cleanup_table_batch", job=job_name, table=table, batch_deleted=deleted)
+
+	return total_deleted
+
+
+def _purge_player_scope(config: Config, job: dict, meta: dict, log: StructuredLogger):
+	"""Purge a player-scoped job: batched DELETE by player_id + cleanup tables.
+
+	Phase A: Delete source table rows (tabMemora Practice Log) by player_id
+	Phase B: Delete cleanup table rows (e.g. tabPlayer Practice Summary)
+	"""
+	job_name = job["name"]
+	query_filter = meta.get("query_filter", {})
+	player_ids = query_filter.get("player_ids", [])
+	source_table = f"tab{job['source_doctype']}"
+
+	# Validate identifiers
+	try:
+		validate_identifier(source_table)
+	except ValueError as exc:
+		log.error("purge_skipped", job=job_name, reason=str(exc))
+		return
+
+	# Verify archive files exist on disk
+	file_path = job.get("file_path") if isinstance(job, dict) else getattr(job, "file_path", None)
+	if not file_path or not os.path.isdir(file_path):
+		log.warning("purge_skipped", job=job_name, reason="archive_files_missing", path=file_path)
+		return
+
+	# Load resume progress
+	progress_raw = job.get("purge_progress")
+	progress = {}
+	if progress_raw:
+		progress = json.loads(progress_raw) if isinstance(progress_raw, str) else progress_raw
+
+	total_deleted = progress.get("total_deleted", 0)
+	source_purge_complete = progress.get("source_purge_complete", False)
+
+	log.info("purge_player_scope_started", job=job_name, source_table=source_table,
+	         player_count=len(player_ids), resume_from=total_deleted)
+
+	purge_start = time.monotonic()
+	num_batches = 0
+	season_id = job.get("archive_scope")
+
+	try:
+		# Phase A: Source table deletion
+		if not source_purge_complete and player_ids:
+			player_batch_size = 5000
+			while True:
+				any_deleted = False
+				for i in range(0, len(player_ids), player_batch_size):
+					batch_ids = player_ids[i : i + player_batch_size]
+					if not batch_ids:
+						continue
+					placeholders = ", ".join(["%s"] * len(batch_ids))
+
+					conn = get_connection(config)
+					try:
+						with conn.cursor() as cursor:
+							sql = (
+								f"DELETE FROM `{source_table}` "
+								f"WHERE `player_id` IN ({placeholders}) "
+								f"LIMIT {PURGE_BATCH_SIZE}"
+							)
+							cursor.execute(sql, tuple(batch_ids))
+							deleted = cursor.rowcount
+						conn.commit()
+					finally:
+						conn.close()
+
+					if deleted > 0:
+						any_deleted = True
+						num_batches += 1
+						total_deleted += deleted
+						progress = {
+							"total_deleted": total_deleted,
+							"source_purge_complete": False,
+							"last_batch_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),
+						}
+						_update_purge_progress(config, job_name, progress)
+						log.info("purge_batch", job=job_name, batch_deleted=deleted,
+						         total_deleted=total_deleted)
+						time.sleep(PURGE_SLEEP_SECONDS)
+
+				if not any_deleted:
+					break
+
+			progress["source_purge_complete"] = True
+			_update_purge_progress(config, job_name, progress)
+
+		# Phase B: Cleanup tables
+		cleanup_tables_deleted = progress.get("cleanup_tables_deleted", {})
+		for ct in meta.get("cleanup_tables", []):
+			table = ct["table"]
+			player_column = ct["player_column"]
+
+			if cleanup_tables_deleted.get(table, {}).get("complete"):
+				log.info("cleanup_table_skipped", job=job_name, table=table, reason="already_complete")
+				continue
+
+			ct_deleted = _purge_cleanup_table(config, table, player_column, player_ids, log, job_name)
+			cleanup_tables_deleted[table] = {"deleted": ct_deleted, "complete": True}
+			progress["cleanup_tables_deleted"] = cleanup_tables_deleted
+			_update_purge_progress(config, job_name, progress)
+			log.info("cleanup_table_done", job=job_name, table=table, deleted=ct_deleted)
+
+		# Mark purged
+		_mark_purged(config, job_name)
+		duration_ms = int((time.monotonic() - purge_start) * 1000)
+		log.info("purge_player_scope_completed", job=job_name, total_deleted=total_deleted)
+
+		_log_delete_audit(
+			config, log, job_id=job_name, season_id=season_id,
+			rows_deleted=total_deleted, duration_ms=duration_ms,
+			status="success", error_msg=None,
+			total_rows_estimated=total_deleted,
+			batch_size=PURGE_BATCH_SIZE, num_batches=num_batches,
+		)
+
+	except Exception as exc:
+		duration_ms = int((time.monotonic() - purge_start) * 1000)
+		log.error("purge_player_scope_failed", job=job_name, error=str(exc),
+		          total_deleted=total_deleted)
+
+		_log_delete_audit(
+			config, log, job_id=job_name, season_id=season_id,
+			rows_deleted=total_deleted, duration_ms=duration_ms,
+			status="failed" if total_deleted == 0 else "partial",
+			error_msg=str(exc),
+			total_rows_estimated=total_deleted,
+			batch_size=PURGE_BATCH_SIZE, num_batches=num_batches,
+		)
+		raise
+
+
 def purge_completed_jobs(config: Config, log: StructuredLogger):
 	"""Purge source data for all eligible Completed archive jobs.
 
@@ -225,6 +393,11 @@ def purge_completed_jobs(config: Config, log: StructuredLogger):
 		job_name = job["name"]
 		meta = json.loads(job["job_meta"]) if isinstance(job["job_meta"], str) else (job["job_meta"] or {})
 		query_filter = meta.get("query_filter", {})
+
+		# Player-scoped jobs use batched DELETE by player_id + cleanup tables
+		if query_filter.get("filter_type") == "player_scope":
+			_purge_player_scope(config, job, meta, log)
+			continue
 
 		# Season-scoped jobs use DROP PARTITION instead of batched DELETE
 		if query_filter.get("filter_type") == "season":

@@ -122,7 +122,7 @@ def check_season_scoped_archives():
 
 	ended_seasons = frappe.db.sql(
 		"""
-		SELECT name, season_seq, end_date
+		SELECT name, season_seq, start_date, end_date
 		FROM `tabMemora Season`
 		WHERE is_published = 0
 		  AND end_date < %s
@@ -153,7 +153,20 @@ def check_season_scoped_archives():
 			try:
 				source_doctype = _format_source_doctype(archive_type["source_table"])
 				archive_type_name = archive_type["archive_type"]
-				archive_scope = _build_season_archive_scope(season.season_seq)
+
+				purge_mode = archive_type.get("purge_mode", "")
+				is_date_window = purge_mode == "date_window"
+				is_player_scope = purge_mode == "player_scope"
+
+				if is_player_scope:
+					archive_scope = season.name
+					meta = _build_player_scope_meta_json(season, archive_type)
+				elif is_date_window:
+					archive_scope = season.name
+					meta = _build_meta_json(season, archive_type)
+				else:
+					archive_scope = _build_season_archive_scope(season.season_seq)
+					meta = _build_season_meta_json(season, archive_type)
 
 				already_exists = frappe.db.exists(
 					"Memora Archive Job",
@@ -168,8 +181,6 @@ def check_season_scoped_archives():
 				if already_exists:
 					jobs_skipped += 1
 					continue
-
-				meta = _build_season_meta_json(season, archive_type)
 
 				job = _build_archive_job_doc(
 					source_doctype=source_doctype,
@@ -235,6 +246,41 @@ def _build_related_tables(archive_type: dict) -> list[dict]:
 			entry["scope_source"] = dim["scope_source"]
 		related_tables.append(entry)
 	return related_tables
+
+
+def _snapshot_player_ids(season_name: str) -> list[str]:
+	"""Return the list of player_ids enrolled in the given season."""
+	rows = frappe.db.sql(
+		"SELECT name FROM `tabMemora Player Profile` WHERE season = %s",
+		(season_name,),
+		as_dict=False,
+	)
+	return [r[0] for r in rows] if rows else []
+
+
+def _build_player_scope_meta_json(season: dict, archive_type: dict) -> dict:
+	"""Build player-scoped job_meta with a snapshot of player_ids."""
+	player_ids = _snapshot_player_ids(season.name)
+
+	query_filter = {
+		"filter_type": "player_scope",
+		"filter_column": "player_id",
+		"player_ids": player_ids,
+		"season_date_from": str(season.start_date),
+		"season_date_to": str(season.end_date),
+	}
+
+	meta = {
+		"query_filter": query_filter,
+		"export_columns": archive_type.get("fact_columns", []),
+		"related_tables": _build_related_tables(archive_type),
+		"schema_snapshot": archive_type.get("schema_snapshot", {}),
+	}
+	if "fact_sql" in archive_type:
+		meta["fact_sql"] = archive_type["fact_sql"]
+	if "cleanup_tables" in archive_type:
+		meta["cleanup_tables"] = archive_type["cleanup_tables"]
+	return meta
 
 
 def _build_meta_json(season: dict, archive_type: dict) -> dict:

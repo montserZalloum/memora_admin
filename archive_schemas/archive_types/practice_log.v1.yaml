@@ -1,6 +1,11 @@
 archive_type: practice_log
 version: v1
 source_table: "tabMemora Practice Log"
+trigger_mode: season
+purge_mode: player_scope
+cleanup_tables:
+  - table: "tabPlayer Practice Summary"
+    player_column: player_id
 fact_columns:
   - player_id
   - item_id
@@ -23,6 +28,16 @@ fact_sql:
     LEFT JOIN `tabMemora Player Profile` pp ON pl.`player_id` = pp.`name`
     WHERE pl.`{filter_column}` >= %s AND pl.`{filter_column}` < %s
     ORDER BY pl.`{filter_column}`
+  player_filtered: |
+    SELECT
+      pl.`player_id`, pl.`item_id`, pl.`first_seen_at`, pl.`last_seen_at`,
+      pl.`last_result`, pl.`attempt_count`, pl.`correct_count`,
+      pp.`season` AS season_id, pp.`plan` AS plan_id
+    FROM `tabMemora Practice Log` pl
+    INNER JOIN `tabMemora Review Item` ri ON pl.`item_id` = ri.`item_id`
+    LEFT JOIN `tabMemora Player Profile` pp ON pl.`player_id` = pp.`name`
+    WHERE pl.`player_id` IN ({placeholders})
+    ORDER BY pl.`player_id`, pl.`last_seen_at`
   full_snapshot: |
     SELECT
       pl.`player_id`, pl.`item_id`, pl.`first_seen_at`, pl.`last_seen_at`,

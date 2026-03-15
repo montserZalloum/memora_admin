@@ -92,13 +92,42 @@ _ARCHIVE_TYPE_V2 = {
 
 _ENDED_SEASON = SimpleNamespace(name="Season-TRG", season_seq=99, end_date="2026-01-01")
 
+_ENDED_SEASON_WITH_START = SimpleNamespace(
+    name="SEAS-00623", season_seq=623, start_date="2025-09-01", end_date="2026-01-01",
+)
+
+_ARCHIVE_TYPE_DATE_WINDOW = {
+    "archive_type": "practice_log",
+    "source_table": "tabMemora Practice Log",
+    "trigger_mode": "season",
+    "purge_mode": "date_window",
+    "version": "v1",
+    "scope_column": "last_seen_at",
+    "fact_columns": ["player_id", "item_id"],
+    "dimensions": [],
+}
+
+_ARCHIVE_TYPE_PLAYER_SCOPE = {
+    "archive_type": "practice_log",
+    "source_table": "tabMemora Practice Log",
+    "trigger_mode": "season",
+    "purge_mode": "player_scope",
+    "version": "v1",
+    "scope_column": "last_seen_at",
+    "fact_columns": ["player_id", "item_id"],
+    "dimensions": [],
+    "cleanup_tables": [
+        {"table": "tabPlayer Practice Summary", "player_column": "player_id"},
+    ],
+}
+
 
 @pytest.fixture(autouse=True)
 def reset_frappe_mocks():
-    """Reset all frappe mock call counts before each test."""
-    frappe.db.reset_mock()
-    frappe.get_doc.reset_mock()
-    frappe.log_error.reset_mock()
+    """Reset all frappe mock call counts and side_effects before each test."""
+    frappe.db.reset_mock(side_effect=True)
+    frappe.get_doc.reset_mock(side_effect=True)
+    frappe.log_error.reset_mock(side_effect=True)
     yield
 
 
@@ -255,3 +284,245 @@ def test_sql_query_has_no_age_cutoff():
         f"SQL query must pass exactly 1 parameter (today), got {len(params)}: {params!r}. "
         "A 90-day cutoff date must not be added as a second parameter."
     )
+
+
+# ============================================================================
+# TRG-005: purge_mode=date_window produces date_from/date_to (no filter_type)
+# ============================================================================
+
+def test_date_window_produces_date_range_meta():
+    """A hybrid archive type with purge_mode=date_window must produce job_meta
+    with date_from/date_to query_filter — NOT filter_type=season.
+
+    TRG-005: the executor pipeline uses the date-window code path (batched
+    DELETE, not DROP PARTITION) when query_filter has date_from/date_to.
+    """
+    import json
+
+    from memora_admin.tasks.archive_trigger import check_season_scoped_archives
+
+    frappe.db.sql.return_value = [_ENDED_SEASON_WITH_START]
+    frappe.db.exists.return_value = None  # no existing job
+
+    job_mock = MagicMock()
+    frappe.get_doc.return_value = job_mock
+
+    with patch(
+        "memora_admin.tasks.archive_trigger._load_archive_types",
+        return_value=[_ARCHIVE_TYPE_DATE_WINDOW],
+    ):
+        check_season_scoped_archives()
+
+    # A job must have been inserted
+    job_mock.insert.assert_called_once_with(ignore_permissions=True)
+
+    # Inspect the job_meta passed to frappe.get_doc
+    doc_dict = frappe.get_doc.call_args[0][0]
+    meta = json.loads(doc_dict["job_meta"])
+    qf = meta["query_filter"]
+
+    assert qf["date_from"] == "2025-09-01", f"Expected date_from=2025-09-01, got {qf['date_from']}"
+    assert qf["date_to"] == "2026-01-01", f"Expected date_to=2026-01-01, got {qf['date_to']}"
+    assert qf["filter_column"] == "last_seen_at"
+    assert "filter_type" not in qf, f"date_window meta must not contain filter_type, got {qf!r}"
+    assert "season_seq" not in qf, f"date_window meta must not contain season_seq, got {qf!r}"
+
+
+# ============================================================================
+# TRG-006: hybrid type uses season.name as archive_scope (not season_N)
+# ============================================================================
+
+def test_date_window_uses_season_name_as_scope():
+    """A hybrid archive type must use the season's name (e.g. SEAS-00623) as
+    archive_scope, not the season_N format used by standard season-scoped types.
+
+    TRG-006: this ensures dedup against the 5 existing practice_log jobs which
+    already used season.name as archive_scope.
+    """
+    from memora_admin.tasks.archive_trigger import check_season_scoped_archives
+
+    frappe.db.sql.return_value = [_ENDED_SEASON_WITH_START]
+    frappe.db.exists.return_value = None
+
+    job_mock = MagicMock()
+    frappe.get_doc.return_value = job_mock
+
+    with patch(
+        "memora_admin.tasks.archive_trigger._load_archive_types",
+        return_value=[_ARCHIVE_TYPE_DATE_WINDOW],
+    ):
+        check_season_scoped_archives()
+
+    doc_dict = frappe.get_doc.call_args[0][0]
+    assert doc_dict["archive_scope"] == "SEAS-00623", (
+        f"Expected archive_scope=SEAS-00623 (season name), got {doc_dict['archive_scope']!r}"
+    )
+
+    # Dedup check must also use the season name
+    frappe.db.exists.assert_called_once_with(
+        "Memora Archive Job",
+        {
+            "source_doctype": "Memora Practice Log",
+            "archive_scope": "SEAS-00623",
+            "archive_type": "practice_log",
+            "schema_version": "v1",
+            "status": ["!=", "Failed"],
+        },
+    )
+
+
+# ============================================================================
+# TRG-007: hybrid type gets post_archive_action="Delete"
+# ============================================================================
+
+def test_date_window_gets_delete_action():
+    """A hybrid archive type routed through check_season_scoped_archives() must
+    get post_archive_action="Delete" so the purge stage picks it up.
+
+    TRG-007: all season-triggered types use Delete, including hybrid ones.
+    """
+    from memora_admin.tasks.archive_trigger import check_season_scoped_archives
+
+    frappe.db.sql.return_value = [_ENDED_SEASON_WITH_START]
+    frappe.db.exists.return_value = None
+
+    job_mock = MagicMock()
+    frappe.get_doc.return_value = job_mock
+
+    with patch(
+        "memora_admin.tasks.archive_trigger._load_archive_types",
+        return_value=[_ARCHIVE_TYPE_DATE_WINDOW],
+    ):
+        check_season_scoped_archives()
+
+    doc_dict = frappe.get_doc.call_args[0][0]
+    assert doc_dict["post_archive_action"] == "Delete", (
+        f"Expected post_archive_action=Delete, got {doc_dict['post_archive_action']!r}"
+    )
+
+
+# ============================================================================
+# TRG-008: player_scope produces player_ids + season dates in meta
+# ============================================================================
+
+def test_player_scope_meta_contains_player_ids():
+    """A player_scope archive type must produce job_meta with filter_type=player_scope,
+    player_ids list, season_date_from/to, and cleanup_tables.
+
+    TRG-008: the archive trigger snapshots player_ids at job creation time.
+    """
+    import json
+
+    from memora_admin.tasks.archive_trigger import check_season_scoped_archives
+
+    frappe.db.sql.return_value = [_ENDED_SEASON_WITH_START]
+    frappe.db.exists.return_value = None
+
+    # Dispatch by query content (robust against internal query reordering)
+    def _sql_side_effect(query, values=None, as_dict=None, **kwargs):
+        q = str(query)
+        if "tabMemora Player Profile" in q:
+            return [("PLYR-001",), ("PLYR-002",), ("PLYR-003",)]
+        # Default: ended seasons query
+        return [_ENDED_SEASON_WITH_START]
+
+    frappe.db.sql.side_effect = _sql_side_effect
+
+    job_mock = MagicMock()
+    frappe.get_doc.return_value = job_mock
+
+    with patch(
+        "memora_admin.tasks.archive_trigger._load_archive_types",
+        return_value=[_ARCHIVE_TYPE_PLAYER_SCOPE],
+    ):
+        check_season_scoped_archives()
+
+    job_mock.insert.assert_called_once_with(ignore_permissions=True)
+
+    doc_dict = frappe.get_doc.call_args[0][0]
+    meta = json.loads(doc_dict["job_meta"])
+    qf = meta["query_filter"]
+
+    assert qf["filter_type"] == "player_scope"
+    assert qf["filter_column"] == "player_id"
+    assert qf["player_ids"] == ["PLYR-001", "PLYR-002", "PLYR-003"]
+    assert qf["season_date_from"] == "2025-09-01"
+    assert qf["season_date_to"] == "2026-01-01"
+
+    # cleanup_tables must be present in meta
+    assert meta["cleanup_tables"] == [
+        {"table": "tabPlayer Practice Summary", "player_column": "player_id"},
+    ]
+
+
+# ============================================================================
+# TRG-009: player_scope with empty player list still creates job
+# ============================================================================
+
+def test_player_scope_empty_players_creates_job():
+    """When no players exist for the season, a job is still created with
+    empty player_ids. The archive pipeline handles 0-row exports gracefully.
+
+    TRG-009: empty season must not be skipped.
+    """
+    import json
+
+    from memora_admin.tasks.archive_trigger import check_season_scoped_archives
+
+    def _sql_side_effect(query, values=None, as_dict=None, **kwargs):
+        q = str(query)
+        if "tabMemora Player Profile" in q:
+            return []  # no players
+        return [_ENDED_SEASON_WITH_START]
+
+    frappe.db.sql.side_effect = _sql_side_effect
+    frappe.db.exists.return_value = None
+
+    job_mock = MagicMock()
+    frappe.get_doc.return_value = job_mock
+
+    with patch(
+        "memora_admin.tasks.archive_trigger._load_archive_types",
+        return_value=[_ARCHIVE_TYPE_PLAYER_SCOPE],
+    ):
+        check_season_scoped_archives()
+
+    job_mock.insert.assert_called_once_with(ignore_permissions=True)
+
+    doc_dict = frappe.get_doc.call_args[0][0]
+    meta = json.loads(doc_dict["job_meta"])
+    assert meta["query_filter"]["player_ids"] == []
+
+
+# ============================================================================
+# TRG-010: player_scope uses season.name as archive_scope
+# ============================================================================
+
+def test_player_scope_uses_season_name_as_scope():
+    """A player_scope archive type must use the season's name (not season_N)
+    as archive_scope.
+
+    TRG-010: consistent with existing practice_log jobs.
+    """
+    from memora_admin.tasks.archive_trigger import check_season_scoped_archives
+
+    def _sql_side_effect(query, values=None, as_dict=None, **kwargs):
+        q = str(query)
+        if "tabMemora Player Profile" in q:
+            return [("PLYR-001",)]
+        return [_ENDED_SEASON_WITH_START]
+
+    frappe.db.sql.side_effect = _sql_side_effect
+    frappe.db.exists.return_value = None
+
+    job_mock = MagicMock()
+    frappe.get_doc.return_value = job_mock
+
+    with patch(
+        "memora_admin.tasks.archive_trigger._load_archive_types",
+        return_value=[_ARCHIVE_TYPE_PLAYER_SCOPE],
+    ):
+        check_season_scoped_archives()
+
+    doc_dict = frappe.get_doc.call_args[0][0]
+    assert doc_dict["archive_scope"] == "SEAS-00623"
