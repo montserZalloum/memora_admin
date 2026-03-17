@@ -425,6 +425,7 @@ _SCOPE_SETTINGS = {
 	"session_end": "session_rate_limit",
 	"lc_join": "lc_join_rate_limit",
 	"lc_submit": "lc_submit_rate_limit",
+	"lc_read": "lc_read_rate_limit",
 	"ch_hierarchy": "ch_hierarchy_rate_limit",
 	"ch_attempt": "ch_attempt_rate_limit",
 	"ch_leaderboard": "ch_leaderboard_rate_limit",
@@ -436,19 +437,23 @@ def require_rate_limit(scope: str):
 
 	Uses GlobalRateLimiter with key memora:rl:{scope}:{player_id}.
 	Reads limit from settings based on scope. Fails open on Redis errors.
+	The limiter is cached per scope to avoid re-registering the Lua script on every request.
 	"""
 	setting_attr = _SCOPE_SETTINGS[scope]
+	_cached_limiter: GlobalRateLimiter | None = None
 
 	async def _check_rate_limit(
 		user: CurrentUser,
 		redis_client: RedisClient,
 		settings: SettingsDep,
 	):
+		nonlocal _cached_limiter
+		if _cached_limiter is None:
+			_cached_limiter = GlobalRateLimiter(redis_client)
 		limit = getattr(settings, setting_attr)
 		window = settings.global_rate_limit_window
-		limiter = GlobalRateLimiter(redis_client)
 		key = player_ratelimit_key(scope, user.sub)
-		allowed, count, ttl = await limiter.check(key, limit, window)
+		allowed, count, ttl = await _cached_limiter.check(key, limit, window)
 		if not allowed:
 			raise RateLimitExceeded(max(ttl, 1))
 

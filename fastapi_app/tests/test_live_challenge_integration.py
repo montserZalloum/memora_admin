@@ -10,6 +10,7 @@ Tests the complete lifecycle against real Redis with mocked FrappeClient:
 
 import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from unittest.mock import AsyncMock
 
 import pytest
@@ -22,6 +23,7 @@ from fastapi_app.core.redis_keys import (
 	lc_joined_key,
 	lc_meta_key,
 	lc_questions_key,
+	lc_results_key,
 	lc_status_key,
 	lc_submitted_key,
 	wallet_key,
@@ -71,13 +73,14 @@ QUESTIONS = [
 
 async def seed_active_event(r: redis.Redis, event_id: str = EVENT_ID) -> dict:
 	"""Seed LC Redis keys for an active event (simulating Waiting->Active transition)."""
-	now = datetime.now()
+	now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
 	exam_start_ts = now - timedelta(seconds=30)  # Already started
 	exam_end_ts = now + timedelta(minutes=10)  # Ends in 10 min
 
 	meta = {
 		"exam_start_ts": exam_start_ts.strftime("%Y-%m-%d %H:%M:%S"),
 		"exam_end_ts": exam_end_ts.strftime("%Y-%m-%d %H:%M:%S"),
+		"scheduled_start": (now - timedelta(seconds=90)).strftime("%Y-%m-%d %H:%M:%S"),
 		"capacity": "100",
 		"show_correct_answers": "1",
 		"show_student_rank": "1",
@@ -85,6 +88,15 @@ async def seed_active_event(r: redis.Redis, event_id: str = EVENT_ID) -> dict:
 		"question_time_limit": "30",
 		"eligible_plans": "[]",
 		"waiting_room_duration": "60",
+		"event_name": "Integration Test Quiz",
+		"description": "<p>Test quiz</p>",
+		"exam_duration": "10",
+		"is_paid": "0",
+		"participation_xp": "50",
+		"first_place_xp": "500",
+		"second_place_xp": "300",
+		"third_place_xp": "100",
+		"default_xp": "25",
 	}
 
 	pipe = r.pipeline()
@@ -100,7 +112,7 @@ async def seed_active_event(r: redis.Redis, event_id: str = EVENT_ID) -> dict:
 
 def _make_event_frappe_doc(event_id: str = EVENT_ID) -> dict:
 	"""Build a fake Frappe event doc for mock FrappeClient responses."""
-	now = datetime.now()
+	now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
 	return {
 		"name": event_id,
 		"event_name": "Integration Test Quiz",
@@ -204,6 +216,13 @@ class TestFullExamFlow:
 		is_submitted = await redis_client.sismember(lc_submitted_key(EVENT_ID), player_id)
 		assert is_submitted
 
+		# Verify Redis: result stored for reconciliation
+		result_raw = await redis_client.hget(lc_results_key(EVENT_ID), player_id)
+		assert result_raw is not None
+		result_data = json.loads(result_raw)
+		assert result_data["score"] == 75.0
+		assert result_data["correct_count"] == 3
+
 	async def test_duplicate_submission_rejected(
 		self,
 		authed_client: tuple[AsyncClient, str, str, str],
@@ -238,7 +257,7 @@ class TestFullExamFlow:
 			json={"answers": answers},
 		)
 		assert resp.status_code == 409
-		assert resp.json()["detail"] == "ALREADY_SUBMITTED"
+		assert resp.json()["detail"]["code"] == "ALREADY_SUBMITTED"
 
 	async def test_join_when_not_active_rejected(
 		self,
@@ -253,7 +272,7 @@ class TestFullExamFlow:
 
 		resp = await client.post(f"/api/v1/live-challenge/{EVENT_ID}/join")
 		assert resp.status_code == 400
-		assert resp.json()["detail"] == "EVENT_NOT_JOINABLE"
+		assert resp.json()["detail"]["code"] == "EVENT_NOT_JOINABLE"
 
 	async def test_submit_when_not_active_rejected(
 		self,
@@ -269,7 +288,7 @@ class TestFullExamFlow:
 			json={"answers": [{"question_idx": 0, "selected": "A"}]},
 		)
 		assert resp.status_code == 400
-		assert resp.json()["detail"] == "EVENT_NOT_ACTIVE"
+		assert resp.json()["detail"]["code"] == "EVENT_NOT_ACTIVE"
 
 	async def test_capacity_enforcement(
 		self,
@@ -290,14 +309,23 @@ class TestFullExamFlow:
 
 		resp = await client.post(f"/api/v1/live-challenge/{EVENT_ID}/join")
 		assert resp.status_code == 422
-		assert resp.json()["detail"] == "CAPACITY_FULL"
+		assert resp.json()["detail"]["code"] == "CAPACITY_FULL"
 
 	@staticmethod
 	def _frappe_call_handler(player_id: str):
-		"""Build a FrappeClient.call side_effect handler for test mocking."""
+		"""Build a FrappeClient.call side_effect handler for test mocking.
+
+		Join and grade are pure-Redis (no Frappe calls). Frappe mocks here serve:
+		- get_event_detail(): get (event doc)
+		- get_result/leaderboard: get, get_list, get_count
+		- reconciliation: insert_many, insert, set_value
+		"""
 		participation_name = f"PART-{player_id}"
 
 		async def handler(method: str, params: dict | None = None):
+			if method == "frappe.client.insert_many":
+				return None
+
 			if method == "frappe.client.insert":
 				doc = json.loads(params.get("doc", "{}"))
 				return {"name": participation_name, **doc}
@@ -320,11 +348,6 @@ class TestFullExamFlow:
 			if method == "frappe.client.set_value":
 				return None
 
-			if method == "frappe.client.get_value":
-				if params and params.get("doctype") == "Memora Player Profile":
-					return {"plan": "PLAN-TEST-001"}
-				return None
-
 			return None
 
 		return handler
@@ -340,12 +363,9 @@ class TestEventDetailEndpoint:
 		redis_client: redis.Redis,
 		mock_frappe: AsyncMock,
 	):
-		"""Verify event detail returns correct public data."""
+		"""Verify event detail returns correct public data (Redis-only, no Frappe calls)."""
 		client, token, player_id, family_id = authed_client
 		await seed_active_event(redis_client)
-		mock_frappe.call = AsyncMock(
-			side_effect=TestFullExamFlow._frappe_call_handler(player_id)
-		)
 
 		resp = await client.get(f"/api/v1/live-challenge/{EVENT_ID}")
 		assert resp.status_code == 200
@@ -355,6 +375,9 @@ class TestEventDetailEndpoint:
 		assert data["question_count"] == 4
 		assert data["has_joined"] is False
 		assert data["has_submitted"] is False
+		assert data["capacity"] == 100
+		assert data["exam_duration"] == 10
+		assert data["participation_xp"] == 50
 
 
 @pytest.mark.asyncio
@@ -468,7 +491,7 @@ class TestResultAndLeaderboard:
 
 		resp = await client.get(f"/api/v1/live-challenge/{EVENT_ID}/leaderboard")
 		assert resp.status_code == 400
-		assert resp.json()["detail"] == "EVENT_NOT_ENDED"
+		assert resp.json()["detail"]["code"] == "EVENT_NOT_ENDED"
 
 	async def test_result_no_participation(
 		self,
@@ -488,6 +511,6 @@ class TestResultAndLeaderboard:
 
 		resp = await client.get(f"/api/v1/live-challenge/{EVENT_ID}/result")
 		assert resp.status_code == 404
-		assert resp.json()["detail"] == "NO_PARTICIPATION"
+		assert resp.json()["detail"]["code"] == "NO_PARTICIPATION"
 
 

@@ -7,6 +7,7 @@ and event_ended broadcast. Uses real Redis, mocked FrappeClient.
 import asyncio
 import json
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from unittest.mock import AsyncMock
 
 import pytest
@@ -68,7 +69,7 @@ async def seed_event_redis(
 
 	Returns the meta dict for assertions.
 	"""
-	now = datetime.now()
+	now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
 	exam_start_ts = now + timedelta(seconds=exam_start_offset_seconds)
 	exam_end_ts = exam_start_ts + timedelta(minutes=exam_duration_minutes)
 
@@ -253,7 +254,7 @@ class TestWSEventEnded:
 	):
 		"""When event status changes to ended, connected clients get event_ended."""
 		# Seed as active with exam_end_ts in 2 seconds
-		now = datetime.now()
+		now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
 		exam_end_ts = now + timedelta(seconds=2)
 
 		# Seed manually with near-future exam_end

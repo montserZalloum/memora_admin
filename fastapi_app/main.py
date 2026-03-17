@@ -114,9 +114,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 	notify_task = asyncio.create_task(start_notification_listener(pool, app.state))
 	app.state.notify_task = notify_task
 
-	# Create LiveChallengeService singleton (shared submission queue)
+	# Create LiveChallengeService singleton
 	lc_service = LiveChallengeService(redis_client, frappe_client)
-	await lc_service.start_queue_consumer()
 	app.state.live_challenge_service = lc_service
 
 	# Ensure Practice write queue consumer group exists (idempotent)
@@ -124,9 +123,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 	yield
 
-	# Stop LiveChallengeService queue consumer and drain remaining submissions
+	# Signal LiveChallengeService to stop countdown loops
 	if hasattr(app.state, "live_challenge_service"):
-		await app.state.live_challenge_service.stop_queue_consumer()
+		await app.state.live_challenge_service.shutdown()
 
 	# Cancel pub/sub listener (cache invalidation)
 	if hasattr(app.state, "pubsub_task"):

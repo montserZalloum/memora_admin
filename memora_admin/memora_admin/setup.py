@@ -10,9 +10,10 @@ import frappe
 
 
 def after_install():
-	"""Create custom roles and voucher schema extensions after app installation."""
+	"""Create custom roles, voucher schema extensions, and nginx WS proxies after app installation."""
 	create_task_admin_role()
 	_setup_voucher_schema()
+	_setup_nginx_websocket_proxies()
 
 
 def create_task_admin_role():
@@ -212,6 +213,26 @@ def after_migrate():
 		_ensure_player_practice_summary_table()
 	except Exception as e:
 		print(f"[after_migrate] Player Practice Summary table setup failed: {e}")
+
+	# Live Challenge Participation unique index (event, player) is managed by
+	# on_doctype_update() in memora_live_challenge_participation.py as "unique_event_player".
+
+	# Nginx WebSocket proxy locations (notifications + live challenge)
+	_setup_nginx_websocket_proxies()
+
+
+def _setup_nginx_websocket_proxies():
+	"""Ensure nginx has WebSocket proxy locations for FastAPI endpoints.
+
+	Non-fatal: prints warnings on failure but never raises.
+	"""
+	try:
+		from memora_admin.memora_admin.setup_nginx import ensure_nginx_websocket_proxies
+
+		ensure_nginx_websocket_proxies()
+	except Exception as e:
+		print(f"[setup_nginx] WARNING: Nginx WebSocket setup failed: {e}. "
+		      "Add WebSocket proxy locations manually.")
 
 
 def _ensure_player_practice_summary_table():

@@ -59,6 +59,7 @@ class Settings(BaseSettings):
 	# Live Challenge Rate Limits
 	lc_join_rate_limit: int = 5
 	lc_submit_rate_limit: int = 2
+	lc_read_rate_limit: int = 20  # detail/questions/result/leaderboard per player
 
 	# Challenge Hub Rate Limits
 	ch_hierarchy_rate_limit: int = 10

@@ -1,12 +1,12 @@
-"""Live Challenge service — join, grade, submission queue, WebSocket management."""
+"""Live Challenge service — join, grade, WebSocket management, post-event reconciliation."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import redis.asyncio as redis
 import structlog
@@ -15,9 +15,13 @@ from fastapi import WebSocket
 from fastapi_app.core.redis_keys import (
 	LC_KEY_TTL,
 	lc_count_key,
+	lc_join_times_key,
 	lc_joined_key,
 	lc_meta_key,
 	lc_questions_key,
+	lc_reconcile_lock_key,
+	lc_reconciled_key,
+	lc_results_key,
 	lc_status_key,
 	lc_submitted_key,
 )
@@ -27,11 +31,26 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-# Lua script for atomic join: uniqueness + capacity + SADD in one call.
-# KEYS: [1] joined_set, [2] submitted_set, [3] count_key
-# ARGV: [1] player_id, [2] capacity
-# Returns: position (>0) on success, -1 capacity full, -2 already joined, -3 already submitted
+# Asia/Amman timezone — Frappe stores all datetimes in this timezone.
+# FastAPI must use the same zone for countdown comparisons, joined_at, submitted_at.
+AMMAN_TZ = ZoneInfo("Asia/Amman")
+
+
+def _now_naive() -> datetime:
+	"""Return current time in Asia/Amman as a naive datetime (matches Frappe timestamps)."""
+	return datetime.now(AMMAN_TZ).replace(tzinfo=None)
+
+
+# Lua script for atomic join: status check + uniqueness + capacity + SADD + EXPIRE in one call.
+# KEYS: [1] joined_set, [2] submitted_set, [3] count_key, [4] status_key
+# ARGV: [1] player_id, [2] capacity, [3] joined_set_ttl
+# Returns: position (>0) on success, -1 capacity full, -2 already joined,
+#          -3 already submitted, -4 event not joinable
 _ATOMIC_JOIN_LUA = """
+local status = redis.call('GET', KEYS[4])
+if status ~= 'waiting' and status ~= 'active' then
+    return -4
+end
 if redis.call('SISMEMBER', KEYS[1], ARGV[1]) == 1 then
     return -2
 end
@@ -44,12 +63,55 @@ if current >= tonumber(ARGV[2]) then
 end
 local pos = redis.call('INCR', KEYS[3])
 redis.call('SADD', KEYS[1], ARGV[1])
+redis.call('EXPIRE', KEYS[1], ARGV[3])
 return pos
 """
 
-# Queue consumer settings
-_FLUSH_BATCH_SIZE = 50
-_FLUSH_INTERVAL_SECONDS = 30
+# Lua script for atomic status transition (CAS — compare-and-swap).
+# KEYS: [1] status_key
+# ARGV: [1] expected_current_status, [2] new_status, [3] status_ttl
+# Returns: new status on success, current status if already changed, nil if key missing.
+# Lua scripts are atomic in Redis, so no external lock is needed.
+_ATOMIC_TRANSITION_LUA = """
+local current = redis.call('GET', KEYS[1])
+if not current then return nil end
+if current ~= ARGV[1] then return current end
+redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+return ARGV[2]
+"""
+
+# Broadcast: max concurrent WebSocket sends.
+# 2000 keeps per-tick broadcast under ~500ms for 10k connections.
+_BROADCAST_CONCURRENCY = 2000
+# Reconciliation: chunk size for insert_many calls
+_RECONCILE_BATCH_SIZE = 500
+
+
+def _strip_correct_answers(questions: list[dict]) -> list[dict]:
+	"""Return questions with correct_answer removed (safe for client)."""
+	return [
+		{
+			"idx": q["idx"],
+			"question_text": q["question_text"],
+			"option_a": q["option_a"],
+			"option_b": q["option_b"],
+			"option_c": q["option_c"],
+			"option_d": q["option_d"],
+		}
+		for q in questions
+	]
+
+
+def _build_exam_start_msg(safe_questions: list[dict], meta: dict) -> dict:
+	"""Build the exam_start message payload from stripped questions and Redis meta."""
+	return {
+		"type": "exam_start",
+		"exam_end_ts": meta.get("exam_end_ts", ""),
+		"total_questions": len(safe_questions),
+		"enable_question_timer": bool(int(meta.get("enable_question_timer", "0"))),
+		"question_time_limit": int(meta.get("question_time_limit", "30")),
+		"questions": safe_questions,
+	}
 
 
 def grade_answers(
@@ -105,10 +167,9 @@ class LiveChallengeService:
 	def __init__(self, redis_client: redis.Redis, frappe_client: FrappeClient):
 		self.redis = redis_client
 		self.frappe = frappe_client
-		self._submission_queue: asyncio.Queue[dict] = asyncio.Queue()
-		self._queue_task: asyncio.Task | None = None
 		self._shutting_down = False
 		self._join_script: Any = None
+		self._cas_script: Any = None
 		# WebSocket connection tracking: event_id -> set[WebSocket]
 		self._ws_connections: dict[str, set[WebSocket]] = {}
 		# Per-event countdown loop tasks
@@ -120,120 +181,235 @@ class LiveChallengeService:
 			self._join_script = self.redis.register_script(_ATOMIC_JOIN_LUA)
 		return self._join_script
 
+	async def _get_cas_script(self):
+		"""Get or register the Lua atomic CAS transition script."""
+		if self._cas_script is None:
+			self._cas_script = self.redis.register_script(_ATOMIC_TRANSITION_LUA)
+		return self._cas_script
+
 	# -------------------------------------------------------------------------
-	# Queue Consumer (T023)
+	# Status endpoint (client-driven transitions)
 	# -------------------------------------------------------------------------
 
-	async def start_queue_consumer(self):
-		"""Start background task that flushes submissions to MariaDB."""
-		self._queue_task = asyncio.create_task(self._queue_consumer_loop())
-		logger.info("lc_queue_consumer_started")
+	async def _hydrate_event_to_redis(self, event_id: str) -> bool:
+		"""One-time hydration: fetch event from Frappe and populate Redis.
 
-	async def drain_queue(self):
-		"""Flush all remaining submissions. Called on shutdown or event end."""
-		batch: list[dict] = []
-		while not self._submission_queue.empty():
-			try:
-				batch.append(self._submission_queue.get_nowait())
-			except asyncio.QueueEmpty:
-				break
-		if batch:
-			await self._flush_batch(batch)
-			logger.info("lc_queue_drained", count=len(batch))
+		For events saved before the after_save hook existed.
+		Returns True if hydrated successfully, False if event not found.
+		"""
+		try:
+			event = await self.frappe.call(
+				"frappe.client.get",
+				{"doctype": "Memora Live Challenge Event", "name": event_id},
+			)
+		except Exception:
+			logger.exception("lc_hydrate_frappe_call_failed", event_id=event_id)
+			return False
+		if not event:
+			return False
 
-	async def stop_queue_consumer(self):
-		"""Stop the queue consumer and drain remaining items."""
-		self._shutting_down = True
-		if self._queue_task:
-			self._queue_task.cancel()
-			try:
-				await self._queue_task
-			except asyncio.CancelledError:
-				pass
-		# Final drain after task cancellation
-		await self.drain_queue()
+		frappe_status = (event.get("status") or "Draft").lower()
+		# Map Frappe status to Redis status
+		status_map = {"draft": "draft", "waiting": "waiting", "active": "active", "ended": "ended"}
+		redis_status = status_map.get(frappe_status, "draft")
 
-	async def _queue_consumer_loop(self):
-		"""Background loop: flush batch every 50 items or 30 seconds."""
-		batch: list[dict] = []
-		last_flush = time.monotonic()
+		# For ended events, set only status + reconciled flag + count.
+		# Meta is NOT hydrated because Redis participant sets cannot be
+		# reconstructed post-event. _resolve_event_source() sees status="ended"
+		# and routes to _get_event_detail_from_db() which reads Frappe directly.
+		if redis_status == "ended":
+			pipe = self.redis.pipeline()
+			pipe.set(lc_status_key(event_id), redis_status, ex=LC_KEY_TTL)
+			pipe.set(lc_reconciled_key(event_id), "1", ex=LC_KEY_TTL)
+			pipe.set(lc_count_key(event_id), str(event.get("participant_count", 0)), ex=LC_KEY_TTL)
+			await pipe.execute()
+			logger.info("lc_hydrated_ended_event", event_id=event_id)
+			return True
+
+		pipe = self.redis.pipeline()
+		pipe.set(lc_status_key(event_id), redis_status, ex=LC_KEY_TTL)
+
+		# Questions
+		questions = []
+		for q in event.get("questions") or []:
+			raw_idx = q.get("idx")
+			questions.append({
+				"idx": (int(raw_idx) - 1) if raw_idx is not None else 0,
+				"question_text": q.get("question_text", ""),
+				"option_a": q.get("option_a", ""),
+				"option_b": q.get("option_b", ""),
+				"option_c": q.get("option_c", ""),
+				"option_d": q.get("option_d", ""),
+				"correct_answer": q.get("correct_answer", ""),
+			})
+		pipe.set(lc_questions_key(event_id), json.dumps(questions), ex=LC_KEY_TTL)
+
+		# Meta hash — includes ALL fields needed by get_event_detail (Redis-only reads)
+		eligible_plans = [ep.get("plan", "") for ep in (event.get("eligible_plans") or []) if isinstance(ep, dict)]
+		meta = {
+			"scheduled_start": str(event.get("scheduled_start", "")),
+			"exam_start_ts": str(event.get("exam_start_ts", "")),
+			"exam_end_ts": str(event.get("exam_end_ts", "")),
+			"capacity": str(event.get("capacity", 100)),
+			"show_correct_answers": str(int(event.get("show_correct_answers", 0))),
+			"show_student_rank": str(int(event.get("show_student_rank", 0))),
+			"enable_question_timer": str(int(event.get("enable_question_timer", 0))),
+			"question_time_limit": str(event.get("question_time_limit", 30)),
+			"waiting_room_duration": str(event.get("waiting_room_duration", 180)),
+			"eligible_plans": json.dumps(eligible_plans),
+			"event_name": event.get("event_name", ""),
+			"description": event.get("description") or "",
+			"exam_duration": str(event.get("exam_duration", 10)),
+			"is_paid": str(int(event.get("is_paid", 0))),
+			"participation_xp": str(event.get("participation_xp", 0)),
+			"first_place_xp": str(event.get("first_place_xp", 0)),
+			"second_place_xp": str(event.get("second_place_xp", 0)),
+			"third_place_xp": str(event.get("third_place_xp", 0)),
+			"default_xp": str(event.get("default_xp", 0)),
+		}
+		meta_key = lc_meta_key(event_id)
+		# hset with all fields is an atomic overwrite — no delete needed
+		pipe.hset(meta_key, mapping=meta)
+		pipe.expire(meta_key, LC_KEY_TTL)
+
+		# Count (preserve existing, else 0)
+		count_key = lc_count_key(event_id)
+		pipe.setnx(count_key, "0")
+		pipe.expire(count_key, LC_KEY_TTL)
+
+		await pipe.execute()
+		logger.info("lc_hydrated_to_redis", event_id=event_id, status=redis_status)
+		return True
+
+	async def get_status(self, event_id: str) -> dict[str, Any] | None:
+		"""Get current event status, triggering transitions if due.
+
+		Redis-first — hydrates from Frappe on first access if needed.
+		The first request arriving after a transition threshold atomically
+		advances the status; concurrent requests get the updated value.
+		"""
+		current_status = await self.redis.get(lc_status_key(event_id))
+		if current_status is None:
+			# Keys fully deleted after reconciliation — check reconciled flag
+			if await self.redis.exists(lc_reconciled_key(event_id)):
+				# Event ended and fully reconciled — DB is source of truth.
+				# Fetch participant_count from Frappe.
+				try:
+					count = await self.frappe.call(
+						"frappe.client.get_value",
+						{
+							"doctype": "Memora Live Challenge Event",
+							"fieldname": "participant_count",
+							"filters": event_id,
+						},
+					)
+					pc = int(count.get("participant_count", 0)) if count else 0
+				except Exception:
+					pc = 0
+				return {"status": "ended", "participant_count": pc}
+			# Not in Redis yet — hydrate from Frappe (one-time)
+			if not await self._hydrate_event_to_redis(event_id):
+				return None
+			current_status = await self.redis.get(lc_status_key(event_id))
+			if current_status is None:
+				return None
+
+		# Pipeline the two reads into a single round-trip
+		pipe = self.redis.pipeline()
+		pipe.hgetall(lc_meta_key(event_id))
+		pipe.get(lc_count_key(event_id))
+		meta, count_raw = await pipe.execute()
+		participant_count = int(count_raw or "0")
+
+		if not meta:
+			# Meta deleted after reconciliation — status is terminal "ended"
+			if current_status == "ended":
+				return {"status": "ended", "participant_count": participant_count}
+			return None
+
+		# Guard against empty/missing timestamps (event may lack computed times)
+		exam_start_raw = meta.get("exam_start_ts", "")
+		exam_end_raw = meta.get("exam_end_ts", "")
+		if not exam_start_raw or not exam_end_raw:
+			return {"status": current_status, "participant_count": participant_count}
 
 		try:
-			while not self._shutting_down:
-				try:
-					item = await asyncio.wait_for(self._submission_queue.get(), timeout=1.0)
-					batch.append(item)
-				except asyncio.TimeoutError:
-					pass
+			exam_start_ts = datetime.fromisoformat(exam_start_raw)
+			exam_end_ts = datetime.fromisoformat(exam_end_raw)
+		except ValueError:
+			logger.warning("lc_status_bad_timestamps", event_id=event_id,
+				exam_start_ts=exam_start_raw, exam_end_ts=exam_end_raw)
+			return {"status": current_status, "participant_count": participant_count}
 
-				should_flush = len(batch) >= _FLUSH_BATCH_SIZE or (
-					batch and (time.monotonic() - last_flush) >= _FLUSH_INTERVAL_SECONDS
-				)
-
-				if should_flush and batch:
-					await self._flush_batch(batch)
-					batch = []
-					last_flush = time.monotonic()
-		except asyncio.CancelledError:
-			# Drain on cancellation
-			while not self._submission_queue.empty():
-				try:
-					batch.append(self._submission_queue.get_nowait())
-				except asyncio.QueueEmpty:
-					break
-			if batch:
-				await self._flush_batch(batch)
-			raise
-
-	async def _flush_batch(self, batch: list[dict]):
-		"""Persist a batch of submissions to MariaDB via FrappeClient."""
-		event_counts: dict[str, int] = {}
-
-		for item in batch:
-			event_id = item["event_id"]
-			event_counts[event_id] = event_counts.get(event_id, 0) + 1
+		# Determine what the status SHOULD be based on server time
+		now = _now_naive()
+		scheduled_raw = meta.get("scheduled_start", "")
+		if scheduled_raw:
 			try:
-				await self.frappe.call(
-					"frappe.client.set_value",
-					{
-						"doctype": "Memora Live Challenge Participation",
-						"name": item["participation_name"],
-						"fieldname": json.dumps(
-							{
-								"score": item["score"],
-								"submitted_at": item["submitted_at"],
-								"answers_json": item["answers_json"],
-							}
-						),
-					},
-				)
-			except Exception:
-				logger.error(
-					"lc_submission_persist_failed",
-					event_id=event_id,
-					player_id=item["player_id"],
-				)
+				scheduled_start = datetime.fromisoformat(scheduled_raw)
+			except ValueError:
+				wr = int(meta.get("waiting_room_duration", "180"))
+				scheduled_start = exam_start_ts - timedelta(seconds=wr)
+		else:
+			wr = int(meta.get("waiting_room_duration", "180"))
+			scheduled_start = exam_start_ts - timedelta(seconds=wr)
 
-		# Sync submitted_count for each event from Redis (idempotent)
-		for event_id, _count in event_counts.items():
-			try:
-				submitted_count = await self.redis.scard(lc_submitted_key(event_id))
-				await self.frappe.call(
-					"frappe.client.set_value",
-					{
-						"doctype": "Memora Live Challenge Event",
-						"name": event_id,
-						"fieldname": json.dumps({"submitted_count": submitted_count}),
-					},
-				)
-			except Exception:
-				logger.error("lc_submitted_count_sync_failed", event_id=event_id)
+		if now >= exam_end_ts:
+			expected = "ended"
+		elif now >= exam_start_ts:
+			expected = "active"
+		elif now >= scheduled_start:
+			expected = "waiting"
+		else:
+			expected = "draft"
 
-		logger.info("lc_batch_flushed", count=len(batch), events=list(event_counts.keys()))
+		# If no transition needed, return immediately (fast path ~1ms)
+		if expected == current_status:
+			# For ended events, ensure reconciliation has been kicked off (non-blocking)
+			if current_status == "ended" and not await self.redis.exists(lc_reconciled_key(event_id)):
+				asyncio.create_task(self._reconcile_event(event_id))
+			return {"status": current_status, "participant_count": participant_count}
 
-	async def queue_submission(self, submission_data: dict):
-		"""Add submission to in-memory queue for batch persistence."""
-		await self._submission_queue.put(submission_data)
+		# Transition needed — use atomic CAS Lua script
+		script = await self._get_cas_script()
+
+		# Walk through each required transition step in order
+		transitions = [("draft", "waiting"), ("waiting", "active"), ("active", "ended")]
+		resolved_status = current_status
+		for from_status, to_status in transitions:
+			if resolved_status != from_status:
+				continue
+			# Check if this transition is due
+			if to_status == "waiting" and now < scheduled_start:
+				break
+			if to_status == "active" and now < exam_start_ts:
+				break
+			if to_status == "ended" and now < exam_end_ts:
+				break
+
+			result = await script(
+				keys=[lc_status_key(event_id)],
+				args=[from_status, to_status, str(LC_KEY_TTL)],
+			)
+			if result is None:
+				break
+			result_str = result if isinstance(result, str) else result.decode()
+			resolved_status = result_str
+			# Trigger reconciliation when transitioning to ended (non-blocking)
+			if to_status == "ended" and result_str == "ended":
+				asyncio.create_task(self._reconcile_event(event_id))
+
+		return {"status": resolved_status, "participant_count": participant_count}
+
+	# -------------------------------------------------------------------------
+	# Lifecycle
+	# -------------------------------------------------------------------------
+
+	async def shutdown(self):
+		"""Signal all background loops to stop and cancel countdown tasks."""
+		self._shutting_down = True
+		for event_id in list(self._countdown_tasks):
+			self.stop_countdown_loop(event_id)
 
 	# -------------------------------------------------------------------------
 	# Join (T021)
@@ -243,99 +419,61 @@ class LiveChallengeService:
 		self,
 		event_id: str,
 		player_id: str,
+		player_plan: str | None = None,
 	) -> dict[str, Any]:
-		"""Join a live challenge event.
+		"""Join a live challenge event (pure Redis — zero Frappe calls).
 
 		Returns dict with position, countdown_remaining, waiting_room_duration.
 		Raises ValueError with error code on failure.
 		"""
-		# 1. Check event status from Redis
-		status = await self.redis.get(lc_status_key(event_id))
+		# 1. Fast-path status + meta in one round trip
+		pipe = self.redis.pipeline()
+		pipe.get(lc_status_key(event_id))
+		pipe.hgetall(lc_meta_key(event_id))
+		status, meta = await pipe.execute()
 		if status not in ("waiting", "active"):
 			raise ValueError("EVENT_NOT_JOINABLE")
 
 		# 2. Check plan eligibility (before atomic join to avoid wasting a capacity slot)
-		meta = await self.redis.hgetall(lc_meta_key(event_id))
 		eligible_plans_json = meta.get("eligible_plans", "[]")
 		eligible_plans = json.loads(eligible_plans_json)
-		if eligible_plans:
-			# Look up player's current plan from FrappeClient (authoritative, not JWT which may be stale)
-			player_plan = None
-			try:
-				profile = await self.frappe.call(
-					"frappe.client.get_value",
-					{
-						"doctype": "Memora Player Profile",
-						"filters": json.dumps({"name": player_id}),
-						"fieldname": "plan",
-					},
-				)
-				if profile:
-					player_plan = profile.get("plan")
-			except Exception:
-				logger.warning("lc_plan_lookup_failed", player_id=player_id, event_id=event_id)
-			if player_plan not in eligible_plans:
-				raise ValueError("PLAN_NOT_ELIGIBLE")
+		if eligible_plans and player_plan not in eligible_plans:
+			raise ValueError("PLAN_NOT_ELIGIBLE")
 
-		# 3. Atomic join: uniqueness + capacity + SADD in one Lua call
+		# 3. Atomic join: status check + uniqueness + capacity + SADD + EXPIRE in one Lua call
 		capacity = int(meta.get("capacity", "0"))
 		script = await self._get_join_script()
 		position = await script(
-			keys=[lc_joined_key(event_id), lc_submitted_key(event_id), lc_count_key(event_id)],
-			args=[player_id, capacity],
+			keys=[
+				lc_joined_key(event_id),
+				lc_submitted_key(event_id),
+				lc_count_key(event_id),
+				lc_status_key(event_id),
+			],
+			args=[player_id, capacity, LC_KEY_TTL],
 		)
+		if position == -4:
+			raise ValueError("EVENT_NOT_JOINABLE")
 		if position == -2 or position == -3:
 			raise ValueError("ALREADY_JOINED")
 		if position == -1:
 			raise ValueError("CAPACITY_FULL")
 
-		# Set TTL on joined set
-		await self.redis.expire(lc_joined_key(event_id), LC_KEY_TTL)
+		# Record per-player join timestamp for reconciliation (pipelined)
+		join_time = _now_naive().strftime("%Y-%m-%d %H:%M:%S")
+		join_pipe = self.redis.pipeline()
+		join_pipe.hset(lc_join_times_key(event_id), player_id, join_time)
+		join_pipe.expire(lc_join_times_key(event_id), LC_KEY_TTL)
+		await join_pipe.execute()
 
-		# 6. Create Participation record via FrappeClient
-		joined_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-		try:
-			await self.frappe.call(
-				"frappe.client.insert",
-				{
-					"doc": json.dumps(
-						{
-							"doctype": "Memora Live Challenge Participation",
-							"event": event_id,
-							"player": player_id,
-							"joined_at": joined_at,
-						}
-					),
-				},
-			)
-		except Exception:
-			# Rollback: decrement count and remove from joined set
-			await self.redis.decr(lc_count_key(event_id))
-			await self.redis.srem(lc_joined_key(event_id), player_id)
-			logger.error("lc_participation_create_failed", event_id=event_id, player_id=player_id)
-			raise
-
-		# Sync participant_count to MariaDB
-		try:
-			await self.frappe.call(
-				"frappe.client.set_value",
-				{
-					"doctype": "Memora Live Challenge Event",
-					"name": event_id,
-					"fieldname": json.dumps({"participant_count": position}),
-				},
-			)
-		except Exception:
-			logger.warning("lc_participant_count_sync_failed", event_id=event_id)
-
-		# 7. Calculate countdown_remaining
+		# 4. Calculate countdown_remaining
 		countdown_remaining = 0
 		if status == "waiting":
 			exam_start_ts_str = meta.get("exam_start_ts", "")
 			if exam_start_ts_str:
 				try:
-					exam_start = datetime.strptime(exam_start_ts_str, "%Y-%m-%d %H:%M:%S")
-					remaining = (exam_start - datetime.now()).total_seconds()
+					exam_start = datetime.fromisoformat(exam_start_ts_str)
+					remaining = (exam_start - _now_naive()).total_seconds()
 					countdown_remaining = max(0, int(remaining))
 				except ValueError:
 					pass
@@ -357,6 +495,182 @@ class LiveChallengeService:
 		}
 
 	# -------------------------------------------------------------------------
+	# Reconciliation (post-event Frappe persistence)
+	# -------------------------------------------------------------------------
+
+	async def _reconcile_event(self, event_id: str) -> None:
+		"""Persist join + submission data to Frappe after event ends (idempotent, lock-guarded).
+
+		Reads the lc:{id}:joined SET and lc:{id}:results HASH (sole sources of truth)
+		and creates Participation docs in Frappe with score data pre-populated.
+		Only deletes Redis keys on full success.
+		"""
+		# Step 0 — Already reconciled?
+		if await self.redis.exists(lc_reconciled_key(event_id)):
+			logger.info("lc_reconciliation_already_done", event_id=event_id)
+			return
+
+		# Step 1 — Acquire lock (3600s TTL)
+		acquired = await self.redis.set(lc_reconcile_lock_key(event_id), "1", nx=True, ex=3600)
+		if not acquired:
+			logger.info("lc_reconciliation_locked", event_id=event_id)
+			return
+
+		try:
+			# Step 2 — Read snapshot (joined players, join times, submission results)
+			player_ids = await self.redis.smembers(lc_joined_key(event_id))
+			count = int(await self.redis.get(lc_count_key(event_id)) or "0")
+			meta = await self.redis.hgetall(lc_meta_key(event_id))
+			join_times = await self.redis.hgetall(lc_join_times_key(event_id))
+			results_raw = await self.redis.hgetall(lc_results_key(event_id))
+			default_joined_at = meta.get("exam_start_ts", _now_naive().strftime("%Y-%m-%d %H:%M:%S"))
+
+			# Parse submission results: player_id -> {score, correct_count, submitted_at, answers_json}
+			results: dict[str, dict] = {}
+			for pid, payload in results_raw.items():
+				try:
+					results[pid] = json.loads(payload)
+				except (json.JSONDecodeError, TypeError):
+					logger.warning("lc_reconcile_bad_result_payload", event_id=event_id, player=pid)
+
+			# Step 3 — Build participation docs with score data pre-populated
+			docs = []
+			for pid in player_ids:
+				doc: dict[str, Any] = {
+					"doctype": "Memora Live Challenge Participation",
+					"event": event_id,
+					"player": pid,
+					"joined_at": join_times.get(pid, default_joined_at),
+				}
+				r = results.get(pid)
+				if r:
+					doc["score"] = r.get("score")
+					doc["submitted_at"] = r.get("submitted_at")
+					doc["answers_json"] = r.get("answers_json")
+				docs.append(doc)
+
+			failed_players: list[str] = []
+			# Chunk insert_many into batches (10k docs in one call exceeds payload limits)
+			for i in range(0, len(docs), _RECONCILE_BATCH_SIZE):
+				batch = docs[i : i + _RECONCILE_BATCH_SIZE]
+				try:
+					await self.frappe.call("frappe.client.insert_many", {"docs": json.dumps(batch)})
+				except Exception:
+					# Fallback: sequential idempotent inserts for this batch
+					for doc in batch:
+						try:
+							await self.frappe.call("frappe.client.insert", {"doc": json.dumps(doc)})
+						except Exception as e:
+							err_str = str(e).lower()
+							if "duplicate" in err_str or "already exists" in err_str:
+								# Doc already exists — update score via filters
+								# (participation docs have hash names, not player_id)
+								r = results.get(doc["player"])
+								if r:
+									try:
+										# Find the actual doc name first
+										existing = await self.frappe.call(
+											"frappe.client.get_list",
+											{
+												"doctype": "Memora Live Challenge Participation",
+												"filters": json.dumps([
+													["event", "=", event_id],
+													["player", "=", doc["player"]],
+												]),
+												"fields": json.dumps(["name"]),
+												"limit_page_length": "1",
+											},
+										)
+										if existing:
+											await self.frappe.call(
+												"frappe.client.set_value",
+												{
+													"doctype": "Memora Live Challenge Participation",
+													"name": existing[0]["name"],
+													"fieldname": json.dumps(
+														{
+															"score": r.get("score"),
+															"submitted_at": r.get("submitted_at"),
+															"answers_json": r.get("answers_json"),
+														}
+													),
+												},
+											)
+									except Exception:
+										logger.warning(
+											"lc_reconcile_score_update_failed",
+											event_id=event_id,
+											player=doc["player"],
+										)
+								continue
+							failed_players.append(doc["player"])
+							logger.warning(
+								"lc_participation_insert_failed",
+								event_id=event_id,
+								player=doc["player"],
+								error=str(e),
+							)
+
+			# Sync counters to Frappe event
+			count_synced = True
+			submitted_count = len(results)
+			try:
+				await self.frappe.call(
+					"frappe.client.set_value",
+					{
+						"doctype": "Memora Live Challenge Event",
+						"name": event_id,
+						"fieldname": json.dumps(
+							{
+								"participant_count": count,
+								"submitted_count": submitted_count,
+							}
+						),
+					},
+				)
+			except Exception:
+				count_synced = False
+				logger.warning("lc_participant_count_sync_failed", event_id=event_id)
+
+			# Step 4 — Conditional cleanup (full success only)
+			all_succeeded = not failed_players and count_synced
+			if all_succeeded:
+				await self.redis.set(lc_reconciled_key(event_id), "1", ex=LC_KEY_TTL)
+				pipe = self.redis.pipeline()
+				# Keep status key alive ("ended") — it is the single routing
+				# signal for _resolve_event_source(). Refresh TTL so it
+				# survives for a full 24h after reconciliation.
+				pipe.expire(lc_status_key(event_id), LC_KEY_TTL)
+				# Delete ephemeral keys — DB is now source of truth.
+				pipe.delete(lc_count_key(event_id))
+				pipe.delete(lc_meta_key(event_id))
+				pipe.delete(lc_questions_key(event_id))
+				pipe.delete(lc_joined_key(event_id))
+				pipe.delete(lc_submitted_key(event_id))
+				pipe.delete(lc_join_times_key(event_id))
+				pipe.delete(lc_results_key(event_id))
+				pipe.delete(lc_reconcile_lock_key(event_id))
+				await pipe.execute()
+				logger.info(
+					"lc_reconciliation_complete",
+					event_id=event_id,
+					participant_count=count,
+					submitted_count=submitted_count,
+				)
+			else:
+				# Partial failure — release lock only, leave keys for retry
+				await self.redis.delete(lc_reconcile_lock_key(event_id))
+				logger.error(
+					"lc_reconciliation_partial_failure",
+					event_id=event_id,
+					failed_players=failed_players,
+					count_synced=count_synced,
+				)
+		except Exception:
+			await self.redis.delete(lc_reconcile_lock_key(event_id))
+			logger.exception("lc_reconciliation_error", event_id=event_id)
+
+	# -------------------------------------------------------------------------
 	# Grade (T022)
 	# -------------------------------------------------------------------------
 
@@ -366,46 +680,39 @@ class LiveChallengeService:
 		player_id: str,
 		answers: list[dict],
 	) -> dict[str, Any]:
-		"""Grade submitted answers and queue for persistence.
+		"""Grade submitted answers (pure Redis — DB persistence deferred to reconciliation).
 
 		Returns dict with score, correct_count, total_questions, submitted_at, corrections.
 		Raises ValueError with error code on failure.
 		"""
-		# 1. Check event is active
-		status = await self.redis.get(lc_status_key(event_id))
+		# 1. Check event is active + mark submitted atomically (2 RT → 1 pipeline)
+		pipe = self.redis.pipeline()
+		pipe.get(lc_status_key(event_id))
+		pipe.sadd(lc_submitted_key(event_id), player_id)
+		status, added = await pipe.execute()
 		if status != "active":
+			# Rollback SADD if we added to a non-active event
+			if added:
+				await self.redis.srem(lc_submitted_key(event_id), player_id)
 			raise ValueError("EVENT_NOT_ACTIVE")
 
 		# 2. Atomic mark-as-submitted: SADD returns 1 if newly added, 0 if already present
-		added = await self.redis.sadd(lc_submitted_key(event_id), player_id)
 		if not added:
 			raise ValueError("ALREADY_SUBMITTED")
 		await self.redis.expire(lc_submitted_key(event_id), LC_KEY_TTL)
 
-		# 3. Check is participant (Redis joined set)
+		# 3. Check is participant (Redis joined set — fail fast, no DB fallback)
 		is_participant = await self.redis.sismember(lc_joined_key(event_id), player_id)
 		if not is_participant:
 			# Rollback: remove from submitted set
 			await self.redis.srem(lc_submitted_key(event_id), player_id)
-			# Fall back to FrappeClient check (joined set may have expired)
-			try:
-				result = await self.frappe.call(
-					"frappe.client.get_count",
-					{
-						"doctype": "Memora Live Challenge Participation",
-						"filters": json.dumps({"event": event_id, "player": player_id}),
-					},
-				)
-				if not result:
-					raise ValueError("NOT_A_PARTICIPANT")
-				# Re-add to submitted set
-				await self.redis.sadd(lc_submitted_key(event_id), player_id)
-				await self.redis.expire(lc_submitted_key(event_id), LC_KEY_TTL)
-			except ValueError:
-				raise
+			raise ValueError("NOT_A_PARTICIPANT")
 
-		# 4. Load questions from Redis
-		questions_json = await self.redis.get(lc_questions_key(event_id))
+		# 4. Load questions + meta in one round trip
+		q_pipe = self.redis.pipeline()
+		q_pipe.get(lc_questions_key(event_id))
+		q_pipe.hgetall(lc_meta_key(event_id))
+		questions_json, meta = await q_pipe.execute()
 		if not questions_json:
 			# Rollback submitted mark
 			await self.redis.srem(lc_submitted_key(event_id), player_id)
@@ -413,36 +720,14 @@ class LiveChallengeService:
 		questions = json.loads(questions_json)
 
 		# 5. Get show_correct_answers setting
-		meta = await self.redis.hgetall(lc_meta_key(event_id))
 		show_correct = bool(int(meta.get("show_correct_answers", "0")))
 
 		# 6. Grade
 		result = grade_answers(questions, answers, show_correct_answers=show_correct)
-		submitted_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		submitted_at = _now_naive().strftime("%Y-%m-%d %H:%M:%S")
 		result["submitted_at"] = submitted_at
 
-		# 7. Find participation record name for queue
-		participation_name = None
-		try:
-			parts = await self.frappe.call(
-				"frappe.client.get_list",
-				{
-					"doctype": "Memora Live Challenge Participation",
-					"filters": json.dumps([["event", "=", event_id], ["player", "=", player_id]]),
-					"fields": json.dumps(["name"]),
-					"limit_page_length": "1",
-				},
-			)
-			if parts:
-				participation_name = parts[0]["name"]
-		except Exception:
-			logger.warning(
-				"lc_participation_lookup_failed",
-				event_id=event_id,
-				player_id=player_id,
-			)
-
-		# 8. Build answers with correctness for persistence
+		# 7. Build answers with correctness for persistence
 		answers_record = []
 		correct_map = {q["idx"]: q["correct_answer"] for q in questions}
 		for a in answers:
@@ -454,28 +739,20 @@ class LiveChallengeService:
 				}
 			)
 
-		# 9. Queue for batch persistence
-		if participation_name:
-			await self.queue_submission(
-				{
-					"event_id": event_id,
-					"player_id": player_id,
-					"participation_name": participation_name,
-					"score": result["score"],
-					"correct_count": result["correct_count"],
-					"submitted_at": submitted_at,
-					"answers_json": json.dumps({"answers": answers_record}),
-				}
-			)
-		else:
-			# Rollback submitted mark so player can retry
-			await self.redis.srem(lc_submitted_key(event_id), player_id)
-			logger.error(
-				"lc_submission_not_queued_no_participation",
-				event_id=event_id,
-				player_id=player_id,
-			)
-			raise ValueError("SUBMISSION_FAILED")
+		# 8. Store result in Redis (pure Redis — zero Frappe calls).
+		#    Frappe persistence is deferred to _reconcile_event() after event ends.
+		result_payload = json.dumps(
+			{
+				"score": result["score"],
+				"correct_count": result["correct_count"],
+				"submitted_at": submitted_at,
+				"answers_json": json.dumps({"answers": answers_record}),
+			}
+		)
+		pipe = self.redis.pipeline()
+		pipe.hset(lc_results_key(event_id), player_id, result_payload)
+		pipe.expire(lc_results_key(event_id), LC_KEY_TTL)
+		await pipe.execute()
 
 		logger.info(
 			"lc_submission_graded",
@@ -488,76 +765,219 @@ class LiveChallengeService:
 		return result
 
 	# -------------------------------------------------------------------------
-	# Event Detail (T024)
+	# Event Detail (T024) — explicit source selection
 	# -------------------------------------------------------------------------
+
+	async def _resolve_event_source(self, event_id: str) -> str | None:
+		"""Determine the authoritative data source for an event.
+
+		Single decision criterion: Redis status key value.
+
+		Returns:
+			"redis" — event is active/waiting/draft, Redis has the data
+			"db"    — event has ended, Frappe DB is the source of truth
+			None    — event does not exist
+		"""
+		status = await self.redis.get(lc_status_key(event_id))
+
+		# Cold start: status key absent — hydrate once, then re-read.
+		# SETNX guard prevents stampede: first request hydrates,
+		# concurrent requests get None (client retries naturally).
+		# 30s TTL = natural backoff if Frappe is down.
+		if status is None:
+			guard = await self.redis.set(
+				f"memora:lc:{event_id}:hydrate_guard", "1", nx=True, ex=30,
+			)
+			if not guard:
+				return None
+			if not await self._hydrate_event_to_redis(event_id):
+				return None
+			status = await self.redis.get(lc_status_key(event_id))
+
+		if status == "ended":
+			return "db"
+		if status is not None:
+			return "redis"
+		return None
 
 	async def get_event_detail(self, event_id: str, player_id: str) -> dict[str, Any] | None:
 		"""Get public event details with player-specific flags.
 
-		Returns None if event not found.
+		Explicit source selection: ended events read from DB,
+		active/waiting/draft events read from Redis. No implicit fallback.
 		"""
-		# Fetch event from FrappeClient
+		source = await self._resolve_event_source(event_id)
+		if source is None:
+			return None
+		if source == "db":
+			return await self._get_event_detail_from_db(event_id, player_id)
+		return await self._get_event_detail_from_redis(event_id, player_id)
+
+	async def _get_event_detail_from_redis(self, event_id: str, player_id: str) -> dict[str, Any] | None:
+		"""Read event detail exclusively from Redis. MUST NOT fall back to DB.
+
+		Single pipeline read — zero Frappe calls. Returns None if Redis data
+		is missing (indicates a hydration or data integrity problem).
+		"""
+		pipe = self.redis.pipeline()
+		pipe.get(lc_status_key(event_id))
+		pipe.hgetall(lc_meta_key(event_id))
+		pipe.get(lc_count_key(event_id))
+		pipe.sismember(lc_joined_key(event_id), player_id)
+		pipe.sismember(lc_submitted_key(event_id), player_id)
+		pipe.get(lc_questions_key(event_id))
+		redis_status, meta, count_raw, has_joined, has_submitted, questions_json = await pipe.execute()
+
+		if not meta:
+			logger.error(
+				"lc_redis_meta_missing",
+				event_id=event_id,
+				redis_status=redis_status,
+			)
+			return None
+
+		status = redis_status.capitalize() if redis_status else "Draft"
+		eligible_plans = json.loads(meta.get("eligible_plans", "[]"))
+		question_count = 0
+		if questions_json:
+			try:
+				question_count = len(json.loads(questions_json))
+			except (json.JSONDecodeError, TypeError):
+				pass
+
+		return {
+			"event_id": event_id,
+			"event_name": meta.get("event_name", ""),
+			"description": meta.get("description") or None,
+			"status": status,
+			"scheduled_start": meta.get("scheduled_start", ""),
+			"exam_start_ts": meta.get("exam_start_ts", "") or None,
+			"exam_end_ts": meta.get("exam_end_ts", "") or None,
+			"waiting_room_duration": int(meta.get("waiting_room_duration", "180")),
+			"exam_duration": int(meta.get("exam_duration", "10")),
+			"enable_question_timer": bool(int(meta.get("enable_question_timer", "0"))),
+			"question_time_limit": int(meta.get("question_time_limit", "30")),
+			"capacity": int(meta.get("capacity", "100")),
+			"current_count": int(count_raw or "0"),
+			"is_paid": bool(int(meta.get("is_paid", "0"))),
+			"show_correct_answers": bool(int(meta.get("show_correct_answers", "0"))),
+			"show_student_rank": bool(int(meta.get("show_student_rank", "0"))),
+			"participation_xp": int(meta.get("participation_xp", "0")),
+			"first_place_xp": int(meta.get("first_place_xp", "0")),
+			"second_place_xp": int(meta.get("second_place_xp", "0")),
+			"third_place_xp": int(meta.get("third_place_xp", "0")),
+			"default_xp": int(meta.get("default_xp", "0")),
+			"question_count": question_count,
+			"eligible_plans": eligible_plans,
+			"has_joined": bool(has_joined),
+			"has_submitted": bool(has_submitted),
+		}
+
+	async def _get_event_detail_from_db(self, event_id: str, player_id: str) -> dict[str, Any] | None:
+		"""Read event detail exclusively from Frappe DB. Used ONLY for ended events."""
 		try:
 			event = await self.frappe.call(
 				"frappe.client.get",
-				{
-					"doctype": "Memora Live Challenge Event",
-					"name": event_id,
-				},
+				{"doctype": "Memora Live Challenge Event", "name": event_id},
 			)
 		except Exception:
+			logger.exception("lc_db_event_fetch_failed", event_id=event_id)
 			return None
-
 		if not event:
 			return None
 
-		# Get live data from Redis (may not exist if event hasn't started yet)
-		redis_status = await self.redis.get(lc_status_key(event_id))
-		current_count = int(await self.redis.get(lc_count_key(event_id)) or "0")
-
-		# Player-specific flags from Redis
-		has_joined = bool(await self.redis.sismember(lc_joined_key(event_id), player_id))
-		has_submitted = bool(await self.redis.sismember(lc_submitted_key(event_id), player_id))
-
-		# Use Redis status if available, otherwise MariaDB status
-		status = redis_status.capitalize() if redis_status else event.get("status", "Draft")
-
-		# Count questions
-		questions = event.get("questions", [])
-		question_count = len(questions) if isinstance(questions, list) else 0
-
-		# Eligible plans
-		eligible_plans_raw = event.get("eligible_plans", [])
-		eligible_plans = []
-		if isinstance(eligible_plans_raw, list):
-			eligible_plans = [ep.get("plan", "") for ep in eligible_plans_raw if isinstance(ep, dict)]
+		joined = False
+		submitted = False
+		try:
+			participation = await self.frappe.call(
+				"frappe.client.get_list",
+				{
+					"doctype": "Memora Live Challenge Participation",
+					"filters": json.dumps([
+						["event", "=", event_id],
+						["player", "=", player_id],
+					]),
+					"fields": json.dumps(["name", "submitted_at"]),
+					"limit_page_length": "1",
+				},
+			)
+			if participation:
+				joined = True
+				submitted = bool(participation[0].get("submitted_at"))
+		except Exception:
+			logger.warning(
+				"lc_participation_lookup_failed",
+				event_id=event_id,
+				player_id=player_id,
+			)
 
 		return {
 			"event_id": event_id,
 			"event_name": event.get("event_name", ""),
-			"description": event.get("description"),
-			"status": status,
+			"description": event.get("description") or None,
+			"status": "Ended",
 			"scheduled_start": str(event.get("scheduled_start", "")),
-			"exam_start_ts": str(event.get("exam_start_ts", "")) if event.get("exam_start_ts") else None,
-			"exam_end_ts": str(event.get("exam_end_ts", "")) if event.get("exam_end_ts") else None,
+			"exam_start_ts": str(event.get("exam_start_ts", "")) or None,
+			"exam_end_ts": str(event.get("exam_end_ts", "")) or None,
 			"waiting_room_duration": int(event.get("waiting_room_duration", 180)),
 			"exam_duration": int(event.get("exam_duration", 10)),
-			"enable_question_timer": bool(event.get("enable_question_timer", 0)),
+			"enable_question_timer": bool(event.get("enable_question_timer")),
 			"question_time_limit": int(event.get("question_time_limit", 30)),
 			"capacity": int(event.get("capacity", 100)),
-			"current_count": current_count,
-			"is_paid": bool(event.get("is_paid", 0)),
-			"show_correct_answers": bool(event.get("show_correct_answers", 0)),
-			"show_student_rank": bool(event.get("show_student_rank", 0)),
+			"current_count": int(event.get("participant_count", 0)),
+			"is_paid": bool(event.get("is_paid")),
+			"show_correct_answers": bool(event.get("show_correct_answers")),
+			"show_student_rank": bool(event.get("show_student_rank")),
 			"participation_xp": int(event.get("participation_xp", 0)),
 			"first_place_xp": int(event.get("first_place_xp", 0)),
 			"second_place_xp": int(event.get("second_place_xp", 0)),
 			"third_place_xp": int(event.get("third_place_xp", 0)),
 			"default_xp": int(event.get("default_xp", 0)),
-			"question_count": question_count,
-			"eligible_plans": eligible_plans,
-			"has_joined": has_joined,
-			"has_submitted": has_submitted,
+			"question_count": len(event.get("questions", [])),
+			"eligible_plans": [ep.get("plan") for ep in event.get("eligible_plans", [])],
+			"has_joined": joined,
+			"has_submitted": submitted,
+		}
+
+	# -------------------------------------------------------------------------
+	# Questions REST fallback
+	# -------------------------------------------------------------------------
+
+	async def get_questions(self, event_id: str, player_id: str) -> dict[str, Any]:
+		"""Get exam questions via REST (fallback when WebSocket is unavailable).
+
+		Raises ValueError with error code on failure:
+		- EVENT_NOT_ACTIVE: status is not "active" or questions missing
+		- NOT_A_PARTICIPANT: player not in joined set
+		- ALREADY_SUBMITTED: player already submitted answers
+		"""
+		status = await self.redis.get(lc_status_key(event_id))
+		if status != "active":
+			raise ValueError("EVENT_NOT_ACTIVE")
+
+		is_joined = await self.redis.sismember(lc_joined_key(event_id), player_id)
+		if not is_joined:
+			raise ValueError("NOT_A_PARTICIPANT")
+
+		has_submitted = await self.redis.sismember(lc_submitted_key(event_id), player_id)
+		if has_submitted:
+			raise ValueError("ALREADY_SUBMITTED")
+
+		questions_json = await self.redis.get(lc_questions_key(event_id))
+		if not questions_json:
+			raise ValueError("EVENT_NOT_ACTIVE")
+
+		questions = json.loads(questions_json)
+		safe_questions = _strip_correct_answers(questions)
+		meta = await self.redis.hgetall(lc_meta_key(event_id))
+
+		return {
+			"event_id": event_id,
+			"exam_end_ts": meta.get("exam_end_ts", ""),
+			"total_questions": len(safe_questions),
+			"enable_question_timer": bool(int(meta.get("enable_question_timer", "0"))),
+			"question_time_limit": int(meta.get("question_time_limit", "30")),
+			"questions": safe_questions,
 		}
 
 	# -------------------------------------------------------------------------
@@ -758,22 +1178,35 @@ class LiveChallengeService:
 	async def _broadcast_json(self, event_id: str, message: dict) -> int:
 		"""Send JSON message to all connected WebSockets for an event.
 
+		Sends concurrently (up to _BROADCAST_CONCURRENCY at a time) with a
+		per-connection timeout so one slow client cannot block the broadcast.
 		Returns count of successful sends. Removes dead connections.
 		"""
 		conns = list(self._ws_connections.get(event_id, set()))
 		if not conns:
 			return 0
 
+		# Pre-serialize once for all connections
 		payload = json.dumps(message)
+		sem = asyncio.Semaphore(_BROADCAST_CONCURRENCY)
 		dead: list[WebSocket] = []
 		sent = 0
 
-		for ws in conns:
-			try:
-				await ws.send_text(payload)
-				sent += 1
-			except Exception:
-				dead.append(ws)
+		async def _send(ws: WebSocket) -> bool:
+			async with sem:
+				try:
+					await asyncio.wait_for(ws.send_text(payload), timeout=2.0)
+					return True
+				except Exception:
+					dead.append(ws)
+					return False
+
+		# Process in chunks to limit coroutine creation pressure at 10k+ scale
+		chunk_size = _BROADCAST_CONCURRENCY * 2
+		for i in range(0, len(conns), chunk_size):
+			chunk = conns[i : i + chunk_size]
+			results = await asyncio.gather(*[_send(ws) for ws in chunk])
+			sent += sum(1 for r in results if r)
 
 		for ws in dead:
 			self.remove_connection(event_id, ws)
@@ -827,11 +1260,12 @@ class LiveChallengeService:
 				if self._shutting_down:
 					return
 
-				now = datetime.now()
+				now = _now_naive()
 				status = await self.redis.get(lc_status_key(event_id))
 
 				# Event ended (by scheduled task or another worker)
 				if status == "ended":
+					await self._reconcile_event(event_id)
 					await self._broadcast_event_ended(event_id)
 					return
 
@@ -845,8 +1279,8 @@ class LiveChallengeService:
 
 				# Check if exam has ended
 				if exam_started and now >= exam_end_ts:
-					await self.drain_queue()  # Flush pending submissions before ending
-					await self.redis.set(lc_status_key(event_id), "ended", ex=LC_KEY_TTL)
+					await self.redis.set(lc_status_key(event_id), "ended", ex=LC_KEY_TTL)  # freeze joins/submits
+					await self._reconcile_event(event_id)
 					await self._broadcast_event_ended(event_id)
 					logger.info("lc_exam_ended_by_ws", event_id=event_id)
 					return
@@ -884,30 +1318,8 @@ class LiveChallengeService:
 			return
 
 		questions = json.loads(questions_json)
-		# Strip correct_answer from questions
-		safe_questions = [
-			{
-				"idx": q["idx"],
-				"question_text": q["question_text"],
-				"option_a": q["option_a"],
-				"option_b": q["option_b"],
-				"option_c": q["option_c"],
-				"option_d": q["option_d"],
-			}
-			for q in questions
-		]
-
-		enable_timer = bool(int(meta.get("enable_question_timer", "0")))
-		q_time_limit = int(meta.get("question_time_limit", "30"))
-
-		msg = {
-			"type": "exam_start",
-			"exam_end_ts": meta.get("exam_end_ts", ""),
-			"total_questions": len(safe_questions),
-			"enable_question_timer": enable_timer,
-			"question_time_limit": q_time_limit,
-			"questions": safe_questions,
-		}
+		safe_questions = _strip_correct_answers(questions)
+		msg = _build_exam_start_msg(safe_questions, meta)
 
 		sent = await self._broadcast_json(event_id, msg)
 		logger.info("lc_exam_start_broadcast", event_id=event_id, sent=sent)
@@ -925,29 +1337,8 @@ class LiveChallengeService:
 			return
 
 		questions = json.loads(questions_json)
-		safe_questions = [
-			{
-				"idx": q["idx"],
-				"question_text": q["question_text"],
-				"option_a": q["option_a"],
-				"option_b": q["option_b"],
-				"option_c": q["option_c"],
-				"option_d": q["option_d"],
-			}
-			for q in questions
-		]
-
-		enable_timer = bool(int(meta.get("enable_question_timer", "0")))
-		q_time_limit = int(meta.get("question_time_limit", "30"))
-
-		msg = {
-			"type": "exam_start",
-			"exam_end_ts": meta.get("exam_end_ts", ""),
-			"total_questions": len(safe_questions),
-			"enable_question_timer": enable_timer,
-			"question_time_limit": q_time_limit,
-			"questions": safe_questions,
-		}
+		safe_questions = _strip_correct_answers(questions)
+		msg = _build_exam_start_msg(safe_questions, meta)
 
 		try:
 			await ws.send_text(json.dumps(msg))

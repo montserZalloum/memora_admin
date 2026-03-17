@@ -4,9 +4,11 @@ Runs every 60 seconds. Handles:
 1. Draft -> Waiting: when scheduled_start <= now
 2. Waiting -> Active: when exam_start_ts <= now
 3. Active -> Ended: when exam_end_ts <= now
+4. Reconciliation: flush Redis data to MariaDB after event ends
+5. Finalization: compute leaderboard + distribute XP
 
 On Draft -> Waiting: populates Redis keys (status, questions, meta, count).
-On Active -> Ended: triggers post-event processing (leaderboard + XP).
+On Active -> Ended: triggers reconciliation + post-event processing.
 """
 
 import json
@@ -18,8 +20,13 @@ from fastapi_app.core.redis_keys import (
 	LC_KEY_TTL,
 	dirty_wallets_key,
 	lc_count_key,
+	lc_join_times_key,
+	lc_joined_key,
 	lc_meta_key,
 	lc_questions_key,
+	lc_reconcile_lock_key,
+	lc_reconciled_key,
+	lc_results_key,
 	lc_status_key,
 	lc_submitted_key,
 	wallet_key,
@@ -87,13 +94,30 @@ def process_live_challenge_transitions():
 
 
 def _transition_to_waiting(event_name: str):
-	"""Transition event from Draft to Waiting and populate Redis keys."""
+	"""Transition event from Draft to Waiting and populate Redis keys.
+
+	Uses SET NX for count key to avoid resetting participant count if
+	FastAPI already advanced the event and users have joined.
+	"""
 	event = frappe.get_doc("Memora Live Challenge Event", event_name)
 	if event.status != "Draft":
 		return  # Already transitioned
 
-	# Populate Redis before changing status
 	r = get_memora_redis()
+
+	# Guard: if Redis status is already beyond "draft", FastAPI already
+	# advanced this event. Only populate keys that don't exist yet.
+	current_status = r.get(lc_status_key(event_name))
+	if isinstance(current_status, bytes):
+		current_status = current_status.decode()
+	if current_status in ("waiting", "active", "ended"):
+		# FastAPI already set status — just sync DB and skip key writes
+		event.status = "Waiting"
+		event.flags.ignore_validate = True
+		event.save(ignore_permissions=True)
+		return
+
+	# Populate Redis before changing status
 	pipe = r.pipeline()
 
 	# Status key
@@ -118,14 +142,24 @@ def _transition_to_waiting(event_name: str):
 	# Meta hash
 	eligible_plans = [ep.plan for ep in (event.eligible_plans or [])]
 	meta = {
+		"event_name": event.event_name or "",
+		"description": event.description or "",
+		"scheduled_start": str(event.scheduled_start or ""),
 		"exam_start_ts": str(event.exam_start_ts),
 		"exam_end_ts": str(event.exam_end_ts),
+		"exam_duration": str(event.exam_duration or 10),
 		"capacity": str(event.capacity),
+		"is_paid": str(int(event.is_paid or 0)),
 		"show_correct_answers": str(int(event.show_correct_answers)),
 		"show_student_rank": str(int(event.show_student_rank)),
 		"enable_question_timer": str(int(event.enable_question_timer)),
 		"question_time_limit": str(event.question_time_limit or 30),
 		"waiting_room_duration": str(event.waiting_room_duration),
+		"participation_xp": str(event.participation_xp or 0),
+		"first_place_xp": str(event.first_place_xp or 0),
+		"second_place_xp": str(event.second_place_xp or 0),
+		"third_place_xp": str(event.third_place_xp or 0),
+		"default_xp": str(event.default_xp or 0),
 		"eligible_plans": json.dumps(eligible_plans),
 	}
 	meta_key = lc_meta_key(event_name)
@@ -133,10 +167,10 @@ def _transition_to_waiting(event_name: str):
 	pipe.hset(meta_key, mapping=meta)
 	pipe.expire(meta_key, LC_KEY_TTL)
 
-	# Count key (initialize to 0)
-	pipe.set(lc_count_key(event_name), "0", ex=LC_KEY_TTL)
-
 	pipe.execute()
+
+	# Count key — SETNX: do NOT reset if FastAPI already started counting
+	r.set(lc_count_key(event_name), "0", nx=True, ex=LC_KEY_TTL)
 
 	# Transition MariaDB status
 	event.status = "Waiting"
@@ -160,10 +194,10 @@ def _transition_to_active(event_name: str):
 
 
 def _transition_to_ended(event_name: str):
-	"""Transition event from Active to Ended.
+	"""Transition event from Active to Ended, then reconcile Redis → DB.
 
-	Post-event processing (leaderboard + XP) is deferred to _try_finalize_event()
-	to ensure all queued submissions have been flushed to MariaDB first.
+	Reconciliation runs here (synchronously) so data is persisted even
+	if no FastAPI client hits after the event ends.
 	"""
 	event = frappe.get_doc("Memora Live Challenge Event", event_name)
 	if event.status != "Active":
@@ -176,32 +210,232 @@ def _transition_to_ended(event_name: str):
 	event.flags.ignore_validate = True
 	event.save(ignore_permissions=True)
 
+	# Reconcile immediately — the authoritative path for Redis → DB flush.
+	_cron_reconcile_event(event_name)
+
 
 def _try_finalize_event(event_name: str, exam_end_ts=None):
-	"""Attempt post-event processing only if all submissions have been flushed.
+	"""Attempt post-event processing only if reconciliation is complete.
 
-	Compares Redis submitted set count vs MariaDB participation records with
-	submitted_at set. If there's a mismatch (queue hasn't fully flushed),
-	skips and retries on next cron run. Forces processing after 5 minutes.
+	Step 1: Ensure reconciliation has happened (Redis → DB).
+	Step 2: Compare submitted counts to verify data completeness.
+	Step 3: Run leaderboard + XP processing.
 	"""
 	r = get_memora_redis()
+
+	# Step 1: Ensure reconciliation ran (safety net if _transition_to_ended missed it)
+	reconciled = r.get(lc_reconciled_key(event_name))
+	if not reconciled:
+		_cron_reconcile_event(event_name)
+
+	# Step 2: Verify data completeness
 	redis_submitted = r.scard(lc_submitted_key(event_name))
 	db_submitted = frappe.db.count(
 		"Memora Live Challenge Participation",
 		filters={"event": event_name, "submitted_at": ["is", "set"]},
 	)
 
-	if redis_submitted > db_submitted:
-		# Check safety timeout: force processing if event ended >5 minutes ago
-		if exam_end_ts:
-			elapsed = (now_datetime() - exam_end_ts).total_seconds()
-			if elapsed < 300:
-				return
+	if redis_submitted and redis_submitted > db_submitted:
+		# Data still in Redis but not DB — reconciliation may have partially failed.
+		# Retry reconciliation.
+		_cron_reconcile_event(event_name)
+		# Re-check after retry
+		db_submitted = frappe.db.count(
+			"Memora Live Challenge Participation",
+			filters={"event": event_name, "submitted_at": ["is", "set"]},
+		)
+		if redis_submitted > db_submitted:
+			# Still mismatched — force after 5 minutes
+			if exam_end_ts:
+				elapsed = (now_datetime() - exam_end_ts).total_seconds()
+				if elapsed < 300:
+					return
 
 	try:
 		_post_event_processing(event_name)
 	except Exception:
 		frappe.log_error(title=f"LC post-event processing failed: {event_name}")
+
+
+def _decode(val):
+	"""Decode bytes to str (sync Redis returns bytes)."""
+	return val.decode() if isinstance(val, bytes) else val
+
+
+def _cron_reconcile_event(event_name: str) -> bool:
+	"""Synchronous reconciliation: flush Redis join/result data to MariaDB.
+
+	This is the authoritative reconciliation path — runs from the cron job
+	so it does NOT depend on any FastAPI client hitting after the event ends.
+	Uses direct SQL for bulk inserts (no Frappe RPC overhead).
+
+	Returns True if reconciliation succeeded or was already done.
+	"""
+	r = get_memora_redis()
+
+	# Already reconciled?
+	if r.exists(lc_reconciled_key(event_name)):
+		return True
+
+	# Acquire distributed lock (3600s TTL)
+	acquired = r.set(lc_reconcile_lock_key(event_name), "1", nx=True, ex=3600)
+	if not acquired:
+		return False
+
+	try:
+		# Read snapshot from Redis
+		player_ids_raw = r.smembers(lc_joined_key(event_name))
+		if not player_ids_raw:
+			# No joined players — either already reconciled by FastAPI or empty event
+			r.set(lc_reconciled_key(event_name), "1", ex=LC_KEY_TTL)
+			_cleanup_all_redis_keys(r, event_name)
+			return True
+
+		count_raw = r.get(lc_count_key(event_name))
+		count = int(_decode(count_raw)) if count_raw else len(player_ids_raw)
+		join_times_raw = r.hgetall(lc_join_times_key(event_name))
+		results_raw = r.hgetall(lc_results_key(event_name))
+		meta_raw = r.hgetall(lc_meta_key(event_name))
+
+		# Decode meta
+		meta = {_decode(k): _decode(v) for k, v in meta_raw.items()} if meta_raw else {}
+		default_joined_at = meta.get("exam_start_ts") or now_datetime().strftime("%Y-%m-%d %H:%M:%S")
+
+		# Decode join times
+		join_times = {}
+		for k, v in join_times_raw.items():
+			join_times[_decode(k)] = _decode(v)
+
+		# Parse results
+		results = {}
+		for k, v in results_raw.items():
+			pid = _decode(k)
+			try:
+				results[pid] = json.loads(_decode(v))
+			except (json.JSONDecodeError, TypeError):
+				pass
+
+		# Find existing participation records to avoid duplicates
+		existing = set()
+		existing_rows = frappe.db.sql(
+			"SELECT player FROM `tabMemora Live Challenge Participation` WHERE event = %s",
+			(event_name,),
+			as_dict=False,
+		)
+		for row in existing_rows:
+			existing.add(row[0])
+
+		# Build rows for INSERT (only new players)
+		now_str = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
+		insert_values = []
+		update_values = []
+
+		for pid_raw in player_ids_raw:
+			pid = _decode(pid_raw)
+			joined_at = join_times.get(pid) or default_joined_at
+			r_data = results.get(pid)
+			score = float(r_data["score"]) if r_data and r_data.get("score") is not None else None
+			submitted_at = r_data.get("submitted_at") if r_data else None
+			answers_json = r_data.get("answers_json") if r_data else None
+
+			if pid in existing:
+				# Already inserted (by FastAPI reconciliation or prior cron run) — update score
+				if r_data:
+					update_values.append((score, submitted_at, answers_json, event_name, pid))
+			else:
+				name = frappe.generate_hash(length=10)
+				insert_values.append((
+					name, event_name, pid, joined_at,
+					score, submitted_at, answers_json,
+					now_str, now_str, "Administrator", "Administrator",
+				))
+
+		# Bulk INSERT new participation records
+		batch_size = 500
+		for i in range(0, len(insert_values), batch_size):
+			batch = insert_values[i : i + batch_size]
+			placeholders = ", ".join(["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(batch))
+			flat = [v for row in batch for v in row]
+			frappe.db.sql(
+				f"""INSERT INTO `tabMemora Live Challenge Participation`
+				(name, event, player, joined_at, score, submitted_at, answers_json,
+				 creation, modified, owner, modified_by)
+				VALUES {placeholders}""",
+				flat,
+			)
+
+		# Bulk UPDATE existing records with score data (batched CASE)
+		batch_size = 500
+		for i in range(0, len(update_values), batch_size):
+			batch = update_values[i : i + batch_size]
+			if not batch:
+				continue
+			score_cases = []
+			submitted_cases = []
+			answers_cases = []
+			players = []
+			for score, submitted_at, answers_json, ev, pid in batch:
+				escaped_pid = frappe.db.escape(pid)
+				players.append(escaped_pid)
+				score_cases.append(f"WHEN player = {escaped_pid} THEN {float(score) if score is not None else 'NULL'}")
+				sub_val = f"'{submitted_at}'" if submitted_at else "NULL"
+				submitted_cases.append(f"WHEN player = {escaped_pid} THEN {sub_val}")
+				ans_val = frappe.db.escape(answers_json) if answers_json else "NULL"
+				answers_cases.append(f"WHEN player = {escaped_pid} THEN {ans_val}")
+			escaped_event = frappe.db.escape(event_name)
+			frappe.db.sql(f"""
+				UPDATE `tabMemora Live Challenge Participation`
+				SET score = CASE {' '.join(score_cases)} ELSE score END,
+				    submitted_at = CASE {' '.join(submitted_cases)} ELSE submitted_at END,
+				    answers_json = CASE {' '.join(answers_cases)} ELSE answers_json END
+				WHERE event = {escaped_event} AND player IN ({','.join(players)})
+			""")
+
+		# Sync counters to event
+		submitted_count = len(results)
+		frappe.db.set_value(
+			"Memora Live Challenge Event", event_name,
+			{"participant_count": count, "submitted_count": submitted_count},
+			update_modified=False,
+		)
+
+		# Mark reconciled + cleanup ALL Redis keys
+		r.set(lc_reconciled_key(event_name), "1", ex=LC_KEY_TTL)
+		_cleanup_all_redis_keys(r, event_name)
+
+		frappe.logger().info(
+			f"LC cron reconcile complete: {event_name} "
+			f"(inserted={len(insert_values)}, updated={len(update_values)}, "
+			f"participants={count}, submitted={submitted_count})"
+		)
+		return True
+
+	except Exception:
+		r.delete(lc_reconcile_lock_key(event_name))
+		frappe.log_error(title=f"LC cron reconciliation failed: {event_name}")
+		return False
+
+
+def _cleanup_all_redis_keys(r, event_name: str) -> None:
+	"""Delete ephemeral Redis keys for an event after reconciliation.
+
+	Status key is KEPT ("ended") — it is the single routing signal for
+	_resolve_event_source(). TTL is refreshed so it survives 24h
+	after reconciliation.
+	"""
+	pipe = r.pipeline()
+	# Keep status key alive as routing signal; refresh its TTL
+	pipe.expire(lc_status_key(event_name), LC_KEY_TTL)
+	# Delete ephemeral keys — DB is now source of truth
+	pipe.delete(lc_count_key(event_name))
+	pipe.delete(lc_meta_key(event_name))
+	pipe.delete(lc_questions_key(event_name))
+	pipe.delete(lc_joined_key(event_name))
+	pipe.delete(lc_submitted_key(event_name))
+	pipe.delete(lc_join_times_key(event_name))
+	pipe.delete(lc_results_key(event_name))
+	pipe.delete(lc_reconcile_lock_key(event_name))
+	pipe.execute()
 
 
 def compute_ranking(
@@ -332,7 +566,7 @@ def _compute_and_store_rankings(event_name: str) -> tuple[list, int, int]:
 	Returns (top_20, participant_count, submitted_count).
 	Does NOT save leaderboard_json — caller saves it after XP distribution
 	so that a transient XP failure doesn't prevent retries.
-	Idempotent: set_value overwrites existing rank values safely.
+	Idempotent: CASE-based UPDATE overwrites existing rank values safely.
 	"""
 	# Query all submitted participations ordered by score DESC
 	participations = frappe.get_all(
@@ -351,33 +585,51 @@ def _compute_and_store_rankings(event_name: str) -> tuple[list, int, int]:
 	if not participations:
 		return [], participant_count, 0
 
-	# Resolve display_name for all participants
+	# Batch-resolve display_names in one query instead of N+1
 	player_ids = list({p["player"] for p in participations})
 	display_names = {}
-	for pid in player_ids:
-		try:
-			dn = frappe.db.get_value("Memora Player Profile", pid, "display_name")
-			if dn:
-				display_names[pid] = dn
-		except Exception:
-			pass
+	if player_ids:
+		profiles = frappe.get_all(
+			"Memora Player Profile",
+			filters={"name": ["in", player_ids]},
+			fields=["name", "display_name"],
+			limit_page_length=0,
+		)
+		display_names = {p["name"]: p["display_name"] for p in profiles if p.get("display_name")}
 
 	# Compute ranking
 	ranked, top_20 = compute_ranking(participations, display_names)
 
-	# Store individual rank on each Participation record (idempotent bulk update)
-	for entry in ranked:
-		frappe.db.set_value(
-			"Memora Live Challenge Participation",
-			entry["name"],
-			"rank",
-			entry["rank"],
-			update_modified=False,
-		)
+	# Bulk update ranks using batched CASE statements (instead of 10k individual UPDATEs)
+	_batch_update_field(ranked, "rank")
 
 	submitted_count = len(participations)
 
 	return top_20, participant_count, submitted_count
+
+
+def _batch_update_field(entries: list[dict], field: str, batch_size: int = 500) -> None:
+	"""Bulk-update a single field on Participation records using CASE statements.
+
+	For 10k records at batch_size=500, this is 20 queries instead of 10k.
+	"""
+	for i in range(0, len(entries), batch_size):
+		batch = entries[i : i + batch_size]
+		if not batch:
+			continue
+		case_parts = []
+		names = []
+		for entry in batch:
+			escaped_name = frappe.db.escape(entry["name"])
+			names.append(escaped_name)
+			case_parts.append(f"WHEN name = {escaped_name} THEN {int(entry[field])}")
+
+		sql = f"""
+			UPDATE `tabMemora Live Challenge Participation`
+			SET `{field}` = CASE {' '.join(case_parts)} END
+			WHERE name IN ({','.join(names)})
+		"""
+		frappe.db.sql(sql)
 
 
 def _distribute_xp(event_name: str):
@@ -438,12 +690,6 @@ def _distribute_xp(event_name: str):
 
 	pipe.execute()
 
-	# Update xp_awarded on each Participation record
-	for award in awards:
-		frappe.db.set_value(
-			"Memora Live Challenge Participation",
-			award["name"],
-			"xp_awarded",
-			award["total_xp"],
-			update_modified=False,
-		)
+	# Bulk update xp_awarded on Participation records (batched CASE)
+	xp_entries = [{"name": a["name"], "xp_awarded": a["total_xp"]} for a in awards if a["total_xp"] > 0]
+	_batch_update_field(xp_entries, "xp_awarded")

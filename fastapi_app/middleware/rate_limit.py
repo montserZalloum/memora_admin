@@ -12,10 +12,16 @@ from fastapi_app.services.global_rate_limit import GlobalRateLimiter
 
 logger = structlog.get_logger()
 
-# Paths exempt from rate limiting (prefix match)
+# Paths exempt from global per-IP rate limiting (prefix match).
+# Live-challenge endpoints are exempt because 10k users behind a school NAT
+# or carrier gateway would exhaust the global 100 req/IP/60s budget.
+# Per-player rate limits protect all authenticated endpoints individually:
+#   lc_join: 5, lc_submit: 2, lc_read: 20 (detail/questions/result/leaderboard).
+# GET /status is unauthenticated (no player key) but sub-2ms Redis-only — low risk.
 EXEMPT_PREFIXES = (
 	"/api/v1/health/",
 	"/api/v1/webhooks/payment",
+	"/api/v1/live-challenge/",
 )
 
 

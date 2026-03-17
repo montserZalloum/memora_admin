@@ -1,6 +1,7 @@
 # Copyright (c) 2026, corex and contributors
 # For license information, please see license.txt
 
+import json
 from datetime import timedelta
 
 import frappe
@@ -38,6 +39,90 @@ _XP_FIELDS = (
 
 
 class MemoraLiveChallengeEvent(Document):
+	def after_save(self):
+		"""Populate Redis with event data when saved as Draft.
+
+		This makes the event available to the FastAPI status endpoint immediately,
+		so client-driven transitions can work without waiting for the cron.
+		Re-populates on every Draft save to pick up edits (questions, schedule).
+		Skips if client-driven transitions have already advanced the status beyond draft.
+		"""
+		if self.status != "Draft":
+			return
+
+		from fastapi_app.core.redis_keys import (
+			LC_KEY_TTL,
+			lc_count_key,
+			lc_meta_key,
+			lc_questions_key,
+			lc_status_key,
+		)
+		from memora_admin.utils.redis_connection import get_memora_redis
+
+		r = get_memora_redis()
+
+		# Don't overwrite if client-driven transitions already advanced beyond draft
+		current_status = r.get(lc_status_key(self.name))
+		if current_status is not None:
+			# Redis may return bytes or str depending on decode_responses setting
+			status_str = current_status.decode() if isinstance(current_status, bytes) else current_status
+			if status_str not in ("draft", ""):
+				return
+
+		pipe = r.pipeline()
+
+		# Status (only set if not already present — avoids brief race with transitions)
+		pipe.setnx(lc_status_key(self.name), "draft")
+		pipe.expire(lc_status_key(self.name), LC_KEY_TTL)
+
+		# Questions JSON
+		questions = []
+		for q in self.questions:
+			questions.append({
+				"idx": q.idx - 1,
+				"question_text": q.question_text,
+				"option_a": q.option_a,
+				"option_b": q.option_b,
+				"option_c": q.option_c,
+				"option_d": q.option_d,
+				"correct_answer": q.correct_answer,
+			})
+		pipe.set(lc_questions_key(self.name), json.dumps(questions), ex=LC_KEY_TTL)
+
+		# Meta hash — includes ALL fields needed by get_event_detail (Redis-only reads)
+		eligible_plans = [ep.plan for ep in (self.eligible_plans or [])]
+		meta = {
+			"scheduled_start": str(self.scheduled_start),
+			"exam_start_ts": str(self.exam_start_ts),
+			"exam_end_ts": str(self.exam_end_ts),
+			"capacity": str(self.capacity),
+			"show_correct_answers": str(int(self.show_correct_answers)),
+			"show_student_rank": str(int(self.show_student_rank)),
+			"enable_question_timer": str(int(self.enable_question_timer)),
+			"question_time_limit": str(self.question_time_limit or 30),
+			"waiting_room_duration": str(self.waiting_room_duration),
+			"eligible_plans": json.dumps(eligible_plans),
+			"event_name": self.event_name or "",
+			"description": self.description or "",
+			"exam_duration": str(self.exam_duration),
+			"is_paid": str(int(self.is_paid)),
+			"participation_xp": str(self.participation_xp or 0),
+			"first_place_xp": str(self.first_place_xp or 0),
+			"second_place_xp": str(self.second_place_xp or 0),
+			"third_place_xp": str(self.third_place_xp or 0),
+			"default_xp": str(self.default_xp or 0),
+		}
+		meta_key = lc_meta_key(self.name)
+		# hset with all fields is an atomic overwrite — no delete needed
+		pipe.hset(meta_key, mapping=meta)
+		pipe.expire(meta_key, LC_KEY_TTL)
+
+		# Count key (preserve existing count if already set, else init to 0)
+		pipe.setnx(lc_count_key(self.name), "0")
+		pipe.expire(lc_count_key(self.name), LC_KEY_TTL)
+
+		pipe.execute()
+
 	def validate(self):
 		self._compute_timestamps()
 		self._validate_ranges()

@@ -1138,15 +1138,62 @@ def lc_joined_key(event_id: str) -> str:
 def lc_meta_key(event_id: str) -> str:
 	"""Live challenge event metadata hash.
 
-	Type: HASH (exam_start_ts, exam_end_ts, capacity, show_correct_answers,
-	            show_student_rank, enable_question_timer, question_time_limit,
+	Type: HASH (scheduled_start, exam_start_ts, exam_end_ts, capacity,
+	            show_correct_answers, show_student_rank, enable_question_timer,
+	            question_time_limit, waiting_room_duration,
 	            eligible_plans — JSON array of plan IDs)
-	Producers: process_live_challenge_transitions() on Waiting transition
+	Producers: DocType after_save (on Draft), process_live_challenge_transitions()
 	Consumers: LiveChallengeService.join() (capacity, eligible_plans),
+	           LiveChallengeService.get_status() (timestamp-based transitions),
 	           WebSocket handler (exam_start_ts, timer settings)
 	TTL: 24h (LC_KEY_TTL)
 	"""
 	return f"memora:lc:{event_id}:meta"
+
+
+def lc_join_times_key(event_id: str) -> str:
+	"""Per-player join timestamps.
+
+	Type: HASH (player_id → "YYYY-MM-DD HH:MM:SS" naive Asia/Amman)
+	Producers: LiveChallengeService.join()
+	Consumers: LiveChallengeService._reconcile_event()
+	TTL: LC_KEY_TTL (24h)
+	"""
+	return f"memora:lc:{event_id}:join_times"
+
+
+def lc_reconcile_lock_key(event_id: str) -> str:
+	"""Lock to prevent concurrent reconciliation runs.
+
+	Type: STRING (value: "1", set via SETNX)
+	Producers: LiveChallengeService._reconcile_event() (SETNX)
+	Consumers: LiveChallengeService._reconcile_event() (lock check)
+	TTL: 3600s (1 hour — exceeds worst-case 10k sequential Frappe inserts)
+	"""
+	return f"memora:lc:{event_id}:reconcile_lock"
+
+
+def lc_reconciled_key(event_id: str) -> str:
+	"""Flag set ONLY after fully successful reconciliation.
+
+	Type: STRING (value: "1")
+	Producers: LiveChallengeService._reconcile_event() (on full success)
+	Consumers: LiveChallengeService._reconcile_event() (idempotency guard)
+	TTL: LC_KEY_TTL (24h)
+	"""
+	return f"memora:lc:{event_id}:reconciled"
+
+
+def lc_results_key(event_id: str) -> str:
+	"""Per-player submission results (score, answers) stored during grade.
+
+	Type: HASH (player_id → JSON {"score", "correct_count", "submitted_at", "answers_json"})
+	Producers: LiveChallengeService.grade() (HSET — one entry per submit)
+	Consumers: LiveChallengeService._reconcile_event() (bulk read for persistence)
+	TTL: LC_KEY_TTL (24h)
+	Note: Grade is pure Redis; Frappe persistence deferred to reconciliation.
+	"""
+	return f"memora:lc:{event_id}:results"
 
 
 # =============================================================================

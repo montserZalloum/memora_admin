@@ -11,7 +11,9 @@ from fastapi_app.models.live_challenge import (
 	EventDetailResponse,
 	JoinResponse,
 	LeaderboardResponse,
+	QuestionsResponse,
 	ResultResponse,
+	StatusResponse,
 	SubmitRequest,
 	SubmitResponse,
 )
@@ -19,10 +21,53 @@ from fastapi_app.services.live_challenge import LiveChallengeService
 
 logger = structlog.get_logger()
 
+# Structured error messages (code → Arabic user-facing message)
+_ERROR_MESSAGES: dict[str, str] = {
+	"EVENT_NOT_FOUND": "الحدث غير موجود",
+	"EVENT_NOT_ACTIVE": "الحدث غير نشط",
+	"NOT_A_PARTICIPANT": "لست مشاركًا في هذا الحدث",
+	"ALREADY_SUBMITTED": "لقد أرسلت إجاباتك مسبقًا",
+	"EVENT_NOT_JOINABLE": "لا يمكن الانضمام للحدث حاليًا",
+	"ALREADY_JOINED": "لقد انضممت مسبقًا",
+	"PLAN_NOT_ELIGIBLE": "خطتك لا تسمح بالمشاركة",
+	"CAPACITY_FULL": "اكتملت سعة المشاركين",
+	"SUBMISSION_FAILED": "فشل تسليم الإجابات",
+	"NO_PARTICIPATION": "لم يتم العثور على مشاركة",
+	"EVENT_NOT_ENDED": "لم ينتهِ الحدث بعد",
+}
+
+
+_GENERIC_ERROR_MESSAGE = "حدث خطأ"
+
+
+def _error_detail(code: str) -> dict[str, str]:
+	return {"code": code, "message": _ERROR_MESSAGES.get(code, _GENERIC_ERROR_MESSAGE)}
+
+
 router = APIRouter(prefix="/live-challenge", tags=["live-challenge"])
 
 
-@router.get("/{event_id}", response_model=EventDetailResponse)
+@router.get("/{event_id}/status", response_model=StatusResponse)
+async def get_event_status(
+	event_id: str,
+	service: LiveChallengeServiceDep,
+) -> StatusResponse:
+	"""Lightweight Redis-only status check with client-driven transitions.
+
+	Returns the current event status, triggering any due transitions atomically.
+	No auth required — status is public. Sub-2ms for non-transition reads.
+	"""
+	result = await service.get_status(event_id)
+	if result is None:
+		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_error_detail("EVENT_NOT_FOUND"))
+	return StatusResponse(**result)
+
+
+@router.get(
+	"/{event_id}",
+	response_model=EventDetailResponse,
+	dependencies=[Depends(require_rate_limit("lc_read"))],
+)
 async def get_event_detail(
 	event_id: str,
 	user: CurrentUser,
@@ -31,8 +76,38 @@ async def get_event_detail(
 	"""Get public event details with player-specific flags."""
 	detail = await service.get_event_detail(event_id, user.sub)
 	if detail is None:
-		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="EVENT_NOT_FOUND")
+		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_error_detail("EVENT_NOT_FOUND"))
 	return EventDetailResponse(**detail)
+
+
+@router.get(
+	"/{event_id}/questions",
+	response_model=QuestionsResponse,
+	dependencies=[Depends(require_rate_limit("lc_read"))],
+)
+async def get_questions(
+	event_id: str,
+	user: CurrentUser,
+	service: LiveChallengeServiceDep,
+) -> QuestionsResponse:
+	"""REST fallback: get exam questions when WebSocket is unavailable.
+
+	Only available when event is active, player has joined, and hasn't submitted.
+	"""
+	try:
+		result = await service.get_questions(event_id, user.sub)
+	except ValueError as e:
+		code = str(e)
+		status_map = {
+			"EVENT_NOT_ACTIVE": status.HTTP_400_BAD_REQUEST,
+			"NOT_A_PARTICIPANT": status.HTTP_403_FORBIDDEN,
+			"ALREADY_SUBMITTED": status.HTTP_409_CONFLICT,
+		}
+		raise HTTPException(
+			status_code=status_map.get(code, status.HTTP_400_BAD_REQUEST),
+			detail=_error_detail(code),
+		)
+	return QuestionsResponse(**result)
 
 
 @router.post(
@@ -47,7 +122,7 @@ async def join_event(
 ) -> JoinResponse:
 	"""Join an event's waiting room."""
 	try:
-		result = await service.join(event_id, user.sub)
+		result = await service.join(event_id, user.sub, user.plan)
 	except ValueError as e:
 		code = str(e)
 		status_map = {
@@ -58,7 +133,7 @@ async def join_event(
 		}
 		raise HTTPException(
 			status_code=status_map.get(code, status.HTTP_400_BAD_REQUEST),
-			detail=code,
+			detail=_error_detail(code),
 		)
 
 	return JoinResponse(
@@ -67,7 +142,7 @@ async def join_event(
 		position=result["position"],
 		waiting_room_duration=result["waiting_room_duration"],
 		countdown_remaining=result["countdown_remaining"],
-		ws_url=f"/api/v1/live-challenge/{event_id}/ws?token=",
+		ws_url=f"/api/v1/live-challenge/{event_id}/ws",
 	)
 
 
@@ -97,7 +172,7 @@ async def submit_answers(
 		}
 		raise HTTPException(
 			status_code=status_map.get(code, status.HTTP_400_BAD_REQUEST),
-			detail=code,
+			detail=_error_detail(code),
 		)
 
 	return SubmitResponse(
@@ -109,7 +184,11 @@ async def submit_answers(
 	)
 
 
-@router.get("/{event_id}/result", response_model=ResultResponse)
+@router.get(
+	"/{event_id}/result",
+	response_model=ResultResponse,
+	dependencies=[Depends(require_rate_limit("lc_read"))],
+)
 async def get_result(
 	event_id: str,
 	user: CurrentUser,
@@ -118,11 +197,15 @@ async def get_result(
 	"""Get the student's own result and rank for a completed event."""
 	result = await service.get_result(event_id, user.sub)
 	if result is None:
-		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="NO_PARTICIPATION")
+		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_error_detail("NO_PARTICIPATION"))
 	return ResultResponse(**result)
 
 
-@router.get("/{event_id}/leaderboard", response_model=LeaderboardResponse)
+@router.get(
+	"/{event_id}/leaderboard",
+	response_model=LeaderboardResponse,
+	dependencies=[Depends(require_rate_limit("lc_read"))],
+)
 async def get_leaderboard(
 	event_id: str,
 	user: CurrentUser,
@@ -131,7 +214,7 @@ async def get_leaderboard(
 	"""Get top 20 leaderboard after event ends."""
 	result = await service.get_leaderboard(event_id, user.sub)
 	if result is None:
-		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="EVENT_NOT_ENDED")
+		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=_error_detail("EVENT_NOT_ENDED"))
 	return LeaderboardResponse(**result)
 
 
@@ -166,18 +249,17 @@ async def live_challenge_ws(
 	# Get LiveChallengeService singleton from app state
 	service: LiveChallengeService = websocket.app.state.live_challenge_service
 
-	# Check event status from Redis
-	import redis.asyncio as aioredis
-
-	r = aioredis.Redis(connection_pool=websocket.app.state.redis_pool)
-	event_status = await r.get(lc_status_key(event_id))
+	# Check event status + joined in one pipeline (reuse service's Redis client)
+	pipe = service.redis.pipeline()
+	pipe.get(lc_status_key(event_id))
+	pipe.sismember(lc_joined_key(event_id), user_id)
+	event_status, is_joined = await pipe.execute()
 
 	if event_status not in ("waiting", "active"):
 		await websocket.close(code=4000, reason="EVENT_NOT_JOINABLE")
 		return
 
 	# Verify player has joined the event (gate bypass prevention)
-	is_joined = await r.sismember(lc_joined_key(event_id), user_id)
 	if not is_joined:
 		await websocket.close(code=4001, reason="NOT_A_PARTICIPANT")
 		return

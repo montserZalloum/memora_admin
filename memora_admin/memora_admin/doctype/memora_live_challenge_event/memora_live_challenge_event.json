@@ -1,304 +1,304 @@
 {
-	"actions": [],
-	"allow_rename": 1,
-	"autoname": "LC-.#####.",
-	"creation": "2026-03-07 12:00:00.000000",
-	"doctype": "DocType",
-	"editable_grid": 1,
-	"engine": "InnoDB",
-	"field_order": [
-		"event_name",
-		"status",
-		"column_break_basic",
-		"description",
-		"section_break_schedule",
-		"scheduled_start",
-		"waiting_room_duration",
-		"column_break_schedule",
-		"exam_duration",
-		"capacity",
-		"section_break_computed",
-		"exam_start_ts",
-		"column_break_computed",
-		"exam_end_ts",
-		"section_break_timer",
-		"enable_question_timer",
-		"question_time_limit",
-		"section_break_settings",
-		"is_paid",
-		"show_correct_answers",
-		"column_break_settings",
-		"show_student_rank",
-		"section_break_xp",
-		"participation_xp",
-		"first_place_xp",
-		"column_break_xp",
-		"second_place_xp",
-		"third_place_xp",
-		"column_break_xp2",
-		"default_xp",
-		"section_break_questions",
-		"questions",
-		"section_break_plans",
-		"eligible_plans",
-		"section_break_stats",
-		"participant_count",
-		"submitted_count",
-		"column_break_stats",
-		"leaderboard_json"
-	],
-	"fields": [
-		{
-			"fieldname": "event_name",
-			"fieldtype": "Data",
-			"in_list_view": 1,
-			"label": "Event Name",
-			"reqd": 1
-		},
-		{
-			"default": "Draft",
-			"fieldname": "status",
-			"fieldtype": "Select",
-			"in_list_view": 1,
-			"label": "Status",
-			"options": "Draft\nWaiting\nActive\nEnded",
-			"reqd": 1
-		},
-		{
-			"fieldname": "column_break_basic",
-			"fieldtype": "Column Break"
-		},
-		{
-			"fieldname": "description",
-			"fieldtype": "Text Editor",
-			"label": "Description"
-		},
-		{
-			"fieldname": "section_break_schedule",
-			"fieldtype": "Section Break",
-			"label": "Schedule"
-		},
-		{
-			"fieldname": "scheduled_start",
-			"fieldtype": "Datetime",
-			"in_list_view": 1,
-			"label": "Scheduled Start",
-			"reqd": 1
-		},
-		{
-			"default": "180",
-			"fieldname": "waiting_room_duration",
-			"fieldtype": "Int",
-			"label": "Waiting Room Duration (seconds)",
-			"reqd": 1
-		},
-		{
-			"fieldname": "column_break_schedule",
-			"fieldtype": "Column Break"
-		},
-		{
-			"default": "10",
-			"fieldname": "exam_duration",
-			"fieldtype": "Int",
-			"label": "Exam Duration (minutes)",
-			"reqd": 1
-		},
-		{
-			"default": "100",
-			"fieldname": "capacity",
-			"fieldtype": "Int",
-			"label": "Capacity",
-			"reqd": 1
-		},
-		{
-			"fieldname": "section_break_computed",
-			"fieldtype": "Section Break",
-			"label": "Computed Times"
-		},
-		{
-			"fieldname": "exam_start_ts",
-			"fieldtype": "Datetime",
-			"label": "Exam Start",
-			"read_only": 1
-		},
-		{
-			"fieldname": "column_break_computed",
-			"fieldtype": "Column Break"
-		},
-		{
-			"fieldname": "exam_end_ts",
-			"fieldtype": "Datetime",
-			"label": "Exam End",
-			"read_only": 1
-		},
-		{
-			"fieldname": "section_break_timer",
-			"fieldtype": "Section Break",
-			"label": "Question Timer"
-		},
-		{
-			"default": "0",
-			"fieldname": "enable_question_timer",
-			"fieldtype": "Check",
-			"label": "Enable Question Timer"
-		},
-		{
-			"default": "30",
-			"depends_on": "eval:doc.enable_question_timer",
-			"fieldname": "question_time_limit",
-			"fieldtype": "Int",
-			"label": "Question Time Limit (seconds)"
-		},
-		{
-			"fieldname": "section_break_settings",
-			"fieldtype": "Section Break",
-			"label": "Settings"
-		},
-		{
-			"default": "0",
-			"fieldname": "is_paid",
-			"fieldtype": "Check",
-			"label": "Is Paid"
-		},
-		{
-			"default": "0",
-			"fieldname": "show_correct_answers",
-			"fieldtype": "Check",
-			"label": "Show Correct Answers"
-		},
-		{
-			"fieldname": "column_break_settings",
-			"fieldtype": "Column Break"
-		},
-		{
-			"default": "0",
-			"fieldname": "show_student_rank",
-			"fieldtype": "Check",
-			"label": "Show Student Rank"
-		},
-		{
-			"fieldname": "section_break_xp",
-			"fieldtype": "Section Break",
-			"label": "XP Rewards"
-		},
-		{
-			"default": "0",
-			"fieldname": "participation_xp",
-			"fieldtype": "Int",
-			"label": "Participation XP"
-		},
-		{
-			"default": "0",
-			"fieldname": "first_place_xp",
-			"fieldtype": "Int",
-			"label": "1st Place XP"
-		},
-		{
-			"fieldname": "column_break_xp",
-			"fieldtype": "Column Break"
-		},
-		{
-			"default": "0",
-			"fieldname": "second_place_xp",
-			"fieldtype": "Int",
-			"label": "2nd Place XP"
-		},
-		{
-			"default": "0",
-			"fieldname": "third_place_xp",
-			"fieldtype": "Int",
-			"label": "3rd Place XP"
-		},
-		{
-			"fieldname": "column_break_xp2",
-			"fieldtype": "Column Break"
-		},
-		{
-			"default": "0",
-			"fieldname": "default_xp",
-			"fieldtype": "Int",
-			"label": "Default XP"
-		},
-		{
-			"fieldname": "section_break_questions",
-			"fieldtype": "Section Break",
-			"label": "Questions"
-		},
-		{
-			"fieldname": "questions",
-			"fieldtype": "Table",
-			"label": "Questions",
-			"options": "Memora Live Challenge Question",
-			"reqd": 1
-		},
-		{
-			"fieldname": "section_break_plans",
-			"fieldtype": "Section Break",
-			"label": "Eligible Plans"
-		},
-		{
-			"fieldname": "eligible_plans",
-			"fieldtype": "Table",
-			"label": "Eligible Plans",
-			"options": "Memora Live Challenge Eligible Plan"
-		},
-		{
-			"fieldname": "section_break_stats",
-			"fieldtype": "Section Break",
-			"label": "Statistics"
-		},
-		{
-			"default": "0",
-			"fieldname": "participant_count",
-			"fieldtype": "Int",
-			"label": "Participant Count",
-			"read_only": 1
-		},
-		{
-			"default": "0",
-			"fieldname": "submitted_count",
-			"fieldtype": "Int",
-			"label": "Submitted Count",
-			"read_only": 1
-		},
-		{
-			"fieldname": "column_break_stats",
-			"fieldtype": "Column Break"
-		},
-		{
-			"fieldname": "leaderboard_json",
-			"fieldtype": "JSON",
-			"label": "Leaderboard JSON",
-			"read_only": 1
-		}
-	],
-	"index_web_pages_for_search": 1,
-	"links": [],
-	"modified": "2026-03-07 12:00:00.000000",
-	"modified_by": "Administrator",
-	"module": "Memora Admin",
-	"name": "Memora Live Challenge Event",
-	"naming_rule": "Expression (old style)",
-	"owner": "Administrator",
-	"permissions": [
-		{
-			"create": 1,
-			"delete": 1,
-			"email": 1,
-			"export": 1,
-			"print": 1,
-			"read": 1,
-			"report": 1,
-			"role": "System Manager",
-			"share": 1,
-			"write": 1
-		}
-	],
-	"row_format": "Dynamic",
-	"show_name_in_global_search": 1,
-	"sort_field": "modified",
-	"sort_order": "DESC",
-	"states": [],
-	"title_field": "event_name",
-	"workspace": "Memora"
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "hash",
+ "creation": "2026-03-07 12:00:00",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "event_name",
+  "status",
+  "column_break_basic",
+  "description",
+  "section_break_schedule",
+  "scheduled_start",
+  "waiting_room_duration",
+  "column_break_schedule",
+  "exam_duration",
+  "capacity",
+  "section_break_computed",
+  "exam_start_ts",
+  "column_break_computed",
+  "exam_end_ts",
+  "section_break_timer",
+  "enable_question_timer",
+  "question_time_limit",
+  "section_break_settings",
+  "is_paid",
+  "show_correct_answers",
+  "column_break_settings",
+  "show_student_rank",
+  "section_break_xp",
+  "participation_xp",
+  "first_place_xp",
+  "column_break_xp",
+  "second_place_xp",
+  "third_place_xp",
+  "column_break_xp2",
+  "default_xp",
+  "section_break_questions",
+  "questions",
+  "section_break_plans",
+  "eligible_plans",
+  "section_break_stats",
+  "participant_count",
+  "submitted_count",
+  "column_break_stats",
+  "leaderboard_json"
+ ],
+ "fields": [
+  {
+   "fieldname": "event_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Event Name",
+   "reqd": 1
+  },
+  {
+   "default": "Draft",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Draft\nWaiting\nActive\nEnded",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_basic",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "description",
+   "fieldtype": "Text Editor",
+   "label": "Description"
+  },
+  {
+   "fieldname": "section_break_schedule",
+   "fieldtype": "Section Break",
+   "label": "Schedule"
+  },
+  {
+   "fieldname": "scheduled_start",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Scheduled Start",
+   "reqd": 1
+  },
+  {
+   "default": "180",
+   "fieldname": "waiting_room_duration",
+   "fieldtype": "Int",
+   "label": "Waiting Room Duration (seconds)",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_schedule",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "10",
+   "fieldname": "exam_duration",
+   "fieldtype": "Int",
+   "label": "Exam Duration (minutes)",
+   "reqd": 1
+  },
+  {
+   "default": "100",
+   "fieldname": "capacity",
+   "fieldtype": "Int",
+   "label": "Capacity",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_computed",
+   "fieldtype": "Section Break",
+   "label": "Computed Times"
+  },
+  {
+   "fieldname": "exam_start_ts",
+   "fieldtype": "Datetime",
+   "label": "Exam Start",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_computed",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "exam_end_ts",
+   "fieldtype": "Datetime",
+   "label": "Exam End",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_break_timer",
+   "fieldtype": "Section Break",
+   "label": "Question Timer"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_question_timer",
+   "fieldtype": "Check",
+   "label": "Enable Question Timer"
+  },
+  {
+   "default": "30",
+   "depends_on": "eval:doc.enable_question_timer",
+   "fieldname": "question_time_limit",
+   "fieldtype": "Int",
+   "label": "Question Time Limit (seconds)"
+  },
+  {
+   "fieldname": "section_break_settings",
+   "fieldtype": "Section Break",
+   "label": "Settings"
+  },
+  {
+   "default": "0",
+   "fieldname": "is_paid",
+   "fieldtype": "Check",
+   "label": "Is Paid"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_correct_answers",
+   "fieldtype": "Check",
+   "label": "Show Correct Answers"
+  },
+  {
+   "fieldname": "column_break_settings",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "show_student_rank",
+   "fieldtype": "Check",
+   "label": "Show Student Rank"
+  },
+  {
+   "fieldname": "section_break_xp",
+   "fieldtype": "Section Break",
+   "label": "XP Rewards"
+  },
+  {
+   "default": "0",
+   "fieldname": "participation_xp",
+   "fieldtype": "Int",
+   "label": "Participation XP"
+  },
+  {
+   "default": "0",
+   "fieldname": "first_place_xp",
+   "fieldtype": "Int",
+   "label": "1st Place XP"
+  },
+  {
+   "fieldname": "column_break_xp",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "second_place_xp",
+   "fieldtype": "Int",
+   "label": "2nd Place XP"
+  },
+  {
+   "default": "0",
+   "fieldname": "third_place_xp",
+   "fieldtype": "Int",
+   "label": "3rd Place XP"
+  },
+  {
+   "fieldname": "column_break_xp2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "default_xp",
+   "fieldtype": "Int",
+   "label": "Default XP"
+  },
+  {
+   "fieldname": "section_break_questions",
+   "fieldtype": "Section Break",
+   "label": "Questions"
+  },
+  {
+   "fieldname": "questions",
+   "fieldtype": "Table",
+   "label": "Questions",
+   "options": "Memora Live Challenge Question",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_break_plans",
+   "fieldtype": "Section Break",
+   "label": "Eligible Plans"
+  },
+  {
+   "fieldname": "eligible_plans",
+   "fieldtype": "Table",
+   "label": "Eligible Plans",
+   "options": "Memora Live Challenge Eligible Plan"
+  },
+  {
+   "fieldname": "section_break_stats",
+   "fieldtype": "Section Break",
+   "label": "Statistics"
+  },
+  {
+   "default": "0",
+   "fieldname": "participant_count",
+   "fieldtype": "Int",
+   "label": "Participant Count",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "submitted_count",
+   "fieldtype": "Int",
+   "label": "Submitted Count",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_stats",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "leaderboard_json",
+   "fieldtype": "JSON",
+   "label": "Leaderboard JSON",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-03-16 11:46:42.687768",
+ "modified_by": "zmontsaer@gmail.com",
+ "module": "Memora Admin",
+ "name": "Memora Live Challenge Event",
+ "naming_rule": "Random",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "event_name",
+ "workspace": "Memora"
 }

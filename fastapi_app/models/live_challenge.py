@@ -44,10 +44,17 @@ class LeaderboardEntryItem(BaseModel):
 # =============================================================================
 
 
+class StatusResponse(BaseModel):
+	"""Lightweight event status from Redis."""
+
+	status: str = Field(..., description="draft, waiting, active, or ended")
+	participant_count: int = Field(0, description="Current participant count")
+
+
 class EventDetailResponse(BaseModel):
 	"""Public event details (no correct answers)."""
 
-	event_id: str = Field(..., description="Event ID (e.g., LC-00001)")
+	event_id: str = Field(..., description="Event ID")
 	event_name: str = Field(..., description="Display name")
 	description: str | None = Field(None, description="Rich text description")
 	status: str = Field(..., description="Draft, Waiting, Active, or Ended")
@@ -148,6 +155,17 @@ class WSQuestionItem(BaseModel):
 	option_b: str = Field(..., description="Choice B")
 	option_c: str = Field(..., description="Choice C")
 	option_d: str = Field(..., description="Choice D")
+
+
+class QuestionsResponse(BaseModel):
+	"""REST fallback: exam questions without correct answers."""
+
+	event_id: str = Field(..., description="Event ID")
+	exam_end_ts: str = Field(..., description="Server-authoritative exam end time")
+	total_questions: int = Field(..., description="Number of questions")
+	enable_question_timer: bool = Field(False, description="Per-question timer enabled")
+	question_time_limit: int = Field(30, description="Seconds per question")
+	questions: list[WSQuestionItem] = Field(..., description="Questions without correct answers")
 
 
 class WSCountdownMessage(BaseModel):
