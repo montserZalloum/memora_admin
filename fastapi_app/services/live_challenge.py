@@ -1157,10 +1157,13 @@ class LiveChallengeService:
 		}
 
 	async def get_leaderboard(self, event_id: str, player_id: str) -> dict[str, Any] | None:
-		"""Get top 20 leaderboard for an ended event.
+		"""Get leaderboard for an ended event, or exam_end_ts for an active one.
 
-		Returns None if event is not in Ended status.
+		Returns None if event is not found or not in Active/Ended status.
 		"""
+		# Check Redis status first (source of truth for live transitions)
+		redis_status = await self.redis.get(lc_status_key(event_id))
+
 		try:
 			event = await self.frappe.call(
 				"frappe.client.get",
@@ -1172,8 +1175,27 @@ class LiveChallengeService:
 		except Exception:
 			return None
 
-		if not event or event.get("status") != "Ended":
+		if not event:
 			return None
+
+		# Prefer Redis status (real-time), fall back to Frappe doc status
+		effective_status = redis_status or (event.get("status") or "").lower()
+
+		if effective_status not in ("ended", "active"):
+			return None
+
+		# Active event — return exam_end_ts so client knows when to check back
+		if effective_status == "active":
+			return {
+				"event_id": event_id,
+				"event_name": event.get("event_name", ""),
+				"status": "Active",
+				"leaderboard": [],
+				"my_rank": None,
+				"my_score": None,
+				"total_participants": int(event.get("participant_count", 0)),
+				"exam_end_ts": str(event.get("exam_end_ts", "")) or None,
+			}
 
 		# Parse leaderboard_json
 		leaderboard = []
@@ -1215,6 +1237,7 @@ class LiveChallengeService:
 			"my_rank": my_rank,
 			"my_score": my_score,
 			"total_participants": total_participants,
+			"exam_end_ts": str(event.get("exam_end_ts", "")) or None,
 		}
 
 	# -------------------------------------------------------------------------

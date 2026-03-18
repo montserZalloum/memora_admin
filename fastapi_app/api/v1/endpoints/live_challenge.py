@@ -25,17 +25,17 @@ logger = structlog.get_logger()
 
 # Structured error messages (code → Arabic user-facing message)
 _ERROR_MESSAGES: dict[str, str] = {
-	"EVENT_NOT_FOUND": "الحدث غير موجود",
-	"EVENT_NOT_ACTIVE": "الحدث غير نشط",
-	"NOT_A_PARTICIPANT": "لست مشاركًا في هذا الحدث",
-	"ALREADY_SUBMITTED": "لقد أرسلت إجاباتك مسبقًا",
-	"EVENT_NOT_JOINABLE": "لا يمكن الانضمام للحدث حاليًا",
-	"ALREADY_JOINED": "لقد انضممت مسبقًا",
-	"PLAN_NOT_ELIGIBLE": "خطتك لا تسمح بالمشاركة",
-	"CAPACITY_FULL": "اكتملت سعة المشاركين",
-	"SUBMISSION_FAILED": "فشل تسليم الإجابات",
-	"NO_PARTICIPATION": "لم يتم العثور على مشاركة",
-	"EVENT_NOT_ENDED": "لم ينتهِ الحدث بعد",
+	"EVENT_NOT_FOUND": "لم نتمكن من العثور على هذا الامتحان",
+	"EVENT_NOT_ACTIVE": "هذا الامتحان غير متاح حاليًا",
+	"NOT_A_PARTICIPANT": "أنت غير مسجل في هذا الامتحان",
+	"ALREADY_SUBMITTED": "لقد سلّمت إجاباتك مسبقًا",
+	"EVENT_NOT_JOINABLE": "هذا الامتحان غير متاح للدخول حاليًا",
+	"ALREADY_JOINED": "لقد انضممت إلى هذا الامتحان مسبقًا",
+	"PLAN_NOT_ELIGIBLE": "خطتك الدراسية لا تتيح لك دخول هذا الامتحان",
+	"CAPACITY_FULL": "لم يعد هناك مقاعد متاحة في هذا الامتحان",
+	"SUBMISSION_FAILED": "تعذر تسليم إجاباتك، يرجى المحاولة مرة أخرى",
+	"NO_PARTICIPATION": "يبدو أنك لم تشارك في هذا الامتحان",
+	"EVENT_NOT_ENDED": "النتائج بالطريق ✨ بس لسه في كم طالب ما خلصوا الامتحان.",
 }
 
 

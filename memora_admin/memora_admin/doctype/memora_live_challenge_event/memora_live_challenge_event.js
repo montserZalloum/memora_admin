@@ -90,6 +90,16 @@ frappe.ui.form.on("Memora Live Challenge Event", {
 		}
 	},
 
+	scheduled_start(frm) {
+		let val = frm.doc.scheduled_start;
+		if (val && val.length > 16) {
+			let zeroed = val.slice(0, 16) + ":00";
+			if (zeroed !== val) {
+				frm.set_value("scheduled_start", zeroed);
+			}
+		}
+	},
+
 	enable_question_timer(frm) {
 		_apply_question_timer(frm);
 	},

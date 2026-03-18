@@ -142,6 +142,7 @@ class LeaderboardResponse(BaseModel):
 	my_rank: int | None = Field(None, description="Current player's rank (null if hidden)")
 	my_score: float | None = Field(None, description="Current player's score (null if hidden)")
 	total_participants: int = Field(0, description="Total participants")
+	exam_end_ts: str | None = Field(None, description="Exam end timestamp")
 
 
 # =============================================================================
