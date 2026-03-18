@@ -134,6 +134,93 @@ def get_full_leaderboard(event_id: str) -> list:
 
 
 @frappe.whitelist(allow_guest=False)
+def get_live_participants(event_id: str) -> dict:
+	"""Return real-time participant data from Redis for an Active event.
+
+	Args:
+		event_id: Live Challenge Event name
+
+	Returns:
+		dict with joined_count, submitted_count, and participants list.
+	"""
+	event = frappe.get_doc("Memora Live Challenge Event", event_id)
+	if event.status != "Active":
+		frappe.throw("Live participants are only available for Active events.")
+
+	from fastapi_app.core.redis_keys import (
+		lc_join_times_key,
+		lc_joined_key,
+		lc_results_key,
+		lc_submitted_key,
+	)
+	from memora_admin.utils.redis_connection import get_memora_redis
+
+	r = get_memora_redis()
+
+	joined_raw = r.smembers(lc_joined_key(event_id))
+	submitted_raw = r.smembers(lc_submitted_key(event_id))
+	join_times_raw = r.hgetall(lc_join_times_key(event_id))
+	results_raw = r.hgetall(lc_results_key(event_id))
+
+	def _dec(val):
+		return val.decode() if isinstance(val, bytes) else val
+
+	joined_ids = {_dec(p) for p in joined_raw} if joined_raw else set()
+	submitted_ids = {_dec(p) for p in submitted_raw} if submitted_raw else set()
+	join_times = {_dec(k): _dec(v) for k, v in join_times_raw.items()} if join_times_raw else {}
+	results = {}
+	for k, v in (results_raw or {}).items():
+		pid = _dec(k)
+		try:
+			results[pid] = json.loads(_dec(v))
+		except (json.JSONDecodeError, TypeError):
+			pass
+
+	# Batch-resolve display names
+	player_ids = list(joined_ids)
+	display_names = {}
+	if player_ids:
+		profiles = frappe.get_all(
+			"Memora Player Profile",
+			filters={"name": ["in", player_ids]},
+			fields=["name", "display_name"],
+			limit_page_length=0,
+		)
+		display_names = {p["name"]: p["display_name"] for p in profiles if p.get("display_name")}
+
+	# Build participant list — submitted first (sorted by score desc), then joined-only
+	submitted_list = []
+	taking_list = []
+	for pid in joined_ids:
+		entry = {
+			"player": pid,
+			"display_name": display_names.get(pid, pid),
+			"joined_at": join_times.get(pid, ""),
+		}
+		r_data = results.get(pid)
+		if pid in submitted_ids and r_data:
+			entry["status"] = "Submitted"
+			entry["score"] = round(float(r_data.get("score", 0)), 1)
+			entry["submitted_at"] = r_data.get("submitted_at", "")
+			submitted_list.append(entry)
+		else:
+			entry["status"] = "Taking exam"
+			entry["score"] = None
+			entry["submitted_at"] = ""
+			taking_list.append(entry)
+
+	# Sort submitted by score descending
+	submitted_list.sort(key=lambda x: x["score"], reverse=True)
+
+	return {
+		"joined_count": len(joined_ids),
+		"submitted_count": len(submitted_ids),
+		"still_taking": len(joined_ids) - len(submitted_ids),
+		"participants": submitted_list + taking_list,
+	}
+
+
+@frappe.whitelist(allow_guest=False)
 def import_review_items(event_id: str, review_item_ids: str | list) -> dict:
 	"""Import questions from Memora Review Items into an event's child table.
 
