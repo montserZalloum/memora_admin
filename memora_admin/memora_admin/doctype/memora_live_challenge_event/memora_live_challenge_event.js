@@ -27,6 +27,23 @@ frappe.ui.form.on("Memora Live Challenge Event", {
 		// Apply question timer logic on refresh
 		_apply_question_timer(frm);
 
+		// Show Leaderboard button (only when leaderboard is computed)
+		if (frm.doc.status === "Ended" && frm.doc.leaderboard_json) {
+			frm.add_custom_button(__("Show Leaderboard"), function () {
+				frappe.call({
+					method: "memora_admin.memora_admin.api.live_challenge.get_full_leaderboard",
+					args: { event_id: frm.doc.name },
+					callback: function (r) {
+						if (!r.message || !r.message.length) {
+							frappe.msgprint(__("No leaderboard data available."));
+							return;
+						}
+						_show_leaderboard_dialog(r.message);
+					},
+				});
+			});
+		}
+
 		// Import Review Items button (only in Draft)
 		if (frm.doc.status === "Draft" && !frm.is_new()) {
 			frm.add_custom_button(__("Import Review Items"), function () {
@@ -98,4 +115,40 @@ function _calc_exam_duration(frm) {
 	let limit = cint(frm.doc.question_time_limit) || 30;
 	let minutes = Math.ceil((limit * count) / 60);
 	frm.set_value("exam_duration", Math.max(minutes, 1));
+}
+
+function _show_leaderboard_dialog(data) {
+	let rows = data
+		.map(
+			(r) =>
+				`<tr>
+				<td style="text-align:center;font-weight:${r.rank <= 3 ? "bold" : "normal"}">${r.rank}</td>
+				<td>${frappe.utils.escape_html(r.display_name)}</td>
+				<td>${frappe.utils.escape_html(r.player)}</td>
+				<td style="text-align:right">${r.score}</td>
+			</tr>`
+		)
+		.join("");
+
+	let html = `
+		<div style="max-height:400px;overflow-y:auto">
+			<table class="table table-bordered table-hover" style="margin:0">
+				<thead><tr>
+					<th style="text-align:center;width:60px">Rank</th>
+					<th>Name</th>
+					<th>Player ID</th>
+					<th style="text-align:right;width:80px">Score</th>
+				</tr></thead>
+				<tbody>${rows}</tbody>
+			</table>
+		</div>
+		<p class="text-muted" style="margin-top:8px">${data.length} participants</p>
+	`;
+
+	let d = new frappe.ui.Dialog({
+		title: __("Leaderboard ({0} participants)", [data.length]),
+		size: "large",
+	});
+	d.$body.html(html);
+	d.show();
 }

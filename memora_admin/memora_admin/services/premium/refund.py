@@ -71,18 +71,22 @@ def refund_plan_premium_purchase(purchase_id: str) -> dict:
 
 
 def refund_event_purchase(purchase_id: str) -> dict:
-	"""Atomically refund a live event purchase (FR-012).
+	"""Atomically refund a live event purchase (FR-011, FR-012).
 
 	Single transaction:
 	1. Mark purchase status → refunded, set refunded_at
 	2. Mark linked event access status → refunded, set revoked_at
-	3. Invalidate Redis cache
+	3. Create Credit Note if purchase has an erpnext_invoice
+	4. Invalidate Redis cache (after commit)
+
+	If Credit Note creation fails, the exception propagates and Frappe
+	rolls back steps 1-3 atomically.
 
 	Args:
 		purchase_id: Memora Live Event Purchase name
 
 	Returns:
-		dict with purchase_id, access_id, status
+		dict with purchase_id, access_id, credit_note_id, status
 
 	Raises:
 		frappe.ValidationError if purchase not in refundable state
@@ -117,17 +121,53 @@ def refund_event_purchase(purchase_id: str) -> dict:
 			access.revoked_by = frappe.session.user
 			access.save(ignore_permissions=True)
 
+	# 3. Create Credit Note (conditional — FR-011)
+	credit_note_id = None
+	if purchase.erpnext_invoice:
+		credit_note_id = _create_event_credit_note(purchase)
+
 	# Commit atomically
 	frappe.db.commit()
 
-	# 3. Invalidate Redis cache (after commit)
+	# 4. Invalidate Redis cache (after commit)
 	_invalidate_event_access_cache(purchase.player, purchase.event)
 
 	return {
 		"purchase_id": purchase.name,
 		"access_id": access_id or "",
+		"credit_note_id": credit_note_id,
 		"status": "refunded",
 	}
+
+
+def _create_event_credit_note(purchase) -> str | None:
+	"""Create a Credit Note (return Sales Invoice) for a refunded event purchase.
+
+	Returns the Credit Note name, or None if no customer mapping exists.
+	Raises on insert/submit failure — caller's transaction will roll back.
+	"""
+	customer = frappe.db.get_value("Memora Player Profile", purchase.player, "customer")
+	if not customer:
+		frappe.log_error(
+			f"No customer mapping for player {purchase.player}. "
+			f"Skipping Credit Note for purchase {purchase.name}.",
+			"Refund Credit Note Skipped",
+		)
+		return None
+
+	cn = frappe.new_doc("Sales Invoice")
+	cn.customer = customer
+	cn.is_return = 1
+	cn.return_against = purchase.erpnext_invoice
+	cn.currency = purchase.currency
+	cn.append("items", {
+		"item_code": purchase.erpnext_item_code,
+		"qty": -1,
+		"rate": float(purchase.amount),
+	})
+	cn.insert(ignore_permissions=True)
+	cn.submit()
+	return cn.name
 
 
 def _invalidate_premium_cache(player: str, plan: str):

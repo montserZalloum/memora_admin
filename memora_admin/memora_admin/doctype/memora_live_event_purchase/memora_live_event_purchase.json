@@ -13,6 +13,7 @@
   "plan_snapshot",
   "season",
   "status",
+  "expires_at",
   "section_payment",
   "amount",
   "currency",
@@ -78,6 +79,12 @@
    "label": "Status",
    "options": "pending\npaid\nfailed\ncancelled\nrefunded",
    "reqd": 1
+  },
+  {
+   "fieldname": "expires_at",
+   "fieldtype": "Datetime",
+   "label": "Expires At",
+   "read_only": 1
   },
   {
    "fieldname": "section_payment",

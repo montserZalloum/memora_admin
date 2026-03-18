@@ -1,0 +1,75 @@
+# Internal Service Contract: Refund with Credit Note
+# Type: Service function extension
+# Spec: FR-011 (atomic refund cascade)
+
+service:
+  name: refund_event_purchase
+  type: frappe_service
+  module: memora_admin.memora_admin.services.premium.refund
+  change_type: EXTEND (existing function, add credit note step)
+
+description: |
+  Extends the existing refund_event_purchase() to atomically create a Credit Note
+  linked to the original Sales Invoice. The complete refund cascade is:
+  purchase -> refunded, access -> refunded, Credit Note created.
+  All steps execute in a single Frappe transaction.
+
+signature:
+  function: refund_event_purchase
+  parameters:
+    - name: purchase_id
+      type: str
+      description: Memora Live Event Purchase document name (e.g., "LEP-00042")
+  returns:
+    type: dict
+    fields:
+      purchase_id: str        # The refunded purchase name
+      access_id: str           # The refunded access record name
+      credit_note_id: str|None # Credit Note name (None if no invoice existed)
+      status: str              # "refunded"
+
+preconditions:
+  - Purchase exists with status = "paid"
+  - Purchase has an associated Live Event Access record
+  - Purchase may or may not have an associated erpnext_invoice
+
+steps:
+  - step: 1
+    action: Mark purchase as refunded
+    mutation: "purchase.status = 'refunded', purchase.refunded_at = now()"
+
+  - step: 2
+    action: Mark access as refunded
+    mutation: "access.status = 'refunded', access.revoked_at = now()"
+
+  - step: 3
+    action: Create Credit Note (conditional)
+    condition: "purchase.erpnext_invoice is not None"
+    mutation: |
+      Create Sales Invoice via Frappe ORM:
+        customer = _get_player_customer(purchase.player)
+        is_return = 1
+        return_against = purchase.erpnext_invoice
+        currency = purchase.currency
+        items:
+          - item_code: purchase.erpnext_item_code
+            qty: -1
+            rate: float(purchase.amount)
+      Insert and submit the Credit Note.
+
+  - step: 4
+    action: Invalidate Redis cache
+    mutation: "DELETE memora:event_access:{player}:{event}"
+
+atomicity: |
+  Steps 1-3 execute within a single Frappe DB transaction. If any step fails
+  (including Credit Note creation), the entire transaction rolls back:
+  - Purchase stays "paid"
+  - Access stays "active"
+  - No Credit Note is created
+  This satisfies FR-011's all-or-nothing requirement.
+
+error_handling:
+  - Credit note creation failure: Full rollback, raise exception to caller
+  - Missing erpnext_invoice: Skip credit note (step 3), proceed with steps 1-2-4
+  - Missing customer mapping: Skip credit note, log warning, proceed with status updates

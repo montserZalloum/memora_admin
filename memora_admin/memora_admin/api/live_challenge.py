@@ -91,6 +91,49 @@ def get_dashboard(event_id: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=False)
+def get_full_leaderboard(event_id: str) -> list:
+	"""Return the full ranked leaderboard for an ended event.
+
+	Args:
+		event_id: Live Challenge Event name
+
+	Returns:
+		List of dicts with rank, player, display_name, score for every
+		submitted participant, ordered by rank ascending.
+	"""
+	event = frappe.get_doc("Memora Live Challenge Event", event_id)
+	if not event.leaderboard_json:
+		frappe.throw("Leaderboard is not available yet for this event.")
+
+	rows = frappe.db.sql(
+		"""
+		SELECT p.player, p.score, pp.display_name
+		FROM `tabMemora Live Challenge Participation` p
+		LEFT JOIN `tabMemora Player Profile` pp ON pp.name = p.player
+		WHERE p.event = %s AND p.submitted_at IS NOT NULL
+		ORDER BY p.score DESC
+		""",
+		(event_id,),
+		as_dict=True,
+	)
+
+	# Compute standard competition ranking in Python (rank column may be 0)
+	result = []
+	for i, r in enumerate(rows):
+		score = round(float(r.score or 0), 1)
+		if i == 0 or score < round(float(rows[i - 1].score or 0), 1):
+			current_rank = i + 1
+		result.append({
+			"rank": current_rank,
+			"player": r.player,
+			"display_name": r.display_name or r.player,
+			"score": score,
+		})
+
+	return result
+
+
+@frappe.whitelist(allow_guest=False)
 def import_review_items(event_id: str, review_item_ids: str | list) -> dict:
 	"""Import questions from Memora Review Items into an event's child table.
 

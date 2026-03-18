@@ -273,6 +273,9 @@ doc_events = {
 		"after_insert": "memora_admin.memora_admin.events.premium_sync.on_premium_created",
 		"on_update": "memora_admin.memora_admin.events.premium_sync.on_premium_updated",
 	},
+	"Memora Live Challenge Event": {
+		"before_save": "memora_admin.memora_admin.events.item_sync.ensure_paid_event_item",
+	},
 	"Memora Live Event Access": {
 		"after_insert": "memora_admin.memora_admin.events.event_access_sync.on_event_access_created",
 		"on_update": "memora_admin.memora_admin.events.event_access_sync.on_event_access_updated",
@@ -332,7 +335,10 @@ scheduler_events = {
 			"memora_admin.tasks.archive_monitor.check_archive_health",
 		],
 		# Every 5 minutes: Redis health monitoring with threshold alerting
-		"*/5 * * * *": ["memora_admin.tasks.redis_monitor.monitor_redis_health"],
+		"*/5 * * * *": [
+			"memora_admin.tasks.redis_monitor.monitor_redis_health",
+			"memora_admin.tasks.purchase_expiry.cancel_expired_purchases",
+		],
 		# Daily at 03:00: Clean up old leaderboard keys + create live sync jobs
 		"0 3 * * *": [
 			"memora_admin.tasks.leaderboard_cleanup.cleanup_old_leaderboards",

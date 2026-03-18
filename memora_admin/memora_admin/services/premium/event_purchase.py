@@ -7,6 +7,8 @@ Handles the Frappe-side logic for creating a pending event purchase record
 and confirming payment via webhook (R-008 invoice pattern).
 """
 
+from datetime import timedelta
+
 import frappe
 
 
@@ -87,6 +89,7 @@ def create_event_purchase(player: str, event: str) -> dict:
 		"amount": price,
 		"currency": currency,
 		"erpnext_item_code": item_code,
+		"expires_at": frappe.utils.now_datetime() + timedelta(minutes=30),
 	})
 	purchase.insert(ignore_permissions=True)
 	frappe.db.commit()

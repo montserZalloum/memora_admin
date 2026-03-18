@@ -1,0 +1,47 @@
+# Internal Service Contract: Purchase Auto-Cancellation
+# Type: Scheduled Job (Frappe cron)
+# Spec: FR-001 (30-min expiry), FR-010 (auto-cancel)
+
+service:
+  name: cancel_expired_purchases
+  type: scheduled_job
+  module: memora_admin.memora_admin.tasks.purchase_expiry
+  schedule: "*/5 * * * *"  # Every 5 minutes
+
+description: |
+  Scans for pending Live Event Purchases whose 30-minute expiry window has
+  elapsed, and batch-updates their status to "cancelled". Enables students
+  to create new purchases for the same event after expiry.
+
+preconditions:
+  - Memora Live Event Purchase DocType has `expires_at` Datetime field
+  - Purchases are created with `expires_at = now + 30 minutes`
+  - Frappe scheduler is running
+
+input:
+  query: |
+    SELECT name FROM `tabMemora Live Event Purchase`
+    WHERE status = 'pending' AND expires_at < NOW()
+
+mutation: |
+  UPDATE `tabMemora Live Event Purchase`
+  SET status = 'cancelled', modified = NOW(), modified_by = 'Administrator'
+  WHERE status = 'pending' AND expires_at < NOW()
+
+postconditions:
+  - All matching purchases have status = "cancelled"
+  - No purchases in status "paid", "failed", or "refunded" are affected
+  - Students can now create new purchases for events with cancelled purchases
+
+idempotency: |
+  Safe to run multiple times. The WHERE clause filters only "pending" status,
+  so already-cancelled purchases are never touched.
+
+error_handling: |
+  - DB errors: Frappe logs the exception; job retries on next schedule cycle
+  - No partial state risk: single UPDATE statement is atomic
+
+observability:
+  - Frappe scheduled job log records execution time and success/failure
+  - Count of cancelled purchases can be derived from modified_by = 'Administrator'
+    AND status = 'cancelled' AND modified in the last 5 minutes

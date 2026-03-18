@@ -1,11 +1,17 @@
 # Copyright (c) 2026, corex and contributors
 # For license information, please see license.txt
 
+from datetime import timedelta
+
 import frappe
 from frappe.model.document import Document
 
 
 class MemoraLiveEventPurchase(Document):
+	def before_insert(self):
+		if self.status == "pending" and not self.expires_at:
+			self.expires_at = frappe.utils.now_datetime() + timedelta(minutes=30)
+
 	def validate(self):
 		self._validate_no_duplicate_pending()
 
