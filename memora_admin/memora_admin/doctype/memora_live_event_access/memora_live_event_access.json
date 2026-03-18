@@ -1,0 +1,143 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "LEA-.#####.",
+ "creation": "2026-03-18 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_main",
+  "player",
+  "event",
+  "column_break_main",
+  "status",
+  "access_type",
+  "section_source",
+  "purchase_ref",
+  "voucher_ref",
+  "column_break_source",
+  "granted_by",
+  "section_revocation",
+  "revoked_at",
+  "column_break_revocation",
+  "revoked_by"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_main",
+   "fieldtype": "Section Break",
+   "label": ""
+  },
+  {
+   "fieldname": "player",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Player",
+   "options": "Memora Player Profile",
+   "reqd": 1
+  },
+  {
+   "fieldname": "event",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Event",
+   "options": "Memora Live Challenge Event",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "active\nrevoked\nrefunded",
+   "reqd": 1
+  },
+  {
+   "fieldname": "access_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Access Type",
+   "options": "purchase\nvoucher\nadmin",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_source",
+   "fieldtype": "Section Break",
+   "label": "Source"
+  },
+  {
+   "fieldname": "purchase_ref",
+   "fieldtype": "Link",
+   "label": "Purchase Ref",
+   "options": "Memora Live Event Purchase"
+  },
+  {
+   "fieldname": "voucher_ref",
+   "fieldtype": "Link",
+   "label": "Voucher Ref",
+   "options": "Memora Access Voucher"
+  },
+  {
+   "fieldname": "column_break_source",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "granted_by",
+   "fieldtype": "Link",
+   "label": "Granted By",
+   "options": "User"
+  },
+  {
+   "fieldname": "section_revocation",
+   "fieldtype": "Section Break",
+   "label": "Revocation"
+  },
+  {
+   "fieldname": "revoked_at",
+   "fieldtype": "Datetime",
+   "label": "Revoked At"
+  },
+  {
+   "fieldname": "column_break_revocation",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "revoked_by",
+   "fieldtype": "Link",
+   "label": "Revoked By",
+   "options": "User"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-03-18 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Live Event Access",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "player"
+}

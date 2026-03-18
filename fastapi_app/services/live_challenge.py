@@ -437,7 +437,10 @@ class LiveChallengeService:
 		player_id: str,
 		player_plan: str | None = None,
 	) -> dict[str, Any]:
-		"""Join a live challenge event (pure Redis — zero Frappe calls).
+		"""Join a live challenge event.
+
+		For free events: Redis-only. For paid events: checks premium bypass
+		or event ticket access before allowing join (FR-015 source-of-truth gate).
 
 		Returns dict with position, countdown_remaining, waiting_room_duration.
 		Raises ValueError with error code on failure.
@@ -455,6 +458,11 @@ class LiveChallengeService:
 		eligible_plans = json.loads(eligible_plans_json)
 		if eligible_plans and player_plan not in eligible_plans:
 			raise ValueError("PLAN_NOT_ELIGIBLE")
+
+		# 2.5 Paid-event access gate (R-010, FR-015)
+		is_paid = bool(int(meta.get("is_paid", "0")))
+		if is_paid:
+			await self._check_paid_event_access(player_id, player_plan, event_id)
 
 		# 3. Atomic join: status check + uniqueness + capacity + SADD + EXPIRE in one Lua call
 		capacity = int(meta.get("capacity", "0"))
@@ -509,6 +517,35 @@ class LiveChallengeService:
 			"countdown_remaining": countdown_remaining,
 			"waiting_room_duration": waiting_room_duration,
 		}
+
+	async def _check_paid_event_access(
+		self,
+		player_id: str,
+		player_plan: str | None,
+		event_id: str,
+	) -> None:
+		"""Gate 1.5 for paid events (R-010): premium bypass OR event ticket.
+
+		Raises ValueError("NO_EVENT_ACCESS") if player has neither.
+		"""
+		from fastapi_app.services.event_access import EventAccessService
+		from fastapi_app.services.premium import PremiumService
+
+		# a. Check premium bypass — if player has usable plan premium, allow
+		if player_plan:
+			premium_svc = PremiumService(self.redis, self.frappe)
+			premium_state = await premium_svc.is_plan_premium_usable(player_id, player_plan)
+			if premium_state.usable:
+				return
+
+		# b. Check event ticket access
+		event_svc = EventAccessService(self.redis, self.frappe)
+		access_state = await event_svc.has_active_access(player_id, event_id)
+		if access_state.has_access:
+			return
+
+		# c. Neither — deny
+		raise ValueError("NO_EVENT_ACCESS")
 
 	# -------------------------------------------------------------------------
 	# Reconciliation (post-event Frappe persistence)

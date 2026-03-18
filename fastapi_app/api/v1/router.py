@@ -9,13 +9,16 @@ from fastapi_app.api.v1.endpoints import (
 	bootstrap,
 	catalog,
 	challenge,
+	event_access,
 	health,
 	leaderboard,
 	live_challenge,
+	monetized_webhooks,
 	notifications,
 	plan_change,
 	plans,
 	practice,
+	premium,
 	profile,
 	progress,
 	purchase,
@@ -55,3 +58,6 @@ router.include_router(practice.router)
 router.include_router(plan_change.router)
 router.include_router(live_challenge.router)
 router.include_router(challenge.router)
+router.include_router(premium.router)
+router.include_router(event_access.router)
+router.include_router(monetized_webhooks.router)

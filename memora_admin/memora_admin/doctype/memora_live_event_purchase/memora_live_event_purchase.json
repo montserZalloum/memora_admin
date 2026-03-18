@@ -1,0 +1,195 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "autoname": "LEP-.#####.",
+ "creation": "2026-03-18 12:00:00",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_main",
+  "player",
+  "event",
+  "column_break_main",
+  "plan_snapshot",
+  "season",
+  "status",
+  "section_payment",
+  "amount",
+  "currency",
+  "column_break_payment",
+  "erpnext_item_code",
+  "erpnext_invoice",
+  "section_gateway",
+  "payment_gateway",
+  "column_break_gateway",
+  "payment_reference",
+  "section_timestamps",
+  "paid_at",
+  "column_break_timestamps",
+  "refunded_at",
+  "section_references",
+  "event_access_ref"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_main",
+   "fieldtype": "Section Break",
+   "label": ""
+  },
+  {
+   "fieldname": "player",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Player",
+   "options": "Memora Player Profile",
+   "reqd": 1
+  },
+  {
+   "fieldname": "event",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Event",
+   "options": "Memora Live Challenge Event",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_main",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "plan_snapshot",
+   "fieldtype": "Link",
+   "label": "Plan Snapshot",
+   "options": "Memora Academic Plan"
+  },
+  {
+   "fieldname": "season",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Season",
+   "options": "Memora Season",
+   "reqd": 1
+  },
+  {
+   "default": "pending",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "pending\npaid\nfailed\ncancelled\nrefunded",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_payment",
+   "fieldtype": "Section Break",
+   "label": "Payment"
+  },
+  {
+   "fieldname": "amount",
+   "fieldtype": "Currency",
+   "label": "Amount",
+   "reqd": 1
+  },
+  {
+   "default": "JOD",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency",
+   "reqd": 1
+  },
+  {
+   "fieldname": "column_break_payment",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "erpnext_item_code",
+   "fieldtype": "Link",
+   "label": "ERPNext Item Code",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "erpnext_invoice",
+   "fieldtype": "Link",
+   "label": "ERPNext Invoice",
+   "options": "Sales Invoice"
+  },
+  {
+   "fieldname": "section_gateway",
+   "fieldtype": "Section Break",
+   "label": "Gateway"
+  },
+  {
+   "fieldname": "payment_gateway",
+   "fieldtype": "Data",
+   "label": "Payment Gateway"
+  },
+  {
+   "fieldname": "column_break_gateway",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "payment_reference",
+   "fieldtype": "Data",
+   "label": "Payment Reference"
+  },
+  {
+   "fieldname": "section_timestamps",
+   "fieldtype": "Section Break",
+   "label": "Timestamps"
+  },
+  {
+   "fieldname": "paid_at",
+   "fieldtype": "Datetime",
+   "label": "Paid At"
+  },
+  {
+   "fieldname": "column_break_timestamps",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "refunded_at",
+   "fieldtype": "Datetime",
+   "label": "Refunded At"
+  },
+  {
+   "fieldname": "section_references",
+   "fieldtype": "Section Break",
+   "label": "References"
+  },
+  {
+   "fieldname": "event_access_ref",
+   "fieldtype": "Link",
+   "label": "Event Access Ref",
+   "options": "Memora Live Event Access"
+  }
+ ],
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-03-18 12:00:00",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Live Event Purchase",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "show_name_in_global_search": 1,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "player"
+}

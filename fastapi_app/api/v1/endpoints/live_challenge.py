@@ -132,6 +132,7 @@ async def join_event(
 			"ALREADY_JOINED": status.HTTP_409_CONFLICT,
 			"PLAN_NOT_ELIGIBLE": status.HTTP_403_FORBIDDEN,
 			"CAPACITY_FULL": status.HTTP_422_UNPROCESSABLE_ENTITY,
+			"NO_EVENT_ACCESS": status.HTTP_403_FORBIDDEN,
 		}
 		raise HTTPException(
 			status_code=status_map.get(code, status.HTTP_400_BAD_REQUEST),

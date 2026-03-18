@@ -1,0 +1,306 @@
+openapi: "3.1.0"
+info:
+  title: Monetized Access — Player API
+  version: "1.0.0"
+  description: |
+    Player-facing FastAPI endpoints for plan premium and live event access.
+    All endpoints require player authentication via session token.
+
+paths:
+  # ─── Plan Premium ───────────────────────────────────────────────
+
+  /api/v1/premium/purchase:
+    post:
+      operationId: createPlanPremiumPurchase
+      summary: Initiate a plan premium purchase
+      description: |
+        Creates a pending purchase record and returns payment session info.
+        Rejects if player already has a usable premium or pending purchase for the plan.
+      tags: [Plan Premium]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [plan_id]
+              properties:
+                plan_id:
+                  type: string
+                  description: Memora Academic Plan name
+      responses:
+        "201":
+          description: Purchase created, payment session initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  purchase_id:
+                    type: string
+                    description: Memora Plan Premium Purchase name
+                  payment_url:
+                    type: string
+                    description: Payment gateway redirect URL
+                  amount:
+                    type: number
+                    format: decimal
+                  currency:
+                    type: string
+                    example: JOD
+        "409":
+          description: |
+            Conflict — player already has a usable premium for this plan,
+            or a pending purchase already exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/premium/voucher/redeem:
+    post:
+      operationId: redeemPlanPremiumVoucher
+      summary: Redeem a voucher code for plan premium
+      description: |
+        Verifies the code, creates the premium entitlement and redemption record
+        atomically. Code is verified via HMAC-SHA256 timing-safe comparison.
+      tags: [Plan Premium]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: Voucher code (plaintext, verified against HMAC hash)
+      responses:
+        "201":
+          description: Voucher redeemed, premium created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  premium_id:
+                    type: string
+                  plan_id:
+                    type: string
+                  season_end:
+                    type: string
+                    format: date
+        "400":
+          description: Invalid, expired, exhausted, or inactive voucher
+        "409":
+          description: Player already has usable premium, or already redeemed this voucher
+
+  /api/v1/premium/access-state/{plan_id}:
+    get:
+      operationId: getPlanAccessState
+      summary: Get player's plan access state
+      description: |
+        Returns complete access state for frontend rendering (FR-014).
+        Single call, no assembly required.
+      tags: [Plan Premium]
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plan access state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlanAccessState"
+
+  # ─── Live Event Access ──────────────────────────────────────────
+
+  /api/v1/events/{event_id}/purchase:
+    post:
+      operationId: createLiveEventPurchase
+      summary: Purchase a ticket for a paid live event
+      description: |
+        Creates a pending purchase for an event ticket.
+        Rejects if player has usable premium (prevents double-charging per FR-007),
+        already has active access, or has a pending purchase.
+      tags: [Live Event Access]
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Purchase created, payment session initiated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  purchase_id:
+                    type: string
+                  payment_url:
+                    type: string
+                  amount:
+                    type: number
+                    format: decimal
+                  currency:
+                    type: string
+        "409":
+          description: |
+            Conflict — player covered by premium, already has access,
+            or pending purchase exists.
+
+  /api/v1/events/{event_id}/voucher/redeem:
+    post:
+      operationId: redeemLiveEventVoucher
+      summary: Redeem a voucher code for live event access
+      tags: [Live Event Access]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+      responses:
+        "201":
+          description: Voucher redeemed, event access created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_id:
+                    type: string
+                  event_id:
+                    type: string
+        "400":
+          description: Invalid, expired, exhausted, or inactive voucher
+        "409":
+          description: Player already has access or covered by premium
+
+  /api/v1/events/{event_id}/access-state:
+    get:
+      operationId: getLiveEventAccessState
+      summary: Get player's event access state
+      description: |
+        Returns complete access state for frontend rendering.
+        Includes premium bypass status.
+      tags: [Live Event Access]
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Event access state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EventAccessState"
+
+  /api/v1/events/{event_id}/join:
+    post:
+      operationId: joinLiveEvent
+      summary: Join a live event (source-of-truth gate)
+      description: |
+        Performs full access check independently of frontend state (FR-015).
+        For paid events, verifies premium bypass OR active event access.
+        Then proceeds with existing join logic (capacity, participation).
+      tags: [Live Event Access]
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successfully joined
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  joined:
+                    type: boolean
+                  participation_id:
+                    type: string
+        "403":
+          description: No access to paid event
+        "409":
+          description: Already joined or event full
+
+components:
+  schemas:
+    PlanAccessState:
+      type: object
+      properties:
+        has_usable_premium:
+          type: boolean
+        reason:
+          type: string
+          enum: [none, plan_mismatch, season_ended, revoked, no_premium]
+          description: Why premium is or isn't usable
+        season_end:
+          type: string
+          format: date
+          nullable: true
+        source_type:
+          type: string
+          enum: [purchase, voucher, admin]
+          nullable: true
+        premium_id:
+          type: string
+          nullable: true
+        has_pending_purchase:
+          type: boolean
+          description: Whether a pending purchase exists for this plan
+
+    EventAccessState:
+      type: object
+      properties:
+        has_access:
+          type: boolean
+          description: Whether player can join this event
+        access_type:
+          type: string
+          enum: [premium, purchase, voucher, admin, free]
+          nullable: true
+          description: How the player has access
+        is_covered_by_premium:
+          type: boolean
+          description: Whether player's plan premium covers this event
+        is_paid:
+          type: boolean
+          description: Whether this event requires payment
+        price:
+          type: number
+          format: decimal
+          nullable: true
+        currency:
+          type: string
+          nullable: true
+        has_pending_purchase:
+          type: boolean
+          description: Whether a pending ticket purchase exists
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        detail:
+          type: string

@@ -26,6 +26,9 @@
   "question_time_limit",
   "section_break_settings",
   "is_paid",
+  "price",
+  "currency",
+  "erpnext_item_code",
   "show_correct_answers",
   "column_break_settings",
   "show_student_rank",
@@ -161,6 +164,27 @@
    "label": "Is Paid"
   },
   {
+   "depends_on": "eval:doc.is_paid",
+   "fieldname": "price",
+   "fieldtype": "Currency",
+   "label": "Price"
+  },
+  {
+   "default": "JOD",
+   "depends_on": "eval:doc.is_paid",
+   "fieldname": "currency",
+   "fieldtype": "Link",
+   "label": "Currency",
+   "options": "Currency"
+  },
+  {
+   "depends_on": "eval:doc.is_paid",
+   "fieldname": "erpnext_item_code",
+   "fieldtype": "Link",
+   "label": "ERPNext Item Code",
+   "options": "Item"
+  },
+  {
    "default": "0",
    "fieldname": "show_correct_answers",
    "fieldtype": "Check",
@@ -275,7 +299,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-16 11:46:42.687768",
+ "modified": "2026-03-18 12:00:00.000000",
  "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Live Challenge Event",

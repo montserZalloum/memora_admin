@@ -1,0 +1,99 @@
+openapi: "3.1.0"
+info:
+  title: Monetized Access — Webhook API
+  version: "1.0.0"
+  description: |
+    Payment gateway webhook endpoint for confirming purchases.
+    Gateway-agnostic — any payment provider can call this endpoint.
+
+paths:
+  /api/v1/webhooks/monetized-payment:
+    post:
+      operationId: handleMonetizedPayment
+      summary: Payment gateway webhook for premium/event purchases
+      description: |
+        Processes payment confirmation for Plan Premium and Live Event purchases.
+
+        **Idempotency**: Duplicate webhooks are handled silently (FR-016).
+        Uses Redis SET NX with 24h TTL on the idempotency key.
+
+        **Processing flow**:
+        1. Validate idempotency key (reject duplicates)
+        2. Acquire Redis lock for the (player, resource) pair
+        3. Load purchase record, verify status is 'pending'
+        4. Mark purchase as 'paid'
+        5. Create entitlement (Plan Premium or Live Event Access)
+        6. Create Sales Invoice via Frappe ORM
+        7. Update purchase with entitlement and invoice references
+        8. Cache entitlement state in Redis
+        9. Release lock
+
+        **Atomicity**: Steps 4-7 execute within a single Frappe transaction.
+        If any step fails, the entire transaction rolls back.
+      tags: [Webhooks]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MonetizedPaymentWebhook"
+      responses:
+        "200":
+          description: |
+            Payment processed successfully, or duplicate webhook handled silently.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [processed, already_processed]
+                  entitlement_id:
+                    type: string
+                    nullable: true
+                    description: Created entitlement ID (null if already processed)
+        "400":
+          description: Invalid payload or purchase not found
+        "422":
+          description: Purchase not in pending state (already paid/failed/cancelled)
+
+components:
+  schemas:
+    MonetizedPaymentWebhook:
+      type: object
+      required:
+        - idempotency_key
+        - purchase_type
+        - purchase_id
+        - transaction_id
+        - status
+      properties:
+        idempotency_key:
+          type: string
+          description: |
+            Unique key for idempotency. Typically the payment gateway's event ID.
+            Stored in Redis with 24h TTL to prevent duplicate processing.
+        purchase_type:
+          type: string
+          enum: [plan_premium, live_event]
+          description: Routes to the correct processing handler
+        purchase_id:
+          type: string
+          description: |
+            Memora Plan Premium Purchase or Memora Live Event Purchase name.
+            Used to look up the pending purchase record.
+        transaction_id:
+          type: string
+          description: Payment gateway's transaction/charge ID
+        status:
+          type: string
+          enum: [success, failed]
+          description: Payment outcome from the gateway
+        payment_gateway:
+          type: string
+          description: Gateway identifier (e.g., "stripe", "tap")
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Optional gateway-specific metadata (stored but not processed)

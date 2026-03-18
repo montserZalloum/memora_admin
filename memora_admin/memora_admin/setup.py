@@ -214,6 +214,12 @@ def after_migrate():
 	except Exception as e:
 		print(f"[after_migrate] Player Practice Summary table setup failed: {e}")
 
+	# Monetized access: virtual columns + unique indexes (R-001)
+	try:
+		_ensure_monetized_access_indexes()
+	except Exception as e:
+		print(f"[after_migrate] Monetized access indexes setup failed: {e}")
+
 	# Live Challenge Participation unique index (event, player) is managed by
 	# on_doctype_update() in memora_live_challenge_participation.py as "unique_event_player".
 
@@ -897,6 +903,153 @@ def _ensure_archive_delete_audit_table():
 			KEY `idx_timestamp` (`timestamp`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 	""")
+
+
+def _ensure_monetized_access_indexes():
+	"""Create virtual columns and unique indexes for monetized access DocTypes.
+
+	Implements R-001 (partial unique index via virtual columns) for:
+	- Plan Premium: one active per (player, plan)
+	- Live Event Access: one active per (player, event)
+	- Access Voucher: unique code_hash
+	- Access Voucher Redemption: one success per (voucher, player)
+
+	Also adds lookup indexes for common query patterns.
+	All operations are idempotent.
+	"""
+	tables = frappe.db.get_tables()
+
+	# --- Memora Plan Premium ---
+	if "tabMemora Plan Premium" in tables:
+		_ensure_virtual_column(
+			"tabMemora Plan Premium",
+			"_unique_active_plan",
+			"VARCHAR(140) AS (IF(status = 'active', plan, NULL)) VIRTUAL",
+		)
+		_ensure_unique_index(
+			"tabMemora Plan Premium",
+			"idx_one_active_premium",
+			"(player, `_unique_active_plan`)",
+		)
+		_ensure_index(
+			"tabMemora Plan Premium",
+			"idx_premium_player",
+			"(player, status)",
+		)
+
+	# --- Memora Live Event Access ---
+	if "tabMemora Live Event Access" in tables:
+		_ensure_virtual_column(
+			"tabMemora Live Event Access",
+			"_unique_active_event",
+			"VARCHAR(140) AS (IF(status = 'active', event, NULL)) VIRTUAL",
+		)
+		_ensure_unique_index(
+			"tabMemora Live Event Access",
+			"idx_one_active_event_access",
+			"(player, `_unique_active_event`)",
+		)
+		_ensure_index(
+			"tabMemora Live Event Access",
+			"idx_event_access_player",
+			"(player, status)",
+		)
+
+	# --- Memora Access Voucher ---
+	if "tabMemora Access Voucher" in tables:
+		_ensure_unique_index(
+			"tabMemora Access Voucher",
+			"idx_voucher_code_hash",
+			"(code_hash)",
+		)
+
+	# --- Memora Access Voucher Redemption ---
+	if "tabMemora Access Voucher Redemption" in tables:
+		_ensure_virtual_column(
+			"tabMemora Access Voucher Redemption",
+			"_unique_success",
+			"VARCHAR(140) AS (IF(status = 'success', voucher, NULL)) VIRTUAL",
+		)
+		_ensure_unique_index(
+			"tabMemora Access Voucher Redemption",
+			"idx_redemption_unique",
+			"(player, `_unique_success`)",
+		)
+		_ensure_index(
+			"tabMemora Access Voucher Redemption",
+			"idx_redemption_voucher",
+			"(voucher)",
+		)
+
+	# --- Memora Plan Premium Purchase ---
+	if "tabMemora Plan Premium Purchase" in tables:
+		_ensure_index(
+			"tabMemora Plan Premium Purchase",
+			"idx_purchase_player_plan",
+			"(player, plan, status)",
+		)
+
+	# --- Memora Live Event Purchase ---
+	if "tabMemora Live Event Purchase" in tables:
+		_ensure_index(
+			"tabMemora Live Event Purchase",
+			"idx_event_purchase_player",
+			"(player, event, status)",
+		)
+
+
+def _ensure_virtual_column(table: str, column: str, definition: str):
+	"""Add a virtual column if it doesn't exist. Idempotent."""
+	existing = frappe.db.sql(
+		"""
+		SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+		WHERE TABLE_SCHEMA = DATABASE()
+		AND TABLE_NAME = %s
+		AND COLUMN_NAME = %s
+		LIMIT 1
+	""",
+		(table, column),
+	)
+	if existing:
+		return
+	frappe.db.sql_ddl(f"ALTER TABLE `{table}` ADD COLUMN `{column}` {definition}")
+	print(f"[after_migrate] Created virtual column {column} on {table}")
+
+
+def _ensure_unique_index(table: str, index_name: str, columns: str):
+	"""Create a UNIQUE index if it doesn't exist. Idempotent."""
+	existing = frappe.db.sql(
+		"""
+		SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+		WHERE TABLE_SCHEMA = DATABASE()
+		AND TABLE_NAME = %s
+		AND INDEX_NAME = %s
+		LIMIT 1
+	""",
+		(table, index_name),
+	)
+	if existing:
+		return
+	frappe.db.sql_ddl(f"CREATE UNIQUE INDEX `{index_name}` ON `{table}` {columns}")
+	print(f"[after_migrate] Created UNIQUE INDEX {index_name} on {table}")
+
+
+def _ensure_index(table: str, index_name: str, columns: str):
+	"""Create a non-unique index if it doesn't exist. Idempotent."""
+	existing = frappe.db.sql(
+		"""
+		SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS
+		WHERE TABLE_SCHEMA = DATABASE()
+		AND TABLE_NAME = %s
+		AND INDEX_NAME = %s
+		LIMIT 1
+	""",
+		(table, index_name),
+	)
+	if existing:
+		return
+	frappe.db.sql_ddl(f"CREATE INDEX `{index_name}` ON `{table}` {columns}")
+	print(f"[after_migrate] Created INDEX {index_name} on {table}")
 
 
 def _ensure_task_log_archive_batch_cleanup_index():

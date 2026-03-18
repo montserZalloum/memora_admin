@@ -38,6 +38,8 @@ from fastapi_app.services.season import SeasonService
 from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.stats import StatsService
 from fastapi_app.services.voucher import VoucherService
+from fastapi_app.services.event_access import EventAccessService
+from fastapi_app.services.premium import PremiumService
 from fastapi_app.services.wallet import WalletService
 
 logger = structlog.get_logger()
@@ -406,6 +408,24 @@ async def get_challenge_service(redis_client: RedisClient) -> ChallengeService:
 
 
 ChallengeServiceDep = Annotated[ChallengeService, Depends(get_challenge_service)]
+
+
+async def get_premium_service(redis_client: RedisClient) -> PremiumService:
+	"""Get PremiumService with Redis and FrappeClient."""
+	frappe_client = await get_frappe_client()
+	return PremiumService(redis_client, frappe_client)
+
+
+PremiumServiceDep = Annotated[PremiumService, Depends(get_premium_service)]
+
+
+async def get_event_access_service(redis_client: RedisClient) -> EventAccessService:
+	"""Get EventAccessService with Redis and FrappeClient."""
+	frappe_client = await get_frappe_client()
+	return EventAccessService(redis_client, frappe_client)
+
+
+EventAccessServiceDep = Annotated[EventAccessService, Depends(get_event_access_service)]
 
 
 async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) -> VoucherService:

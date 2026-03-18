@@ -1547,3 +1547,104 @@ GAME_SESSION_SCAN_PATTERN = "memora:gamesession:*"
 
 # Pattern for SCAN match= parameter to iterate all wallet keys
 WALLET_SCAN_PATTERN = "memora:wallet:*"
+
+
+# =============================================================================
+# Monetized Access (Premium & Event Access)
+# =============================================================================
+
+PREMIUM_LOCK_TTL = 10
+"""10 seconds. Lock TTL for premium creation/revocation operations.
+
+Prevents concurrent purchase, voucher redemption, or admin grant from creating
+duplicate active entitlements for the same (player, plan). DB virtual column
+unique index is the safety net if the lock expires mid-operation.
+"""
+
+EVENT_ACCESS_LOCK_TTL = 10
+"""10 seconds. Lock TTL for event access creation/revocation operations.
+
+Same pattern as premium lock — prevents duplicate active entitlements
+for the same (player, event).
+"""
+
+MONETIZED_WEBHOOK_IDEM_TTL = 86400
+"""24 hours. Idempotency window for monetized payment webhooks.
+
+Prevents duplicate processing if the payment gateway retries delivery.
+"""
+
+NEGATIVE_CACHE_TTL = 300
+"""5 minutes. TTL for negative cache entries (usable=false / has_access=false).
+
+Prevents permanent false denials if event-driven cache invalidation misses.
+Positive entries remain event-driven (no TTL) for instant access revocation.
+"""
+
+
+def premium_key(player_id: str, plan_id: str) -> str:
+	"""Cached premium usability state for a (player, plan) pair.
+
+	Type: HASH (usable, reason, season_end, source_type, premium_id)
+	Producers: premium_sync.py on_premium_created()
+	Consumers: PremiumService.is_plan_premium_usable()
+	TTL: None (event-driven invalidation: premium create/revoke, plan change, season update)
+	"""
+	return f"memora:premium:{player_id}:{plan_id}"
+
+
+def event_access_key(player_id: str, event_id: str) -> str:
+	"""Cached event access state for a (player, event) pair.
+
+	Type: HASH (has_access, access_type, access_id)
+	Producers: event_access_sync.py on_event_access_created()
+	Consumers: EventAccessService.has_active_access()
+	TTL: None (event-driven invalidation: access create/revoke/refund)
+	"""
+	return f"memora:event_access:{player_id}:{event_id}"
+
+
+def premium_lock_key(player_id: str, plan_id: str) -> str:
+	"""Per-(player, plan) lock for premium entitlement mutations.
+
+	Type: STRING (SET NX EX pattern)
+	Producers: purchase creation, voucher redemption, admin grant, webhook
+	Consumers: Same operations (lock check before proceeding)
+	TTL: 10s (PREMIUM_LOCK_TTL — auto-expire safety net)
+	"""
+	return f"memora:lock:premium:{player_id}:{plan_id}"
+
+
+def event_access_lock_key(player_id: str, event_id: str) -> str:
+	"""Per-(player, event) lock for event access entitlement mutations.
+
+	Type: STRING (SET NX EX pattern)
+	Producers: ticket purchase, voucher redemption, admin grant, webhook
+	Consumers: Same operations (lock check before proceeding)
+	TTL: 10s (EVENT_ACCESS_LOCK_TTL — auto-expire safety net)
+	"""
+	return f"memora:lock:event_access:{player_id}:{event_id}"
+
+
+def monetized_webhook_idempotency_key(idempotency_key: str) -> str:
+	"""Idempotency marker for monetized payment webhooks.
+
+	Type: STRING ("processing" or "completed")
+	Producers: webhooks.py monetized_payment_webhook()
+	Consumers: webhooks.py monetized_payment_webhook()
+	TTL: 24h (MONETIZED_WEBHOOK_IDEM_TTL)
+	"""
+	return f"memora:webhook:monetized:{idempotency_key}"
+
+
+def voucher_redeem_lock_key(player_id: str) -> str:
+	"""Per-player lock for voucher redemption operations.
+
+	Keyed on player only (not plan) because the voucher's target plan
+	is unknown until server-side resolution. Prevents concurrent
+	redemption attempts by the same player.
+
+	Type: STRING (SET NX EX pattern)
+	TTL: 10s (auto-expire safety net)
+	"""
+	return f"memora:lock:voucher_redeem:{player_id}"

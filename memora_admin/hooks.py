@@ -178,6 +178,7 @@ doc_events = {
 			"memora_admin.events.plan_change_sync.on_player_profile_plan_changed",
 			"memora_admin.events.season_change_sync.on_player_profile_season_changed",
 			"memora_admin.events.dimension_sync.on_player_changed",
+			"memora_admin.memora_admin.events.premium_sync.on_player_plan_changed",
 		],
 	},
 	# Product catalog cache invalidation
@@ -266,6 +267,15 @@ doc_events = {
 		"after_insert": "memora_admin.events.build_trigger.on_plan_overrider_changed",
 		"on_update": "memora_admin.events.build_trigger.on_plan_overrider_changed",
 		"on_trash": "memora_admin.events.build_trigger.on_plan_overrider_changed",
+	},
+	# Monetized access: premium + event access Redis cache sync
+	"Memora Plan Premium": {
+		"after_insert": "memora_admin.memora_admin.events.premium_sync.on_premium_created",
+		"on_update": "memora_admin.memora_admin.events.premium_sync.on_premium_updated",
+	},
+	"Memora Live Event Access": {
+		"after_insert": "memora_admin.memora_admin.events.event_access_sync.on_event_access_created",
+		"on_update": "memora_admin.memora_admin.events.event_access_sync.on_event_access_updated",
 	},
 	# Announcement cache invalidation
 	"Memora Announcement": {

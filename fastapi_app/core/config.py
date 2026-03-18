@@ -49,6 +49,10 @@ class Settings(BaseSettings):
 	# IMPORTANT: Must match voucher_hmac_secret in Frappe site_config.json
 	voucher_hmac_secret: str = ""
 
+	# Webhook Authentication
+	# Shared secret for monetized payment webhook verification
+	webhook_secret: str = ""
+
 	# Rate Limiting
 	global_rate_limit: int = 100  # Max requests per IP per window
 	global_rate_limit_window: int = 60  # Window duration in seconds

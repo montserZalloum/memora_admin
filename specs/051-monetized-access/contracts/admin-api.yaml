@@ -1,0 +1,256 @@
+openapi: "3.1.0"
+info:
+  title: Monetized Access — Admin API
+  version: "1.0.0"
+  description: |
+    Frappe whitelisted API methods for admin operations.
+    All endpoints require System Manager role.
+    Called via POST /api/method/{method_path}.
+
+paths:
+  /api/method/memora_admin.api.premium.grant_plan_premium:
+    post:
+      operationId: grantPlanPremium
+      summary: Admin grants plan premium to a player
+      description: |
+        Creates a Plan Premium with source_type=admin and granted_by set
+        to the current admin user. Rejects if player already has a usable
+        premium for the target plan.
+      tags: [Admin - Plan Premium]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [player, plan]
+              properties:
+                player:
+                  type: string
+                  description: Memora Player Profile name
+                plan:
+                  type: string
+                  description: Memora Academic Plan name
+      responses:
+        "200":
+          description: Premium granted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: object
+                    properties:
+                      premium_id:
+                        type: string
+                      player:
+                        type: string
+                      plan:
+                        type: string
+                      source_type:
+                        type: string
+                        example: admin
+        "409":
+          description: Player already has usable premium for this plan
+
+  /api/method/memora_admin.api.premium.revoke_plan_premium:
+    post:
+      operationId: revokePlanPremium
+      summary: Admin revokes a plan premium
+      description: |
+        Sets premium status to revoked, records revoked_at and revoked_by.
+        Invalidates Redis cache. Does NOT affect linked purchase status.
+      tags: [Admin - Plan Premium]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [premium_id]
+              properties:
+                premium_id:
+                  type: string
+                  description: Memora Plan Premium name
+      responses:
+        "200":
+          description: Premium revoked
+        "404":
+          description: Premium not found
+        "400":
+          description: Premium already revoked
+
+  /api/method/memora_admin.api.premium.refund_plan_premium_purchase:
+    post:
+      operationId: refundPlanPremiumPurchase
+      summary: Process refund for a plan premium purchase
+      description: |
+        Atomically within a single transaction:
+        1. Marks purchase status → refunded, sets refunded_at
+        2. Marks linked premium status → revoked, sets revoked_at
+        3. Invalidates Redis cache
+        FR-012 atomicity guarantee.
+      tags: [Admin - Plan Premium]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [purchase_id]
+              properties:
+                purchase_id:
+                  type: string
+                  description: Memora Plan Premium Purchase name
+      responses:
+        "200":
+          description: Refund processed
+        "400":
+          description: Purchase not in refundable state (must be 'paid')
+
+  /api/method/memora_admin.api.premium.grant_event_access:
+    post:
+      operationId: grantEventAccess
+      summary: Admin grants live event access to a player
+      description: |
+        Creates a Live Event Access with access_type=admin.
+        Rejects if player already has active access for this event.
+      tags: [Admin - Live Event Access]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [player, event]
+              properties:
+                player:
+                  type: string
+                event:
+                  type: string
+                  description: Memora Live Challenge Event name
+      responses:
+        "200":
+          description: Event access granted
+        "409":
+          description: Player already has active access for this event
+
+  /api/method/memora_admin.api.premium.revoke_event_access:
+    post:
+      operationId: revokeEventAccess
+      summary: Admin revokes live event access
+      tags: [Admin - Live Event Access]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [access_id]
+              properties:
+                access_id:
+                  type: string
+                  description: Memora Live Event Access name
+      responses:
+        "200":
+          description: Access revoked
+        "400":
+          description: Access already revoked/refunded
+
+  /api/method/memora_admin.api.premium.refund_event_purchase:
+    post:
+      operationId: refundEventPurchase
+      summary: Process refund for a live event purchase
+      description: |
+        Atomically marks purchase as refunded and linked access as refunded.
+      tags: [Admin - Live Event Access]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [purchase_id]
+              properties:
+                purchase_id:
+                  type: string
+                  description: Memora Live Event Purchase name
+      responses:
+        "200":
+          description: Refund processed
+        "400":
+          description: Purchase not in refundable state
+
+  /api/method/memora_admin.api.access_voucher.create_access_voucher:
+    post:
+      operationId: createAccessVoucher
+      summary: Create a new access voucher
+      description: |
+        Generates a cryptographically secure code, stores HMAC-SHA256 hash,
+        returns plaintext code ONCE to the admin. Code cannot be retrieved later.
+      tags: [Admin - Vouchers]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [voucher_type]
+              properties:
+                voucher_type:
+                  type: string
+                  enum: [plan_premium, live_event_access]
+                target_plan:
+                  type: string
+                  description: Required for plan_premium type
+                target_event:
+                  type: string
+                  description: Required for live_event_access type
+                max_redemptions:
+                  type: integer
+                  default: 1
+                valid_until:
+                  type: string
+                  format: date
+                  description: Optional expiry date
+                notes:
+                  type: string
+      responses:
+        "200":
+          description: Voucher created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: object
+                    properties:
+                      voucher_id:
+                        type: string
+                      code:
+                        type: string
+                        description: |
+                          Plaintext code. Shown ONCE. Cannot be retrieved later.
+                          Admin must copy/distribute immediately.
+
+  /api/method/memora_admin.api.access_voucher.deactivate_access_voucher:
+    post:
+      operationId: deactivateAccessVoucher
+      summary: Deactivate an access voucher
+      description: Sets is_active=0, preventing future redemptions.
+      tags: [Admin - Vouchers]
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [voucher_id]
+              properties:
+                voucher_id:
+                  type: string
+      responses:
+        "200":
+          description: Voucher deactivated
