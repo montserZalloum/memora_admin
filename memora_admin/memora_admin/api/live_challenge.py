@@ -145,7 +145,7 @@ def get_live_participants(event_id: str) -> dict:
 	"""
 	event = frappe.get_doc("Memora Live Challenge Event", event_id)
 	if event.status != "Active":
-		frappe.throw("Live participants are only available for Active events.")
+		return {"ended": True, "status": event.status}
 
 	from fastapi_app.core.redis_keys import (
 		lc_join_times_key,

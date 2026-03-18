@@ -179,6 +179,21 @@ function _open_live_participants_dialog(event_id) {
 			callback: function (r) {
 				if (!r.message) return;
 				let data = r.message;
+
+				if (data.ended) {
+					if (interval_id) {
+						clearInterval(interval_id);
+						interval_id = null;
+					}
+					d.$body.html(
+						'<div class="alert alert-warning" style="margin:20px">' +
+						'<strong>Event ' + frappe.utils.escape_html(data.status) + '</strong> — ' +
+						'Live participant monitoring has stopped.' +
+						'</div>'
+					);
+					return;
+				}
+
 				let parts = data.participants || [];
 
 				let rows = parts
