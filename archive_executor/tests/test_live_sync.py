@@ -11,7 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from archive_executor.config import Config
-from archive_executor.live_sync import _process_pending_live_jobs
+from archive_executor.live_sync import _cleanup_local_live_copies, _process_pending_live_jobs
 from archive_executor.schemas import load_archive_type, load_sync_type
 
 
@@ -148,3 +148,79 @@ def test_process_pending_live_jobs_publishes_empty_snapshot():
 			reason="fact_has_0_rows_after_exclusions",
 			duration_s=mock_mark_exported.call_args.args[6],
 		)
+
+
+class TestCleanupLocalLiveCopies:
+	"""Tests for _cleanup_local_live_copies — local directory cleanup after transfer."""
+
+	def test_removes_directory_and_clears_file_path(self):
+		"""Completed job with existing local dir should have dir removed and file_path set to NULL."""
+		with TemporaryDirectory() as tmpdir:
+			config = _make_config(tmpdir)
+			log = MagicMock()
+
+			# Create a local batch directory
+			batch_dir = Path(config.live_output_path) / "LSYNC-00099"
+			batch_dir.mkdir(parents=True)
+			(batch_dir / "fact.parquet").write_bytes(b"fake")
+
+			jobs = [{"name": "LSYNC-00099", "file_path": str(batch_dir)}]
+
+			with patch("archive_executor.live_sync.get_connection") as mock_conn, \
+				patch("archive_executor.live_sync.atomic_update") as mock_update:
+				cursor = MagicMock()
+				cursor.fetchall.return_value = jobs
+				mock_conn.return_value.__enter__ = MagicMock(return_value=mock_conn.return_value)
+				mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+				mock_conn.return_value.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+				mock_conn.return_value.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+				_cleanup_local_live_copies(config, log)
+
+			assert not batch_dir.exists()
+			mock_update.assert_called_once()
+			assert "file_path = NULL" in mock_update.call_args.args[1]
+			log.info.assert_any_call("live_local_cleanup_completed", job="LSYNC-00099", path=str(batch_dir))
+
+	def test_clears_file_path_when_directory_already_gone(self):
+		"""If the local directory is already gone, just NULL out file_path."""
+		with TemporaryDirectory() as tmpdir:
+			config = _make_config(tmpdir)
+			log = MagicMock()
+
+			gone_path = str(Path(config.live_output_path) / "LSYNC-00098")
+			jobs = [{"name": "LSYNC-00098", "file_path": gone_path}]
+
+			with patch("archive_executor.live_sync.get_connection") as mock_conn, \
+				patch("archive_executor.live_sync.atomic_update") as mock_update:
+				cursor = MagicMock()
+				cursor.fetchall.return_value = jobs
+				mock_conn.return_value.__enter__ = MagicMock(return_value=mock_conn.return_value)
+				mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+				mock_conn.return_value.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+				mock_conn.return_value.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+				_cleanup_local_live_copies(config, log)
+
+			mock_update.assert_called_once()
+			log.info.assert_any_call("live_local_cleanup_skipped", job="LSYNC-00098", reason="directory_not_found")
+
+	def test_no_jobs_is_noop(self):
+		"""When no eligible jobs exist, nothing happens."""
+		with TemporaryDirectory() as tmpdir:
+			config = _make_config(tmpdir)
+			log = MagicMock()
+
+			with patch("archive_executor.live_sync.get_connection") as mock_conn, \
+				patch("archive_executor.live_sync.atomic_update") as mock_update:
+				cursor = MagicMock()
+				cursor.fetchall.return_value = []
+				mock_conn.return_value.__enter__ = MagicMock(return_value=mock_conn.return_value)
+				mock_conn.return_value.__exit__ = MagicMock(return_value=False)
+				mock_conn.return_value.cursor.return_value.__enter__ = MagicMock(return_value=cursor)
+				mock_conn.return_value.cursor.return_value.__exit__ = MagicMock(return_value=False)
+
+				_cleanup_local_live_copies(config, log)
+
+			mock_update.assert_not_called()
+			log.info.assert_not_called()

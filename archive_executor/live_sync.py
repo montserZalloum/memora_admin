@@ -682,6 +682,57 @@ def _process_ingested_live_jobs(config: Config, log: StructuredLogger) -> int:
 	return processed
 
 
+def _cleanup_local_live_copies(config: Config, log: StructuredLogger):
+	"""Delete local batch directories for Completed live sync jobs with a remote_path.
+
+	Mirrors cleanup_local_copies() from the archive pipeline but targets
+	the live sync job table instead.
+	"""
+	conn = get_connection(config)
+	try:
+		with conn.cursor() as cursor:
+			cursor.execute(
+				f"SELECT name, file_path "
+				f"FROM `{_TABLE_NAME}` "
+				f"WHERE status = 'Completed' "
+				f"  AND file_path IS NOT NULL "
+				f"  AND remote_path IS NOT NULL "
+				f"ORDER BY creation ASC"
+			)
+			jobs = cursor.fetchall()
+	finally:
+		conn.close()
+
+	if not jobs:
+		return
+
+	log.info("live_local_cleanup_started", eligible_jobs=len(jobs))
+
+	for job in jobs:
+		job_name = job["name"]
+		file_path = job["file_path"]
+
+		if not file_path or not os.path.isdir(file_path):
+			atomic_update(
+				config,
+				f"UPDATE `{_TABLE_NAME}` SET file_path = NULL WHERE name = %s",
+				(job_name,),
+			)
+			log.info("live_local_cleanup_skipped", job=job_name, reason="directory_not_found")
+			continue
+
+		try:
+			shutil.rmtree(file_path)
+			atomic_update(
+				config,
+				f"UPDATE `{_TABLE_NAME}` SET file_path = NULL WHERE name = %s",
+				(job_name,),
+			)
+			log.info("live_local_cleanup_completed", job=job_name, path=file_path)
+		except OSError as exc:
+			log.error("live_local_cleanup_failed", job=job_name, path=file_path, error=str(exc))
+
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
@@ -711,6 +762,11 @@ def main():
 		transferred = _process_exported_live_jobs(config, log)
 		ingested = _process_transferred_live_jobs(config, log)
 		completed = _process_ingested_live_jobs(config, log)
+
+		try:
+			_cleanup_local_live_copies(config, log)
+		except Exception as exc:
+			log.error("live_local_cleanup_error", error=str(exc))
 	finally:
 		release_lock(lock_fd)
 

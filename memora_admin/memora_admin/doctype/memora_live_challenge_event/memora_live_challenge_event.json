@@ -164,6 +164,7 @@
    "default": "0",
    "fieldname": "show_correct_answers",
    "fieldtype": "Check",
+   "description": "When enabled, the correct answers will be revealed to players on the score page.",
    "label": "Show Correct Answers"
   },
   {
