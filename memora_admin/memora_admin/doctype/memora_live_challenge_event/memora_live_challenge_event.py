@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import json
+import math
 from datetime import timedelta
 
 import frappe
@@ -124,6 +125,7 @@ class MemoraLiveChallengeEvent(Document):
 		pipe.execute()
 
 	def validate(self):
+		self._auto_calc_exam_duration()
 		self._compute_timestamps()
 		self._validate_ranges()
 		self._validate_xp_non_negative()
@@ -132,6 +134,14 @@ class MemoraLiveChallengeEvent(Document):
 		self._validate_freeze_after_draft()
 		if self.status == "Draft":
 			self._validate_no_overlap()
+
+	def _auto_calc_exam_duration(self):
+		"""Auto-calculate exam_duration when question timer is enabled."""
+		if not self.enable_question_timer:
+			return
+		question_count = len(self.questions or [])
+		time_limit = int(self.question_time_limit or 30)
+		self.exam_duration = max(math.ceil((time_limit * question_count) / 60), 1)
 
 	def _compute_timestamps(self):
 		"""Set exam_start_ts and exam_end_ts from schedule fields."""
@@ -151,8 +161,8 @@ class MemoraLiveChallengeEvent(Document):
 			frappe.throw("Exam Duration must be between 1 and 180 minutes.")
 
 		cap = int(self.capacity or 0)
-		if cap < 1 or cap > 10000:
-			frappe.throw("Capacity must be between 1 and 10,000.")
+		if cap < 0 or cap > 10000:
+			frappe.throw("Capacity must be between 0 and 10,000 (0 = unlimited).")
 
 	def _validate_xp_non_negative(self):
 		"""All XP reward fields must be >= 0."""

@@ -65,7 +65,7 @@ class EventDetailResponse(BaseModel):
 	exam_duration: int = Field(..., description="Minutes")
 	enable_question_timer: bool = Field(False, description="Per-question countdown")
 	question_time_limit: int = Field(30, description="Seconds per question")
-	capacity: int = Field(..., description="Max participants")
+	capacity: int = Field(..., description="Max participants (0 = unlimited)")
 	current_count: int = Field(0, description="Current participant count")
 	is_paid: bool = Field(False, description="Whether event is paid")
 	show_correct_answers: bool = Field(False, description="Show answers after submission")

@@ -59,9 +59,12 @@ end
 if redis.call('SISMEMBER', KEYS[2], ARGV[1]) == 1 then
     return -3
 end
-local current = tonumber(redis.call('GET', KEYS[3]) or '0')
-if current >= tonumber(ARGV[2]) then
-    return -1
+local cap = tonumber(ARGV[2])
+if cap > 0 then
+    local current = tonumber(redis.call('GET', KEYS[3]) or '0')
+    if current >= cap then
+        return -1
+    end
 end
 local pos = redis.call('INCR', KEYS[3])
 redis.call('SADD', KEYS[1], ARGV[1])
@@ -258,7 +261,7 @@ class LiveChallengeService:
 			"scheduled_start": str(event.get("scheduled_start", "")),
 			"exam_start_ts": str(event.get("exam_start_ts", "")),
 			"exam_end_ts": str(event.get("exam_end_ts", "")),
-			"capacity": str(event.get("capacity", 100)),
+			"capacity": str(event.get("capacity", 0)),
 			"show_correct_answers": str(int(event.get("show_correct_answers", 0))),
 			"show_student_rank": str(int(event.get("show_student_rank", 0))),
 			"enable_question_timer": str(int(event.get("enable_question_timer", 0))),
@@ -870,7 +873,7 @@ class LiveChallengeService:
 			"exam_duration": int(meta.get("exam_duration", "10")),
 			"enable_question_timer": bool(int(meta.get("enable_question_timer", "0"))),
 			"question_time_limit": int(meta.get("question_time_limit", "30")),
-			"capacity": int(meta.get("capacity", "100")),
+			"capacity": int(meta.get("capacity", "0")),
 			"current_count": int(count_raw or "0"),
 			"is_paid": bool(int(meta.get("is_paid", "0"))),
 			"show_correct_answers": bool(int(meta.get("show_correct_answers", "0"))),
@@ -946,7 +949,7 @@ class LiveChallengeService:
 			"exam_duration": int(event.get("exam_duration", 10)),
 			"enable_question_timer": bool(event.get("enable_question_timer")),
 			"question_time_limit": int(event.get("question_time_limit", 30)),
-			"capacity": int(event.get("capacity", 100)),
+			"capacity": int(event.get("capacity", 0)),
 			"current_count": int(event.get("participant_count", 0)),
 			"is_paid": bool(event.get("is_paid")),
 			"show_correct_answers": bool(event.get("show_correct_answers")),
