@@ -180,6 +180,8 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 		"memora:daily_xp:PLAYER-TEST-*",
 		"memora:player_plan:PLAYER-TEST-*",
 		"memora:lc:*",  # Live challenge keys (status, questions, count, submitted, joined, meta)
+		"memora:lc_reaction_rl:*",  # Reaction rate limit keys
+		"memora:lc_burst:*",  # Reaction burst pub/sub channels (leftover keys)
 		registration_options_key(),
 	]
 

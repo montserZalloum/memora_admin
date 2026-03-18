@@ -114,9 +114,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 	notify_task = asyncio.create_task(start_notification_listener(pool, app.state))
 	app.state.notify_task = notify_task
 
-	# Create LiveChallengeService singleton
+	# Create LiveChallengeService singleton + start cross-worker reaction subscriber
 	lc_service = LiveChallengeService(redis_client, frappe_client)
 	app.state.live_challenge_service = lc_service
+	await lc_service.start_reaction_subscriber()
 
 	# Ensure Practice write queue consumer group exists (idempotent)
 	await ensure_consumer_group(redis_client)

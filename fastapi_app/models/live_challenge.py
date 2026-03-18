@@ -79,6 +79,9 @@ class EventDetailResponse(BaseModel):
 	eligible_plans: list[str] = Field(default_factory=list, description="Eligible plan IDs")
 	has_joined: bool = Field(False, description="Whether current player has joined")
 	has_submitted: bool = Field(False, description="Whether current player has submitted")
+	top_players: list[LeaderboardEntryItem] | None = Field(
+		None, description="Top 3 leaderboard entries (only present when event is Ended)"
+	)
 
 
 class JoinResponse(BaseModel):

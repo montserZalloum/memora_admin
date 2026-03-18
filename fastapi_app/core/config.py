@@ -79,6 +79,14 @@ class Settings(BaseSettings):
 	# Scaling: WebSocket Broadcast
 	ws_broadcast_concurrency: int = 0  # 0=sequential, >0=parallel with semaphore
 
+	# Waiting Room Reactions
+	reaction_flush_interval_ms: int = 300  # Burst aggregation window in milliseconds
+	reaction_sustained_rate: int = 3  # Max taps/sec per user (token refill rate)
+	reaction_burst_allowance: int = 6  # Max tokens in rate limit bucket
+	reaction_room_cap_per_sec: int = 250  # Room-level reaction cap per second
+	reaction_rl_ttl_sec: int = 5  # TTL for rate limit Redis keys
+	reaction_enabled: bool = True  # Global kill-switch for reactions
+
 	# Scaling: Rate Limiter Fail Behavior
 	rate_limit_fail_open: bool = True  # True=pass on Redis failure, False=503
 

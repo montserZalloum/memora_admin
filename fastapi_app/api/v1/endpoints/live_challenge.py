@@ -1,5 +1,7 @@
 """Live Challenge endpoints — join, submit, result, leaderboard, WebSocket."""
 
+import json
+
 import jwt
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
@@ -278,9 +280,19 @@ async def live_challenge_ws(
 		# Ensure countdown loop is running (idempotent — only starts once)
 		service.start_countdown_loop(event_id)
 
-		# Keep connection alive: await client messages (detect disconnect)
+		# Keep connection alive + handle client messages (reactions, disconnect)
 		while True:
-			await websocket.receive_text()
+			raw = await websocket.receive_text()
+			try:
+				msg = json.loads(raw)
+			except (json.JSONDecodeError, ValueError):
+				continue  # silently drop malformed JSON
+			msg_type = msg.get("type")
+			if msg_type == "waiting_room_reaction_tap":
+				logger.debug("lc_ws_msg_received", event_id=event_id, user_id=user_id, msg_type=msg_type)
+				await service.handle_reaction_tap(event_id, user_id, msg)
+			else:
+				logger.info("lc_ws_msg_received", event_id=event_id, user_id=user_id, msg_type=msg_type)
 	except WebSocketDisconnect:
 		pass
 	except Exception:

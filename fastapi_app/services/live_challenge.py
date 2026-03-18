@@ -12,6 +12,7 @@ import redis.asyncio as redis
 import structlog
 from fastapi import WebSocket
 
+from fastapi_app.core.config import get_settings
 from fastapi_app.core.redis_keys import (
 	LC_KEY_TTL,
 	lc_count_key,
@@ -25,6 +26,7 @@ from fastapi_app.core.redis_keys import (
 	lc_status_key,
 	lc_submitted_key,
 )
+from fastapi_app.services.waiting_room_reactions import ReactionEngine
 
 if TYPE_CHECKING:
 	from fastapi_app.services.frappe_client import FrappeClient
@@ -174,6 +176,12 @@ class LiveChallengeService:
 		self._ws_connections: dict[str, set[WebSocket]] = {}
 		# Per-event countdown loop tasks
 		self._countdown_tasks: dict[str, asyncio.Task] = {}
+		# Waiting room reaction engine
+		self._reaction_engine = ReactionEngine(
+			settings=get_settings(),
+			broadcast=self._broadcast_json,
+			redis=self.redis,
+		)
 
 	async def _get_join_script(self):
 		"""Get or register the Lua atomic join script."""
@@ -405,9 +413,14 @@ class LiveChallengeService:
 	# Lifecycle
 	# -------------------------------------------------------------------------
 
+	async def start_reaction_subscriber(self) -> None:
+		"""Start the cross-worker reaction burst pub/sub subscriber."""
+		await self._reaction_engine.start_subscriber()
+
 	async def shutdown(self):
 		"""Signal all background loops to stop and cancel countdown tasks."""
 		self._shutting_down = True
+		await self._reaction_engine.stop_subscriber()
 		for event_id in list(self._countdown_tasks):
 			self.stop_countdown_loop(event_id)
 
@@ -911,6 +924,16 @@ class LiveChallengeService:
 				player_id=player_id,
 			)
 
+		# Extract top 3 from leaderboard_json
+		top_players = None
+		lb_json = event.get("leaderboard_json")
+		if lb_json:
+			try:
+				lb = json.loads(lb_json) if isinstance(lb_json, str) else lb_json
+				top_players = lb[:3] if lb else None
+			except (json.JSONDecodeError, TypeError):
+				pass
+
 		return {
 			"event_id": event_id,
 			"event_name": event.get("event_name", ""),
@@ -937,6 +960,7 @@ class LiveChallengeService:
 			"eligible_plans": [ep.get("plan") for ep in event.get("eligible_plans", [])],
 			"has_joined": joined,
 			"has_submitted": submitted,
+			"top_players": top_players,
 		}
 
 	# -------------------------------------------------------------------------
@@ -1154,14 +1178,40 @@ class LiveChallengeService:
 		}
 
 	# -------------------------------------------------------------------------
+	# Waiting Room Reactions (T005)
+	# -------------------------------------------------------------------------
+
+	async def handle_reaction_tap(self, event_id: str, player_id: str, msg: dict) -> None:
+		"""Handle a reaction tap from a player in the waiting room.
+
+		Validates room status is 'waiting' before delegating to the engine.
+		Silently drops taps in any other state. Errors are isolated — no
+		reaction failure can propagate to the WS connection or countdown logic.
+		"""
+		try:
+			status = await self.redis.get(lc_status_key(event_id))
+			if status != "waiting":
+				logger.debug("reaction_tap_dropped_status", event_id=event_id, status=status)
+				return
+			reaction = msg.get("reaction", "")
+			logger.debug("reaction_tap_delegating", event_id=event_id, player_id=player_id, reaction=reaction)
+			accepted = await self._reaction_engine.accept_tap(event_id, player_id, reaction)
+			logger.debug("reaction_tap_result", event_id=event_id, accepted=accepted, reaction=reaction)
+		except Exception:
+			logger.warning("reaction_tap_handler_error", event_id=event_id, player_id=player_id, exc_info=True)
+
+	# -------------------------------------------------------------------------
 	# WebSocket Connection Tracking (T029)
 	# -------------------------------------------------------------------------
 
 	def register_connection(self, event_id: str, ws: WebSocket) -> None:
 		"""Register a WebSocket connection for an event."""
-		if event_id not in self._ws_connections:
+		is_first = event_id not in self._ws_connections
+		if is_first:
 			self._ws_connections[event_id] = set()
 		self._ws_connections[event_id].add(ws)
+		if is_first:
+			asyncio.create_task(self._reaction_engine.subscribe_event(event_id))
 
 	def remove_connection(self, event_id: str, ws: WebSocket) -> None:
 		"""Remove a WebSocket connection for an event."""
@@ -1170,6 +1220,7 @@ class LiveChallengeService:
 			conns.discard(ws)
 			if not conns:
 				del self._ws_connections[event_id]
+				asyncio.create_task(self._reaction_engine.unsubscribe_event(event_id))
 
 	def get_connected_count(self, event_id: str) -> int:
 		"""Return number of active WebSocket connections for an event."""
@@ -1265,6 +1316,7 @@ class LiveChallengeService:
 
 				# Event ended (by scheduled task or another worker)
 				if status == "ended":
+					self._reaction_engine.stop_room(event_id)
 					await self._reconcile_event(event_id)
 					await self._broadcast_event_ended(event_id)
 					return
@@ -1273,6 +1325,7 @@ class LiveChallengeService:
 				if not exam_started and now >= exam_start_ts:
 					# Authoritative start: set Redis status to active
 					await self.redis.set(lc_status_key(event_id), "active", ex=LC_KEY_TTL)
+					self._reaction_engine.stop_room(event_id)
 					await self._broadcast_exam_start(event_id, meta)
 					exam_started = True
 					logger.info("lc_exam_started_by_ws", event_id=event_id)
@@ -1280,6 +1333,7 @@ class LiveChallengeService:
 				# Check if exam has ended
 				if exam_started and now >= exam_end_ts:
 					await self.redis.set(lc_status_key(event_id), "ended", ex=LC_KEY_TTL)  # freeze joins/submits
+					self._reaction_engine.stop_room(event_id)
 					await self._reconcile_event(event_id)
 					await self._broadcast_event_ended(event_id)
 					logger.info("lc_exam_ended_by_ws", event_id=event_id)

@@ -1196,6 +1196,75 @@ def lc_results_key(event_id: str) -> str:
 	return f"memora:lc:{event_id}:results"
 
 
+REACTION_WIN_TTL = 3
+"""3 seconds. Applied to per-window reaction counter HASH keys.
+
+Survives one flush cycle so the flushing worker can read and delete.
+"""
+
+REACTION_ROOM_SEC_TTL = 2
+"""2 seconds. Applied to room-level per-second tap counter keys.
+
+Auto-cleans room cap counters after the second passes.
+"""
+
+
+def lc_reaction_rl_key(event_id: str, player_id: str) -> str:
+	"""Per-user reaction rate limit token bucket.
+
+	Type: HASH (tokens: float, last_ms: int)
+	Producers: ReactionEngine.check_rate_limit() (Redis Lua script)
+	Consumers: ReactionEngine.check_rate_limit() (Redis Lua script)
+	TTL: settings.reaction_rl_ttl_sec (default 5s — reset on each access via Lua EXPIRE)
+	"""
+	return f"memora:lc_reaction_rl:{event_id}:{player_id}"
+
+
+def lc_reaction_burst_channel(event_id: str) -> str:
+	"""Redis pub/sub channel for cross-worker reaction burst fan-out.
+
+	Type: PUBSUB channel
+	Producers: ReactionEngine._try_flush_window() (PUBLISH burst JSON)
+	Consumers: ReactionEngine._subscriber_loop() (all workers subscribe,
+	           each broadcasts to its own local WebSocket connections)
+	TTL: N/A (pub/sub channels have no TTL)
+	"""
+	return f"memora:lc_burst:{event_id}"
+
+
+def lc_reaction_win_key(event_id: str, window_id: int) -> str:
+	"""Per-event per-window reaction counter hash.
+
+	Type: HASH (heart/fire/clap: int, _degraded: "1"|absent)
+	Producers: _ACCEPT_TAP_LUA script (HINCRBY per reaction type)
+	Consumers: ReactionEngine._try_flush_window() (HGETALL + DELETE)
+	TTL: REACTION_WIN_TTL (3s)
+	"""
+	return f"memora:lc:reaction_win:{event_id}:{window_id}"
+
+
+def lc_reaction_flush_lock_key(event_id: str, window_id: int) -> str:
+	"""One-shot flush lock per event/window (SET NX PX).
+
+	Type: STRING (worker_id)
+	Producers: ReactionEngine._try_flush_window() (SET NX PX)
+	Consumers: ReactionEngine._try_flush_window() (lock holder flushes)
+	TTL: flush_interval_ms (via PX arg at SET time)
+	"""
+	return f"memora:lc:reaction_flush_lock:{event_id}:{window_id}"
+
+
+def lc_reaction_room_sec_key(event_id: str, second: int) -> str:
+	"""Room-level per-second tap counter for global cap.
+
+	Type: STRING (INCR counter)
+	Producers: _ACCEPT_TAP_LUA script (INCR)
+	Consumers: _ACCEPT_TAP_LUA script (cap check)
+	TTL: REACTION_ROOM_SEC_TTL (2s)
+	"""
+	return f"memora:lc:reaction_room_sec:{event_id}:{second}"
+
+
 # =============================================================================
 # Challenge Hub
 # =============================================================================
