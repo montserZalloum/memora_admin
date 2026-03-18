@@ -9,6 +9,7 @@ import hmac as hmac_module
 import structlog
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
+from redis.exceptions import RedisError
 
 from fastapi_app.api.deps import RedisClient, get_frappe_client
 from fastapi_app.core.config import Settings, get_settings
@@ -90,7 +91,7 @@ async def handle_monetized_payment(
 		if not is_new:
 			logger.info("duplicate_webhook", idempotency_key=payload.idempotency_key)
 			return WebhookResponse(status="already_processed")
-	except Exception:
+	except RedisError:
 		logger.error("idempotency_check_failed", idempotency_key=payload.idempotency_key)
 		raise HTTPException(
 			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

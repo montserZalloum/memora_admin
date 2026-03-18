@@ -185,6 +185,8 @@ def redeem_plan_premium_voucher(player: str, code: str) -> dict:
 		"UPDATE `tabMemora Access Voucher` SET total_redemptions = total_redemptions + 1 WHERE name = %s",
 		(voucher.name,),
 	)
+	if not frappe.db._cursor.rowcount:
+		frappe.throw(f"Voucher {voucher.name} was deleted during redemption.")
 
 	frappe.db.commit()
 
@@ -271,6 +273,8 @@ def redeem_event_access_voucher(player: str, event: str, code: str) -> dict:
 		"UPDATE `tabMemora Access Voucher` SET total_redemptions = total_redemptions + 1 WHERE name = %s",
 		(voucher.name,),
 	)
+	if not frappe.db._cursor.rowcount:
+		frappe.throw(f"Voucher {voucher.name} was deleted during redemption.")
 
 	frappe.db.commit()
 

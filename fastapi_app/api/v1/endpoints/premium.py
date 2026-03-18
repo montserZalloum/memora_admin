@@ -3,6 +3,7 @@
 import structlog
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
+from redis.exceptions import RedisError
 
 from fastapi_app.api.deps import CurrentUser, RedisClient, get_frappe_client
 from fastapi_app.core.redis_keys import voucher_redeem_lock_key
@@ -147,8 +148,12 @@ async def redeem_plan_premium_voucher(
 			)
 	except HTTPException:
 		raise
-	except Exception:
-		logger.warning("voucher_lock_failed", player=player_id)
+	except RedisError:
+		logger.error("voucher_lock_failed", player=player_id)
+		raise HTTPException(
+			status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+			detail="Service temporarily unavailable. Please retry.",
+		)
 
 	try:
 		result = await frappe_client._call_method(
