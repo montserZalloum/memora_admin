@@ -48,6 +48,15 @@ def verify_player_password(mobile: str, password: str) -> dict:
 	profile = frappe.get_doc("Memora Player Profile", player_name)
 	xp = _get_player_xp(player_name)
 
+	# Check active premium for player's current plan
+	has_premium = bool(
+		profile.plan
+		and frappe.db.exists(
+			"Memora Plan Premium",
+			{"player": player_name, "plan": profile.plan, "status": "active"},
+		)
+	)
+
 	return {
 		"player_id": profile.name,
 		"display_name": profile.display_name,
@@ -57,6 +66,7 @@ def verify_player_password(mobile: str, password: str) -> dict:
 		"gender": profile.gender,
 		"mobile": profile.mobile,
 		"xp": xp,
+		"has_premium": has_premium,
 	}
 
 
@@ -97,6 +107,10 @@ def register_player(
 	# Default avatar
 	if not avatar:
 		avatar = "pre"
+
+	# Normalize gender to match Select field options ("Male", "Female")
+	if gender:
+		gender = gender.capitalize()
 
 	# Create player doc -- DocType hooks handle password hashing + wallet DocType creation
 	doc = frappe.get_doc(

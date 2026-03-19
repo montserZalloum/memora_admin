@@ -20,12 +20,14 @@ def on_player_changed(doc, method):
         entity="player",
         queue="short",
         deduplicate=True,
+        job_id="dim_refresh_player",
     )
     frappe.enqueue(
         _REFRESH_FN,
         entity="player_history",
         queue="short",
         deduplicate=True,
+        job_id="dim_refresh_player_history",
     )
 
 
@@ -36,6 +38,7 @@ def on_plan_changed(doc, method):
         entity="plan",
         queue="short",
         deduplicate=True,
+        job_id="dim_refresh_plan",
     )
 
 
@@ -46,6 +49,7 @@ def on_season_changed(doc, method):
         entity="season",
         queue="short",
         deduplicate=True,
+        job_id="dim_refresh_season",
     )
 
 
@@ -56,6 +60,7 @@ def on_review_item_changed(doc, method):
         entity="review_item",
         queue="short",
         deduplicate=True,
+        job_id="dim_refresh_review_item",
     )
 
 
@@ -66,4 +71,5 @@ def on_lesson_changed(doc, method):
         entity="lesson",
         queue="short",
         deduplicate=True,
+        job_id="dim_refresh_lesson",
     )

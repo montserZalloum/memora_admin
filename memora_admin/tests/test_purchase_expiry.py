@@ -131,7 +131,7 @@ class TestCreateEventPurchaseExpiry(unittest.TestCase):
 		# Mock player doc
 		player_doc = MagicMock()
 		player_doc.get.side_effect = lambda k: {
-			"current_season": "S-001", "current_plan": "PLAN-A",
+			"current_season": "S-001", "plan": "PLAN-A",
 		}.get(k)
 
 		# Mock no existing access or pending purchase

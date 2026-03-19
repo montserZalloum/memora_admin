@@ -24,15 +24,6 @@ class EventPurchaseResponse(BaseModel):
 	currency: str
 
 
-class EventVoucherRedeemRequest(BaseModel):
-	code: str
-
-
-class EventVoucherRedeemResponse(BaseModel):
-	access_id: str
-	event_id: str
-
-
 class EventAccessStateResponse(BaseModel):
 	has_access: bool
 	access_type: str | None = None  # premium | purchase | voucher | admin | free | None
@@ -120,67 +111,6 @@ async def create_event_ticket_purchase(
 		raise HTTPException(
 			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
 			detail={"error": "INTERNAL_ERROR", "detail": "Failed to create event purchase."},
-		)
-	finally:
-		await event_svc.release_lock(player_id, event_id)
-
-
-@router.post("/{event_id}/voucher/redeem", response_model=EventVoucherRedeemResponse, status_code=status.HTTP_201_CREATED)
-async def redeem_event_voucher(
-	event_id: str,
-	body: EventVoucherRedeemRequest,
-	user: CurrentUser,
-	redis_client: RedisClient,
-):
-	"""Redeem a voucher code for live event access (T029).
-
-	Verifies the code via HMAC-SHA256, creates event access entitlement
-	and redemption record atomically.
-	"""
-	player_id = user.sub
-
-	frappe_client = await get_frappe_client()
-	event_svc = EventAccessService(redis_client, frappe_client)
-
-	# Acquire lock to prevent concurrent redemption
-	if not await event_svc.acquire_lock(player_id, event_id):
-		raise HTTPException(
-			status_code=status.HTTP_409_CONFLICT,
-			detail={"error": "CONCURRENT_REQUEST", "detail": "Another operation is in progress."},
-		)
-
-	try:
-		result = await frappe_client._call_method(
-			"memora_admin.memora_admin.services.premium.voucher.redeem_event_access_voucher",
-			player=player_id,
-			event=event_id,
-			code=body.code,
-		)
-
-		return EventVoucherRedeemResponse(
-			access_id=result.get("access_id", ""),
-			event_id=result.get("event_id", event_id),
-		)
-	except FrappeAPIError as e:
-		logger.error("event_voucher_redemption_failed", player=player_id, event=event_id, error=str(e))
-		error_map = {
-			"VOUCHER_INACTIVE": (status.HTTP_400_BAD_REQUEST, "Voucher is inactive."),
-			"VOUCHER_EXPIRED": (status.HTTP_400_BAD_REQUEST, "Voucher has expired."),
-			"VOUCHER_EXHAUSTED": (status.HTTP_400_BAD_REQUEST, "Voucher has reached maximum redemptions."),
-			"ALREADY_REDEEMED": (status.HTTP_409_CONFLICT, "You have already redeemed this voucher."),
-			"ALREADY_HAS_ACCESS": (status.HTTP_409_CONFLICT, "You already have access to this event."),
-		}
-		for error_key, (http_status, detail) in error_map.items():
-			if error_key in str(e.message):
-				raise HTTPException(status_code=http_status, detail={"error": error_key, "detail": detail})
-		if e.status_code == 417:
-			raise HTTPException(
-				status_code=status.HTTP_400_BAD_REQUEST,
-				detail={"error": "REDEMPTION_FAILED", "detail": e.message},
-			)
-		raise HTTPException(
-			status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-			detail={"error": "INTERNAL_ERROR", "detail": "Failed to redeem voucher."},
 		)
 	finally:
 		await event_svc.release_lock(player_id, event_id)

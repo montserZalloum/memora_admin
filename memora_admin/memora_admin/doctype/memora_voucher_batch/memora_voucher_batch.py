@@ -18,6 +18,8 @@ class MemoraVoucherBatch(Document):
 		self._validate_pin_length()
 		self._validate_batch_purpose()
 		self._validate_batch_purpose_immutable()
+		self._validate_grant_type_immutable()
+		self._validate_grant_type_fields()
 
 	def _validate_status_transition(self):
 		if not self.is_new() and self.has_value_changed("status"):
@@ -55,3 +57,41 @@ class MemoraVoucherBatch(Document):
 				"Batch purpose cannot be changed after Draft status.",
 				frappe.ValidationError,
 			)
+
+	def _validate_grant_type_immutable(self):
+		if self.is_new() or not self.has_value_changed("grant_type"):
+			return
+		old_doc = self.get_doc_before_save()
+		if old_doc and old_doc.status != "Draft":
+			frappe.throw(
+				"Grant type cannot be changed after Draft status.",
+				frappe.ValidationError,
+			)
+
+	def _validate_grant_type_fields(self):
+		grant_type = self.grant_type or "product_grant"
+		if grant_type == "product_grant":
+			if not self.batch_grants or len(self.batch_grants) == 0:
+				frappe.throw(
+					"Product Grants table must not be empty for product_grant batches.",
+					frappe.ValidationError,
+				)
+		elif grant_type == "live_event_access":
+			if not self.target_event:
+				frappe.throw(
+					"Target Event is required for live_event_access batches.",
+					frappe.ValidationError,
+				)
+			event_status = frappe.db.get_value(
+				"Memora Live Challenge Event", self.target_event, "status"
+			)
+			if not event_status:
+				frappe.throw(
+					f"Target Event {self.target_event} does not exist.",
+					frappe.ValidationError,
+				)
+			if event_status == "Ended":
+				frappe.throw(
+					"Target Event has already ended.",
+					frappe.ValidationError,
+				)

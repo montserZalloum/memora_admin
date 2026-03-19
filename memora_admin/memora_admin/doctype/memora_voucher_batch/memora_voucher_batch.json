@@ -9,11 +9,13 @@
  "field_order": [
   "batch_name",
   "batch_purpose",
+  "grant_type",
   "status",
   "column_break_1",
   "quantity",
   "pin_length",
   "face_value",
+  "target_event",
   "section_grants",
   "batch_grants",
   "section_generation",
@@ -46,6 +48,15 @@
    "in_standard_filter": 1,
    "label": "Batch Purpose",
    "options": "Sale\nScholarship\nGift\nPromotion",
+   "reqd": 1
+  },
+  {
+   "default": "product_grant",
+   "fieldname": "grant_type",
+   "fieldtype": "Select",
+   "in_standard_filter": 1,
+   "label": "Grant Type",
+   "options": "product_grant\nlive_event_access",
    "reqd": 1
   },
   {
@@ -85,6 +96,14 @@
    "reqd": 1
   },
   {
+   "depends_on": "eval:doc.grant_type=='live_event_access'",
+   "fieldname": "target_event",
+   "fieldtype": "Link",
+   "label": "Target Event",
+   "options": "Memora Live Challenge Event"
+  },
+  {
+   "depends_on": "eval:doc.grant_type=='product_grant'",
    "fieldname": "section_grants",
    "fieldtype": "Section Break",
    "label": "Product Grants"
@@ -94,7 +113,7 @@
    "fieldtype": "Table",
    "label": "Product Grants",
    "options": "Memora Voucher Batch Grant",
-   "reqd": 1
+   "reqd": 0
   },
   {
    "collapsible": 1,

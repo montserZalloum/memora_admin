@@ -13,6 +13,7 @@
   "column_break_1",
   "batch",
   "requested_grant",
+  "requested_event",
   "status",
   "section_details",
   "failure_reason",
@@ -68,12 +69,18 @@
    "options": "Memora Product Grant"
   },
   {
+   "fieldname": "requested_event",
+   "fieldtype": "Link",
+   "label": "Requested Event",
+   "options": "Memora Live Challenge Event"
+  },
+  {
    "fieldname": "status",
    "fieldtype": "Select",
    "in_list_view": 1,
    "in_standard_filter": 1,
    "label": "Status",
-   "options": "Success\nInvalid PIN\nAlready Redeemed\nExpired\nVoid\nBatch Inactive\nSeason Inactive\nAll Grants Owned\nGrant Not In Batch\nAlready Owned\nRate Limited\nNot Allocated\nError",
+   "options": "Success\nInvalid PIN\nAlready Redeemed\nExpired\nVoid\nBatch Inactive\nSeason Inactive\nAll Grants Owned\nMissing Grant ID\nGrant Not In Batch\nAlready Owned\nRate Limited\nNot Allocated\nAlready Has Access\nEvent Ended\nError",
    "reqd": 1
   },
   {

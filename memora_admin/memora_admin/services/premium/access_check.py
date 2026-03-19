@@ -33,7 +33,7 @@ def is_plan_premium_usable(player: str, plan: str) -> PremiumCheckResult:
 
 	Computed validity logic (data-model.md):
 	  usable = premium.status == 'active'
-	           AND premium.plan == player.current_plan
+	           AND premium.plan == player.plan
 	           AND NOW() <= season.end_date
 
 	Args:
@@ -55,7 +55,7 @@ def is_plan_premium_usable(player: str, plan: str) -> PremiumCheckResult:
 		return PremiumCheckResult(usable=False, reason="no_premium")
 
 	# Check plan matches player's current plan
-	current_plan = frappe.db.get_value("Memora Player Profile", player, "current_plan")
+	current_plan = frappe.db.get_value("Memora Player Profile", player, "plan")
 	if current_plan != plan:
 		season_end = _get_season_end(premium.season)
 		return PremiumCheckResult(

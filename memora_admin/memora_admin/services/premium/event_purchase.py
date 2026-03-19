@@ -80,7 +80,7 @@ def create_event_purchase(player: str, event: str) -> dict:
 	if not season:
 		frappe.throw("Player has no active season.", exc=frappe.ValidationError)
 
-	plan_snapshot = player_doc.get("current_plan") or ""
+	plan_snapshot = player_doc.get("plan") or ""
 
 	# Create purchase record
 	purchase = frappe.get_doc({

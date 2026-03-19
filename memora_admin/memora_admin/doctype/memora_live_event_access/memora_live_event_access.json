@@ -80,7 +80,7 @@
    "fieldname": "voucher_ref",
    "fieldtype": "Link",
    "label": "Voucher Ref",
-   "options": "Memora Access Voucher"
+   "options": "Memora Voucher Card"
   },
   {
    "fieldname": "column_break_source",

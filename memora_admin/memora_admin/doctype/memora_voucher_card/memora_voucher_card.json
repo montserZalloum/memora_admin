@@ -21,6 +21,7 @@
   "redeemed_at",
   "redeemed_grant",
   "subscription_transaction",
+  "event_access",
   "section_void",
   "void_reason",
   "section_recipient",
@@ -136,6 +137,13 @@
    "fieldtype": "Link",
    "label": "Subscription Transaction",
    "options": "Memora Subscription Transaction",
+   "read_only": 1
+  },
+  {
+   "fieldname": "event_access",
+   "fieldtype": "Link",
+   "label": "Event Access",
+   "options": "Memora Live Event Access",
    "read_only": 1
   },
   {

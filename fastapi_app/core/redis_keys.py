@@ -1637,14 +1637,3 @@ def monetized_webhook_idempotency_key(idempotency_key: str) -> str:
 	return f"memora:webhook:monetized:{idempotency_key}"
 
 
-def voucher_redeem_lock_key(player_id: str) -> str:
-	"""Per-player lock for voucher redemption operations.
-
-	Keyed on player only (not plan) because the voucher's target plan
-	is unknown until server-side resolution. Prevents concurrent
-	redemption attempts by the same player.
-
-	Type: STRING (SET NX EX pattern)
-	TTL: 10s (auto-expire safety net)
-	"""
-	return f"memora:lock:voucher_redeem:{player_id}"

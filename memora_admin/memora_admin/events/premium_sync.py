@@ -13,7 +13,7 @@ Cache structure (Redis HASH at memora:premium:{player}:{plan}):
   usable:      "1" | "0"
   reason:      "none" | "plan_mismatch" | "season_ended" | "revoked"
   season_end:  "2026-06-30"
-  source_type: "purchase" | "voucher" | "admin"
+  source_type: "purchase" | "admin"
   premium_id:  "PP-00001"
 """
 
@@ -73,13 +73,13 @@ def on_player_plan_changed(doc, method):
 	"""Invalidate premium cache when player changes plan (R-007, T035).
 
 	Called via doc_events on Memora Player Profile on_update.
-	Only fires when current_plan has actually changed.
+	Only fires when plan has actually changed.
 	"""
-	if not doc.has_value_changed("current_plan"):
+	if not doc.has_value_changed("plan"):
 		return
 
-	old_plan = doc.get_doc_before_save().get("current_plan") if doc.get_doc_before_save() else None
-	new_plan = doc.current_plan
+	old_plan = doc.get_doc_before_save().get("plan") if doc.get_doc_before_save() else None
+	new_plan = doc.plan
 
 	if old_plan:
 		invalidate_premium_cache(doc.name, old_plan)

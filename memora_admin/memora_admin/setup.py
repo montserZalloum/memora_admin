@@ -933,8 +933,6 @@ def _ensure_monetized_access_indexes():
 	Implements R-001 (partial unique index via virtual columns) for:
 	- Plan Premium: one active per (player, plan)
 	- Live Event Access: one active per (player, event)
-	- Access Voucher: unique code_hash
-	- Access Voucher Redemption: one success per (voucher, player)
 
 	Also adds lookup indexes for common query patterns.
 	All operations are idempotent.
@@ -975,32 +973,6 @@ def _ensure_monetized_access_indexes():
 			"tabMemora Live Event Access",
 			"idx_event_access_player",
 			"(player, status)",
-		)
-
-	# --- Memora Access Voucher ---
-	if "tabMemora Access Voucher" in tables:
-		_ensure_unique_index(
-			"tabMemora Access Voucher",
-			"idx_voucher_code_hash",
-			"(code_hash)",
-		)
-
-	# --- Memora Access Voucher Redemption ---
-	if "tabMemora Access Voucher Redemption" in tables:
-		_ensure_virtual_column(
-			"tabMemora Access Voucher Redemption",
-			"_unique_success",
-			"VARCHAR(140) AS (IF(status = 'success', voucher, NULL)) VIRTUAL",
-		)
-		_ensure_unique_index(
-			"tabMemora Access Voucher Redemption",
-			"idx_redemption_unique",
-			"(player, `_unique_success`)",
-		)
-		_ensure_index(
-			"tabMemora Access Voucher Redemption",
-			"idx_redemption_voucher",
-			"(voucher)",
 		)
 
 	# --- Memora Plan Premium Purchase ---

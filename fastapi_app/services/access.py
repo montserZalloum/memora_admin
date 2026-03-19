@@ -233,7 +233,7 @@ class AccessService:
 		return result
 
 	async def check_access_with_plan(self, player_id: str, content_key: str, plan_id: str | None) -> bool:
-		"""Check access via explicit grant OR plan membership.
+		"""Check access via explicit grant, plan membership, or plan premium.
 		Both checks use local caches — typically 0 Redis RTTs.
 		"""
 		grants = await self.get_player_grants(player_id)
@@ -246,4 +246,19 @@ class AccessService:
 			if subject_id in plan_subjects:
 				return True
 
+		# Premium bypass: active plan premium grants access to all plan content
+		if plan_id:
+			if await self._has_active_premium(player_id, plan_id):
+				return True
+
 		return False
+
+	async def _has_active_premium(self, player_id: str, plan_id: str) -> bool:
+		"""Check premium status from Redis cache (best-effort)."""
+		try:
+			from fastapi_app.core.redis_keys import premium_key
+
+			raw = await self.redis.hget(premium_key(player_id, plan_id), "usable")
+			return raw in (b"1", "1")
+		except Exception:
+			return False

@@ -159,9 +159,9 @@ async def start_session(
 
 	# Check content access (Gate 2) - free lessons bypass, paid lessons require grant or plan
 	# Per Phase 3: Free content (is_free at Unit/Topic level) bypasses Gate 2
-	# Non-free lessons require EXPLICIT GRANT or plan membership (subject is free in plan)
+	# Non-free lessons require EXPLICIT GRANT, plan membership, or active plan premium
 	if not hierarchy.is_lesson_free(request.lesson_id):
-		# Lesson is NOT free - check subject grant or plan membership, then track grant
+		# Lesson is NOT free - check subject grant, plan membership, or premium
 		has_access = await access_service.check_access_with_plan(
 			user.sub, f"SUB-{request.subject_id}", user.plan
 		)

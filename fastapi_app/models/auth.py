@@ -70,6 +70,7 @@ class LoginProfile(BaseModel):
 	display_name: str
 	avatar: str
 	xp: int
+	has_premium: bool
 
 
 class PlayerLoginResponse(BaseModel):

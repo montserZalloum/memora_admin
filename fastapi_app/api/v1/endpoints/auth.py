@@ -148,6 +148,7 @@ async def _complete_player_sign_in(
 			display_name=profile.get("display_name", ""),
 			avatar=profile.get("avatar") or "default_avatar",
 			xp=wallet.get("xp", 0),
+			has_premium=profile.get("has_premium", False),
 		),
 	)
 
