@@ -273,9 +273,6 @@ doc_events = {
 		"after_insert": "memora_admin.memora_admin.events.premium_sync.on_premium_created",
 		"on_update": "memora_admin.memora_admin.events.premium_sync.on_premium_updated",
 	},
-	"Memora Live Challenge Event": {
-		"before_save": "memora_admin.memora_admin.events.item_sync.ensure_paid_event_item",
-	},
 	"Memora Live Event Access": {
 		"after_insert": "memora_admin.memora_admin.events.event_access_sync.on_event_access_created",
 		"on_update": "memora_admin.memora_admin.events.event_access_sync.on_event_access_updated",

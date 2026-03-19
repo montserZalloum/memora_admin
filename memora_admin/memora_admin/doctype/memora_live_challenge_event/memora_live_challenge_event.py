@@ -109,7 +109,6 @@ class MemoraLiveChallengeEvent(Document):
 			"is_paid": str(int(self.is_paid)),
 			"price": str(self.price or 0),
 			"currency": self.currency or "JOD",
-			"erpnext_item_code": self.erpnext_item_code or "",
 			"participation_xp": str(self.participation_xp or 0),
 			"first_place_xp": str(self.first_place_xp or 0),
 			"second_place_xp": str(self.second_place_xp or 0),
@@ -177,14 +176,12 @@ class MemoraLiveChallengeEvent(Document):
 				frappe.throw(f"{label} must be non-negative (got {val}).")
 
 	def _validate_paid_event_fields(self):
-		"""When is_paid is checked, price and erpnext_item_code are required."""
+		"""When is_paid is checked, price is required."""
 		if not self.is_paid:
 			return
 		price = self.price or 0
 		if price <= 0:
 			frappe.throw("Price must be greater than 0 for paid events.")
-		if not self.erpnext_item_code:
-			frappe.throw("ERPNext Item Code is required for paid events.")
 
 	def _validate_status_transition(self):
 		"""Enforce VALID_TRANSITIONS state machine."""

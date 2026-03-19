@@ -28,26 +28,26 @@
 - Credit note is only created when the purchase has an associated `erpnext_invoice` — graceful no-op otherwise
 
 **Alternatives Considered**:
-- Reuse `create_credit_note()` from `voucher/invoice.py` directly: Rejected — that function uses `MEMORA-VOUCHER-CARD` item code; event purchase uses the event's `erpnext_item_code`. Cleaner to inline the pattern in refund.py with event-specific parameters.
+- Reuse `create_credit_note()` from `voucher/invoice.py` directly: Rejected — that function uses `MEMORA-VOUCHER-CARD` item code; event purchases use `LIVE-EVENT-ACCESS`. Cleaner to inline the pattern in refund.py.
 - Extract a generic `create_credit_note()` helper: Considered but over-engineering for two callers with different item codes. Can be refactored later if a third caller appears.
+- Read item_code from purchase field: **Revised** — credit note now reads item_code and description from the original invoice for backward compatibility (old per-event items + new shared item).
 - Separate credit note creation as a post-refund step: Rejected — FR-011 requires atomic all-or-nothing. Splitting creates risk of partial state.
 
-## R3: ERPNext Item Auto-Creation
+## R3: Shared ERPNext Item for Paid Events
 
-**Decision**: Register `before_save` doc event hook on Memora Live Challenge Event. When `is_paid=1` and `erpnext_item_code` is empty (or item doesn't exist), create an ERPNext Item with code `LIVE-EVENT-{event_name}` and set it on the event. When `is_paid=0`, do nothing (FR-014: never delete existing items).
+**Decision**: ~~Register `before_save` doc event hook to create per-event Items.~~ **Revised**: Use a single shared `LIVE-EVENT-ACCESS` item for all paid event invoices. Event-specific details (event name, ID, schedule) are captured in the invoice line item `description` field. The shared item is created idempotently at `after_migrate` and lazily before the first invoice.
 
-**Rationale**:
-- `before_save` runs after `doc.name` is assigned (Frappe lifecycle: `_set_name` -> `before_validate` -> `validate` -> `before_save` -> DB write), so `doc.name` is available for item code generation
-- Item code pattern `LIVE-EVENT-{doc.name}` is deterministic, making idempotency check trivial: `frappe.db.exists("Item", item_code)`
-- Item configuration follows `_ensure_voucher_service_item()` pattern in `setup.py`: Services group, Nos UOM, non-stock, sales item
-- Setting `doc.erpnext_item_code` in `before_save` means the value is included in the same DB write — no extra round-trip
-- Handles both new paid events (insert) and existing events where `is_paid` toggles 0 -> 1
+**Rationale (revised)**:
+- Per-event items created unnecessary proliferation in ERPNext (one Item per paid event)
+- Event-specific financial reporting is achievable via the invoice line description (event name + ID + schedule)
+- Follows `_ensure_voucher_service_item()` pattern in `setup.py`: Services group, Nos UOM, non-stock, sales item
+- `erpnext_item_code` field removed from both Event and Purchase DocTypes — simplifies the data model
+- `before_save` hook removed from `hooks.py` — no per-save overhead
+- Credit notes read item_code from original invoice for backward compatibility with existing per-event items
 
 **Alternatives Considered**:
-- `after_insert` only: Rejected — must also handle `is_paid` toggling from 0 -> 1 on existing events
-- `on_update` (after DB write): Rejected — would require a separate `db.set_value` to update `erpnext_item_code`, which triggers another `on_update` (recursion risk)
+- Per-event item code (e.g., `LIVE-EVENT-LC-00042`): **Originally implemented, then revised**. Created item proliferation without proportional value. Per-event reporting is possible via invoice description.
 - Admin manual item creation: Rejected — spec explicitly requires automatic creation (User Story 6)
-- Shared item code for all events (e.g., `MEMORA-LIVE-EVENT`): Rejected — each event needs a distinct item for invoice line-item clarity and per-event financial reporting
 - Include event price in item: Rejected — price is on the purchase, not the item. Item rate is set per invoice line.
 
 ## R4: Existing Infrastructure Verification

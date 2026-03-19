@@ -11,6 +11,11 @@ from datetime import timedelta
 
 import frappe
 
+from memora_admin.memora_admin.events.item_sync import (
+	LIVE_EVENT_ITEM_CODE,
+	ensure_shared_live_event_item,
+)
+
 
 def create_event_purchase(player: str, event: str) -> dict:
 	"""Create a pending Live Event Purchase for a player.
@@ -68,7 +73,6 @@ def create_event_purchase(player: str, event: str) -> dict:
 	# Get pricing from event
 	price = event_doc.get("price") or 0
 	currency = event_doc.get("currency") or "JOD"
-	item_code = event_doc.get("erpnext_item_code") or ""
 
 	# Get player's current season and plan
 	player_doc = frappe.get_doc("Memora Player Profile", player)
@@ -88,7 +92,6 @@ def create_event_purchase(player: str, event: str) -> dict:
 		"status": "pending",
 		"amount": price,
 		"currency": currency,
-		"erpnext_item_code": item_code,
 		"expires_at": frappe.utils.now_datetime() + timedelta(minutes=30),
 	})
 	purchase.insert(ignore_permissions=True)
@@ -170,13 +173,22 @@ def _create_purchase_invoice(purchase_doc) -> str:
 		return ""
 
 	try:
+		ensure_shared_live_event_item()
+
+		event_doc = frappe.get_doc("Memora Live Challenge Event", purchase_doc.event)
+		description = (
+			f"Live Event Ticket: {event_doc.event_name or event_doc.name} "
+			f"({event_doc.name}) \u2014 {event_doc.scheduled_start}"
+		)
+
 		invoice = frappe.get_doc({
 			"doctype": "Sales Invoice",
 			"customer": customer,
 			"items": [{
-				"item_code": purchase_doc.erpnext_item_code,
+				"item_code": LIVE_EVENT_ITEM_CODE,
 				"qty": 1,
 				"rate": purchase_doc.amount,
+				"description": description,
 			}],
 			"currency": purchase_doc.currency,
 		})

@@ -6,7 +6,7 @@ Three gaps from the 051 monetized-access foundation:
 
 1. **Purchase Expiry** (FR-001, FR-010): Pending purchases auto-cancel after 30 minutes via a scheduled job
 2. **Refund Credit Note** (FR-011): Refunds now atomically create an accounting Credit Note linked to the original invoice
-3. **Item Auto-Creation** (FR-013, FR-014): Paid events auto-create ERPNext Items on save; toggling `is_paid` off does NOT delete the item
+3. **Shared Item** (FR-013): All paid events use a single shared `LIVE-EVENT-ACCESS` ERPNext Item on invoices; event-specific details in the line description
 
 ## Prerequisites
 
@@ -20,11 +20,12 @@ Three gaps from the 051 monetized-access foundation:
 | File | Purpose | Change Type |
 |------|---------|-------------|
 | `tasks/purchase_expiry.py` | Scheduled job: cancel expired purchases | NEW |
-| `events/item_sync.py` | Doc event: auto-create Item for paid events | NEW |
+| `events/item_sync.py` | Shared `LIVE-EVENT-ACCESS` item constant + ensure function | NEW |
 | `services/premium/refund.py` | Refund flow: add credit note creation | MODIFY |
 | `services/premium/event_purchase.py` | Purchase creation: set `expires_at` | MODIFY |
 | `doctype/memora_live_event_purchase/` | DocType: add `expires_at` field | MODIFY |
-| `hooks.py` | Register new scheduler job + doc event | MODIFY |
+| `setup.py` | Ensure shared item at after_migrate | MODIFY |
+| `hooks.py` | Register scheduler job (removed before_save doc_event) | MODIFY |
 
 ## Testing
 
@@ -34,7 +35,7 @@ Three gaps from the 051 monetized-access foundation:
 # Purchase expiry query logic (mock datetime, verify correct filtering)
 bench run-tests --app memora_admin --module memora_admin.tests.test_purchase_expiry
 
-# Item code generation from event name
+# Shared item creation (LIVE-EVENT-ACCESS)
 bench run-tests --app memora_admin --module memora_admin.tests.test_item_sync
 
 # Credit note parameter construction
@@ -56,7 +57,7 @@ bench run-tests --app memora_admin --module memora_admin.tests.test_purchase_lif
 
 2. **Credit Note**: Create and pay for a paid event. Call `refund_event_purchase(purchase_id)`. Verify: purchase is `refunded`, access is `refunded`, Credit Note exists and links to original invoice.
 
-3. **Item Creation**: Create a new Live Challenge Event with `is_paid = 1`. Save. Verify ERPNext Item `LIVE-EVENT-{name}` exists. Save again. Verify no duplicate. Toggle `is_paid` to 0. Save. Verify Item still exists.
+3. **Shared Item**: Run `bench migrate`. Verify ERPNext Item `LIVE-EVENT-ACCESS` exists. Run migrate again. Verify no duplicate. Create a paid event, purchase, and confirm payment. Verify the Sales Invoice uses `LIVE-EVENT-ACCESS` with event-specific description.
 
 ## Scheduler Configuration
 

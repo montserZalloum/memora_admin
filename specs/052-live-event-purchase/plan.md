@@ -63,17 +63,18 @@ memora_admin/
 │   │   │   ├── memora_live_event_purchase.json  # MODIFY: add expires_at Datetime field
 │   │   │   └── memora_live_event_purchase.py    # MODIFY: set expires_at on insert
 │   │   └── memora_live_challenge_event/
-│   │       └── memora_live_challenge_event.py   # MODIFY: auto-create ERPNext Item (or via doc_events hook)
+│   │       └── memora_live_challenge_event.py   # MODIFY: remove erpnext_item_code from Redis meta
 │   ├── services/
 │   │   └── premium/
 │   │       ├── event_purchase.py                # MODIFY: set expires_at = now + 30 min during creation
 │   │       └── refund.py                        # MODIFY: add Credit Note creation to refund flow
 │   ├── events/
-│   │   └── item_sync.py                         # NEW: ensure_paid_event_item() doc event handler
+│   │   └── item_sync.py                         # NEW: LIVE_EVENT_ITEM_CODE constant + ensure_shared_live_event_item()
 │   └── tasks/
 │       └── purchase_expiry.py                   # NEW: cancel_expired_purchases() scheduled job
 ├── fastapi_app/                                  # NO CHANGES (051 code sufficient)
-└── hooks.py                                      # MODIFY: add scheduler_events entry + doc_events entry
+├── setup.py                                       # MODIFY: add _ensure_live_event_service_item() in after_migrate
+└── hooks.py                                      # MODIFY: add scheduler_events entry (removed before_save doc_event)
 ```
 
 **Structure Decision**: All new work is Frappe-side (server hooks, scheduled jobs, ORM operations). The FastAPI sidecar requires no changes — the join-time access check, access state query, and webhook handler already work correctly with the existing data model. Adding `expires_at` to the purchase DocType is transparent to FastAPI.
@@ -104,7 +105,7 @@ The following components were delivered in 051 and require **NO changes**:
 | G1 | Purchase `expires_at` field | FR-001 (30-min expiry) | P1 | Add Datetime field to DocType JSON, set `now + 30 min` in `create_event_purchase()` |
 | G2 | Auto-cancel expired purchases | FR-010 | P2 | New scheduled job `cancel_expired_purchases()` every 5 min, batch SQL UPDATE |
 | G3 | Refund Credit Note | FR-011 (atomic cascade) | P2 | Extend `refund_event_purchase()` to create Credit Note via Frappe ORM |
-| G4 | ERPNext Item auto-creation | FR-013, FR-014 | P3 | `before_save` doc event on Live Challenge Event, idempotent Item creation |
+| G4 | Shared ERPNext Item for invoices | FR-013 | P3 | Single `LIVE-EVENT-ACCESS` item, ensured at after_migrate and lazily before invoice creation |
 
 ## Complexity Tracking
 

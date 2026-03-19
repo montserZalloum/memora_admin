@@ -20,7 +20,7 @@
 **Purpose**: Add the `expires_at` field and register all new Frappe hooks before any implementation begins.
 
 - [x] T001 [P] Add `expires_at` Datetime field (read-only, after `status`) to `memora_admin/doctype/memora_live_event_purchase/memora_live_event_purchase.json` — field label "Expires At", no default, not required (only meaningful for pending status)
-- [x] T002 [P] Register new entries in `hooks.py`: (1) `scheduler_events` cron `"*/5 * * * *"` pointing to `memora_admin.memora_admin.tasks.purchase_expiry.cancel_expired_purchases`, and (2) `doc_events` for `"Memora Live Challenge Event"` with `before_save` pointing to `memora_admin.memora_admin.events.item_sync.ensure_paid_event_item`
+- [x] T002 [P] Register `scheduler_events` cron `"*/5 * * * *"` in `hooks.py` pointing to `memora_admin.memora_admin.tasks.purchase_expiry.cancel_expired_purchases`. (Note: the `before_save` doc_event for item_sync was later removed — shared item is ensured via after_migrate and lazily at invoice creation instead.)
 
 **Checkpoint**: DocType schema updated, hooks registered. Implementation can begin.
 
@@ -87,17 +87,17 @@
 
 ### Implementation for User Story 5
 
-- [x] T009 [US5] Extend `refund_event_purchase()` in `memora_admin/services/premium/refund.py`: after marking purchase refunded and access refunded (existing steps 1-2), add step 3 — if `purchase.erpnext_invoice` exists: create `frappe.new_doc("Sales Invoice")` with `customer=_get_player_customer(purchase.player)`, `is_return=1`, `return_against=purchase.erpnext_invoice`, `currency=purchase.currency`, one item row with `item_code=purchase.erpnext_item_code`, `qty=-1`, `rate=float(purchase.amount)`. Insert and submit. Add `credit_note_id` to return dict (None if no invoice). All within existing Frappe transaction for atomicity.
+- [x] T009 [US5] Extend `refund_event_purchase()` in `memora_admin/services/premium/refund.py`: after marking purchase refunded and access refunded (existing steps 1-2), add step 3 — if `purchase.erpnext_invoice` exists: fetch original invoice, read `item_code` and `description` from `original_inv.items[0]`, then create `frappe.new_doc("Sales Invoice")` with `customer=_get_player_customer(purchase.player)`, `is_return=1`, `return_against=purchase.erpnext_invoice`, `currency=purchase.currency`, one item row with the original invoice's `item_code` and `description`, `qty=-1`, `rate=float(purchase.amount)`. Insert and submit. This provides backward compatibility: old purchases keep per-event item codes, new ones use `LIVE-EVENT-ACCESS`. Add `credit_note_id` to return dict (None if no invoice). All within existing Frappe transaction for atomicity.
 
 **Checkpoint**: US5 complete. Refunds atomically create Credit Notes for accounting reconciliation.
 
 ---
 
-## Phase 5: User Story 6 — Automatic ERPNext Item Creation (Priority: P3)
+## Phase 5: User Story 6 — Shared ERPNext Item for Paid Events (Priority: P3)
 
-**Goal**: When a Live Challenge Event is saved with `is_paid=1`, automatically create an ERPNext Item (`LIVE-EVENT-{event.name}`) and set `erpnext_item_code` on the event. Idempotent — never creates duplicates. Never deletes items when `is_paid` toggles to 0 (FR-014).
+**Goal**: Replace per-event ERPNext Item creation with a single shared `LIVE-EVENT-ACCESS` item used by all paid event invoices. Event-specific details are captured in the invoice line description. The shared item is ensured at after_migrate and lazily before invoice creation. The `erpnext_item_code` field is removed from both the Event and Purchase DocTypes.
 
-**Independent Test**: Create a paid event, save, verify Item exists and `erpnext_item_code` is set. Save again, verify no duplicate. Toggle `is_paid=0`, save, verify Item still exists.
+**Independent Test**: Verify `LIVE-EVENT-ACCESS` is created when missing, no-op when it exists. Verify invoices use the shared item with event-specific descriptions. Verify credit notes read item from original invoice (backward compatible).
 
 **Contract**: `contracts/item-auto-creation.yaml`
 
@@ -105,13 +105,13 @@
 
 > **Write these tests FIRST, ensure they FAIL before implementation**
 
-- [x] T010 [US6] Write unit tests for `ensure_paid_event_item()` in `memora_admin/tests/test_item_sync.py`: (1) `test_creates_item_for_paid_event` — mock `frappe.db.exists` returning False, mock `frappe.new_doc`, call handler with `is_paid=1`, assert Item created with `item_code=LIVE-EVENT-{name}`, `item_group=Services`, `stock_uom=Nos`, `is_stock_item=0`, `is_sales_item=1`; (2) `test_idempotent_no_duplicate` — mock `frappe.db.exists` returning True, assert no `frappe.new_doc` called, assert `doc.erpnext_item_code` still set; (3) `test_noop_for_free_event` — call with `is_paid=0`, assert no Item creation and no changes to `erpnext_item_code`; (4) `test_item_code_format` — assert generated code matches `LIVE-EVENT-{doc.name}` pattern; (5) `test_item_name_uses_title` — assert `item_name = "Live Event Ticket: {doc.event_title}"`
+- [x] T010 [US6] Write unit tests for `ensure_shared_live_event_item()` in `memora_admin/tests/test_item_sync.py`: (1) `test_ensure_shared_item_creates_when_not_exists` — mock `frappe.db.exists` returning False, assert Item created with `item_code=LIVE-EVENT-ACCESS`, `item_group=Services`, `stock_uom=Nos`, `is_stock_item=0`, `is_sales_item=1`; (2) `test_ensure_shared_item_noop_when_exists` — mock `frappe.db.exists` returning True, assert no `frappe.get_doc` called; (3) `test_constant_value` — assert `LIVE_EVENT_ITEM_CODE == "LIVE-EVENT-ACCESS"`
 
 ### Implementation for User Story 6
 
-- [x] T011 [US6] Create `memora_admin/events/item_sync.py` with `ensure_paid_event_item(doc, method)`: if `doc.is_paid != 1`, return immediately (no-op per FR-014). Compute `item_code = f"LIVE-EVENT-{doc.name}"`. If `frappe.db.exists("Item", item_code)`, set `doc.erpnext_item_code = item_code` and return. Otherwise create `frappe.new_doc("Item")` with `item_code`, `item_name=f"Live Event Ticket: {doc.event_title or doc.name}"`, `item_group="Services"`, `stock_uom="Nos"`, `is_stock_item=0`, `is_sales_item=1`, `include_item_in_manufacturing=0`, `description=f"Ticket for live event {doc.name}"`. Insert with `ignore_permissions=True`. Set `doc.erpnext_item_code = item_code`.
+- [x] T011 [US6] Rewrite `memora_admin/events/item_sync.py`: define `LIVE_EVENT_ITEM_CODE = "LIVE-EVENT-ACCESS"` constant and `ensure_shared_live_event_item()` function (idempotent). Remove `ensure_paid_event_item()`. Add `_ensure_live_event_service_item()` to `setup.py` after_migrate. Update `event_purchase.py` to use shared item code + event-specific description in invoices. Update `refund.py` to read item_code from original invoice. Remove `erpnext_item_code` field from Event and Purchase DocType JSONs. Remove `before_save` hook from `hooks.py`. Remove field from Redis meta hash.
 
-**Checkpoint**: US6 complete. Paid events auto-create ERPNext Items; admins never need to create them manually.
+**Checkpoint**: US6 complete. All paid event invoices use shared `LIVE-EVENT-ACCESS` item. No per-event item proliferation.
 
 ---
 
@@ -119,7 +119,7 @@
 
 **Purpose**: End-to-end validation across all user stories
 
-- [x] T012 Write integration test for full purchase lifecycle in `memora_admin/tests/test_purchase_lifecycle.py`: (1) create paid event → verify Item auto-created (US6); (2) create purchase → verify `expires_at` set (US1); (3) confirm payment → verify invoice + access (051); (4) refund → verify credit note + access revoked (US5); (5) create expired purchase → run cancel job → verify cancelled (US4); (6) create new purchase after cancel → verify success
+- [x] T012 Write integration test for full purchase lifecycle in `memora_admin/tests/test_purchase_lifecycle.py`: (1) shared item creation → verify `LIVE-EVENT-ACCESS` created (US6); (2) create purchase → verify `expires_at` set, no `erpnext_item_code` in purchase dict (US1); (3) confirm payment → verify invoice uses shared item with event description + access (051); (4) refund → verify credit note reads item from original invoice + access revoked (US5); (5) create expired purchase → run cancel job → verify cancelled (US4); (6) create new purchase after cancel → verify success
 - [ ] T013 Run quickstart.md manual smoke tests for all three gaps (expiry, credit note, item creation) and verify expected behavior
 
 ---
@@ -132,7 +132,7 @@
 - **US1 (Phase 2)**: Depends on T001 (field exists in DocType JSON)
 - **US4 (Phase 3)**: Depends on T001 (field exists) + T002 (scheduler registered) + US1 (field gets populated)
 - **US5 (Phase 4)**: Depends on Phase 1 only — independent of US1/US4
-- **US6 (Phase 5)**: Depends on T002 (doc_events registered) — independent of US1/US4/US5
+- **US6 (Phase 5)**: Independent — shared item ensured via after_migrate and lazy creation (no doc_events needed)
 - **Polish (Phase 6)**: Depends on all user story phases complete
 
 ### User Story Independence
@@ -209,5 +209,6 @@ Task T005: "Set expires_at in create_event_purchase() in event_purchase.py"
 - US2 (Join-Time Access Check) and US3 (Access State Inquiry) require **zero tasks** — fully delivered in 051
 - All financial operations use Frappe ORM exclusively (Constitution Principle VI)
 - `expires_at` batch UPDATE uses raw SQL per contract — acceptable for non-financial status cleanup
-- Credit Note creation follows existing `voucher/invoice.py:create_credit_note()` pattern but with event-specific item codes
-- Item auto-creation follows existing `setup.py:_ensure_voucher_service_item()` pattern
+- Credit Note creation reads item_code from original invoice for backward compatibility (old per-event items + new shared item)
+- Shared item creation follows existing `setup.py:_ensure_voucher_service_item()` pattern
+- `erpnext_item_code` field removed from both Event and Purchase DocTypes — no longer needed with shared item approach

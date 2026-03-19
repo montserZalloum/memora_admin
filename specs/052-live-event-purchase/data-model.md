@@ -26,30 +26,35 @@ SET status = 'cancelled', modified = NOW(), modified_by = 'Administrator'
 WHERE status = 'pending' AND expires_at < NOW()
 ```
 
-### Memora Live Challenge Event (add hook behavior)
+### Memora Live Challenge Event (field removal)
 
-**No new fields.** New behavior on `before_save`:
+**Removed field**: `erpnext_item_code` — no longer needed. Per-event items are replaced by a shared `LIVE-EVENT-ACCESS` item.
 
-| Trigger | Condition | Action |
-|---------|-----------|--------|
-| `before_save` | `is_paid == 1` AND `erpnext_item_code` is empty | Create ERPNext Item, set `erpnext_item_code` |
-| `before_save` | `is_paid == 1` AND `erpnext_item_code` is set AND item exists | No-op (idempotent) |
-| `before_save` | `is_paid == 0` | No-op (FR-014: never delete items) |
+**Removed behavior**: The `before_save` doc_event hook (`ensure_paid_event_item`) has been removed from `hooks.py`. The `erpnext_item_code` field has been removed from both the DocType JSON and the Redis meta hash.
 
-### ERPNext Item (auto-created for paid events)
+### ERPNext Item (shared for all paid events)
+
+A single shared item `LIVE-EVENT-ACCESS` is used for all paid event invoices:
 
 | Field | Value | Notes |
 |-------|-------|-------|
-| `item_code` | `LIVE-EVENT-{event.name}` | e.g., `LIVE-EVENT-LC-00042` |
-| `item_name` | `Live Event Ticket: {event.event_title}` | Human-readable |
+| `item_code` | `LIVE-EVENT-ACCESS` | Shared across all events |
+| `item_name` | `Live Event Access` | Generic name |
 | `item_group` | `Services` | Service item, not stock |
 | `stock_uom` | `Nos` | Standard unit |
 | `is_stock_item` | `0` | No inventory tracking |
 | `is_sales_item` | `1` | Can appear on Sales Invoices |
 | `include_item_in_manufacturing` | `0` | Not manufactured |
-| `description` | `Ticket for live event {event.name}` | For invoice line items |
+| `description` | `Access ticket for Memora live challenge events` | Generic description |
 
-**Idempotency**: Before creating, check `frappe.db.exists("Item", item_code)`. If exists, just set `doc.erpnext_item_code = item_code` without creating.
+**Event-specific identification**: The invoice line item `description` field carries event details:
+`"Live Event Ticket: {event_name} ({event_id}) — {scheduled_start}"`
+
+**Idempotency**: `ensure_shared_live_event_item()` checks `frappe.db.exists("Item", "LIVE-EVENT-ACCESS")` before creating.
+
+**Creation paths**: (1) `setup.py:after_migrate` (eager), (2) `event_purchase.py:_create_purchase_invoice` (lazy guard).
+
+**Migration note**: Old per-event items (e.g., `LIVE-EVENT-LC-00042`) remain in ERPNext for existing invoice references. They are simply no longer created.
 
 ## State Machines (unchanged from 051)
 
@@ -97,10 +102,13 @@ refund_event_purchase(purchase_id):
   1. purchase.status → "refunded", set refunded_at
   2. access.status → "refunded", set revoked_at
   3. IF purchase.erpnext_invoice exists:
+       Fetch original invoice: frappe.get_doc("Sales Invoice", purchase.erpnext_invoice)
+       Read item_code and description from original_inv.items[0]
        Create Credit Note (Sales Invoice with is_return=1)
          - return_against = purchase.erpnext_invoice
          - customer = _get_player_customer(purchase.player)
-         - items[0].item_code = purchase.erpnext_item_code
+         - items[0].item_code = original_inv.items[0].item_code  (backward compatible)
+         - items[0].description = original_inv.items[0].description
          - items[0].qty = -1
          - items[0].rate = purchase.amount
        Submit Credit Note
@@ -115,29 +123,30 @@ refund_event_purchase(purchase_id):
 ```
 ┌─────────────────────────┐
 │ Memora Live Challenge   │
-│ Event                   │
-│─────────────────────────│
-│ is_paid                 │
-│ price                   │
-│ currency                │
-│ erpnext_item_code ──────│──→ ERPNext Item (auto-created on save)
-│ eligible_plans[]        │
-└─────────┬───────────────┘
-          │ 1:N
-          ▼
-┌─────────────────────────┐         ┌──────────────────────┐
+│ Event                   │       ┌──────────────────────────┐
+│─────────────────────────│       │ ERPNext Item             │
+│ is_paid                 │       │ LIVE-EVENT-ACCESS        │
+│ price                   │       │ (shared, created once)   │
+│ currency                │       └──────────┬───────────────┘
+│ eligible_plans[]        │                  │ used by all invoices
+└─────────┬───────────────┘                  │
+          │ 1:N                              │
+          ▼                                  │
+┌─────────────────────────┐         ┌────────┴─────────────┐
 │ Memora Live Event       │         │ ERPNext Sales Invoice │
 │ Purchase                │         │                      │
-│─────────────────────────│    1:1  │                      │
-│ status                  │────────→│ (created on payment) │
-│ expires_at ★ (NEW)      │         └──────────┬───────────┘
-│ amount / currency       │                    │
-│ erpnext_item_code       │                    │ return_against
-│ event_access_ref ───────│──┐                 ▼
-└─────────────────────────┘  │    ┌──────────────────────┐
+│─────────────────────────│    1:1  │ item: LIVE-EVENT-    │
+│ status                  │────────→│   ACCESS             │
+│ expires_at ★ (NEW)      │         │ desc: event-specific │
+│ amount / currency       │         └──────────┬───────────┘
+│ event_access_ref ───────│──┐                 │
+└─────────────────────────┘  │                 │ return_against
+                             │                 ▼
+                             │    ┌──────────────────────┐
                              │    │ Credit Note ★ (NEW)  │
                              │    │ (is_return=1)        │
-                             │    │ Created on refund    │
+                             │    │ reads item from      │
+                             │    │ original invoice     │
                              │    └──────────────────────┘
                              │
                              ▼

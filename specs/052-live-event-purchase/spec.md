@@ -90,20 +90,20 @@ When an admin approves a refund, the system atomically revokes the student's eve
 
 ---
 
-### User Story 6 - Automatic ERPNext Item Creation for Paid Events (Priority: P3)
+### User Story 6 - Shared ERPNext Item for Paid Events (Priority: P3)
 
-When an admin creates or saves a live event with `is_paid = 1`, the system automatically creates an ERPNext Item (e.g., `LIVE-EVENT-LC-00042`). The admin does not need to manually create items. Item creation is idempotent.
+All paid Live Challenge Events share a single ERPNext Item (`LIVE-EVENT-ACCESS`). The system ensures this shared item exists (idempotently) at after_migrate and lazily before the first invoice is created. Event-specific details are captured in the invoice line item description, not the item code.
 
 **Why this priority**: Administrative convenience and data consistency. Lower priority because it supports the purchase flow rather than being user-facing.
 
-**Independent Test**: Can be tested by creating a paid event and verifying the ERPNext Item exists, then saving again and verifying no duplicate is created.
+**Independent Test**: Can be tested by verifying the `LIVE-EVENT-ACCESS` item exists after migration or first invoice creation, and that saving paid events does NOT create per-event items.
 
 **Acceptance Scenarios**:
 
-1. **Given** an admin creates a new event with `is_paid = 1`, **When** the event is saved, **Then** an ERPNext Item is automatically created with a code like `LIVE-EVENT-{event_name}`.
-2. **Given** a paid event with an existing item, **When** the event is saved again, **Then** no duplicate item is created (idempotent).
-3. **Given** a free event, **When** `is_paid` changes from 0 to 1, **Then** an ERPNext Item is created.
-4. **Given** a paid event with an existing item, **When** `is_paid` changes from 1 to 0, **Then** the ERPNext Item is NOT deleted (may be referenced by existing invoices).
+1. **Given** the system runs `after_migrate`, **When** `LIVE-EVENT-ACCESS` does not exist, **Then** it is created as a non-stock service item.
+2. **Given** `LIVE-EVENT-ACCESS` already exists, **When** `after_migrate` or `ensure_shared_live_event_item()` runs again, **Then** no duplicate item is created (idempotent).
+3. **Given** a paid event purchase is confirmed, **When** the Sales Invoice is created, **Then** the invoice line item uses `LIVE-EVENT-ACCESS` as the item code with the event name and schedule in the description.
+4. **Given** old purchases with per-event item codes exist, **When** a refund creates a Credit Note, **Then** the Credit Note reads the item code from the original invoice (backward compatible).
 
 ---
 
@@ -132,24 +132,24 @@ When an admin creates or saves a live event with `is_paid = 1`, the system autom
 - **FR-010**: System MUST automatically cancel pending purchases whose expiry time has passed.
 - **FR-011**: System MUST process refunds atomically — marking purchase as refunded, revoking access, and creating a credit note all succeed or all roll back.
 - **FR-012**: System MUST protect all purchase and access mutations with a per-player-per-event lock to prevent race conditions (double purchase, duplicate callbacks, duplicate access).
-- **FR-013**: System MUST automatically create an ERPNext Item when a paid event is created or when `is_paid` changes from 0 to 1, and skip creation if the item already exists (idempotent).
-- **FR-014**: System MUST NOT delete an ERPNext Item when `is_paid` changes from 1 to 0.
+- **FR-013**: System MUST ensure a single shared ERPNext Item (`LIVE-EVENT-ACCESS`) exists for all paid event invoices, creating it idempotently at migration and lazily before invoice creation. Event-specific details MUST be captured in the invoice line description.
+- **FR-014**: ~~System MUST NOT delete an ERPNext Item when `is_paid` changes from 1 to 0.~~ (Superseded: no per-event items are created. Old per-event items remain for existing invoice references.)
 - **FR-015**: System MUST create the sales invoice after payment confirmation (not at purchase creation).
 - **FR-016**: System MUST provide an access state query that returns whether the student has access, whether payment is required, whether their plan is eligible, whether they can join, and the reason if they cannot.
 - **FR-017**: The lock mechanism MUST have a time-to-live to automatically release if the holding process crashes.
 
 ### Key Entities
 
-- **Live Challenge Event**: A scheduled live exam event. May be free or paid. Paid events have a price, currency, and a linked ERPNext Item. Has eligible plans and an exam time window.
+- **Live Challenge Event**: A scheduled live exam event. May be free or paid. Paid events have a price and currency. Has eligible plans and an exam time window.
 - **Live Event Purchase**: Represents a single purchase transaction for a paid event. Tracks payment state (pending, paid, failed, cancelled, refunded), links to the player, event, and (after payment) the sales invoice. Auto-expires after 30 minutes if not paid.
 - **Live Event Access**: The join entitlement. One active record per (player, event). Sole source of truth at join time for paid events. Linked to the originating purchase. Statuses: active, revoked, refunded.
-- **ERPNext Item**: Accounting item auto-created for each paid event. Referenced by invoices and purchases.
-- **Sales Invoice**: Accounting document created after payment confirmation. For accounting only — never read at join time.
-- **Credit Note**: Accounting document created during refund, linked to the original invoice.
+- **ERPNext Item**: A single shared service item (`LIVE-EVENT-ACCESS`) used on all event purchase invoices. Event-specific details are in the invoice line description.
+- **Sales Invoice**: Accounting document created after payment confirmation. For accounting only — never read at join time. Line item description includes event name and schedule for identification.
+- **Credit Note**: Accounting document created during refund, linked to the original invoice. Reads item_code and description from the original invoice for backward compatibility.
 
 ### Entity Relationships
 
-- An Event has at most one ERPNext Item (auto-created for paid events).
+- All paid events share a single ERPNext Item (`LIVE-EVENT-ACCESS`).
 - An Event has many Purchases and many Access records.
 - A Purchase belongs to one Player and one Event; references one Sales Invoice (after payment).
 - An Access record belongs to one Player and one Event; references one Purchase.
@@ -167,7 +167,7 @@ When an admin creates or saves a live event with `is_paid = 1`, the system autom
 - Access-based join gating for paid events
 - Plan eligibility check for all events
 - Access state query endpoint
-- Automatic ERPNext Item creation for paid events (idempotent)
+- Shared ERPNext Item (`LIVE-EVENT-ACCESS`) for paid event invoices (idempotent)
 - Concurrency protection via per-player-per-event locking with TTL
 - Payment gateway as a placeholder for future integration
 
@@ -191,7 +191,7 @@ When an admin creates or saves a live event with `is_paid = 1`, the system autom
 - **SC-003**: Concurrent duplicate payment callbacks for the same purchase never result in duplicate access records (0% duplication rate).
 - **SC-004**: 100% of expired pending purchases (past 30-minute window) are automatically cancelled within one scheduled job cycle.
 - **SC-005**: Refund operations are fully atomic — either all three artifacts (purchase status, access status, credit note) are updated, or none are.
-- **SC-006**: ERPNext Item creation for paid events is idempotent — saving a paid event multiple times never creates duplicate items.
+- **SC-006**: Shared ERPNext Item creation is idempotent — calling `ensure_shared_live_event_item()` multiple times never creates duplicate items.
 - **SC-007**: Students blocked from joining due to missing access or ineligible plan receive a clear, actionable reason in the response.
 
 ## Assumptions

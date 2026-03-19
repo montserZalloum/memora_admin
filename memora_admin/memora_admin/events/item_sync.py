@@ -1,40 +1,37 @@
 # Copyright (c) 2026, corex and contributors
 # For license information, please see license.txt
 
-"""Doc event hook: auto-create ERPNext Item for paid Live Challenge Events.
+"""Shared ERPNext service Item for Live Challenge Event purchases.
 
-Registered as before_save on Memora Live Challenge Event (hooks.py).
+All paid events share a single LIVE-EVENT-ACCESS Item on invoices.
+Event-specific details are captured in the invoice line description.
 Contract: specs/052-live-event-purchase/contracts/item-auto-creation.yaml
 """
 
 import frappe
 
+LIVE_EVENT_ITEM_CODE = "LIVE-EVENT-ACCESS"
 
-def ensure_paid_event_item(doc, method):
-	"""Create an ERPNext Item when a Live Challenge Event is saved with is_paid=1.
 
-	- Idempotent: frappe.db.exists() prevents duplicate creation (SC-006)
-	- FR-014: When is_paid=0, does nothing — never deletes existing items
-	- Sets doc.erpnext_item_code in before_save so it's included in the DB write
+def ensure_shared_live_event_item():
+	"""Create the LIVE-EVENT-ACCESS service Item if it doesn't exist.
+
+	Idempotent: frappe.db.exists() prevents duplicate creation.
+	Called lazily from invoice creation and eagerly from after_migrate.
 	"""
-	if not doc.is_paid:
+	if frappe.db.exists("Item", LIVE_EVENT_ITEM_CODE):
 		return
 
-	item_code = f"LIVE-EVENT-{doc.name}"
-
-	if frappe.db.exists("Item", item_code):
-		doc.erpnext_item_code = item_code
-		return
-
-	item = frappe.new_doc("Item")
-	item.item_code = item_code
-	item.item_name = f"Live Event Ticket: {doc.event_title or doc.name}"
-	item.item_group = "Services"
-	item.stock_uom = "Nos"
-	item.is_stock_item = 0
-	item.is_sales_item = 1
-	item.include_item_in_manufacturing = 0
-	item.description = f"Ticket for live event {doc.name}"
+	item = frappe.get_doc({
+		"doctype": "Item",
+		"item_code": LIVE_EVENT_ITEM_CODE,
+		"item_name": "Live Event Access",
+		"item_group": "Services",
+		"stock_uom": "Nos",
+		"is_stock_item": 0,
+		"is_sales_item": 1,
+		"include_item_in_manufacturing": 0,
+		"description": "Access ticket for Memora live challenge events",
+	})
 	item.insert(ignore_permissions=True)
-
-	doc.erpnext_item_code = item_code
+	frappe.db.commit()

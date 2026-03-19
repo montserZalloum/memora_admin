@@ -46,16 +46,22 @@ steps:
     action: Create Credit Note (conditional)
     condition: "purchase.erpnext_invoice is not None"
     mutation: |
+      Fetch original invoice: frappe.get_doc("Sales Invoice", purchase.erpnext_invoice)
+      Read item_code and description from original_inv.items[0].
       Create Sales Invoice via Frappe ORM:
         customer = _get_player_customer(purchase.player)
         is_return = 1
         return_against = purchase.erpnext_invoice
         currency = purchase.currency
         items:
-          - item_code: purchase.erpnext_item_code
+          - item_code: original_inv.items[0].item_code  # backward compatible
+            description: original_inv.items[0].description
             qty: -1
             rate: float(purchase.amount)
       Insert and submit the Credit Note.
+      Note: Reading from original invoice ensures backward compatibility —
+      old purchases with per-event item codes produce correct credit notes,
+      while new purchases use the shared LIVE-EVENT-ACCESS item.
 
   - step: 4
     action: Invalidate Redis cache

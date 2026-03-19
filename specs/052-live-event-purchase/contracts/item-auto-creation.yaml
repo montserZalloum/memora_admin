@@ -1,70 +1,62 @@
-# Internal Service Contract: ERPNext Item Auto-Creation
-# Type: Document event hook
-# Spec: FR-013 (auto-create), FR-014 (never delete)
+# Internal Service Contract: Shared LIVE-EVENT-ACCESS ERPNext Item
+# Type: Service item management
+# Spec: FR-013 (shared item creation)
 
 service:
-  name: ensure_paid_event_item
-  type: doc_event_hook
+  name: ensure_shared_live_event_item
+  type: service_function
   module: memora_admin.memora_admin.events.item_sync
-  trigger: before_save
-  doctype: Memora Live Challenge Event
+  called_by:
+    - memora_admin.memora_admin.setup.after_migrate (eagerly)
+    - memora_admin.memora_admin.services.premium.event_purchase._create_purchase_invoice (lazily)
 
 description: |
-  Automatically creates an ERPNext Item when a Live Challenge Event is saved
-  with is_paid = 1. The item code follows the pattern LIVE-EVENT-{event_name}.
-  Idempotent: saving a paid event multiple times never creates duplicate items.
-  When is_paid changes from 1 to 0, the item is NOT deleted (FR-014).
+  All paid Live Challenge Events share a single ERPNext Item (LIVE-EVENT-ACCESS)
+  on invoices and credit notes. Event-specific details are captured in the
+  invoice line item description field.
+  Idempotent: frappe.db.exists() prevents duplicate creation.
+
+constants:
+  LIVE_EVENT_ITEM_CODE: "LIVE-EVENT-ACCESS"
 
 signature:
-  function: ensure_paid_event_item
-  parameters:
-    - name: doc
-      type: Document
-      description: The Memora Live Challenge Event being saved
-    - name: method
-      type: str
-      description: The event method name (always "before_save")
+  function: ensure_shared_live_event_item
+  parameters: []
 
 logic:
-  - condition: "doc.is_paid == 0"
-    action: "Return immediately (no-op). Never delete existing items."
+  - check: "frappe.db.exists('Item', 'LIVE-EVENT-ACCESS')"
+  - if_exists: "Return immediately (no-op)"
+  - if_not_exists: |
+      Create Item via Frappe ORM:
+        item_code: LIVE-EVENT-ACCESS
+        item_name: "Live Event Access"
+        item_group: Services
+        stock_uom: Nos
+        is_stock_item: 0
+        is_sales_item: 1
+        include_item_in_manufacturing: 0
+        description: "Access ticket for Memora live challenge events"
+      Insert with ignore_permissions=True.
+      Commit.
 
-  - condition: "doc.is_paid == 1"
-    steps:
-      - compute: "item_code = f'LIVE-EVENT-{doc.name}'"
-      - check: "frappe.db.exists('Item', item_code)"
-      - if_exists: "Set doc.erpnext_item_code = item_code and return"
-      - if_not_exists: |
-          Create Item via Frappe ORM:
-            item_code: LIVE-EVENT-{doc.name}
-            item_name: "Live Event Ticket: {doc.event_title or doc.name}"
-            item_group: Services
-            stock_uom: Nos
-            is_stock_item: 0
-            is_sales_item: 1
-            include_item_in_manufacturing: 0
-            description: "Ticket for live event {doc.name}"
-          Insert with ignore_permissions=True.
-          Set doc.erpnext_item_code = item_code.
+invoice_description_format: |
+  When creating a Sales Invoice for an event purchase, the line item uses:
+    item_code: LIVE-EVENT-ACCESS
+    description: "Live Event Ticket: {event_name} ({event_id}) — {scheduled_start}"
+
+credit_note_behavior: |
+  Credit notes read item_code and description from the original Sales Invoice.
+  This provides backward compatibility: old purchases with per-event item codes
+  (LIVE-EVENT-{event_name}) continue to produce correct credit notes.
 
 postconditions:
-  - If is_paid=1: erpnext_item_code is set and the ERPNext Item exists
-  - If is_paid=0: No changes to erpnext_item_code or ERPNext Items
+  - After calling ensure_shared_live_event_item(): LIVE-EVENT-ACCESS Item exists in ERPNext
+  - No per-event Items are created
 
 idempotency: |
   The frappe.db.exists() check prevents duplicate item creation.
-  Multiple saves of the same paid event result in exactly one ERPNext Item.
-  This satisfies SC-006.
+  Multiple calls result in exactly one ERPNext Item.
 
-hooks_registration: |
-  # hooks.py doc_events addition:
-  "Memora Live Challenge Event": {
-      "before_save": "memora_admin.memora_admin.events.item_sync.ensure_paid_event_item",
-  }
-
-edge_cases:
-  - new_paid_event: "Item created on first save (after_insert triggers before_save too)"
-  - toggle_0_to_1: "Item created when is_paid changes from 0 to 1"
-  - toggle_1_to_0: "No-op. Item preserved for existing invoice references (FR-014)"
-  - save_again: "Exists check passes, item_code re-set, no new item created"
-  - item_manually_deleted: "Next save re-creates it (self-healing)"
+migration: |
+  Old per-event items (LIVE-EVENT-{event_name}) remain in ERPNext for existing
+  invoice references. No cleanup is needed — they are simply no longer created.

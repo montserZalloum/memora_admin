@@ -638,7 +638,29 @@ def _setup_voucher_schema():
 	print("[after_migrate] Voucher invoice Link fields ensured")
 
 	_ensure_voucher_service_item()
+	_ensure_live_event_service_item()
 	_ensure_voucher_card_indexes()
+
+
+def _ensure_live_event_service_item():
+	"""Create the LIVE-EVENT-ACCESS service Item if it doesn't exist.
+
+	This Item is used as the line item on Sales Invoices and Credit Notes
+	for live event ticket purchases. It's a non-stock, sales-only service item.
+	"""
+	try:
+		from memora_admin.memora_admin.events.item_sync import (
+			LIVE_EVENT_ITEM_CODE,
+			ensure_shared_live_event_item,
+		)
+
+		if frappe.db.exists("Item", LIVE_EVENT_ITEM_CODE):
+			return
+
+		ensure_shared_live_event_item()
+		print(f"[after_migrate] Created {LIVE_EVENT_ITEM_CODE} service item")
+	except Exception as e:
+		print(f"[after_migrate] Live event service item creation skipped: {e}")
 
 
 def _ensure_voucher_service_item():

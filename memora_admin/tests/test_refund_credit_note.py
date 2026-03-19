@@ -4,7 +4,7 @@
 """Unit tests for Credit Note creation during live event purchase refund (US5 / FR-011).
 
 Tests cover:
-- Credit Note created with correct fields when purchase has erpnext_invoice
+- Credit Note reads item_code and description from original invoice
 - Refund succeeds without Credit Note when no invoice exists
 - Exception propagates on Credit Note creation failure (Frappe rollback)
 - Return dict includes credit_note_id field
@@ -28,7 +28,6 @@ class TestRefundCreditNote(unittest.TestCase):
 		doc.event = "EV-001"
 		doc.event_access_ref = "LEA-00042"
 		doc.erpnext_invoice = "ACC-SINV-2026-00001"
-		doc.erpnext_item_code = "LIVE-EVENT-EV-001"
 		doc.amount = 5.0
 		doc.currency = "JOD"
 		for k, v in overrides.items():
@@ -41,23 +40,36 @@ class TestRefundCreditNote(unittest.TestCase):
 		doc.status = "active"
 		return doc
 
+	def _make_original_invoice(self, item_code="LIVE-EVENT-ACCESS", description="Live Event Ticket: Math Finals (EV-001)"):
+		"""Create a mock original Sales Invoice with one item row."""
+		inv = MagicMock()
+		inv.name = "ACC-SINV-2026-00001"
+		item_row = MagicMock()
+		item_row.item_code = item_code
+		item_row.description = description
+		inv.items = [item_row]
+		return inv
+
 	# ── T008(1): test_credit_note_created_on_refund ──────────────────────
 
 	@patch("memora_admin.memora_admin.services.premium.refund.frappe")
 	def test_credit_note_created_on_refund(self, mock_frappe):
-		"""Refunding a purchase with erpnext_invoice creates a Credit Note."""
+		"""Refunding a purchase with erpnext_invoice creates a Credit Note
+		using item_code and description from the original invoice."""
 		mock_frappe.ValidationError = frappe.ValidationError
 		mock_frappe.utils.now_datetime.return_value = "2026-03-18 10:00:00"
 		mock_frappe.session.user = "Administrator"
 
 		purchase = self._make_purchase_doc()
 		access = self._make_access_doc()
+		original_inv = self._make_original_invoice()
 		credit_note = MagicMock()
 		credit_note.name = "ACC-SINV-2026-00099"
 
 		doc_lookup = {
 			("Memora Live Event Purchase", "LEP-00042"): purchase,
 			("Memora Live Event Access", "LEA-00042"): access,
+			("Sales Invoice", "ACC-SINV-2026-00001"): original_inv,
 		}
 		mock_frappe.get_doc.side_effect = lambda *a, **kw: doc_lookup.get(a, MagicMock())
 		mock_frappe.db.exists.return_value = True
@@ -81,12 +93,13 @@ class TestRefundCreditNote(unittest.TestCase):
 		self.assertEqual(credit_note.return_against, "ACC-SINV-2026-00001")
 		self.assertEqual(credit_note.currency, "JOD")
 
-		# Verify item row appended with qty=-1 and correct rate
+		# Verify item row appended with item_code from original invoice
 		credit_note.append.assert_called_once()
 		append_args = credit_note.append.call_args
 		self.assertEqual(append_args[0][0], "items")
 		item_row = append_args[0][1]
-		self.assertEqual(item_row["item_code"], "LIVE-EVENT-EV-001")
+		self.assertEqual(item_row["item_code"], "LIVE-EVENT-ACCESS")
+		self.assertEqual(item_row["description"], "Live Event Ticket: Math Finals (EV-001)")
 		self.assertEqual(item_row["qty"], -1)
 		self.assertEqual(item_row["rate"], 5.0)
 
@@ -96,6 +109,44 @@ class TestRefundCreditNote(unittest.TestCase):
 
 		# Return includes credit_note_id
 		self.assertEqual(result["credit_note_id"], "ACC-SINV-2026-00099")
+
+	# ── T008(1b): test_credit_note_backward_compat_old_item ──────────────
+
+	@patch("memora_admin.memora_admin.services.premium.refund.frappe")
+	def test_credit_note_backward_compat_old_item(self, mock_frappe):
+		"""Old purchases with per-event item codes: credit note reads item from original invoice."""
+		mock_frappe.ValidationError = frappe.ValidationError
+		mock_frappe.utils.now_datetime.return_value = "2026-03-18 10:00:00"
+		mock_frappe.session.user = "Administrator"
+
+		purchase = self._make_purchase_doc()
+		access = self._make_access_doc()
+		# Old invoice with per-event item code
+		original_inv = self._make_original_invoice(
+			item_code="LIVE-EVENT-EV-001",
+			description="Ticket for live event EV-001",
+		)
+		credit_note = MagicMock()
+		credit_note.name = "ACC-SINV-2026-00100"
+
+		doc_lookup = {
+			("Memora Live Event Purchase", "LEP-00042"): purchase,
+			("Memora Live Event Access", "LEA-00042"): access,
+			("Sales Invoice", "ACC-SINV-2026-00001"): original_inv,
+		}
+		mock_frappe.get_doc.side_effect = lambda *a, **kw: doc_lookup.get(a, MagicMock())
+		mock_frappe.db.exists.return_value = True
+		mock_frappe.db.get_value.return_value = "CUST-001"
+		mock_frappe.new_doc.return_value = credit_note
+
+		from memora_admin.memora_admin.services.premium.refund import refund_event_purchase
+
+		result = refund_event_purchase("LEP-00042")
+
+		# Uses item_code from original invoice, not a constant
+		item_row = credit_note.append.call_args[0][1]
+		self.assertEqual(item_row["item_code"], "LIVE-EVENT-EV-001")
+		self.assertEqual(item_row["description"], "Ticket for live event EV-001")
 
 	# ── T008(2): test_no_credit_note_without_invoice ─────────────────────
 
@@ -138,10 +189,12 @@ class TestRefundCreditNote(unittest.TestCase):
 
 		purchase = self._make_purchase_doc()
 		access = self._make_access_doc()
+		original_inv = self._make_original_invoice()
 
 		doc_lookup = {
 			("Memora Live Event Purchase", "LEP-00042"): purchase,
 			("Memora Live Event Access", "LEA-00042"): access,
+			("Sales Invoice", "ACC-SINV-2026-00001"): original_inv,
 		}
 		mock_frappe.get_doc.side_effect = lambda *a, **kw: doc_lookup.get(a, MagicMock())
 		mock_frappe.db.exists.return_value = True
@@ -170,12 +223,14 @@ class TestRefundCreditNote(unittest.TestCase):
 
 		purchase = self._make_purchase_doc()
 		access = self._make_access_doc()
+		original_inv = self._make_original_invoice()
 		credit_note = MagicMock()
 		credit_note.name = "ACC-SINV-2026-00099"
 
 		doc_lookup = {
 			("Memora Live Event Purchase", "LEP-00042"): purchase,
 			("Memora Live Event Access", "LEA-00042"): access,
+			("Sales Invoice", "ACC-SINV-2026-00001"): original_inv,
 		}
 		mock_frappe.get_doc.side_effect = lambda *a, **kw: doc_lookup.get(a, MagicMock())
 		mock_frappe.db.exists.return_value = True

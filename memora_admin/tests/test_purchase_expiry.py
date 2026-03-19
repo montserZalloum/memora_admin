@@ -114,7 +114,8 @@ class TestCreateEventPurchaseExpiry(unittest.TestCase):
 	"""Tests for expires_at being set by create_event_purchase() service."""
 
 	@patch("memora_admin.memora_admin.services.premium.event_purchase.frappe")
-	def test_create_event_purchase_sets_expires_at(self, mock_frappe):
+	@patch("memora_admin.memora_admin.events.item_sync.frappe")
+	def test_create_event_purchase_sets_expires_at(self, _mock_item_frappe, mock_frappe):
 		"""create_event_purchase() explicitly sets expires_at = now + 30 min on the doc."""
 		fake_now = datetime(2026, 3, 18, 10, 0, 0)
 		mock_frappe.utils.now_datetime.return_value = fake_now
@@ -124,7 +125,7 @@ class TestCreateEventPurchaseExpiry(unittest.TestCase):
 		event_doc = MagicMock()
 		event_doc.get.side_effect = lambda k: {
 			"is_paid": 1, "status": "Scheduled", "price": 5.0,
-			"currency": "JOD", "erpnext_item_code": "LIVE-EVENT-LC-001",
+			"currency": "JOD",
 		}.get(k)
 
 		# Mock player doc
@@ -224,7 +225,6 @@ class TestCancelExpiredPurchases(unittest.TestCase):
 	def test_idempotent(self, mock_frappe):
 		"""Running the job twice causes no errors; second run finds zero matches."""
 		rowcounts = iter([2, 0])
-		original_sql = mock_frappe.db.sql.side_effect
 
 		def sql_side_effect(*args, **kwargs):
 			mock_frappe.db._cursor.rowcount = next(rowcounts)

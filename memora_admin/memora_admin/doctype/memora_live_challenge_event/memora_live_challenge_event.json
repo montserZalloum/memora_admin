@@ -28,7 +28,6 @@
   "is_paid",
   "price",
   "currency",
-  "erpnext_item_code",
   "show_correct_answers",
   "column_break_settings",
   "show_student_rank",
@@ -176,13 +175,6 @@
    "fieldtype": "Link",
    "label": "Currency",
    "options": "Currency"
-  },
-  {
-   "depends_on": "eval:doc.is_paid",
-   "fieldname": "erpnext_item_code",
-   "fieldtype": "Link",
-   "label": "ERPNext Item Code",
-   "options": "Item"
   },
   {
    "default": "0",

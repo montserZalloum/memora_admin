@@ -143,6 +143,10 @@ def refund_event_purchase(purchase_id: str) -> dict:
 def _create_event_credit_note(purchase) -> str | None:
 	"""Create a Credit Note (return Sales Invoice) for a refunded event purchase.
 
+	Reads item_code and description from the original invoice for backward
+	compatibility — old purchases keep per-event item codes, new ones use
+	LIVE-EVENT-ACCESS.
+
 	Returns the Credit Note name, or None if no customer mapping exists.
 	Raises on insert/submit failure — caller's transaction will roll back.
 	"""
@@ -155,13 +159,18 @@ def _create_event_credit_note(purchase) -> str | None:
 		)
 		return None
 
+	original_inv = frappe.get_doc("Sales Invoice", purchase.erpnext_invoice)
+	item_code = original_inv.items[0].item_code
+	description = original_inv.items[0].description or ""
+
 	cn = frappe.new_doc("Sales Invoice")
 	cn.customer = customer
 	cn.is_return = 1
 	cn.return_against = purchase.erpnext_invoice
 	cn.currency = purchase.currency
 	cn.append("items", {
-		"item_code": purchase.erpnext_item_code,
+		"item_code": item_code,
+		"description": description,
 		"qty": -1,
 		"rate": float(purchase.amount),
 	})

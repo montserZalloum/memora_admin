@@ -4,7 +4,7 @@
 """Integration test for the full Live Event Purchase lifecycle (T012).
 
 Exercises the cross-cutting flow across all 052 user stories:
-  US6: Event save → Item auto-created
+  US6: Shared item creation (LIVE-EVENT-ACCESS)
   US1: Purchase creation → expires_at set
   051: Payment confirmation → invoice + access
   US5: Refund → Credit Note + access revoked
@@ -20,34 +20,28 @@ from unittest.mock import MagicMock, patch
 class TestPurchaseLifecycle(unittest.TestCase):
 	"""End-to-end lifecycle test using mocks (no Frappe site required)."""
 
-	# ── (1) Create paid event → verify Item auto-created (US6) ────────
+	# ── (1) Shared item creation (US6) ───────────────────────────────
 
 	@patch("memora_admin.memora_admin.events.item_sync.frappe")
-	def test_step1_paid_event_creates_item(self, mock_frappe):
-		"""Saving a paid event auto-creates an ERPNext Item."""
+	def test_step1_shared_item_created(self, mock_frappe):
+		"""ensure_shared_live_event_item creates LIVE-EVENT-ACCESS when missing."""
 		mock_frappe.db.exists.return_value = False
 		item_mock = MagicMock()
-		mock_frappe.new_doc.return_value = item_mock
+		mock_frappe.get_doc.return_value = item_mock
 
-		doc = MagicMock()
-		doc.name = "LC-LIFECYCLE-001"
-		doc.is_paid = 1
-		doc.event_title = "Lifecycle Test Event"
-		doc.erpnext_item_code = None
+		from memora_admin.memora_admin.events.item_sync import ensure_shared_live_event_item
 
-		from memora_admin.memora_admin.events.item_sync import ensure_paid_event_item
+		ensure_shared_live_event_item()
 
-		ensure_paid_event_item(doc, "before_save")
-
-		mock_frappe.new_doc.assert_called_once_with("Item")
-		self.assertEqual(item_mock.item_code, "LIVE-EVENT-LC-LIFECYCLE-001")
+		doc_dict = mock_frappe.get_doc.call_args[0][0]
+		self.assertEqual(doc_dict["item_code"], "LIVE-EVENT-ACCESS")
 		item_mock.insert.assert_called_once_with(ignore_permissions=True)
-		self.assertEqual(doc.erpnext_item_code, "LIVE-EVENT-LC-LIFECYCLE-001")
 
 	# ── (2) Create purchase → verify expires_at set (US1) ─────────────
 
 	@patch("memora_admin.memora_admin.services.premium.event_purchase.frappe")
-	def test_step2_purchase_has_expires_at(self, mock_frappe):
+	@patch("memora_admin.memora_admin.events.item_sync.frappe")
+	def test_step2_purchase_has_expires_at(self, _mock_item_frappe, mock_frappe):
 		"""Creating a purchase sets expires_at = now + 30 min."""
 		fake_now = datetime(2026, 3, 18, 10, 0, 0)
 		mock_frappe.utils.now_datetime.return_value = fake_now
@@ -57,7 +51,7 @@ class TestPurchaseLifecycle(unittest.TestCase):
 		event_doc = MagicMock()
 		event_doc.get.side_effect = lambda k: {
 			"is_paid": 1, "status": "Scheduled", "price": 5.0,
-			"currency": "JOD", "erpnext_item_code": "LIVE-EVENT-LC-LIFECYCLE-001",
+			"currency": "JOD",
 		}.get(k)
 
 		# Mock player doc
@@ -96,12 +90,15 @@ class TestPurchaseLifecycle(unittest.TestCase):
 			purchase_dicts[0]["expires_at"],
 			fake_now + timedelta(minutes=30),
 		)
+		# No erpnext_item_code in purchase dict
+		self.assertNotIn("erpnext_item_code", purchase_dicts[0])
 
 	# ── (3) Confirm payment → verify invoice + access (051) ──────────
 
+	@patch("memora_admin.memora_admin.services.premium.event_purchase.ensure_shared_live_event_item")
 	@patch("memora_admin.memora_admin.services.premium.event_purchase.frappe")
-	def test_step3_payment_creates_access_and_invoice(self, mock_frappe):
-		"""Confirming payment creates access and invoice."""
+	def test_step3_payment_creates_access_and_invoice(self, mock_frappe, mock_ensure):
+		"""Confirming payment creates access and invoice with shared item."""
 		mock_frappe.ValidationError = Exception
 		mock_frappe.utils.now_datetime.return_value = datetime(2026, 3, 18, 10, 5, 0)
 
@@ -112,13 +109,17 @@ class TestPurchaseLifecycle(unittest.TestCase):
 		purchase.event = "LC-LIFECYCLE-001"
 		purchase.amount = 5.0
 		purchase.currency = "JOD"
-		purchase.erpnext_item_code = "LIVE-EVENT-LC-LIFECYCLE-001"
 
 		access_mock = MagicMock()
 		access_mock.name = "LEA-LC-00001"
 
 		invoice_mock = MagicMock()
 		invoice_mock.name = "ACC-SINV-2026-00001"
+
+		event_doc = MagicMock()
+		event_doc.event_name = "Lifecycle Test Event"
+		event_doc.name = "LC-LIFECYCLE-001"
+		event_doc.scheduled_start = "2026-03-20 14:00:00"
 
 		def mock_get_doc(*args, **kwargs):
 			if args and isinstance(args[0], dict):
@@ -127,8 +128,11 @@ class TestPurchaseLifecycle(unittest.TestCase):
 					return access_mock
 				if doctype == "Sales Invoice":
 					return invoice_mock
-			if len(args) == 2 and args[0] == "Memora Live Event Purchase":
-				return purchase
+			if len(args) == 2:
+				if args[0] == "Memora Live Event Purchase":
+					return purchase
+				if args[0] == "Memora Live Challenge Event":
+					return event_doc
 			return MagicMock()
 
 		mock_frappe.get_doc.side_effect = mock_get_doc
@@ -143,6 +147,15 @@ class TestPurchaseLifecycle(unittest.TestCase):
 		self.assertEqual(purchase.status, "paid")
 		self.assertEqual(result["access_id"], "LEA-LC-00001")
 		access_mock.insert.assert_called_once_with(ignore_permissions=True)
+
+		# Invoice uses shared item code
+		invoice_dict = None
+		for call in mock_frappe.get_doc.call_args_list:
+			if call[0] and isinstance(call[0][0], dict) and call[0][0].get("doctype") == "Sales Invoice":
+				invoice_dict = call[0][0]
+		self.assertIsNotNone(invoice_dict)
+		self.assertEqual(invoice_dict["items"][0]["item_code"], "LIVE-EVENT-ACCESS")
+		self.assertIn("Lifecycle Test Event", invoice_dict["items"][0]["description"])
 
 	# ── (4) Refund → verify Credit Note + access revoked (US5) ───────
 
@@ -161,7 +174,6 @@ class TestPurchaseLifecycle(unittest.TestCase):
 		purchase.event = "LC-LIFECYCLE-001"
 		purchase.event_access_ref = "LEA-LC-00001"
 		purchase.erpnext_invoice = "ACC-SINV-2026-00001"
-		purchase.erpnext_item_code = "LIVE-EVENT-LC-LIFECYCLE-001"
 		purchase.amount = 5.0
 		purchase.currency = "JOD"
 
@@ -171,9 +183,16 @@ class TestPurchaseLifecycle(unittest.TestCase):
 		credit_note = MagicMock()
 		credit_note.name = "ACC-SINV-2026-00099"
 
+		original_inv = MagicMock()
+		item_row = MagicMock()
+		item_row.item_code = "LIVE-EVENT-ACCESS"
+		item_row.description = "Live Event Ticket: Lifecycle Test Event (LC-LIFECYCLE-001)"
+		original_inv.items = [item_row]
+
 		doc_lookup = {
 			("Memora Live Event Purchase", "LEP-LC-00001"): purchase,
 			("Memora Live Event Access", "LEA-LC-00001"): access,
+			("Sales Invoice", "ACC-SINV-2026-00001"): original_inv,
 		}
 		mock_frappe.get_doc.side_effect = lambda *a, **kw: doc_lookup.get(a, MagicMock())
 		mock_frappe.db.exists.return_value = True
@@ -194,6 +213,9 @@ class TestPurchaseLifecycle(unittest.TestCase):
 		self.assertEqual(credit_note.return_against, "ACC-SINV-2026-00001")
 		credit_note.insert.assert_called_once_with(ignore_permissions=True)
 		credit_note.submit.assert_called_once()
+		# Credit note uses item from original invoice
+		item_row_arg = credit_note.append.call_args[0][1]
+		self.assertEqual(item_row_arg["item_code"], "LIVE-EVENT-ACCESS")
 		# Return has credit_note_id
 		self.assertEqual(result["credit_note_id"], "ACC-SINV-2026-00099")
 
@@ -217,7 +239,8 @@ class TestPurchaseLifecycle(unittest.TestCase):
 	# ── (6) New purchase after cancel → success ──────────────────────
 
 	@patch("memora_admin.memora_admin.services.premium.event_purchase.frappe")
-	def test_step6_repurchase_after_cancel_succeeds(self, mock_frappe):
+	@patch("memora_admin.memora_admin.events.item_sync.frappe")
+	def test_step6_repurchase_after_cancel_succeeds(self, _mock_item_frappe, mock_frappe):
 		"""After cancellation, player can create a new purchase for the same event."""
 		fake_now = datetime(2026, 3, 18, 11, 0, 0)
 		mock_frappe.utils.now_datetime.return_value = fake_now
@@ -226,7 +249,7 @@ class TestPurchaseLifecycle(unittest.TestCase):
 		event_doc = MagicMock()
 		event_doc.get.side_effect = lambda k: {
 			"is_paid": 1, "status": "Scheduled", "price": 5.0,
-			"currency": "JOD", "erpnext_item_code": "LIVE-EVENT-LC-LIFECYCLE-001",
+			"currency": "JOD",
 		}.get(k)
 
 		player_doc = MagicMock()
