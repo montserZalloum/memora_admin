@@ -95,3 +95,15 @@ class MemoraVoucherBatch(Document):
 					"Target Event has already ended.",
 					frappe.ValidationError,
 				)
+		elif grant_type == "plan_premium":
+			if not self.eligible_plans or len(self.eligible_plans) == 0:
+				frappe.throw(
+					"Eligible Plans table must not be empty for plan_premium batches.",
+					frappe.ValidationError,
+				)
+			for ep in self.eligible_plans:
+				if not frappe.db.exists("Memora Academic Plan", ep.plan):
+					frappe.throw(
+						f"Plan {ep.plan} does not exist.",
+						frappe.ValidationError,
+					)

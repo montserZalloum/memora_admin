@@ -28,9 +28,7 @@
   "is_paid",
   "price",
   "currency",
-  "show_correct_answers",
   "column_break_settings",
-  "show_student_rank",
   "section_break_xp",
   "participation_xp",
   "first_place_xp",
@@ -177,21 +175,8 @@
    "options": "Currency"
   },
   {
-   "default": "0",
-   "fieldname": "show_correct_answers",
-   "fieldtype": "Check",
-   "description": "When enabled, the correct answers will be revealed to players on the score page.",
-   "label": "Show Correct Answers"
-  },
-  {
    "fieldname": "column_break_settings",
    "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "fieldname": "show_student_rank",
-   "fieldtype": "Check",
-   "label": "Show Student Rank"
   },
   {
    "fieldname": "section_break_xp",

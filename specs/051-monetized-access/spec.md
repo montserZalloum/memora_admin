@@ -58,6 +58,12 @@ A player receives a promotional voucher code that grants either a Plan Premium o
 5. **Given** a player who has already successfully redeemed a specific voucher card, **When** they attempt to redeem the same code again, **Then** the system rejects the duplicate.
 6. **Given** a plan_premium voucher and a player who already holds a usable premium for the target plan, **When** they attempt to redeem, **Then** the system rejects to prevent duplication.
 
+**B2B Voucher Batch — Plan Premium**:
+
+7. **Given** a B2B Voucher Batch with `grant_type=plan_premium` and a list of eligible plans, **When** a player whose current plan is in the eligible list redeems a card, **Then** a `Memora Plan Premium` is created with `source_type=voucher` and `voucher_ref` pointing to the card.
+8. **Given** a plan_premium voucher batch, **When** a player whose plan is NOT in the eligible list attempts to redeem, **Then** the system returns `PLAN_NOT_ELIGIBLE`.
+9. **Given** a plan_premium voucher batch, **When** a player who already has an active premium for their plan attempts to redeem, **Then** the system returns `ALREADY_HAS_PREMIUM` without consuming the card.
+
 ---
 
 ### User Story 4 - Admin Grants or Revokes Entitlements (Priority: P2)

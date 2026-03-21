@@ -13,7 +13,7 @@ class VoucherRedeemRequest(BaseModel):
 	"""Redeem request: student submits PIN + chosen grant to redeem."""
 
 	pin: str = Field(..., min_length=6, max_length=20, description="Voucher card PIN")
-	grant_id: str = Field(..., description="Product Grant ID to redeem")
+	grant_id: str | None = Field(None, description="Product Grant ID to redeem (required for product_grant vouchers, ignored for live_event_access and plan_premium)")
 
 
 class VoucherGrant(BaseModel):

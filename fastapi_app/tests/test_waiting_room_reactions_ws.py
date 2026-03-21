@@ -49,7 +49,7 @@ async def seed_event_redis(
 	exam_start_offset_seconds: int = 60,
 ) -> dict:
 	"""Seed LC Redis keys for a waiting room event."""
-	now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
+	now = datetime.now(ZoneInfo("UTC")).replace(tzinfo=None)
 	exam_start_ts = now + timedelta(seconds=exam_start_offset_seconds)
 	exam_end_ts = exam_start_ts + timedelta(minutes=10)
 
@@ -57,8 +57,6 @@ async def seed_event_redis(
 		"exam_start_ts": exam_start_ts.strftime("%Y-%m-%d %H:%M:%S"),
 		"exam_end_ts": exam_end_ts.strftime("%Y-%m-%d %H:%M:%S"),
 		"capacity": "100",
-		"show_correct_answers": "1",
-		"show_student_rank": "1",
 		"enable_question_timer": "1",
 		"question_time_limit": "30",
 		"eligible_plans": "[]",

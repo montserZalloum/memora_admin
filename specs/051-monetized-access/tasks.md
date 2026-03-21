@@ -107,6 +107,20 @@
 
 ---
 
+## Phase 5b: B2B Voucher Batch — Plan Premium Grant Type
+
+**Purpose**: Extend the existing B2B voucher batch system (which already supports `product_grant` and `live_event_access`) with a `plan_premium` grant type, enabling admins to create voucher batches that grant premium access to academic plans.
+
+- [x] T025b [US3] Create `Memora Voucher Batch Eligible Plan` child DocType (istable=1, single `plan` Link field → `Memora Academic Plan`) in `memora_admin/memora_admin/doctype/memora_voucher_batch_eligible_plan/`
+- [x] T025c [US3] Add `plan_premium` to `Memora Voucher Batch` grant_type options, add `section_eligible_plans` + `eligible_plans` Table field, add validation requiring non-empty eligible_plans and valid plan references
+- [x] T025d [US3] Add `voucher` to `Memora Plan Premium` source_type options, add `voucher_ref` Link field → `Memora Voucher Card`, add validation requiring voucher_ref when source_type=voucher
+- [x] T025e [US3] Add `plan_premium` Link field → `Memora Plan Premium` to `Memora Voucher Card`
+- [x] T025f [US3] Add `requested_plan` Link field and `Plan Not Eligible`/`Already Has Premium` status options to `Memora Voucher Redemption Log`
+- [x] T025g [US3] Implement `_preview_plan_premium` and `_redeem_plan_premium` functions in `memora_admin/memora_admin/api/voucher.py` — checks player's plan against eligible list, creates `Memora Plan Premium` with `source_type=voucher`
+- [x] T025h [US3] Add `PLAN_NOT_ELIGIBLE` and `ALREADY_HAS_PREMIUM` error codes to FastAPI voucher endpoint error map and failure error set
+
+---
+
 ## Phase 6: User Story 4 — Admin Grants or Revokes Entitlements (Priority: P2)
 
 **Goal**: Administrators can manually grant Plan Premium or Live Event Access to a player, and revoke existing entitlements. Supports customer service and promotional use cases.

@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
-from zoneinfo import ZoneInfo
 
 import redis.asyncio as redis
 import structlog
@@ -33,14 +32,9 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-# Asia/Amman timezone — Frappe stores all datetimes in this timezone.
-# FastAPI must use the same zone for countdown comparisons, joined_at, submitted_at.
-AMMAN_TZ = ZoneInfo("Asia/Amman")
-
-
 def _now_naive() -> datetime:
-	"""Return current time in Asia/Amman as a naive datetime (matches Frappe timestamps)."""
-	return datetime.now(AMMAN_TZ).replace(tzinfo=None)
+	"""Return current UTC time as a naive datetime (matches DB storage)."""
+	return datetime.now(UTC).replace(tzinfo=None)
 
 
 # Lua script for atomic join: status check + uniqueness + capacity + SADD + EXPIRE in one call.
@@ -122,18 +116,15 @@ def _build_exam_start_msg(safe_questions: list[dict], meta: dict) -> dict:
 def grade_answers(
 	questions: list[dict],
 	answers: list[dict],
-	*,
-	show_correct_answers: bool,
 ) -> dict[str, Any]:
 	"""Grade submitted answers against correct answers (pure function).
 
 	Args:
 		questions: List of question dicts with 'idx' and 'correct_answer' fields.
 		answers: List of answer dicts with 'question_idx' and 'selected' fields.
-		show_correct_answers: If True, return corrections list; if False, return None.
 
 	Returns:
-		Dict with score, correct_count, total_questions, and corrections.
+		Dict with score, correct_count, and total_questions.
 	"""
 	total = len(questions)
 	correct_count = 0
@@ -141,22 +132,10 @@ def grade_answers(
 	# Build lookup: question_idx -> selected
 	answer_map = {a["question_idx"]: a["selected"] for a in answers}
 
-	corrections = []
 	for q in questions:
-		idx = q["idx"]
-		selected = answer_map.get(idx)
-		correct = q["correct_answer"]
-
-		if selected == correct:
+		selected = answer_map.get(q["idx"])
+		if selected == q["correct_answer"]:
 			correct_count += 1
-		else:
-			corrections.append(
-				{
-					"question_idx": idx,
-					"selected": selected,
-					"correct_answer": correct,
-				}
-			)
 
 	score = (correct_count / total) * 100 if total > 0 else 0.0
 
@@ -164,7 +143,6 @@ def grade_answers(
 		"score": score,
 		"correct_count": correct_count,
 		"total_questions": total,
-		"corrections": corrections if show_correct_answers else None,
 	}
 
 
@@ -262,8 +240,6 @@ class LiveChallengeService:
 			"exam_start_ts": str(event.get("exam_start_ts", "")),
 			"exam_end_ts": str(event.get("exam_end_ts", "")),
 			"capacity": str(event.get("capacity", 0)),
-			"show_correct_answers": str(int(event.get("show_correct_answers", 0))),
-			"show_student_rank": str(int(event.get("show_student_rank", 0))),
 			"enable_question_timer": str(int(event.get("enable_question_timer", 0))),
 			"question_time_limit": str(event.get("question_time_limit", 30)),
 			"waiting_room_duration": str(event.get("waiting_room_duration", 180)),
@@ -772,11 +748,8 @@ class LiveChallengeService:
 			raise ValueError("EVENT_NOT_ACTIVE")
 		questions = json.loads(questions_json)
 
-		# 5. Get show_correct_answers setting
-		show_correct = bool(int(meta.get("show_correct_answers", "0")))
-
-		# 6. Grade
-		result = grade_answers(questions, answers, show_correct_answers=show_correct)
+		# 5. Grade
+		result = grade_answers(questions, answers)
 		submitted_at = _now_naive().strftime("%Y-%m-%d %H:%M:%S")
 		result["submitted_at"] = submitted_at
 
@@ -913,8 +886,6 @@ class LiveChallengeService:
 			"capacity": int(meta.get("capacity", "0")),
 			"current_count": int(count_raw or "0"),
 			"is_paid": bool(int(meta.get("is_paid", "0"))),
-			"show_correct_answers": bool(int(meta.get("show_correct_answers", "0"))),
-			"show_student_rank": bool(int(meta.get("show_student_rank", "0"))),
 			"participation_xp": int(meta.get("participation_xp", "0")),
 			"first_place_xp": int(meta.get("first_place_xp", "0")),
 			"second_place_xp": int(meta.get("second_place_xp", "0")),
@@ -989,8 +960,6 @@ class LiveChallengeService:
 			"capacity": int(event.get("capacity", 0)),
 			"current_count": int(event.get("participant_count", 0)),
 			"is_paid": bool(event.get("is_paid")),
-			"show_correct_answers": bool(event.get("show_correct_answers")),
-			"show_student_rank": bool(event.get("show_student_rank")),
 			"participation_xp": int(event.get("participation_xp", 0)),
 			"first_place_xp": int(event.get("first_place_xp", 0)),
 			"second_place_xp": int(event.get("second_place_xp", 0)),
@@ -1086,7 +1055,6 @@ class LiveChallengeService:
 			event = {}
 
 		event_name = event.get("event_name", "")
-		show_correct = bool(int(event.get("show_correct_answers", 0)))
 
 		# Count total participants
 		total_participants = 0
@@ -1115,31 +1083,6 @@ class LiveChallengeService:
 			except (json.JSONDecodeError, KeyError, TypeError):
 				pass
 
-		# Build corrections if show_correct_answers is enabled.
-		# answers_json stores {correct: bool} but not the actual correct_answer,
-		# so we need to look up correct answers from the event's questions.
-		corrections = None
-		if show_correct and answers_list:
-			# Build correct_answer map from event questions
-			questions = event.get("questions", [])
-			correct_map: dict[int, str] = {}
-			if isinstance(questions, list):
-				for q in questions:
-					if isinstance(q, dict):
-						# Frappe child table idx is 1-based, our question_idx is 0-based
-						idx = int(q.get("idx", 0)) - 1
-						correct_map[idx] = q.get("correct_answer", "")
-
-			corrections = [
-				{
-					"question_idx": a["question_idx"],
-					"selected": a.get("selected"),
-					"correct_answer": correct_map.get(a["question_idx"], ""),
-				}
-				for a in answers_list
-				if not a.get("correct", False)
-			]
-
 		rank = part.get("rank")
 		xp_awarded = part.get("xp_awarded")
 
@@ -1153,7 +1096,6 @@ class LiveChallengeService:
 			"total_participants": int(total_participants or 0),
 			"xp_awarded": int(xp_awarded) if xp_awarded else None,
 			"submitted_at": str(part.get("submitted_at", "")) if part.get("submitted_at") else None,
-			"corrections": corrections,
 		}
 
 	async def get_leaderboard(self, event_id: str, player_id: str) -> dict[str, Any] | None:
@@ -1206,28 +1148,26 @@ class LiveChallengeService:
 			except (json.JSONDecodeError, TypeError):
 				pass
 
-		# Get player's own rank/score if show_student_rank enabled
+		total_participants = int(event.get("participant_count", 0))
+
+		# Get player's own rank/score
 		my_rank = None
 		my_score = None
-		show_student_rank = bool(int(event.get("show_student_rank", 0)))
-		if show_student_rank:
-			try:
-				parts = await self.frappe.call(
-					"frappe.client.get_list",
-					{
-						"doctype": "Memora Live Challenge Participation",
-						"filters": json.dumps([["event", "=", event_id], ["player", "=", player_id]]),
-						"fields": json.dumps(["rank", "score"]),
-						"limit_page_length": "1",
-					},
-				)
-				if parts:
-					my_rank = int(parts[0]["rank"]) if parts[0].get("rank") else None
-					my_score = float(parts[0]["score"]) if parts[0].get("score") is not None else None
-			except Exception:
-				pass
-
-		total_participants = int(event.get("participant_count", 0))
+		try:
+			parts = await self.frappe.call(
+				"frappe.client.get_list",
+				{
+					"doctype": "Memora Live Challenge Participation",
+					"filters": json.dumps([["event", "=", event_id], ["player", "=", player_id]]),
+					"fields": json.dumps(["rank", "score"]),
+					"limit_page_length": "1",
+				},
+			)
+			if parts:
+				my_rank = int(parts[0]["rank"]) if parts[0].get("rank") else None
+				my_score = float(parts[0]["score"]) if parts[0].get("score") is not None else None
+		except Exception:
+			pass
 
 		return {
 			"event_id": event_id,

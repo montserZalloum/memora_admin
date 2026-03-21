@@ -68,8 +68,6 @@ class EventDetailResponse(BaseModel):
 	capacity: int = Field(..., description="Max participants (0 = unlimited)")
 	current_count: int = Field(0, description="Current participant count")
 	is_paid: bool = Field(False, description="Whether event is paid")
-	show_correct_answers: bool = Field(False, description="Show answers after submission")
-	show_student_rank: bool = Field(False, description="Show rank after event ends")
 	participation_xp: int = Field(0, description="XP for all submitters")
 	first_place_xp: int = Field(0, description="Bonus for rank 1")
 	second_place_xp: int = Field(0, description="Bonus for rank 2")
@@ -139,8 +137,8 @@ class LeaderboardResponse(BaseModel):
 	leaderboard: list[LeaderboardEntryItem] = Field(
 		default_factory=list, description="Top 20 entries"
 	)
-	my_rank: int | None = Field(None, description="Current player's rank (null if hidden)")
-	my_score: float | None = Field(None, description="Current player's score (null if hidden)")
+	my_rank: int | None = Field(None, description="Current player's rank")
+	my_score: float | None = Field(None, description="Current player's score")
 	total_participants: int = Field(0, description="Total participants")
 	exam_end_ts: str | None = Field(None, description="Exam end timestamp")
 

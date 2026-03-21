@@ -1139,8 +1139,7 @@ def lc_meta_key(event_id: str) -> str:
 	"""Live challenge event metadata hash.
 
 	Type: HASH (scheduled_start, exam_start_ts, exam_end_ts, capacity,
-	            show_correct_answers, show_student_rank, enable_question_timer,
-	            question_time_limit, waiting_room_duration,
+	            enable_question_timer, question_time_limit, waiting_room_duration,
 	            eligible_plans — JSON array of plan IDs)
 	Producers: DocType after_save (on Draft), process_live_challenge_transitions()
 	Consumers: LiveChallengeService.join() (capacity, eligible_plans),

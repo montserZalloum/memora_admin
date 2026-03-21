@@ -97,8 +97,6 @@ class MemoraLiveChallengeEvent(Document):
 			"exam_start_ts": str(self.exam_start_ts),
 			"exam_end_ts": str(self.exam_end_ts),
 			"capacity": str(self.capacity),
-			"show_correct_answers": str(int(self.show_correct_answers)),
-			"show_student_rank": str(int(self.show_student_rank)),
 			"enable_question_timer": str(int(self.enable_question_timer)),
 			"question_time_limit": str(self.question_time_limit or 30),
 			"waiting_room_duration": str(self.waiting_room_duration),

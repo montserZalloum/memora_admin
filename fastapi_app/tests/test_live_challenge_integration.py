@@ -73,7 +73,7 @@ QUESTIONS = [
 
 async def seed_active_event(r: redis.Redis, event_id: str = EVENT_ID) -> dict:
 	"""Seed LC Redis keys for an active event (simulating Waiting->Active transition)."""
-	now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
+	now = datetime.now(ZoneInfo("UTC")).replace(tzinfo=None)
 	exam_start_ts = now - timedelta(seconds=30)  # Already started
 	exam_end_ts = now + timedelta(minutes=10)  # Ends in 10 min
 
@@ -82,8 +82,6 @@ async def seed_active_event(r: redis.Redis, event_id: str = EVENT_ID) -> dict:
 		"exam_end_ts": exam_end_ts.strftime("%Y-%m-%d %H:%M:%S"),
 		"scheduled_start": (now - timedelta(seconds=90)).strftime("%Y-%m-%d %H:%M:%S"),
 		"capacity": "100",
-		"show_correct_answers": "1",
-		"show_student_rank": "1",
 		"enable_question_timer": "0",
 		"question_time_limit": "30",
 		"eligible_plans": "[]",
@@ -112,7 +110,7 @@ async def seed_active_event(r: redis.Redis, event_id: str = EVENT_ID) -> dict:
 
 def _make_event_frappe_doc(event_id: str = EVENT_ID) -> dict:
 	"""Build a fake Frappe event doc for mock FrappeClient responses."""
-	now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
+	now = datetime.now(ZoneInfo("UTC")).replace(tzinfo=None)
 	return {
 		"name": event_id,
 		"event_name": "Integration Test Quiz",
@@ -127,8 +125,6 @@ def _make_event_frappe_doc(event_id: str = EVENT_ID) -> dict:
 		"question_time_limit": 30,
 		"capacity": 100,
 		"is_paid": 0,
-		"show_correct_answers": 1,
-		"show_student_rank": 1,
 		"participation_xp": 50,
 		"first_place_xp": 500,
 		"second_place_xp": 300,
@@ -395,8 +391,6 @@ class TestResultAndLeaderboard:
 
 		ended_event = _make_event_frappe_doc()
 		ended_event["status"] = "Ended"
-		ended_event["show_correct_answers"] = 1
-
 		async def frappe_handler(method, params=None):
 			if method == "frappe.client.get_list":
 				return [{
@@ -430,8 +424,6 @@ class TestResultAndLeaderboard:
 		assert data["total_questions"] == 4
 		assert data["rank"] == 2
 		assert data["xp_awarded"] == 350
-		assert data["corrections"] is not None
-		assert len(data["corrections"]) == 1
 
 	async def test_leaderboard_endpoint(
 		self,
@@ -450,7 +442,6 @@ class TestResultAndLeaderboard:
 
 		ended_event = _make_event_frappe_doc()
 		ended_event["status"] = "Ended"
-		ended_event["show_student_rank"] = 1
 		ended_event["leaderboard_json"] = json.dumps(leaderboard)
 		ended_event["participant_count"] = 3
 

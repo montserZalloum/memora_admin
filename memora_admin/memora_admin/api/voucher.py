@@ -110,6 +110,11 @@ def generate_cards_job(batch_name: str) -> None:
 				frappe.db.get_value("Memora Live Challenge Event", batch.target_event, "event_name")
 				or batch.target_event
 			)
+		elif grant_type == "plan_premium":
+			product_names = ", ".join(
+				frappe.db.get_value("Memora Academic Plan", ep.plan, "plan_name") or ep.plan
+				for ep in batch.eligible_plans
+			)
 		else:
 			product_names = ", ".join(
 				frappe.db.get_value("Memora Product Grant", grant.product_grant, "item_code")
@@ -346,21 +351,30 @@ def export_for_print(batch_name: str):
 
 	csv_bytes = decrypt_data(encrypted_bytes, hmac_secret)
 
-	# Filter CSV to only include Available cards
-	available_serials = set(
+	# Filter CSV to printable cards.
+	# For product_grant batches, only include Available cards — Allocated cards
+	# may have already been distributed to specific recipients.
+	# For plan_premium / live_event_access, include both Available and Allocated.
+	grant_type = batch.grant_type or "product_grant"
+	if grant_type == "product_grant":
+		status_filter = ("Available",)
+	else:
+		status_filter = ("Available", "Allocated")
+
+	printable_serials = set(
 		row[0]
 		for row in frappe.db.sql(
-			"SELECT serial_no FROM `tabMemora Voucher Card` WHERE batch = %s AND status = 'Available'",
-			(batch_name,),
+			"SELECT serial_no FROM `tabMemora Voucher Card` WHERE batch = %s AND status IN %s",
+			(batch_name, status_filter),
 		)
 	)
 
 	csv_text = csv_bytes.decode("utf-8")
 	reader = csv.DictReader(io.StringIO(csv_text))
-	filtered_rows = [row for row in reader if row["serial_no"] in available_serials]
+	filtered_rows = [row for row in reader if row["serial_no"] in printable_serials]
 
 	if not filtered_rows:
-		frappe.throw("No available cards to export for this batch.")
+		frappe.throw("No printable cards to export for this batch.")
 
 	# Rebuild CSV with same format
 	output = io.StringIO()
@@ -500,6 +514,8 @@ _ERROR_TO_LOG_STATUS = {
 	"ALREADY_OWNED": "Already Owned",
 	"ALREADY_HAS_ACCESS": "Already Has Access",
 	"EVENT_ENDED": "Event Ended",
+	"PLAN_NOT_ELIGIBLE": "Plan Not Eligible",
+	"ALREADY_HAS_PREMIUM": "Already Has Premium",
 	"REDEMPTION_FAILED": "Error",
 }
 
@@ -530,6 +546,7 @@ def _log_attempt(
 	failure_reason,
 	ip_address,
 	requested_event=None,
+	requested_plan=None,
 ):
 	"""Create an immutable Voucher Redemption Log entry.
 
@@ -561,6 +578,8 @@ def _log_attempt(
 	}
 	if requested_event:
 		doc["requested_event"] = requested_event
+	if requested_plan:
+		doc["requested_plan"] = requested_plan
 	frappe.get_doc(doc).insert(ignore_permissions=True, ignore_links=True)
 
 
@@ -649,6 +668,9 @@ def preview_voucher(pin_hmac: str, player_id: str) -> dict:
 	if grant_type == "live_event_access":
 		return _preview_event_access(batch, player_id)
 
+	if grant_type == "plan_premium":
+		return _preview_plan_premium(batch, player_id)
+
 	# 6. Season validation via player's plan (product_grant only — events are season-independent)
 	if not _check_season_active(player_id):
 		return {"error": "SEASON_INACTIVE"}
@@ -719,6 +741,46 @@ def _preview_event_access(batch, player_id):
 		"event": {
 			"event_id": event_data.name,
 			"event_name": event_data.event_name,
+		},
+		"face_value": str(batch.face_value or "0"),
+	}
+
+
+def _validate_plan_premium_eligibility(batch, player_id):
+	"""Check if a player is eligible for plan premium from this batch.
+
+	Returns (player_plan, None) on success, or (player_plan, error_code) on failure.
+	player_plan may be None if the player has no plan.
+	"""
+	player_plan = frappe.db.get_value("Memora Player Profile", player_id, "plan")
+	if not player_plan:
+		return None, "PLAN_NOT_ELIGIBLE"
+
+	eligible_plan_ids = [ep.plan for ep in batch.eligible_plans]
+	if player_plan not in eligible_plan_ids:
+		return player_plan, "PLAN_NOT_ELIGIBLE"
+
+	existing_premium = frappe.db.exists(
+		"Memora Plan Premium",
+		{"player": player_id, "plan": player_plan, "status": "active"},
+	)
+	if existing_premium:
+		return player_plan, "ALREADY_HAS_PREMIUM"
+
+	return player_plan, None
+
+
+def _preview_plan_premium(batch, player_id):
+	"""Preview plan premium for a plan_premium voucher batch."""
+	player_plan, error = _validate_plan_premium_eligibility(batch, player_id)
+	if error:
+		return {"error": error}
+
+	plan_name = frappe.db.get_value("Memora Academic Plan", player_plan, "plan_name") or player_plan
+	return {
+		"plan": {
+			"plan_id": player_plan,
+			"plan_name": plan_name,
 		},
 		"face_value": str(batch.face_value or "0"),
 	}
@@ -826,6 +888,9 @@ def redeem_voucher(
 	grant_type = batch.grant_type or "product_grant"
 	if grant_type == "live_event_access":
 		return _redeem_event_access(card, batch, player_id, pin_hmac, ip_address)
+
+	if grant_type == "plan_premium":
+		return _redeem_plan_premium(card, batch, player_id, pin_hmac, ip_address)
 
 	# 6. Season validation via player's plan (product_grant only — events are season-independent)
 	if not _check_season_active(player_id):
@@ -1153,3 +1218,117 @@ def _redeem_event_access(card, batch, player_id, pin_hmac, ip_address):
 	frappe.db.commit()
 
 	return {"status": "success", "access_id": access.name}
+
+
+def _redeem_plan_premium(card, batch, player_id, pin_hmac, ip_address):
+	"""Redeem a voucher card for plan premium access."""
+	library = frappe.db.get_value("Memora Voucher Card", card.name, "library")
+
+	player_plan, error = _validate_plan_premium_eligibility(batch, player_id)
+	if error:
+		error_labels = {
+			"PLAN_NOT_ELIGIBLE": "Plan Not Eligible",
+			"ALREADY_HAS_PREMIUM": "Already Has Premium",
+		}
+		_log_attempt(
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			library,
+			card.batch,
+			None,
+			error_labels.get(error, error),
+			error,
+			ip_address,
+			requested_plan=player_plan,
+		)
+		return {"error": error}
+
+	# 4. Create premium record first — if this fails, the card stays Allocated
+	#    (no orphaned Redeemed card with no premium record).
+	plan_data = frappe.db.get_value(
+		"Memora Academic Plan", player_plan, ["season"], as_dict=True
+	)
+	season = plan_data.season if plan_data else None
+	if not season:
+		season = frappe.db.get_value("Memora Player Profile", player_id, "season")
+
+	try:
+		premium = frappe.get_doc(
+			{
+				"doctype": "Memora Plan Premium",
+				"player": player_id,
+				"plan": player_plan,
+				"season": season,
+				"status": "active",
+				"source_type": "voucher",
+				"voucher_ref": card.name,
+			}
+		)
+		premium.insert(ignore_permissions=True)
+	except frappe.UniqueValidationError:
+		_log_attempt(
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			library,
+			card.batch,
+			None,
+			"Already Has Premium",
+			"ALREADY_HAS_PREMIUM",
+			ip_address,
+			requested_plan=player_plan,
+		)
+		frappe.db.commit()
+		return {"error": "ALREADY_HAS_PREMIUM"}
+	except Exception:
+		frappe.log_error(title=f"Plan premium voucher redemption failed: {card.name}")
+		_log_attempt(
+			player_id,
+			pin_hmac[-4:],
+			card.name,
+			library,
+			card.batch,
+			None,
+			"Error",
+			"REDEMPTION_FAILED",
+			ip_address,
+			requested_plan=player_plan,
+		)
+		frappe.db.commit()
+		return {"error": "REDEMPTION_FAILED"}
+
+	# 5. Premium created — now mark card Redeemed and link back
+	frappe.db.set_value(
+		"Memora Voucher Card",
+		card.name,
+		{
+			"status": "Redeemed",
+			"redeemed_by": player_id,
+			"redeemed_at": frappe.utils.now(),
+			"plan_premium": premium.name,
+		},
+	)
+
+	# 8. Log success
+	_log_attempt(
+		player_id,
+		pin_hmac[-4:],
+		card.name,
+		library,
+		card.batch,
+		None,
+		"Success",
+		"",
+		ip_address,
+		requested_plan=player_plan,
+	)
+
+	# 9. Update batch counters and check auto-close
+	from memora_admin.memora_admin.services.voucher.batch_utils import recount_and_maybe_close
+
+	recount_and_maybe_close(card.batch)
+
+	frappe.db.commit()
+
+	return {"status": "success", "premium_id": premium.name}

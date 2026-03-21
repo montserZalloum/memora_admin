@@ -49,6 +49,8 @@ FAILURE_ERRORS = {
 	"ALL_GRANTS_OWNED",
 	"GRANT_NOT_IN_BATCH",
 	"ALREADY_OWNED",
+	"PLAN_NOT_ELIGIBLE",
+	"ALREADY_HAS_PREMIUM",
 }
 
 
@@ -151,7 +153,7 @@ class VoucherService:
 			)
 			return {"error": "SERVICE_ERROR"}
 
-	async def redeem(self, pin: str, player_id: str, grant_id: str, ip: str) -> dict:
+	async def redeem(self, pin: str, player_id: str, grant_id: str | None, ip: str) -> dict:
 		"""Redeem voucher: compute HMAC and delegate to Frappe redeem_voucher.
 
 		Returns:
@@ -164,7 +166,7 @@ class VoucherService:
 				{
 					"pin_hmac": pin_hmac,
 					"player_id": player_id,
-					"product_grant_id": grant_id,
+					"product_grant_id": grant_id or "",
 					"ip_address": ip,
 				},
 			)

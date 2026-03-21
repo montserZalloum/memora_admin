@@ -16,6 +16,8 @@
   "pin_length",
   "face_value",
   "target_event",
+  "section_eligible_plans",
+  "eligible_plans",
   "section_grants",
   "batch_grants",
   "section_generation",
@@ -56,7 +58,7 @@
    "fieldtype": "Select",
    "in_standard_filter": 1,
    "label": "Grant Type",
-   "options": "product_grant\nlive_event_access",
+   "options": "product_grant\nlive_event_access\nplan_premium",
    "reqd": 1
   },
   {
@@ -101,6 +103,18 @@
    "fieldtype": "Link",
    "label": "Target Event",
    "options": "Memora Live Challenge Event"
+  },
+  {
+   "depends_on": "eval:doc.grant_type=='plan_premium'",
+   "fieldname": "section_eligible_plans",
+   "fieldtype": "Section Break",
+   "label": "Eligible Plans"
+  },
+  {
+   "fieldname": "eligible_plans",
+   "fieldtype": "Table",
+   "label": "Eligible Plans",
+   "options": "Memora Voucher Batch Eligible Plan"
   },
   {
    "depends_on": "eval:doc.grant_type=='product_grant'",

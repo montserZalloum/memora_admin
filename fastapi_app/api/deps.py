@@ -39,7 +39,9 @@ from fastapi_app.services.settings import SettingsService
 from fastapi_app.services.stats import StatsService
 from fastapi_app.services.voucher import VoucherService
 from fastapi_app.services.event_access import EventAccessService
+from fastapi_app.services.event_catalog import EventCatalogService
 from fastapi_app.services.premium import PremiumService
+from fastapi_app.services.premium_catalog import PremiumCatalogService
 from fastapi_app.services.wallet import WalletService
 
 logger = structlog.get_logger()
@@ -426,6 +428,27 @@ async def get_event_access_service(redis_client: RedisClient) -> EventAccessServ
 
 
 EventAccessServiceDep = Annotated[EventAccessService, Depends(get_event_access_service)]
+
+
+async def get_event_catalog_service(redis_client: RedisClient) -> EventCatalogService:
+	"""Get EventCatalogService with Redis, FrappeClient, and sub-services."""
+	frappe_client = await get_frappe_client()
+	premium_svc = PremiumService(redis_client, frappe_client)
+	event_access_svc = EventAccessService(redis_client, frappe_client)
+	return EventCatalogService(redis_client, frappe_client, premium_svc, event_access_svc)
+
+
+EventCatalogServiceDep = Annotated[EventCatalogService, Depends(get_event_catalog_service)]
+
+
+async def get_premium_catalog_service(redis_client: RedisClient) -> PremiumCatalogService:
+	"""Get PremiumCatalogService with FrappeClient and PremiumService."""
+	frappe_client = await get_frappe_client()
+	premium_svc = PremiumService(redis_client, frappe_client)
+	return PremiumCatalogService(frappe_client, premium_svc)
+
+
+PremiumCatalogServiceDep = Annotated[PremiumCatalogService, Depends(get_premium_catalog_service)]
 
 
 async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) -> VoucherService:

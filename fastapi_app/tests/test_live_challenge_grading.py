@@ -46,7 +46,7 @@ class TestScoreCalculation:
 			{"question_idx": 1, "selected": "B"},
 			{"question_idx": 2, "selected": "C"},
 		]
-		result = grade_answers(questions, answers, show_correct_answers=True)
+		result = grade_answers(questions, answers)
 		assert result["score"] == 100.0
 		assert result["correct_count"] == 3
 		assert result["total_questions"] == 3
@@ -60,7 +60,7 @@ class TestScoreCalculation:
 			{"question_idx": 0, "selected": "B"},
 			{"question_idx": 1, "selected": "A"},
 		]
-		result = grade_answers(questions, answers, show_correct_answers=True)
+		result = grade_answers(questions, answers)
 		assert result["score"] == 0.0
 		assert result["correct_count"] == 0
 
@@ -68,7 +68,7 @@ class TestScoreCalculation:
 		"""15 out of 20 correct = 75.0%."""
 		questions = [{"idx": i, "correct_answer": "A"} for i in range(20)]
 		answers = [{"question_idx": i, "selected": "A" if i < 15 else "B"} for i in range(20)]
-		result = grade_answers(questions, answers, show_correct_answers=True)
+		result = grade_answers(questions, answers)
 		assert result["score"] == 75.0
 		assert result["correct_count"] == 15
 		assert result["total_questions"] == 20
@@ -76,48 +76,19 @@ class TestScoreCalculation:
 	def test_single_question_correct(self):
 		questions = [{"idx": 0, "correct_answer": "D"}]
 		answers = [{"question_idx": 0, "selected": "D"}]
-		result = grade_answers(questions, answers, show_correct_answers=True)
+		result = grade_answers(questions, answers)
 		assert result["score"] == 100.0
 
 	def test_empty_questions_zero_score(self):
 		"""Zero questions -> score 0, no crash."""
-		result = grade_answers([], [], show_correct_answers=True)
+		result = grade_answers([], [])
 		assert result["score"] == 0.0
 		assert result["correct_count"] == 0
 		assert result["total_questions"] == 0
 
 
-class TestCorrections:
-	"""Verify corrections list only includes wrong answers."""
-
-	def test_corrections_only_wrong_answers(self):
-		questions = [
-			{"idx": 0, "correct_answer": "A"},
-			{"idx": 1, "correct_answer": "B"},
-			{"idx": 2, "correct_answer": "C"},
-			{"idx": 3, "correct_answer": "D"},
-		]
-		answers = [
-			{"question_idx": 0, "selected": "A"},  # correct
-			{"question_idx": 1, "selected": "C"},  # wrong
-			{"question_idx": 2, "selected": "C"},  # correct
-			{"question_idx": 3, "selected": "A"},  # wrong
-		]
-		result = grade_answers(questions, answers, show_correct_answers=True)
-		assert result["score"] == 50.0
-		assert len(result["corrections"]) == 2
-
-		corrections_by_idx = {c["question_idx"]: c for c in result["corrections"]}
-		assert corrections_by_idx[1]["selected"] == "C"
-		assert corrections_by_idx[1]["correct_answer"] == "B"
-		assert corrections_by_idx[3]["selected"] == "A"
-		assert corrections_by_idx[3]["correct_answer"] == "D"
-
-	def test_all_correct_empty_corrections(self):
-		questions = [{"idx": 0, "correct_answer": "A"}]
-		answers = [{"question_idx": 0, "selected": "A"}]
-		result = grade_answers(questions, answers, show_correct_answers=True)
-		assert result["corrections"] == []
+class TestMissingAnswer:
+	"""Verify missing/null answers count as incorrect."""
 
 	def test_missing_answer_treated_as_wrong(self):
 		"""If answer array doesn't include a question_idx, it's treated as wrong."""
@@ -131,16 +102,9 @@ class TestCorrections:
 			# question_idx 1 missing entirely
 			{"question_idx": 2, "selected": "C"},
 		]
-		result = grade_answers(questions, answers, show_correct_answers=True)
+		result = grade_answers(questions, answers)
 		assert result["correct_count"] == 2
 		assert result["total_questions"] == 3
-		q1_correction = [c for c in result["corrections"] if c["question_idx"] == 1]
-		assert len(q1_correction) == 1
-		assert q1_correction[0]["selected"] is None
-
-
-class TestNullUnanswered:
-	"""Verify null/unanswered selections count as incorrect."""
 
 	def test_null_selected_is_incorrect(self):
 		questions = [
@@ -151,37 +115,16 @@ class TestNullUnanswered:
 			{"question_idx": 0, "selected": None},
 			{"question_idx": 1, "selected": "B"},
 		]
-		result = grade_answers(questions, answers, show_correct_answers=True)
+		result = grade_answers(questions, answers)
 		assert result["score"] == 50.0
 		assert result["correct_count"] == 1
-		assert result["corrections"][0]["selected"] is None
-		assert result["corrections"][0]["correct_answer"] == "A"
 
 	def test_all_null_zero_score(self):
 		questions = [{"idx": i, "correct_answer": "A"} for i in range(3)]
 		answers = [{"question_idx": i, "selected": None} for i in range(3)]
-		result = grade_answers(questions, answers, show_correct_answers=True)
+		result = grade_answers(questions, answers)
 		assert result["score"] == 0.0
 		assert result["correct_count"] == 0
-		assert len(result["corrections"]) == 3
-
-
-class TestShowCorrectAnswers:
-	"""Verify show_correct_answers toggle."""
-
-	def test_show_false_returns_null_corrections(self):
-		questions = [{"idx": 0, "correct_answer": "A"}]
-		answers = [{"question_idx": 0, "selected": "C"}]
-		result = grade_answers(questions, answers, show_correct_answers=False)
-		assert result["score"] == 0.0
-		assert result["corrections"] is None
-
-	def test_show_true_returns_corrections_list(self):
-		questions = [{"idx": 0, "correct_answer": "A"}]
-		answers = [{"question_idx": 0, "selected": "C"}]
-		result = grade_answers(questions, answers, show_correct_answers=True)
-		assert result["corrections"] is not None
-		assert len(result["corrections"]) == 1
 
 
 # =============================================================================

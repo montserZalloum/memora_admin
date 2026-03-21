@@ -13,5 +13,7 @@ class MemoraPlanPremium(Document):
 		"""Ensure required reference fields are set based on source_type."""
 		if self.source_type == "purchase" and not self.purchase_ref:
 			frappe.throw("Purchase Reference is required when source type is 'purchase'.")
+		if self.source_type == "voucher" and not self.voucher_ref:
+			frappe.throw("Voucher Reference is required when source type is 'voucher'.")
 		if self.source_type == "admin" and not self.granted_by:
 			frappe.throw("Granted By is required when source type is 'admin'.")

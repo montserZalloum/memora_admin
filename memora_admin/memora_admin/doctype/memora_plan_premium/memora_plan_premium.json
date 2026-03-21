@@ -15,6 +15,7 @@
   "source_type",
   "column_break_source",
   "purchase_ref",
+  "voucher_ref",
   "granted_by",
   "section_break_revocation",
   "revoked_at",
@@ -69,7 +70,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Source Type",
-   "options": "purchase\nadmin",
+   "options": "purchase\nvoucher\nadmin",
    "reqd": 1
   },
   {
@@ -81,6 +82,12 @@
    "fieldtype": "Link",
    "label": "Purchase Reference",
    "options": "Memora Plan Premium Purchase"
+  },
+  {
+   "fieldname": "voucher_ref",
+   "fieldtype": "Link",
+   "label": "Voucher Reference",
+   "options": "Memora Voucher Card"
   },
   {
    "fieldname": "granted_by",

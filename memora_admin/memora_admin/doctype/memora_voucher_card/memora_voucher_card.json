@@ -22,6 +22,7 @@
   "redeemed_grant",
   "subscription_transaction",
   "event_access",
+  "plan_premium",
   "section_void",
   "void_reason",
   "section_recipient",
@@ -144,6 +145,13 @@
    "fieldtype": "Link",
    "label": "Event Access",
    "options": "Memora Live Event Access",
+   "read_only": 1
+  },
+  {
+   "fieldname": "plan_premium",
+   "fieldtype": "Link",
+   "label": "Plan Premium",
+   "options": "Memora Plan Premium",
    "read_only": 1
   },
   {

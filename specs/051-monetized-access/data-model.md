@@ -63,7 +63,7 @@ The entitlement record proving a player has premium access to a specific plan. V
 | status | Select: `active`, `revoked` | yes | Default: `active` |
 | source_type | Select: `purchase`, `voucher`, `admin` | yes | |
 | purchase_ref | Link → Memora Plan Premium Purchase | no | Required if source_type = purchase |
-| voucher_ref | Link → Memora Access Voucher | no | Required if source_type = voucher |
+| voucher_ref | Link → Memora Voucher Card | no | Required if source_type = voucher (B2B voucher batch card) |
 | granted_by | Link → User | no | Required if source_type = admin |
 | revoked_at | Datetime | no | Set when status → revoked |
 | revoked_by | Link → User | no | Set when status → revoked |
@@ -72,6 +72,8 @@ The entitlement record proving a player has premium access to a specific plan. V
 - At most one `active` premium per (player, plan) — enforced via virtual column unique index (see R-001)
 - `_unique_active_plan` virtual column: `IF(status = 'active', plan, NULL)`
 - `UNIQUE INDEX idx_one_active_premium ON (player, _unique_active_plan)`
+
+**Voucher Batch Integration**: The B2B `Memora Voucher Batch` system supports `grant_type = plan_premium` with a child table of eligible plans (`Memora Voucher Batch Eligible Plan`). On redemption, the system checks if the player's current plan is in the batch's eligible list, then creates a `Memora Plan Premium` with `source_type = voucher` and `voucher_ref` pointing to the `Memora Voucher Card`.
 
 **State Machine**:
 ```

@@ -44,14 +44,12 @@ QUESTIONS = [
 
 
 def _make_meta() -> dict[str, str]:
-	now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
+	now = datetime.now(ZoneInfo("UTC")).replace(tzinfo=None)
 	return {
 		"exam_start_ts": (now - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S"),
 		"exam_end_ts": (now + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S"),
 		"scheduled_start": (now - timedelta(seconds=90)).strftime("%Y-%m-%d %H:%M:%S"),
 		"capacity": "100",
-		"show_correct_answers": "1",
-		"show_student_rank": "1",
 		"enable_question_timer": "0",
 		"question_time_limit": "30",
 		"eligible_plans": "[]",
@@ -80,7 +78,7 @@ async def _seed_active_event(r: redis.Redis, event_id: str = EVENT_ID) -> None:
 
 
 def _make_frappe_event_doc(event_id: str = EVENT_ID) -> dict:
-	now = datetime.now(ZoneInfo("Asia/Amman")).replace(tzinfo=None)
+	now = datetime.now(ZoneInfo("UTC")).replace(tzinfo=None)
 	return {
 		"name": event_id,
 		"event_name": "Source Selection Test",
@@ -95,8 +93,6 @@ def _make_frappe_event_doc(event_id: str = EVENT_ID) -> dict:
 		"question_time_limit": 30,
 		"capacity": 100,
 		"is_paid": 0,
-		"show_correct_answers": 1,
-		"show_student_rank": 1,
 		"participation_xp": 50,
 		"first_place_xp": 500,
 		"second_place_xp": 300,

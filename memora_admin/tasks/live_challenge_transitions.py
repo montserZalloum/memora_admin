@@ -150,8 +150,6 @@ def _transition_to_waiting(event_name: str):
 		"exam_duration": str(event.exam_duration or 10),
 		"capacity": str(event.capacity),
 		"is_paid": str(int(event.is_paid or 0)),
-		"show_correct_answers": str(int(event.show_correct_answers)),
-		"show_student_rank": str(int(event.show_student_rank)),
 		"enable_question_timer": str(int(event.enable_question_timer)),
 		"question_time_limit": str(event.question_time_limit or 30),
 		"waiting_room_duration": str(event.waiting_room_duration),
