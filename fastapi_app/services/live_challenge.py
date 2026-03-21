@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+UTC = timezone.utc
 from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as redis

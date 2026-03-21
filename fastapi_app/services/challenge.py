@@ -522,24 +522,16 @@ class ChallengeService:
 	def _compute_subject_stats(
 		hierarchy,
 		progress_map: dict[str, dict],
-		stats: dict[str, str] | None,
-		subject_has_access: bool,
 	) -> tuple[int, int]:
 		"""Count visible challenge progress using the same rules as the detail view.
 
-		The list endpoint keeps the historical `stamped_topics` field name for
-		backward compatibility, but the landing card should not show `0` when the
-		first challenge topic is already open from normal-path completion. We
-		therefore count topics that are either explicitly stamped or currently open.
+		Only explicitly stamped topics count toward `stamped_topics`.
 		"""
 		total_topics = 0
 		stamped_topics = 0
-		free_units_set = set(hierarchy.free_units)
-		free_topics_set = set(hierarchy.free_topics)
 
 		for track in hierarchy.tracks:
 			for unit in track.units:
-				unit_is_free = unit.unit_id in free_units_set
 				prev_stamped = True
 				for topic in unit.topics:
 					if topic.mcq_count == 0:
@@ -550,14 +542,8 @@ class ChallengeService:
 					total_topics += 1
 					tp = progress_map.get(topic.topic_id, {})
 					is_stamped = bool(tp.get("stamped", 0))
-					topic_is_free = unit_is_free or topic.topic_id in free_topics_set
-					has_access = subject_has_access or topic_is_free
-					topic_completed = int(stats.get(f"{topic.topic_id}:completed", 0)) if stats else 0
-					topic_total = int(stats.get(f"{topic.topic_id}:total", 0)) if stats else 0
-					normal_path_complete = topic_total > 0 and topic_completed >= topic_total
-					is_open = has_access and normal_path_complete and prev_stamped
 
-					if is_stamped or is_open:
+					if is_stamped:
 						stamped_topics += 1
 					prev_stamped = is_stamped
 
@@ -610,11 +596,6 @@ class ChallengeService:
 		# Step 3: Bulk HGETALL all progress maps (1 pipeline)
 		progress_maps = await self._get_progress_maps_bulk(player_id, valid_ids)
 
-		# Step 4: Bulk-read fresh stats + subject access for summary state evaluation.
-		stats_maps, subject_access = await asyncio.gather(
-			self._get_valid_stats_bulk(player_id, valid_hierarchies),
-			self._get_subject_access_map(player_id, plan_id, valid_ids),
-		)
 
 		# Step 5: Try ZSCORE from leaderboard for XP (1 pipeline, fast path)
 		xp_from_leaderboard: dict[str, int | None] = {}
@@ -631,13 +612,10 @@ class ChallengeService:
 		for sid in valid_ids:
 			hierarchy = valid_hierarchies[sid]
 			progress_map = progress_maps.get(sid, {})
-			stats = stats_maps.get(sid)
 
 			total_topics, stamped_topics = self._compute_subject_stats(
 				hierarchy,
 				progress_map,
-				stats,
-				subject_access.get(sid, True),
 			)
 
 			# XP: use leaderboard ZSCORE (fast path), fallback to summing progress map
@@ -734,8 +712,8 @@ class ChallengeService:
 
 			units_response = []
 			for unit in track.units:
-				topics_response = []
 				unit_is_free = unit.unit_id in free_units_set
+				topics_response = []
 
 				# Track predecessor stamp state for sequential unlock within unit
 				prev_stamped = True  # First topic has no predecessor constraint
