@@ -1,11 +1,11 @@
 Restart the FastAPI server by following these steps exactly:
 
-1. Kill the uvicorn process on port 8002:
+1. Find the uvicorn master process PID and send SIGHUP to fully reload workers with new code:
    ```bash
-   fuser -k 8002/tcp
+   sudo kill -HUP $(pgrep -of 'uvicorn fastapi_app.main:app')
    ```
 
-2. Wait 3 seconds for the process supervisor to auto-restart it:
+2. Wait 3 seconds for workers to restart:
    ```bash
    sleep 3
    ```

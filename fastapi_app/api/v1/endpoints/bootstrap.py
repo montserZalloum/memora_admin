@@ -6,6 +6,7 @@ import structlog
 from fastapi import APIRouter
 
 from fastapi_app.api.deps import (
+	ChallengeServiceDep,
 	CurrentUser,
 	ReviewServiceDep,
 	SettingsServiceDep,
@@ -26,16 +27,27 @@ async def get_bootstrap(
 	settings_service: SettingsServiceDep,
 	wallet_service: WalletServiceDep,
 	review_service: ReviewServiceDep,
+	challenge_service: ChallengeServiceDep,
 ) -> BootstrapResponse:
-	"""Get combined init data in a single call: gamification settings, wallet, and review overview.
+	"""Get combined init data in a single call: gamification settings, wallet, review overview, and challenge XP.
 
-	All three are independent Redis reads executed concurrently.
-	Replaces separate calls to /settings/gamification, /wallet, and /reviews.
+	All four are independent Redis reads executed concurrently.
+	Replaces separate calls to /settings/gamification, /wallet, /reviews, and /challenge/xp.
 	"""
-	gamification, wallet_data, subjects_data = await asyncio.gather(
+	async def _get_challenge_xp() -> int:
+		if not user.season or not user.plan:
+			return 0
+		return await challenge_service.get_player_xp(
+			season_id=user.season,
+			plan_id=user.plan,
+			player_id=user.sub,
+		)
+
+	gamification, wallet_data, subjects_data, challenge_xp = await asyncio.gather(
 		settings_service.get_gamification_settings(),
 		wallet_service.get_wallet(user.sub),
 		review_service.get_overview(user.sub),
+		_get_challenge_xp(),
 	)
 
 	reviews = [
@@ -53,4 +65,5 @@ async def get_bootstrap(
 		gamification=gamification,
 		wallet=WalletResponse(xp=wallet_data["xp"], streak=wallet_data["streak"]),
 		reviews=reviews,
+		challenge_xp=challenge_xp,
 	)

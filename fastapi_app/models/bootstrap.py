@@ -8,8 +8,9 @@ from fastapi_app.models.wallet import WalletResponse
 
 
 class BootstrapResponse(BaseModel):
-	"""Combined response for app init — gamification + wallet + reviews in one call."""
+	"""Combined response for app init — gamification + wallet + reviews + challenge XP in one call."""
 
 	gamification: GamificationSettings
 	wallet: WalletResponse
 	reviews: list[SubjectReviewCount]
+	challenge_xp: int = 0

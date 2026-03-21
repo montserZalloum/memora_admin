@@ -673,6 +673,8 @@ class ChallengeService:
 		if subject_id not in plan_subject_ids:
 			return None
 
+		subject_name = next((ps.title for ps in manifest.subjects if ps.id == subject_id), subject_id)
+
 		hierarchy = await self.hierarchy_svc.get_hierarchy(subject_id)
 		if not hierarchy:
 			return None
@@ -810,6 +812,7 @@ class ChallengeService:
 		)
 		return ChallengeHierarchyResponse(
 			subject_id=subject_id,
+			subject_name=subject_name,
 			tracks=tracks_response,
 		)
 
@@ -1326,6 +1329,13 @@ class ChallengeService:
 			except Exception as e:
 				logger.warning("ch_attempt_lock_release_failed", error=str(e), player_id=player_id, topic_id=topic_id)
 
+		# Fetch total challenge XP (single ZSCORE, outside the lock)
+		total_challenge_xp = 0
+		if season_id and plan_id:
+			total_challenge_xp = await self.get_player_xp(
+				season_id=season_id, plan_id=plan_id, player_id=player_id,
+			)
+
 		logger.info(
 			"ch_attempt_submitted",
 			player_id=player_id,
@@ -1358,6 +1368,7 @@ class ChallengeService:
 			stamped=stamped,
 			xp_earned=xp_delta,
 			total_topic_xp=total_topic_xp,
+			total_challenge_xp=total_challenge_xp,
 			best_score_pct=best_score_pct,
 			best_passing_pct=best_passing_pct if best_passing_pct > 0 else None,
 			is_new_best=is_new_best,
@@ -1501,6 +1512,25 @@ class ChallengeService:
 			"entries": entries,
 			"total_players": total_players,
 		}
+
+	async def get_player_xp(
+		self,
+		season_id: str,
+		plan_id: str,
+		player_id: str,
+		subject_id: str | None = None,
+	) -> int:
+		"""Return the player's total Challenge XP from the leaderboard ZSET.
+
+		Single ZSCORE call — O(1). Returns 0 if unranked.
+		"""
+		if subject_id:
+			key = ch_leaderboard_subject_key(season_id, plan_id, subject_id)
+		else:
+			key = ch_leaderboard_key(season_id, plan_id)
+
+		score = await self.redis.zscore(key, player_id)
+		return int(score) if score is not None else 0
 
 	async def get_my_rank(
 		self,

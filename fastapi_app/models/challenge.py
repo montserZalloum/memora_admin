@@ -49,6 +49,7 @@ class AttemptResponse(BaseModel):
 	stamped: bool
 	xp_earned: int
 	total_topic_xp: int
+	total_challenge_xp: int
 	best_score_pct: float
 	best_passing_pct: float | None
 	is_new_best: bool
@@ -92,6 +93,7 @@ class ChallengeHierarchyResponse(BaseModel):
 	"""Response for GET /challenge/hierarchy/{subject_id}."""
 
 	subject_id: str
+	subject_name: str = ""
 	tracks: list[TrackState] = []
 
 
