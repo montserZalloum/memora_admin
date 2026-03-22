@@ -1140,11 +1140,13 @@ def lc_meta_key(event_id: str) -> str:
 
 	Type: HASH (scheduled_start, exam_start_ts, exam_end_ts, capacity,
 	            enable_question_timer, question_time_limit, waiting_room_duration,
-	            eligible_plans — JSON array of plan IDs)
+	            eligible_plans — JSON array of plan IDs,
+	            mode, starting_hearts, result_window_duration — Last Stand fields)
 	Producers: DocType after_save (on Draft), process_live_challenge_transitions()
 	Consumers: LiveChallengeService.join() (capacity, eligible_plans),
 	           LiveChallengeService.get_status() (timestamp-based transitions),
-	           WebSocket handler (exam_start_ts, timer settings)
+	           WebSocket handler (exam_start_ts, timer settings),
+	           LastStandEngine (mode branching, starting_hearts, result_window_duration)
 	TTL: 24h (LC_KEY_TTL)
 	"""
 	return f"memora:lc:{event_id}:meta"
@@ -1193,6 +1195,135 @@ def lc_results_key(event_id: str) -> str:
 	Note: Grade is pure Redis; Frappe persistence deferred to reconciliation.
 	"""
 	return f"memora:lc:{event_id}:results"
+
+
+# ── Last Stand (round-based elimination mode) ──────────────────────────
+
+
+def lc_mode_key(event_id: str) -> str:
+	"""Event mode indicator.
+
+	Type: STRING ("exam" or "last_stand")
+	Producers: _transition_to_waiting() (set alongside meta HASH)
+	Consumers: LiveChallengeService (mode branching at join/submit/answer/WS)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:mode"
+
+
+def lc_round_key(event_id: str) -> str:
+	"""Current round state for Last Stand events.
+
+	Type: HASH (round_id, question_idx, phase, phase_end_ts, alive_count)
+	Producers: LastStandEngine (set at round start, updated on phase change)
+	Consumers: LastStandEngine (resume after crash), POST /answer (Lua validation),
+	           WS reconnect handler (player_state delivery)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:round"
+
+
+def lc_hearts_key(event_id: str) -> str:
+	"""Per-player remaining hearts counter.
+
+	Type: HASH (player_id → remaining hearts as integer string)
+	Producers: LiveChallengeService.join() (HSET starting_hearts),
+	           LastStandEngine (HINCRBY -1 on wrong/missed answer)
+	Consumers: LastStandEngine (elimination check), reconciliation,
+	           WS reconnect (player_state)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:hearts"
+
+
+def lc_alive_key(event_id: str) -> str:
+	"""Set of player IDs still alive in a Last Stand event.
+
+	Type: SET of player_id strings
+	Producers: LiveChallengeService.join() (SADD),
+	           LastStandEngine (SMOVE to eliminated on heart depletion)
+	Consumers: LastStandEngine (SCARD for alive count, early close check),
+	           POST /answer Lua script (alive membership validation)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:alive"
+
+
+def lc_eliminated_key(event_id: str) -> str:
+	"""Set of player IDs eliminated in a Last Stand event.
+
+	Type: SET of player_id strings
+	Producers: LastStandEngine (SMOVE from alive on heart depletion)
+	Consumers: WS reconnect (eliminated status check), reconciliation
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:eliminated"
+
+
+def lc_eliminated_at_key(event_id: str) -> str:
+	"""Per-player elimination question index.
+
+	Type: HASH (player_id → question_idx as 0-based integer string)
+	Producers: LastStandEngine (HSET on elimination)
+	Consumers: Reconciliation (persist to Participation), WS reconnect
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:eliminated_at"
+
+
+def lc_round_answers_key(event_id: str, round_id: str) -> str:
+	"""Per-round player answers.
+
+	Type: HASH (player_id → JSON {"selected": "A", "ts": 1234567890.123})
+	Producers: POST /answer Lua script (HSET on valid submission)
+	Consumers: LastStandEngine (evaluate round — read all answers, check correctness)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:round_answers:{round_id}"
+
+
+def lc_response_times_key(event_id: str) -> str:
+	"""Cumulative per-player response times across all rounds.
+
+	Type: HASH (player_id → JSON array of response times in ms, e.g. [120, 340])
+	Producers: LastStandEngine (append after each round evaluation)
+	Consumers: Reconciliation (compute avg_response_time_ms)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:response_times"
+
+
+def lc_correct_counts_key(event_id: str) -> str:
+	"""Per-player correct answer count.
+
+	Type: HASH (player_id → correct count as integer string)
+	Producers: LastStandEngine (HINCRBY 1 on correct answer)
+	Consumers: Reconciliation (compute score = correct_count / total_questions * 100)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:correct_counts"
+
+
+def lc_answered_counts_key(event_id: str) -> str:
+	"""Per-player total answered count (excludes timeouts).
+
+	Type: HASH (player_id → answered count as integer string)
+	Producers: LastStandEngine (HINCRBY 1 when player submitted an answer)
+	Consumers: Reconciliation (avg_response_time denominator)
+	TTL: 24h (LC_KEY_TTL)
+	"""
+	return f"memora:lc:{event_id}:answered_counts"
+
+
+def lc_round_signal_key(event_id: str) -> str:
+	"""Pub/sub channel for early answer window close signal.
+
+	Type: PUBSUB channel
+	Producers: POST /answer (PUBLISH "all_answered" when HLEN >= alive_count)
+	Consumers: LastStandEngine (subscriber awaits signal to end answer window early)
+	TTL: N/A (pub/sub channels have no TTL)
+	"""
+	return f"memora:lc:{event_id}:round_signal"
 
 
 REACTION_WIN_TTL = 3

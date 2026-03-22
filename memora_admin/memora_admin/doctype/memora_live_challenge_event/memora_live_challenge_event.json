@@ -11,6 +11,10 @@
   "status",
   "column_break_basic",
   "description",
+  "section_break_mode",
+  "mode",
+  "starting_hearts",
+  "result_window_duration",
   "section_break_schedule",
   "scheduled_start",
   "waiting_room_duration",
@@ -72,6 +76,36 @@
    "fieldname": "description",
    "fieldtype": "Text Editor",
    "label": "Description"
+  },
+  {
+   "fieldname": "section_break_mode",
+   "fieldtype": "Section Break",
+   "label": "Mode"
+  },
+  {
+   "default": "exam",
+   "fieldname": "mode",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Mode",
+   "options": "exam\nlast_stand",
+   "reqd": 1
+  },
+  {
+   "default": "3",
+   "depends_on": "eval:doc.mode=='last_stand'",
+   "fieldname": "starting_hearts",
+   "fieldtype": "Int",
+   "label": "Starting Hearts",
+   "mandatory_depends_on": "eval:doc.mode=='last_stand'"
+  },
+  {
+   "default": "3",
+   "depends_on": "eval:doc.mode=='last_stand'",
+   "fieldname": "result_window_duration",
+   "fieldtype": "Int",
+   "label": "Result Window Duration (seconds)",
+   "mandatory_depends_on": "eval:doc.mode=='last_stand'"
   },
   {
    "fieldname": "section_break_schedule",
@@ -276,7 +310,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2026-03-18 12:00:00.000000",
+ "modified": "2026-03-22 12:00:00.000000",
  "modified_by": "zmontsaer@gmail.com",
  "module": "Memora Admin",
  "name": "Memora Live Challenge Event",

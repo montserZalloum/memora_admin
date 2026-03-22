@@ -18,7 +18,13 @@
 		"column_break_results",
 		"xp_awarded",
 		"section_break_detail",
-		"answers_json"
+		"answers_json",
+		"section_break_last_stand",
+		"final_hearts",
+		"is_eliminated",
+		"column_break_last_stand",
+		"eliminated_at_question",
+		"avg_response_time_ms"
 	],
 	"fields": [
 		{
@@ -88,11 +94,44 @@
 			"fieldname": "answers_json",
 			"fieldtype": "JSON",
 			"label": "Answers JSON"
+		},
+		{
+			"fieldname": "section_break_last_stand",
+			"fieldtype": "Section Break",
+			"label": "Last Stand"
+		},
+		{
+			"default": "0",
+			"fieldname": "final_hearts",
+			"fieldtype": "Int",
+			"label": "Final Hearts"
+		},
+		{
+			"default": "0",
+			"fieldname": "is_eliminated",
+			"fieldtype": "Check",
+			"label": "Is Eliminated"
+		},
+		{
+			"fieldname": "column_break_last_stand",
+			"fieldtype": "Column Break"
+		},
+		{
+			"default": "0",
+			"fieldname": "eliminated_at_question",
+			"fieldtype": "Int",
+			"label": "Eliminated At Question"
+		},
+		{
+			"default": "0",
+			"fieldname": "avg_response_time_ms",
+			"fieldtype": "Int",
+			"label": "Avg Response Time (ms)"
 		}
 	],
 	"index_web_pages_for_search": 1,
 	"links": [],
-	"modified": "2026-03-07 12:00:00.000000",
+	"modified": "2026-03-22 12:00:00.000000",
 	"modified_by": "Administrator",
 	"module": "Memora Admin",
 	"name": "Memora Live Challenge Participation",

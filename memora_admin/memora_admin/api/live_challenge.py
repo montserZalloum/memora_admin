@@ -35,14 +35,42 @@ def get_dashboard(event_id: str) -> dict:
 			diff = (event.exam_end_ts - now).total_seconds()
 			time_remaining = max(0, int(diff))
 
-		return {
+		result = {
 			"status": "Active",
+			"mode": getattr(event, "mode", None) or "exam",
 			"participant_count": participant_count,
 			"submitted_count": submitted_count,
 			"still_taking_count": still_taking_count,
 			"time_remaining": time_remaining,
 			"exam_end_ts": str(event.exam_end_ts) if event.exam_end_ts else None,
 		}
+
+		# Last Stand: live stats from Redis
+		mode = getattr(event, "mode", None) or "exam"
+		if mode == "last_stand":
+			from fastapi_app.core.redis_keys import (
+				lc_alive_key,
+				lc_eliminated_key,
+				lc_round_key,
+			)
+			from memora_admin.utils.redis_connection import get_memora_redis
+
+			r = get_memora_redis()
+			alive_count = r.scard(lc_alive_key(event_id))
+			eliminated_count = r.scard(lc_eliminated_key(event_id))
+			round_data = r.hgetall(lc_round_key(event_id))
+			# Decode bytes if needed
+			if round_data:
+				round_data = {
+					(k.decode() if isinstance(k, bytes) else k): (v.decode() if isinstance(v, bytes) else v)
+					for k, v in round_data.items()
+				}
+			result["alive_count"] = alive_count or 0
+			result["eliminated_count"] = eliminated_count or 0
+			result["current_round"] = int(round_data.get("question_idx", "0")) if round_data else 0
+			result["total_rounds"] = len(event.questions) if hasattr(event, "questions") else 0
+
+		return result
 
 	if event.status == "Ended":
 		participant_count = event.participant_count or 0

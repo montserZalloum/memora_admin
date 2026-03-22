@@ -1,0 +1,469 @@
+openapi: "3.1.0"
+info:
+  title: Live Challenge — Last Stand Mode API Contracts
+  version: "1.0.0"
+  description: |
+    New and modified endpoints for Last Stand mode.
+    Base path: /api/v1/live-challenge
+
+paths:
+  /{event_id}/answer:
+    post:
+      operationId: submitRoundAnswer
+      summary: Submit answer for current round (Last Stand only)
+      description: |
+        Submit a single answer for the current active round. Only available
+        during the answer window of a Last Stand event. Exam mode events
+        return MODE_NOT_SUPPORTED.
+
+        Atomic validation via Lua script:
+        1. Event status is "active"
+        2. Player is in alive set
+        3. round_id matches current round
+        4. Answer window is open (phase_end_ts > now)
+        5. Player hasn't already answered this round
+
+        Returns immediately with acceptance status. The actual correctness
+        result is delivered via WebSocket round_result message.
+      tags: [Last Stand]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: event_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AnswerRequest"
+      responses:
+        "200":
+          description: Answer accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnswerResponse"
+        "400":
+          description: |
+            Validation error. Codes:
+            - ROUND_MISMATCH: round_id doesn't match current round
+            - WINDOW_CLOSED: answer window has ended
+            - ALREADY_ANSWERED: player already answered this round
+            - NOT_ALIVE: player is eliminated
+            - MODE_NOT_SUPPORTED: event is exam mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: NOT_A_PARTICIPANT — player hasn't joined
+        "409":
+          description: EVENT_NOT_ACTIVE — event is not in Active state
+
+  /{event_id}/submit:
+    post:
+      operationId: submitExamAnswers
+      summary: Submit all answers (Exam mode only — existing)
+      description: |
+        MODIFIED: Now returns MODE_NOT_SUPPORTED error for Last Stand events.
+        Existing exam mode behavior is unchanged.
+      tags: [Exam, Modified]
+      responses:
+        "400":
+          description: MODE_NOT_SUPPORTED for Last Stand events (new)
+
+  /{event_id}/join:
+    post:
+      operationId: joinEvent
+      summary: Join event waiting room (modified for Last Stand)
+      description: |
+        MODIFIED behavior for Last Stand:
+        - Rejects join when status is "active" (no late join — FR-007)
+        - Response includes starting_hearts field
+        - On join, initializes player in hearts HASH and alive SET
+
+        Exam mode: unchanged (allows join during active).
+      tags: [Modified]
+      responses:
+        "200":
+          description: Successfully joined
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/JoinResponse"
+        "400":
+          description: |
+            New error code for Last Stand:
+            - NO_LATE_JOIN: Last Stand events don't allow joining after Active
+
+  /{event_id}/status:
+    get:
+      operationId: getEventStatus
+      summary: Lightweight event status (modified for Last Stand)
+      description: |
+        MODIFIED: Response includes additional fields for Last Stand events:
+        - mode: "exam" or "last_stand"
+        - alive_count: number of alive players (Last Stand only)
+        - eliminated_count: number of eliminated players (Last Stand only)
+        - current_round: current question index (Last Stand only, during Active)
+        - total_rounds: total question count
+      tags: [Modified]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+
+  /{event_id}/result:
+    get:
+      operationId: getPlayerResult
+      summary: Get player's own result (modified for Last Stand)
+      description: |
+        MODIFIED: Response includes additional fields for Last Stand events:
+        - final_hearts, is_eliminated, eliminated_at_question, avg_response_time_ms
+      tags: [Modified]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResultResponse"
+
+  /{event_id}/leaderboard:
+    get:
+      operationId: getLeaderboard
+      summary: Get top 20 leaderboard (modified ranking for Last Stand)
+      description: |
+        MODIFIED: Last Stand ranking uses three-tier sort:
+        score DESC → final_hearts DESC → avg_response_time_ms ASC.
+        Exam mode ranking unchanged (score DESC only).
+      tags: [Modified]
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LeaderboardResponse"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    AnswerRequest:
+      type: object
+      required: [round_id, selected]
+      properties:
+        round_id:
+          type: string
+          description: Current round identifier (e.g., "EVT-001-R3")
+          example: "EVT-001-R3"
+        selected:
+          type: string
+          enum: [A, B, C, D]
+          description: Selected answer option
+
+    AnswerResponse:
+      type: object
+      properties:
+        accepted:
+          type: boolean
+          description: Always true on 200 response
+          example: true
+        round_id:
+          type: string
+          description: Echo of the round_id that was answered
+          example: "EVT-001-R3"
+
+    JoinResponse:
+      type: object
+      properties:
+        position:
+          type: integer
+          description: Player's join position (1-based)
+        countdown_remaining:
+          type: integer
+          description: Seconds until event starts
+        waiting_room_duration:
+          type: integer
+          description: Total waiting room duration in seconds
+        starting_hearts:
+          type: integer
+          nullable: true
+          description: Hearts assigned (Last Stand only, null for exam)
+          example: 3
+        mode:
+          type: string
+          enum: [exam, last_stand]
+          description: Event mode
+
+    StatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [draft, waiting, active, ended]
+        mode:
+          type: string
+          enum: [exam, last_stand]
+          description: "(new) Event mode"
+        participant_count:
+          type: integer
+        exam_start_ts:
+          type: string
+          format: date-time
+        exam_end_ts:
+          type: string
+          format: date-time
+        # Last Stand specific (null for exam)
+        alive_count:
+          type: integer
+          nullable: true
+          description: "(new) Alive players — Last Stand Active only"
+        eliminated_count:
+          type: integer
+          nullable: true
+          description: "(new) Eliminated players — Last Stand Active only"
+        current_round:
+          type: integer
+          nullable: true
+          description: "(new) Current question index (0-based) — Last Stand Active only"
+        total_rounds:
+          type: integer
+          nullable: true
+          description: "(new) Total questions in event"
+
+    ResultResponse:
+      type: object
+      properties:
+        score:
+          type: number
+          format: float
+          description: Score as percentage (0-100)
+        rank:
+          type: integer
+        xp_awarded:
+          type: integer
+        correct_count:
+          type: integer
+        total_questions:
+          type: integer
+        # Last Stand specific (0/false for exam)
+        final_hearts:
+          type: integer
+          description: "(new) Hearts remaining at event end"
+        is_eliminated:
+          type: boolean
+          description: "(new) Whether player was eliminated"
+        eliminated_at_question:
+          type: integer
+          description: "(new) Question index where eliminated (0 if not)"
+        avg_response_time_ms:
+          type: integer
+          description: "(new) Average response time in ms"
+
+    LeaderboardResponse:
+      type: object
+      properties:
+        leaderboard:
+          type: array
+          items:
+            $ref: "#/components/schemas/LeaderboardEntry"
+        my_rank:
+          type: integer
+          nullable: true
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        player_id:
+          type: string
+        display_name:
+          type: string
+        score:
+          type: number
+        # Last Stand additions
+        final_hearts:
+          type: integer
+          description: "(new) Hearts remaining"
+        is_eliminated:
+          type: boolean
+          description: "(new) Whether eliminated"
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Machine-readable error code
+        message:
+          type: string
+          description: Human-readable description
+
+    # ─── WebSocket Message Schemas ───────────────────────────────
+
+    WSRoundStart:
+      type: object
+      description: |
+        Broadcast to ALL connected players (alive + spectators) at the
+        start of each round's answer window.
+      properties:
+        type:
+          type: string
+          const: round_start
+        round_id:
+          type: string
+          example: "EVT-001-R3"
+        question_idx:
+          type: integer
+          description: 0-based question index
+        question:
+          type: object
+          description: Question WITHOUT correct_answer field (FR-020)
+          properties:
+            question_text:
+              type: string
+            option_a:
+              type: string
+            option_b:
+              type: string
+            option_c:
+              type: string
+            option_d:
+              type: string
+        time_limit:
+          type: integer
+          description: Answer window duration in seconds
+        alive_count:
+          type: integer
+        total_rounds:
+          type: integer
+        is_alive:
+          type: boolean
+          description: "(personalized) Whether this player is alive"
+
+    WSRoundResult:
+      type: object
+      description: |
+        Sent to ALL connected players after answer window closes and
+        evaluation completes. Contains personalized per-player fields.
+        Correct answer is NOT included (FR-020 — revealed only after event ends).
+      properties:
+        type:
+          type: string
+          const: round_result
+        round_id:
+          type: string
+        question_idx:
+          type: integer
+        alive_count:
+          type: integer
+          description: Alive players AFTER this round's eliminations
+        eliminated_this_round:
+          type: integer
+          description: Number of players eliminated this round
+        # Personalized fields (different per connection)
+        hearts_remaining:
+          type: integer
+          description: "(personalized) Player's hearts after this round"
+        heart_lost:
+          type: boolean
+          description: "(personalized) Whether player lost a heart this round"
+        is_correct:
+          type: boolean
+          nullable: true
+          description: "(personalized) Whether player's answer was correct. null if didn't answer."
+        is_eliminated:
+          type: boolean
+          description: "(personalized) Whether player was eliminated this round"
+        is_alive:
+          type: boolean
+          description: "(personalized) Whether player is still alive"
+
+    WSAliveCountUpdate:
+      type: object
+      description: |
+        Broadcast during Active phase when alive count changes
+        (typically after each round_result). Lightweight update for
+        admin dashboards and spectator UIs.
+      properties:
+        type:
+          type: string
+          const: alive_count_update
+        alive_count:
+          type: integer
+        eliminated_count:
+          type: integer
+        current_round:
+          type: integer
+          description: Current question index (0-based)
+
+    WSPlayerState:
+      type: object
+      description: |
+        Sent to a single player on WebSocket reconnect during Active
+        Last Stand event. Allows client to rebuild UI state.
+      properties:
+        type:
+          type: string
+          const: player_state
+        hearts_remaining:
+          type: integer
+        is_alive:
+          type: boolean
+        current_round_id:
+          type: string
+          nullable: true
+          description: Current round_id (null if between rounds)
+        question_idx:
+          type: integer
+          description: Current question index
+        phase:
+          type: string
+          enum: [answer, result]
+          description: Current round phase
+        phase_remaining_ms:
+          type: integer
+          description: Milliseconds remaining in current phase
+        question:
+          type: object
+          nullable: true
+          description: Current question (if in answer phase and alive). null for eliminated/result phase.
+        alive_count:
+          type: integer
+        eliminated_at_question:
+          type: integer
+          nullable: true
+          description: Question index where eliminated (null if alive)
+
+    WSEventEnded:
+      type: object
+      description: |
+        Broadcast to ALL connected players when event ends.
+        Extends existing event_ended message with Last Stand reason.
+      properties:
+        type:
+          type: string
+          const: event_ended
+        reason:
+          type: string
+          enum: [all_finished, all_eliminated, time_ceiling]
+          description: |
+            - all_finished: all questions answered
+            - all_eliminated: no players have hearts remaining
+            - time_ceiling: exam_end_ts safety ceiling reached
+        final_alive_count:
+          type: integer
+        total_rounds_played:
+          type: integer
+          description: Number of rounds that were played

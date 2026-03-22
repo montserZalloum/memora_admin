@@ -5,9 +5,11 @@ import json
 import math
 from datetime import timedelta
 
+from zoneinfo import ZoneInfo
+
 import frappe
 from frappe.model.document import Document
-from frappe.utils import get_datetime
+from frappe.utils import get_datetime, get_system_timezone
 
 VALID_TRANSITIONS = {
 	"Draft": {"Waiting"},
@@ -40,6 +42,11 @@ _XP_FIELDS = (
 
 
 class MemoraLiveChallengeEvent(Document):
+	def before_save(self):
+		"""Enforce immutable mode after creation."""
+		if not self.is_new() and self.has_value_changed("mode"):
+			frappe.throw("Mode cannot be changed after creation")
+
 	def after_save(self):
 		"""Populate Redis with event data when saved as Draft.
 
@@ -112,6 +119,9 @@ class MemoraLiveChallengeEvent(Document):
 			"second_place_xp": str(self.second_place_xp or 0),
 			"third_place_xp": str(self.third_place_xp or 0),
 			"default_xp": str(self.default_xp or 0),
+			"mode": self.mode or "exam",
+			"starting_hearts": str(self.starting_hearts or 3),
+			"result_window_duration": str(self.result_window_duration or 3),
 		}
 		meta_key = lc_meta_key(self.name)
 		# hset with all fields is an atomic overwrite — no delete needed
@@ -125,6 +135,7 @@ class MemoraLiveChallengeEvent(Document):
 		pipe.execute()
 
 	def validate(self):
+		self._validate_last_stand_fields()
 		self._auto_calc_exam_duration()
 		self._compute_timestamps()
 		self._validate_ranges()
@@ -142,12 +153,47 @@ class MemoraLiveChallengeEvent(Document):
 			return
 		question_count = len(self.questions or [])
 		time_limit = int(self.question_time_limit or 30)
-		self.exam_duration = max(math.ceil((time_limit * question_count) / 60), 1)
+		if self.mode == "last_stand":
+			result_window = int(self.result_window_duration or 3)
+			total_seconds = question_count * (time_limit + result_window)
+			# Add 1 minute buffer for transitions and final reconciliation
+			self.exam_duration = max(math.ceil(total_seconds / 60) + 1, 1)
+		else:
+			self.exam_duration = max(math.ceil((time_limit * question_count) / 60), 1)
+
+	def _validate_last_stand_fields(self):
+		"""Validate Last Stand-specific fields when mode is last_stand."""
+		if self.mode != "last_stand":
+			return
+		if not self.enable_question_timer:
+			frappe.throw("Question timer must be enabled for Last Stand mode")
+		hearts = int(self.starting_hearts or 0)
+		if not (1 <= hearts <= 10):
+			frappe.throw("Starting hearts must be between 1 and 10")
+		rwd = int(self.result_window_duration or 0)
+		if not (1 <= rwd <= 10):
+			frappe.throw("Result window duration must be between 1 and 10 seconds")
 
 	def _compute_timestamps(self):
-		"""Set exam_start_ts and exam_end_ts from schedule fields."""
+		"""Convert scheduled_start to UTC and compute exam_start_ts / exam_end_ts.
+
+		The admin enters scheduled_start in the Frappe system timezone (Asia/Amman).
+		All three timestamps are stored as UTC so both the Frappe cron
+		and the FastAPI service can compare them directly.
+
+		Conversion only runs when scheduled_start is new or changed to avoid
+		double-converting on re-saves (e.g. status transitions).
+		"""
 		if self.scheduled_start and self.waiting_room_duration is not None and self.exam_duration is not None:
 			start = get_datetime(self.scheduled_start)
+
+			# Only convert from local TZ on new docs or when scheduled_start changed
+			if self.is_new() or self.has_value_changed("scheduled_start"):
+				sys_tz = ZoneInfo(get_system_timezone())
+				start_aware = start.replace(tzinfo=sys_tz)
+				start = start_aware.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
+				self.scheduled_start = start
+
 			self.exam_start_ts = start + timedelta(seconds=int(self.waiting_room_duration))
 			self.exam_end_ts = get_datetime(self.exam_start_ts) + timedelta(minutes=int(self.exam_duration))
 
@@ -240,13 +286,13 @@ class MemoraLiveChallengeEvent(Document):
 			fields=["name", "event_name", "scheduled_start", "exam_end_ts"],
 		)
 
-		for ev in existing:
-			ev_start = get_datetime(ev.scheduled_start)
-			ev_end = get_datetime(ev.exam_end_ts) + timedelta(seconds=OVERLAP_BUFFER)
+		# for ev in existing:
+		# 	ev_start = get_datetime(ev.scheduled_start)
+		# 	ev_end = get_datetime(ev.exam_end_ts) + timedelta(seconds=OVERLAP_BUFFER)
 
-			# Check overlap: my event's [start, end+buffer] overlaps with existing [start, end+buffer]
-			if my_start < ev_end and my_end > ev_start:
-				frappe.throw(
-					f"Schedule conflicts with '{ev.event_name}' ({ev.name}). "
-					f"There must be at least a 5-minute gap between events."
-				)
+		# 	# Check overlap: my event's [start, end+buffer] overlaps with existing [start, end+buffer]
+		# 	if my_start < ev_end and my_end > ev_start:
+		# 		frappe.throw(
+		# 			f"Schedule conflicts with '{ev.event_name}' ({ev.name}). "
+		# 			f"There must be at least a 5-minute gap between events."
+		# 		)

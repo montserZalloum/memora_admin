@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from datetime import datetime, timedelta, timezone
 
 UTC = timezone.utc
@@ -16,14 +17,23 @@ from fastapi import WebSocket
 from fastapi_app.core.config import get_settings
 from fastapi_app.core.redis_keys import (
 	LC_KEY_TTL,
+	lc_alive_key,
+	lc_answered_counts_key,
+	lc_correct_counts_key,
 	lc_count_key,
+	lc_eliminated_at_key,
+	lc_eliminated_key,
+	lc_hearts_key,
 	lc_join_times_key,
 	lc_joined_key,
 	lc_meta_key,
+	lc_mode_key,
 	lc_questions_key,
 	lc_reconcile_lock_key,
 	lc_reconciled_key,
+	lc_response_times_key,
 	lc_results_key,
+	lc_round_key,
 	lc_status_key,
 	lc_submitted_key,
 )
@@ -31,6 +41,7 @@ from fastapi_app.services.waiting_room_reactions import ReactionEngine
 
 if TYPE_CHECKING:
 	from fastapi_app.services.frappe_client import FrappeClient
+	from fastapi_app.services.last_stand_engine import LastStandEngine
 
 logger = structlog.get_logger()
 
@@ -157,8 +168,13 @@ class LiveChallengeService:
 		self._cas_script: Any = None
 		# WebSocket connection tracking: event_id -> set[WebSocket]
 		self._ws_connections: dict[str, set[WebSocket]] = {}
+		# WebSocket → player_id mapping for personalized broadcasts
+		self._ws_player_map: dict[str, dict[WebSocket, str]] = {}
 		# Per-event countdown loop tasks
 		self._countdown_tasks: dict[str, asyncio.Task] = {}
+		# Last Stand engine instances and tasks
+		self._engines: dict[str, LastStandEngine] = {}
+		self._engine_tasks: dict[str, asyncio.Task] = {}
 		# Waiting room reaction engine
 		self._reaction_engine = ReactionEngine(
 			settings=get_settings(),
@@ -237,6 +253,7 @@ class LiveChallengeService:
 
 		# Meta hash — includes ALL fields needed by get_event_detail (Redis-only reads)
 		eligible_plans = [ep.get("plan", "") for ep in (event.get("eligible_plans") or []) if isinstance(ep, dict)]
+		mode = event.get("mode") or "exam"
 		meta = {
 			"scheduled_start": str(event.get("scheduled_start", "")),
 			"exam_start_ts": str(event.get("exam_start_ts", "")),
@@ -255,11 +272,17 @@ class LiveChallengeService:
 			"second_place_xp": str(event.get("second_place_xp", 0)),
 			"third_place_xp": str(event.get("third_place_xp", 0)),
 			"default_xp": str(event.get("default_xp", 0)),
+			"mode": mode,
+			"starting_hearts": str(event.get("starting_hearts", 3)),
+			"result_window_duration": str(event.get("result_window_duration", 3)),
 		}
 		meta_key = lc_meta_key(event_id)
 		# hset with all fields is an atomic overwrite — no delete needed
 		pipe.hset(meta_key, mapping=meta)
 		pipe.expire(meta_key, LC_KEY_TTL)
+
+		# Mode key (fast lookup without HGET on meta)
+		pipe.set(lc_mode_key(event_id), mode, ex=LC_KEY_TTL)
 
 		# Count (preserve existing, else 0)
 		count_key = lc_count_key(event_id)
@@ -357,38 +380,59 @@ class LiveChallengeService:
 			# For ended events, ensure reconciliation has been kicked off (non-blocking)
 			if current_status == "ended" and not await self.redis.exists(lc_reconciled_key(event_id)):
 				asyncio.create_task(self._reconcile_event(event_id))
-			return {"status": current_status, "participant_count": participant_count}
+			resolved_status = current_status
+		else:
+			# Transition needed — use atomic CAS Lua script
+			script = await self._get_cas_script()
 
-		# Transition needed — use atomic CAS Lua script
-		script = await self._get_cas_script()
+			# Walk through each required transition step in order
+			transitions = [("draft", "waiting"), ("waiting", "active"), ("active", "ended")]
+			resolved_status = current_status
+			for from_status, to_status in transitions:
+				if resolved_status != from_status:
+					continue
+				# Check if this transition is due
+				if to_status == "waiting" and now < scheduled_start:
+					break
+				if to_status == "active" and now < exam_start_ts:
+					break
+				if to_status == "ended" and now < exam_end_ts:
+					break
 
-		# Walk through each required transition step in order
-		transitions = [("draft", "waiting"), ("waiting", "active"), ("active", "ended")]
-		resolved_status = current_status
-		for from_status, to_status in transitions:
-			if resolved_status != from_status:
-				continue
-			# Check if this transition is due
-			if to_status == "waiting" and now < scheduled_start:
-				break
-			if to_status == "active" and now < exam_start_ts:
-				break
-			if to_status == "ended" and now < exam_end_ts:
-				break
+				result = await script(
+					keys=[lc_status_key(event_id)],
+					args=[from_status, to_status, str(LC_KEY_TTL)],
+				)
+				if result is None:
+					break
+				result_str = result if isinstance(result, str) else result.decode()
+				resolved_status = result_str
+				# Trigger reconciliation when transitioning to ended (non-blocking)
+				if to_status == "ended" and result_str == "ended":
+					asyncio.create_task(self._reconcile_event(event_id))
 
-			result = await script(
-				keys=[lc_status_key(event_id)],
-				args=[from_status, to_status, str(LC_KEY_TTL)],
-			)
-			if result is None:
-				break
-			result_str = result if isinstance(result, str) else result.decode()
-			resolved_status = result_str
-			# Trigger reconciliation when transitioning to ended (non-blocking)
-			if to_status == "ended" and result_str == "ended":
-				asyncio.create_task(self._reconcile_event(event_id))
+		resp: dict[str, Any] = {"status": resolved_status, "participant_count": participant_count}
 
-		return {"status": resolved_status, "participant_count": participant_count}
+		# Enrich with Last Stand stats when applicable
+		mode = meta.get("mode", "exam")
+		resp["mode"] = mode
+		if mode == "last_stand":
+			if resolved_status == "active":
+				ls_pipe = self.redis.pipeline()
+				ls_pipe.scard(lc_alive_key(event_id))
+				ls_pipe.scard(lc_eliminated_key(event_id))
+				ls_pipe.hgetall(lc_round_key(event_id))
+				ls_pipe.get(lc_questions_key(event_id))
+				alive, eliminated, round_data, qs_raw = await ls_pipe.execute()
+				resp["alive_count"] = alive
+				resp["eliminated_count"] = eliminated
+				resp["current_round"] = int(round_data.get("question_idx", "0")) if round_data else 0
+				try:
+					resp["total_rounds"] = len(json.loads(qs_raw)) if qs_raw else 0
+				except (json.JSONDecodeError, TypeError):
+					resp["total_rounds"] = 0
+
+		return resp
 
 	# -------------------------------------------------------------------------
 	# Lifecycle
@@ -398,12 +442,277 @@ class LiveChallengeService:
 		"""Start the cross-worker reaction burst pub/sub subscriber."""
 		await self._reaction_engine.start_subscriber()
 
+	async def resume_active_last_stand_events(self) -> None:
+		"""Startup scan: resume LastStandEngine for any Active Last Stand events.
+
+		Called once during FastAPI startup.  Queries Frappe for Active events
+		with mode=last_stand, checks Redis round state, and resumes engines
+		from stored state (fast-forwards missed rounds if phase_end_ts < now).
+		"""
+		try:
+			active_events = await self.frappe.call(
+				"frappe.client.get_list",
+				{
+					"doctype": "Memora Live Challenge Event",
+					"filters": {"status": "Active", "mode": "last_stand"},
+					"fields": ["name"],
+					"limit_page_length": 0,
+				},
+			)
+		except Exception:
+			logger.exception("last_stand_startup_scan_frappe_failed")
+			return
+
+		if not active_events:
+			return
+
+		for ev in active_events:
+			event_id = ev["name"]
+			try:
+				# Check if engine already running (shouldn't happen on fresh startup)
+				if event_id in self._engines:
+					continue
+
+				# Check Redis state exists
+				redis_status = await self.redis.get(lc_status_key(event_id))
+				if redis_status != "active":
+					logger.info(
+						"last_stand_startup_skip_not_active",
+						event_id=event_id,
+						redis_status=redis_status,
+					)
+					continue
+
+				round_data = await self.redis.hgetall(lc_round_key(event_id))
+				if not round_data:
+					# No round state — Redis was lost. End the event via reconciliation.
+					logger.warning(
+						"last_stand_startup_no_round_state",
+						event_id=event_id,
+					)
+					await self.redis.set(lc_status_key(event_id), "ended", ex=LC_KEY_TTL)
+					asyncio.create_task(self._reconcile_event(event_id))
+					continue
+
+				phase = round_data.get("phase", "")
+				if phase == "ended":
+					# Engine already finished — just ensure reconciliation
+					logger.info("last_stand_startup_already_ended", event_id=event_id)
+					asyncio.create_task(self._reconcile_event(event_id))
+					continue
+
+				# Resume engine from stored state
+				await self._start_last_stand_engine(event_id)
+				logger.info(
+					"last_stand_startup_resumed",
+					event_id=event_id,
+					round_phase=phase,
+					round_question_idx=round_data.get("question_idx", "?"),
+				)
+
+			except Exception:
+				logger.exception("last_stand_startup_resume_failed", event_id=event_id)
+
 	async def shutdown(self):
 		"""Signal all background loops to stop and cancel countdown tasks."""
 		self._shutting_down = True
 		await self._reaction_engine.stop_subscriber()
 		for event_id in list(self._countdown_tasks):
 			self.stop_countdown_loop(event_id)
+		# Stop all Last Stand engines
+		for engine in self._engines.values():
+			engine.stop()
+		for task in self._engine_tasks.values():
+			if not task.done():
+				task.cancel()
+		self._engines.clear()
+		self._engine_tasks.clear()
+
+	# -------------------------------------------------------------------------
+	# Last Stand Engine Lifecycle
+	# -------------------------------------------------------------------------
+
+	async def _start_last_stand_engine(self, event_id: str) -> None:
+		"""Create and start the LastStandEngine for an event.
+
+		Supports both fresh starts and crash-recovery resumes.  On resume,
+		reads the round HASH to determine which question index to resume
+		from.  For rounds missed during downtime (phase_end_ts < now),
+		alive players who didn't answer lose a heart.
+		"""
+		from fastapi_app.services.last_stand_engine import LastStandEngine
+
+		questions_json = await self.redis.get(lc_questions_key(event_id))
+		if not questions_json:
+			logger.error("last_stand_no_questions", event_id=event_id)
+			return
+		questions = json.loads(questions_json)
+		meta = await self.redis.hgetall(lc_meta_key(event_id))
+
+		# Determine resume point from Redis round state
+		resume_from_idx = 0
+		round_data = await self.redis.hgetall(lc_round_key(event_id))
+		if round_data and round_data.get("question_idx"):
+			stored_idx = int(round_data["question_idx"])
+			phase = round_data.get("phase", "")
+			phase_end_ts = float(round_data.get("phase_end_ts", "0"))
+			now = time.time()
+
+			if phase_end_ts < now:
+				# Phase expired during downtime — fast-forward past this round
+				# Deduct hearts for alive players who didn't answer the missed round
+				await self._fast_forward_missed_round(event_id, round_data, questions)
+				resume_from_idx = stored_idx + 1
+			elif phase == "result":
+				# In result window but not expired — resume from NEXT round
+				resume_from_idx = stored_idx + 1
+			else:
+				# Still in answer window — resume from THIS round
+				resume_from_idx = stored_idx
+
+			if resume_from_idx > 0:
+				logger.info(
+					"last_stand_engine_resuming",
+					event_id=event_id,
+					resume_from_idx=resume_from_idx,
+					stored_idx=stored_idx,
+					phase=phase,
+				)
+
+		engine = LastStandEngine(
+			redis_client=self.redis,
+			event_id=event_id,
+			questions=questions,
+			meta=meta,
+			broadcast_json=self._broadcast_json,
+			broadcast_personalized=self._broadcast_personalized,
+			on_event_ended=self._on_last_stand_ended,
+			resume_from_idx=resume_from_idx,
+		)
+		self._engines[event_id] = engine
+		task = asyncio.create_task(engine.run())
+		self._engine_tasks[event_id] = task
+		logger.info(
+			"last_stand_engine_started",
+			event_id=event_id,
+			total_rounds=len(questions),
+			resume_from_idx=resume_from_idx,
+		)
+
+	async def _fast_forward_missed_round(
+		self, event_id: str, round_data: dict, questions: list[dict],
+	) -> None:
+		"""Fast-forward a round that expired during downtime (crash recovery).
+
+		For alive players who didn't answer, deduct a heart and eliminate if <= 0.
+		"""
+		from fastapi_app.core.redis_keys import lc_round_answers_key
+
+		round_id = round_data.get("round_id", "")
+		question_idx = int(round_data.get("question_idx", "0"))
+
+		# Guard: if hearts were already deducted for this round before the crash,
+		# skip deduction to avoid double-penalizing players (S-1).
+		if round_data.get("hearts_deducted") == "1":
+			logger.info(
+				"last_stand_fast_forward_skip_hearts_already_deducted",
+				event_id=event_id,
+				question_idx=question_idx,
+			)
+			return
+
+		# Get alive players and who already answered
+		alive_members = await self.redis.smembers(lc_alive_key(event_id))
+		if not alive_members:
+			return
+
+		answered = set()
+		if round_id:
+			answered_raw = await self.redis.hkeys(lc_round_answers_key(event_id, round_id))
+			answered = set(answered_raw)
+
+		# Unanswered alive players lose a heart
+		unanswered = [pid for pid in alive_members if pid not in answered]
+		if not unanswered:
+			return
+
+		pipe = self.redis.pipeline()
+		for pid in unanswered:
+			pipe.hincrby(lc_hearts_key(event_id), pid, -1)
+		new_hearts_list = await pipe.execute()
+
+		# Eliminate players with hearts <= 0
+		to_eliminate = [
+			pid for pid, nh in zip(unanswered, new_hearts_list)
+			if int(nh) <= 0
+		]
+		if to_eliminate:
+			elim_pipe = self.redis.pipeline()
+			for pid in to_eliminate:
+				elim_pipe.smove(
+					lc_alive_key(event_id),
+					lc_eliminated_key(event_id),
+					pid,
+				)
+				elim_pipe.hset(
+					lc_eliminated_at_key(event_id), pid, str(question_idx),
+				)
+			elim_pipe.expire(lc_eliminated_key(event_id), LC_KEY_TTL)
+			elim_pipe.expire(lc_eliminated_at_key(event_id), LC_KEY_TTL)
+			await elim_pipe.execute()
+
+		logger.info(
+			"last_stand_fast_forward",
+			event_id=event_id,
+			question_idx=question_idx,
+			unanswered_count=len(unanswered),
+			eliminated_count=len(to_eliminate),
+		)
+
+	async def _on_last_stand_ended(
+		self, event_id: str, reason: str, alive_count: int, rounds_played: int,
+	) -> None:
+		"""Callback from LastStandEngine when the event ends."""
+		# Broadcast event_ended with Last Stand fields
+		await self._broadcast_json(event_id, {
+			"type": "event_ended",
+			"reason": reason,
+			"final_alive_count": alive_count,
+			"total_rounds_played": rounds_played,
+		})
+		# Trigger reconciliation
+		await self._reconcile_event(event_id)
+		# Defer engine cleanup so the safety ceiling can still find and await
+		# the engine task (which is the caller of this callback) — S-5.
+		asyncio.get_event_loop().call_soon(self._cleanup_engine, event_id)
+
+	def _cleanup_engine(self, event_id: str) -> None:
+		"""Remove engine and task references (deferred from _on_last_stand_ended)."""
+		self._engines.pop(event_id, None)
+		self._engine_tasks.pop(event_id, None)
+
+	async def submit_last_stand_answer(
+		self, event_id: str, player_id: str, round_id: str, selected: str,
+	) -> int:
+		"""Submit an answer for a Last Stand round.  Returns Lua result code."""
+		from fastapi_app.core.redis_keys import lc_round_answers_key, lc_round_signal_key
+
+		engine = self._engines.get(event_id)
+		if engine is None:
+			return -1  # EVENT_NOT_ACTIVE (no engine running)
+
+		result = await engine.submit_answer(player_id, round_id, selected)
+
+		# On success, check for early close signal (R-004)
+		if result == 1:
+			pipe = self.redis.pipeline()
+			pipe.hlen(lc_round_answers_key(event_id, round_id))
+			pipe.scard(lc_alive_key(event_id))
+			answer_count, alive_count = await pipe.execute()
+			if alive_count > 0 and answer_count >= alive_count:
+				await self.redis.publish(lc_round_signal_key(event_id), "all_answered")
+
+		return result
 
 	# -------------------------------------------------------------------------
 	# Join (T021)
@@ -423,13 +732,19 @@ class LiveChallengeService:
 		Returns dict with position, countdown_remaining, waiting_room_duration.
 		Raises ValueError with error code on failure.
 		"""
-		# 1. Fast-path status + meta in one round trip
+		# 1. Fast-path status + meta + mode in one round trip
 		pipe = self.redis.pipeline()
 		pipe.get(lc_status_key(event_id))
 		pipe.hgetall(lc_meta_key(event_id))
-		status, meta = await pipe.execute()
+		pipe.get(lc_mode_key(event_id))
+		status, meta, mode = await pipe.execute()
+		mode = mode or "exam"
 		if status not in ("waiting", "active"):
 			raise ValueError("EVENT_NOT_JOINABLE")
+
+		# Last Stand: reject late join during Active phase (FR-007)
+		if mode == "last_stand" and status == "active":
+			raise ValueError("NO_LATE_JOIN")
 
 		# 2. Check plan eligibility (before atomic join to avoid wasting a capacity slot)
 		eligible_plans_json = meta.get("eligible_plans", "[]")
@@ -440,7 +755,7 @@ class LiveChallengeService:
 		# 2.5 Paid-event access gate (R-010, FR-015)
 		is_paid = bool(int(meta.get("is_paid", "0")))
 		if is_paid:
-			await self._check_paid_event_access(player_id, player_plan, event_id)
+			await self._check_paid_event_access(player_id, event_id)
 
 		# 3. Atomic join: status check + uniqueness + capacity + SADD + EXPIRE in one Lua call
 		capacity = int(meta.get("capacity", "0"))
@@ -466,6 +781,13 @@ class LiveChallengeService:
 		join_pipe = self.redis.pipeline()
 		join_pipe.hset(lc_join_times_key(event_id), player_id, join_time)
 		join_pipe.expire(lc_join_times_key(event_id), LC_KEY_TTL)
+		# Last Stand: initialize hearts and alive set on join
+		if mode == "last_stand":
+			starting_hearts = int(meta.get("starting_hearts", "3"))
+			join_pipe.hset(lc_hearts_key(event_id), player_id, starting_hearts)
+			join_pipe.expire(lc_hearts_key(event_id), LC_KEY_TTL)
+			join_pipe.sadd(lc_alive_key(event_id), player_id)
+			join_pipe.expire(lc_alive_key(event_id), LC_KEY_TTL)
 		await join_pipe.execute()
 
 		# 4. Calculate countdown_remaining
@@ -490,39 +812,32 @@ class LiveChallengeService:
 			status=status,
 		)
 
-		return {
+		result = {
 			"position": position,
 			"countdown_remaining": countdown_remaining,
 			"waiting_room_duration": waiting_room_duration,
+			"mode": mode,
 		}
+		if mode == "last_stand":
+			result["starting_hearts"] = int(meta.get("starting_hearts", "3"))
+		return result
 
 	async def _check_paid_event_access(
 		self,
 		player_id: str,
-		player_plan: str | None,
 		event_id: str,
 	) -> None:
-		"""Gate 1.5 for paid events (R-010): premium bypass OR event ticket.
+		"""Gate 1.5 for paid events (R-010): event ticket required.
 
-		Raises ValueError("NO_EVENT_ACCESS") if player has neither.
+		Raises ValueError("NO_EVENT_ACCESS") if player has no active ticket.
 		"""
 		from fastapi_app.services.event_access import EventAccessService
-		from fastapi_app.services.premium import PremiumService
 
-		# a. Check premium bypass — if player has usable plan premium, allow
-		if player_plan:
-			premium_svc = PremiumService(self.redis, self.frappe)
-			premium_state = await premium_svc.is_plan_premium_usable(player_id, player_plan)
-			if premium_state.usable:
-				return
-
-		# b. Check event ticket access
 		event_svc = EventAccessService(self.redis, self.frappe)
 		access_state = await event_svc.has_active_access(player_id, event_id)
 		if access_state.has_access:
 			return
 
-		# c. Neither — deny
 		raise ValueError("NO_EVENT_ACCESS")
 
 	# -------------------------------------------------------------------------
@@ -532,8 +847,11 @@ class LiveChallengeService:
 	async def _reconcile_event(self, event_id: str) -> None:
 		"""Persist join + submission data to Frappe after event ends (idempotent, lock-guarded).
 
-		Reads the lc:{id}:joined SET and lc:{id}:results HASH (sole sources of truth)
-		and creates Participation docs in Frappe with score data pre-populated.
+		Handles both exam and last_stand modes:
+		- Exam: reads lc_results_key (score/answers from /submit)
+		- Last Stand: reads hearts, eliminated_at, correct_counts, answered_counts,
+		  response_times from Redis and computes score/stats.
+
 		Only deletes Redis keys on full success.
 		"""
 		# Step 0 — Already reconciled?
@@ -548,40 +866,47 @@ class LiveChallengeService:
 			return
 
 		try:
-			# Step 2 — Read snapshot (joined players, join times, submission results)
+			# Step 2 — Read snapshot (joined players, join times, meta)
 			player_ids = await self.redis.smembers(lc_joined_key(event_id))
 			count = int(await self.redis.get(lc_count_key(event_id)) or "0")
 			meta = await self.redis.hgetall(lc_meta_key(event_id))
 			join_times = await self.redis.hgetall(lc_join_times_key(event_id))
-			results_raw = await self.redis.hgetall(lc_results_key(event_id))
 			default_joined_at = meta.get("exam_start_ts", _now_naive().strftime("%Y-%m-%d %H:%M:%S"))
+			mode = meta.get("mode", "exam")
 
-			# Parse submission results: player_id -> {score, correct_count, submitted_at, answers_json}
-			results: dict[str, dict] = {}
-			for pid, payload in results_raw.items():
-				try:
-					results[pid] = json.loads(payload)
-				except (json.JSONDecodeError, TypeError):
-					logger.warning("lc_reconcile_bad_result_payload", event_id=event_id, player=pid)
+			if mode == "last_stand":
+				docs = await self._build_last_stand_docs(
+					event_id, player_ids, join_times, default_joined_at,
+				)
+				submitted_count = len(player_ids)
+			else:
+				# Exam mode — read submission results
+				results_raw = await self.redis.hgetall(lc_results_key(event_id))
+				results: dict[str, dict] = {}
+				for pid, payload in results_raw.items():
+					try:
+						results[pid] = json.loads(payload)
+					except (json.JSONDecodeError, TypeError):
+						logger.warning("lc_reconcile_bad_result_payload", event_id=event_id, player=pid)
 
-			# Step 3 — Build participation docs with score data pre-populated
-			docs = []
-			for pid in player_ids:
-				doc: dict[str, Any] = {
-					"doctype": "Memora Live Challenge Participation",
-					"event": event_id,
-					"player": pid,
-					"joined_at": join_times.get(pid, default_joined_at),
-				}
-				r = results.get(pid)
-				if r:
-					doc["score"] = r.get("score")
-					doc["submitted_at"] = r.get("submitted_at")
-					doc["answers_json"] = r.get("answers_json")
-				docs.append(doc)
+				docs = []
+				for pid in player_ids:
+					doc: dict[str, Any] = {
+						"doctype": "Memora Live Challenge Participation",
+						"event": event_id,
+						"player": pid,
+						"joined_at": join_times.get(pid, default_joined_at),
+					}
+					r = results.get(pid)
+					if r:
+						doc["score"] = r.get("score")
+						doc["submitted_at"] = r.get("submitted_at")
+						doc["answers_json"] = r.get("answers_json")
+					docs.append(doc)
+				submitted_count = len(results)
 
+			# Step 3 — Insert docs via Frappe
 			failed_players: list[str] = []
-			# Chunk insert_many into batches (10k docs in one call exceeds payload limits)
 			for i in range(0, len(docs), _RECONCILE_BATCH_SIZE):
 				batch = docs[i : i + _RECONCILE_BATCH_SIZE]
 				try:
@@ -594,12 +919,10 @@ class LiveChallengeService:
 						except Exception as e:
 							err_str = str(e).lower()
 							if "duplicate" in err_str or "already exists" in err_str:
-								# Doc already exists — update score via filters
-								# (participation docs have hash names, not player_id)
-								r = results.get(doc["player"])
-								if r:
+								# Doc already exists — update fields
+								update_fields = self._reconcile_update_fields(doc, mode)
+								if update_fields:
 									try:
-										# Find the actual doc name first
 										existing = await self.frappe.call(
 											"frappe.client.get_list",
 											{
@@ -618,18 +941,12 @@ class LiveChallengeService:
 												{
 													"doctype": "Memora Live Challenge Participation",
 													"name": existing[0]["name"],
-													"fieldname": json.dumps(
-														{
-															"score": r.get("score"),
-															"submitted_at": r.get("submitted_at"),
-															"answers_json": r.get("answers_json"),
-														}
-													),
+													"fieldname": json.dumps(update_fields),
 												},
 											)
 									except Exception:
 										logger.warning(
-											"lc_reconcile_score_update_failed",
+											"lc_reconcile_update_failed",
 											event_id=event_id,
 											player=doc["player"],
 										)
@@ -644,7 +961,6 @@ class LiveChallengeService:
 
 			# Sync counters to Frappe event
 			count_synced = True
-			submitted_count = len(results)
 			try:
 				await self.frappe.call(
 					"frappe.client.set_value",
@@ -667,24 +983,11 @@ class LiveChallengeService:
 			all_succeeded = not failed_players and count_synced
 			if all_succeeded:
 				await self.redis.set(lc_reconciled_key(event_id), "1", ex=LC_KEY_TTL)
-				pipe = self.redis.pipeline()
-				# Keep status key alive ("ended") — it is the single routing
-				# signal for _resolve_event_source(). Refresh TTL so it
-				# survives for a full 24h after reconciliation.
-				pipe.expire(lc_status_key(event_id), LC_KEY_TTL)
-				# Delete ephemeral keys — DB is now source of truth.
-				pipe.delete(lc_count_key(event_id))
-				pipe.delete(lc_meta_key(event_id))
-				pipe.delete(lc_questions_key(event_id))
-				pipe.delete(lc_joined_key(event_id))
-				pipe.delete(lc_submitted_key(event_id))
-				pipe.delete(lc_join_times_key(event_id))
-				pipe.delete(lc_results_key(event_id))
-				pipe.delete(lc_reconcile_lock_key(event_id))
-				await pipe.execute()
+				await self._cleanup_redis_keys(event_id)
 				logger.info(
 					"lc_reconciliation_complete",
 					event_id=event_id,
+					mode=mode,
 					participant_count=count,
 					submitted_count=submitted_count,
 				)
@@ -701,6 +1004,122 @@ class LiveChallengeService:
 			await self.redis.delete(lc_reconcile_lock_key(event_id))
 			logger.exception("lc_reconciliation_error", event_id=event_id)
 
+	async def _build_last_stand_docs(
+		self, event_id: str, player_ids: set, join_times: dict,
+		default_joined_at: str,
+	) -> list[dict[str, Any]]:
+		"""Build Participation docs for a Last Stand event from Redis state."""
+		hearts_raw = await self.redis.hgetall(lc_hearts_key(event_id))
+		eliminated_at_raw = await self.redis.hgetall(lc_eliminated_at_key(event_id))
+		correct_counts_raw = await self.redis.hgetall(lc_correct_counts_key(event_id))
+		answered_counts_raw = await self.redis.hgetall(lc_answered_counts_key(event_id))
+		response_times_raw = await self.redis.hgetall(lc_response_times_key(event_id))
+		questions_raw = await self.redis.get(lc_questions_key(event_id))
+
+		# Parse total questions
+		total_questions = 0
+		if questions_raw:
+			try:
+				total_questions = len(json.loads(questions_raw))
+			except (json.JSONDecodeError, TypeError):
+				pass
+		if total_questions == 0:
+			round_data = await self.redis.hgetall(lc_round_key(event_id))
+			total_questions = int(round_data.get("total_rounds_played", "0") or "0") or 1
+
+		now_str = _now_naive().strftime("%Y-%m-%d %H:%M:%S")
+		docs = []
+		for pid in player_ids:
+			correct = int(correct_counts_raw.get(pid, "0") or "0")
+			player_hearts = max(0, int(hearts_raw.get(pid, "0") or "0"))
+			elim_at = eliminated_at_raw.get(pid)
+			is_eliminated = 1 if elim_at is not None else 0
+			elim_at_q = int(elim_at) if elim_at is not None else 0
+			score = (correct / total_questions * 100) if total_questions > 0 else 0.0
+
+			# Avg response time from answered questions
+			rt_raw = response_times_raw.get(pid)
+			if rt_raw:
+				try:
+					rts = json.loads(rt_raw)
+					avg_rt_ms = int(sum(rts) / len(rts)) if rts else 0
+				except (json.JSONDecodeError, TypeError):
+					avg_rt_ms = 0
+			else:
+				avg_rt_ms = 0
+
+			docs.append({
+				"doctype": "Memora Live Challenge Participation",
+				"event": event_id,
+				"player": pid,
+				"joined_at": join_times.get(pid, default_joined_at),
+				"score": round(score, 2),
+				"submitted_at": now_str,
+				"final_hearts": player_hearts,
+				"is_eliminated": is_eliminated,
+				"eliminated_at_question": elim_at_q,
+				"avg_response_time_ms": avg_rt_ms,
+			})
+		return docs
+
+	@staticmethod
+	def _reconcile_update_fields(doc: dict, mode: str) -> dict | None:
+		"""Extract the fields to update on duplicate for a given mode."""
+		if mode == "last_stand":
+			return {
+				"score": doc.get("score"),
+				"submitted_at": doc.get("submitted_at"),
+				"final_hearts": doc.get("final_hearts"),
+				"is_eliminated": doc.get("is_eliminated"),
+				"eliminated_at_question": doc.get("eliminated_at_question"),
+				"avg_response_time_ms": doc.get("avg_response_time_ms"),
+			}
+		# Exam mode
+		if doc.get("score") is not None:
+			return {
+				"score": doc.get("score"),
+				"submitted_at": doc.get("submitted_at"),
+				"answers_json": doc.get("answers_json"),
+			}
+		return None
+
+	async def _cleanup_redis_keys(self, event_id: str) -> None:
+		"""Delete all ephemeral Redis keys for an event after reconciliation.
+
+		Cleans up both exam and Last Stand keys (no-op DELETEs for missing keys).
+		"""
+		pipe = self.redis.pipeline()
+		pipe.expire(lc_status_key(event_id), LC_KEY_TTL)
+		pipe.delete(lc_count_key(event_id))
+		pipe.delete(lc_meta_key(event_id))
+		pipe.delete(lc_questions_key(event_id))
+		pipe.delete(lc_joined_key(event_id))
+		pipe.delete(lc_submitted_key(event_id))
+		pipe.delete(lc_join_times_key(event_id))
+		pipe.delete(lc_results_key(event_id))
+		pipe.delete(lc_reconcile_lock_key(event_id))
+		# Last Stand keys (no-op if exam mode)
+		pipe.delete(lc_mode_key(event_id))
+		pipe.delete(lc_round_key(event_id))
+		pipe.delete(lc_hearts_key(event_id))
+		pipe.delete(lc_alive_key(event_id))
+		pipe.delete(lc_eliminated_key(event_id))
+		pipe.delete(lc_eliminated_at_key(event_id))
+		pipe.delete(lc_response_times_key(event_id))
+		pipe.delete(lc_correct_counts_key(event_id))
+		pipe.delete(lc_answered_counts_key(event_id))
+		await pipe.execute()
+
+		# Clean up per-round answer keys (pattern-matched, outside pipeline)
+		round_answers_pattern = f"memora:lc:{event_id}:round_answers:*"
+		cursor = 0
+		while True:
+			cursor, keys = await self.redis.scan(cursor, match=round_answers_pattern, count=100)
+			if keys:
+				await self.redis.delete(*keys)
+			if cursor == 0:
+				break
+
 	# -------------------------------------------------------------------------
 	# Grade (T022)
 	# -------------------------------------------------------------------------
@@ -716,6 +1135,11 @@ class LiveChallengeService:
 		Returns dict with score, correct_count, total_questions, submitted_at, corrections.
 		Raises ValueError with error code on failure.
 		"""
+		# 0. Reject Last Stand events — they use POST /answer, not POST /submit
+		mode = await self.redis.get(lc_mode_key(event_id))
+		if mode == "last_stand":
+			raise ValueError("MODE_NOT_SUPPORTED")
+
 		# 1. Check event is active + mark submitted atomically (2 RT → 1 pipeline)
 		pipe = self.redis.pipeline()
 		pipe.get(lc_status_key(event_id))
@@ -1023,6 +1447,7 @@ class LiveChallengeService:
 		"""Get student's own result for an event.
 
 		Returns None if no participation found.
+		Includes Last Stand fields (final_hearts, is_eliminated, etc.) when applicable.
 		"""
 		try:
 			parts = await self.frappe.call(
@@ -1033,6 +1458,8 @@ class LiveChallengeService:
 					"fields": json.dumps([
 						"name", "score", "rank", "xp_awarded",
 						"submitted_at", "answers_json",
+						"final_hearts", "is_eliminated",
+						"eliminated_at_question", "avg_response_time_ms",
 					]),
 					"limit_page_length": "1",
 				},
@@ -1057,6 +1484,7 @@ class LiveChallengeService:
 			event = {}
 
 		event_name = event.get("event_name", "")
+		mode = event.get("mode", "exam")
 
 		# Count total participants
 		total_participants = 0
@@ -1071,19 +1499,25 @@ class LiveChallengeService:
 		except Exception:
 			pass
 
-		# Parse answers_json for correct_count / total_questions
+		# Parse answers_json for correct_count / total_questions (exam mode)
 		correct_count = 0
 		total_questions = 0
-		answers_json_raw = part.get("answers_json")
-		answers_list = []
-		if answers_json_raw:
-			try:
-				answers_data = json.loads(answers_json_raw) if isinstance(answers_json_raw, str) else answers_json_raw
-				answers_list = answers_data.get("answers", [])
-				total_questions = len(answers_list)
-				correct_count = sum(1 for a in answers_list if a.get("correct", False))
-			except (json.JSONDecodeError, KeyError, TypeError):
-				pass
+		if mode == "last_stand":
+			# For Last Stand, derive from score + event question count
+			total_questions = len(event.get("questions", []))
+			score_val = float(part.get("score") or 0)
+			if total_questions > 0:
+				correct_count = round(score_val * total_questions / 100)
+		else:
+			answers_json_raw = part.get("answers_json")
+			if answers_json_raw:
+				try:
+					answers_data = json.loads(answers_json_raw) if isinstance(answers_json_raw, str) else answers_json_raw
+					answers_list = answers_data.get("answers", [])
+					total_questions = len(answers_list)
+					correct_count = sum(1 for a in answers_list if a.get("correct", False))
+				except (json.JSONDecodeError, KeyError, TypeError):
+					pass
 
 		rank = part.get("rank")
 		xp_awarded = part.get("xp_awarded")
@@ -1098,6 +1532,10 @@ class LiveChallengeService:
 			"total_participants": int(total_participants or 0),
 			"xp_awarded": int(xp_awarded) if xp_awarded else None,
 			"submitted_at": str(part.get("submitted_at", "")) if part.get("submitted_at") else None,
+			"final_hearts": int(part.get("final_hearts") or 0),
+			"is_eliminated": bool(part.get("is_eliminated")),
+			"eliminated_at_question": int(part.get("eliminated_at_question") or 0),
+			"avg_response_time_ms": int(part.get("avg_response_time_ms") or 0),
 		}
 
 	async def get_leaderboard(self, event_id: str, player_id: str) -> dict[str, Any] | None:
@@ -1209,12 +1647,22 @@ class LiveChallengeService:
 	# WebSocket Connection Tracking (T029)
 	# -------------------------------------------------------------------------
 
-	def register_connection(self, event_id: str, ws: WebSocket) -> None:
-		"""Register a WebSocket connection for an event."""
+	def register_connection(
+		self, event_id: str, ws: WebSocket, player_id: str | None = None,
+	) -> None:
+		"""Register a WebSocket connection for an event.
+
+		When *player_id* is provided the mapping is stored so that
+		``_broadcast_personalized`` can send per-player messages.
+		"""
 		is_first = event_id not in self._ws_connections
 		if is_first:
 			self._ws_connections[event_id] = set()
 		self._ws_connections[event_id].add(ws)
+		if player_id is not None:
+			if event_id not in self._ws_player_map:
+				self._ws_player_map[event_id] = {}
+			self._ws_player_map[event_id][ws] = player_id
 		if is_first:
 			asyncio.create_task(self._reaction_engine.subscribe_event(event_id))
 
@@ -1226,6 +1674,12 @@ class LiveChallengeService:
 			if not conns:
 				del self._ws_connections[event_id]
 				asyncio.create_task(self._reaction_engine.unsubscribe_event(event_id))
+		# Clean up player mapping
+		pm = self._ws_player_map.get(event_id)
+		if pm:
+			pm.pop(ws, None)
+			if not pm:
+				del self._ws_player_map[event_id]
 
 	def get_connected_count(self, event_id: str) -> int:
 		"""Return number of active WebSocket connections for an event."""
@@ -1258,6 +1712,58 @@ class LiveChallengeService:
 					return False
 
 		# Process in chunks to limit coroutine creation pressure at 10k+ scale
+		chunk_size = _BROADCAST_CONCURRENCY * 2
+		for i in range(0, len(conns), chunk_size):
+			chunk = conns[i : i + chunk_size]
+			results = await asyncio.gather(*[_send(ws) for ws in chunk])
+			sent += sum(1 for r in results if r)
+
+		for ws in dead:
+			self.remove_connection(event_id, ws)
+
+		return sent
+
+	async def _broadcast_personalized(
+		self,
+		event_id: str,
+		base_msg: dict,
+		player_states: dict[str, dict],
+	) -> int:
+		"""Send a per-player JSON message to every connected WebSocket.
+
+		For each connection whose player_id appears in *player_states* the
+		message is ``base_msg | player_states[player_id]``.  Spectators (not
+		in *player_states*) receive *base_msg* only.
+		"""
+		conns = list(self._ws_connections.get(event_id, set()))
+		if not conns:
+			return 0
+
+		ws_map = self._ws_player_map.get(event_id, {})
+
+		# Pre-serialise: one payload per connection
+		base_json = json.dumps(base_msg)
+		messages: dict[WebSocket, str] = {}
+		for ws in conns:
+			pid = ws_map.get(ws)
+			if pid and pid in player_states:
+				messages[ws] = json.dumps({**base_msg, **player_states[pid]})
+			else:
+				messages[ws] = base_json
+
+		sem = asyncio.Semaphore(_BROADCAST_CONCURRENCY)
+		dead: list[WebSocket] = []
+		sent = 0
+
+		async def _send(ws: WebSocket) -> bool:
+			async with sem:
+				try:
+					await asyncio.wait_for(ws.send_text(messages[ws]), timeout=2.0)
+					return True
+				except Exception:
+					dead.append(ws)
+					return False
+
 		chunk_size = _BROADCAST_CONCURRENCY * 2
 		for i in range(0, len(conns), chunk_size):
 			chunk = conns[i : i + chunk_size]
@@ -1331,13 +1837,51 @@ class LiveChallengeService:
 					# Authoritative start: set Redis status to active
 					await self.redis.set(lc_status_key(event_id), "active", ex=LC_KEY_TTL)
 					self._reaction_engine.stop_room(event_id)
-					await self._broadcast_exam_start(event_id, meta)
-					exam_started = True
-					logger.info("lc_exam_started_by_ws", event_id=event_id)
 
-				# Check if exam has ended
+					mode = await self.redis.get(lc_mode_key(event_id))
+					if mode == "last_stand":
+						await self._start_last_stand_engine(event_id)
+					else:
+						await self._broadcast_exam_start(event_id, meta)
+
+					exam_started = True
+					logger.info("lc_exam_started_by_ws", event_id=event_id, mode=mode or "exam")
+
+				# Check if exam has ended (safety ceiling for Last Stand)
 				if exam_started and now >= exam_end_ts:
-					await self.redis.set(lc_status_key(event_id), "ended", ex=LC_KEY_TTL)  # freeze joins/submits
+					# Stop Last Stand engine if still running
+					engine = self._engines.get(event_id)
+					if engine:
+						engine.stop()
+						# Wait for engine task to finish current phase before reconciling
+						engine_task = self._engine_tasks.get(event_id)
+						if engine_task and not engine_task.done():
+							try:
+								await asyncio.wait_for(engine_task, timeout=5.0)
+							except (asyncio.TimeoutError, asyncio.CancelledError):
+								logger.warning(
+									"last_stand_engine_stop_timeout",
+									event_id=event_id,
+								)
+
+					mode = await self.redis.get(lc_mode_key(event_id))
+					if mode == "last_stand":
+						# Store safety-ceiling end info if engine didn't already
+						round_state = await self.redis.hgetall(lc_round_key(event_id))
+						if round_state.get("phase") != "ended":
+							alive = await self.redis.scard(lc_alive_key(event_id))
+							rounds_played = int(round_state.get("question_idx", "0"))
+							await self.redis.hset(
+								lc_round_key(event_id),
+								mapping={
+									"phase": "ended",
+									"end_reason": "time_ceiling",
+									"final_alive_count": str(alive),
+									"total_rounds_played": str(rounds_played),
+								},
+							)
+
+					await self.redis.set(lc_status_key(event_id), "ended", ex=LC_KEY_TTL)
 					self._reaction_engine.stop_room(event_id)
 					await self._reconcile_event(event_id)
 					await self._broadcast_event_ended(event_id)
@@ -1384,8 +1928,19 @@ class LiveChallengeService:
 		logger.info("lc_exam_start_broadcast", event_id=event_id, sent=sent)
 
 	async def _broadcast_event_ended(self, event_id: str) -> None:
-		"""Broadcast event_ended to all connected clients."""
-		sent = await self._broadcast_json(event_id, {"type": "event_ended"})
+		"""Broadcast event_ended to all connected clients.
+
+		For Last Stand events the message includes reason, final_alive_count,
+		and total_rounds_played read from the round state HASH.
+		"""
+		msg: dict[str, Any] = {"type": "event_ended"}
+		mode = await self.redis.get(lc_mode_key(event_id))
+		if mode == "last_stand":
+			round_state = await self.redis.hgetall(lc_round_key(event_id))
+			msg["reason"] = round_state.get("end_reason", "time_ceiling")
+			msg["final_alive_count"] = int(round_state.get("final_alive_count", "0"))
+			msg["total_rounds_played"] = int(round_state.get("total_rounds_played", "0"))
+		sent = await self._broadcast_json(event_id, msg)
 		logger.info("lc_event_ended_broadcast", event_id=event_id, sent=sent)
 
 	async def send_exam_start_to_client(self, event_id: str, ws: WebSocket) -> None:
@@ -1403,3 +1958,80 @@ class LiveChallengeService:
 			await ws.send_text(json.dumps(msg))
 		except Exception:
 			logger.debug("lc_send_exam_start_failed", event_id=event_id)
+
+	async def send_player_state_to_client(
+		self, event_id: str, ws: WebSocket, player_id: str,
+	) -> None:
+		"""Send player_state to a single client on WS reconnect during Active Last Stand.
+
+		Reads alive/eliminated SET membership, hearts HASH, round state HASH,
+		and (if alive + answer phase) the current question from Redis.
+		Allows the client to rebuild its UI state immediately on reconnect.
+		"""
+		pipe = self.redis.pipeline()
+		pipe.sismember(lc_alive_key(event_id), player_id)
+		pipe.sismember(lc_eliminated_key(event_id), player_id)
+		pipe.hget(lc_hearts_key(event_id), player_id)
+		pipe.hgetall(lc_round_key(event_id))
+		pipe.hget(lc_eliminated_at_key(event_id), player_id)
+		pipe.scard(lc_alive_key(event_id))
+		is_alive, is_eliminated, hearts_raw, round_state, elim_at_raw, alive_count = (
+			await pipe.execute()
+		)
+
+		# Determine player liveness
+		player_alive = bool(is_alive)
+		hearts_remaining = int(hearts_raw) if hearts_raw else 0
+
+		# Round state
+		current_round_id = round_state.get("round_id")
+		question_idx = int(round_state.get("question_idx", "0"))
+		phase = round_state.get("phase", "answer")
+		phase_end_ts = float(round_state.get("phase_end_ts", "0"))
+		phase_remaining_ms = max(0, int((phase_end_ts - time.time()) * 1000))
+
+		# Build base message
+		msg: dict[str, Any] = {
+			"type": "player_state",
+			"hearts_remaining": hearts_remaining,
+			"is_alive": player_alive,
+			"current_round_id": current_round_id,
+			"question_idx": question_idx,
+			"phase": phase,
+			"phase_remaining_ms": phase_remaining_ms,
+			"question": None,
+			"alive_count": alive_count,
+			"eliminated_at_question": None,
+		}
+
+		# Eliminated players get their elimination question index
+		if is_eliminated and elim_at_raw is not None:
+			msg["eliminated_at_question"] = int(elim_at_raw)
+
+		# Alive player in answer phase: include current question (sans correct_answer)
+		if player_alive and phase == "answer" and phase_remaining_ms > 0:
+			questions_json = await self.redis.get(lc_questions_key(event_id))
+			if questions_json:
+				questions = json.loads(questions_json)
+				if 0 <= question_idx < len(questions):
+					q = questions[question_idx]
+					msg["question"] = {
+						"idx": q["idx"],
+						"question_text": q["question_text"],
+						"option_a": q["option_a"],
+						"option_b": q["option_b"],
+						"option_c": q["option_c"],
+						"option_d": q["option_d"],
+					}
+
+		try:
+			await ws.send_text(json.dumps(msg))
+			logger.debug(
+				"lc_player_state_sent",
+				event_id=event_id,
+				player_id=player_id,
+				is_alive=player_alive,
+				phase=phase,
+			)
+		except Exception:
+			logger.debug("lc_send_player_state_failed", event_id=event_id, player_id=player_id)

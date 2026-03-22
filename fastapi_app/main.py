@@ -119,6 +119,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 	app.state.live_challenge_service = lc_service
 	await lc_service.start_reaction_subscriber()
 
+	# Resume any Active Last Stand events (crash recovery)
+	await lc_service.resume_active_last_stand_events()
+
 	# Ensure Practice write queue consumer group exists (idempotent)
 	await ensure_consumer_group(redis_client)
 

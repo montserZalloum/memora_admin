@@ -7,9 +7,11 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 
 from fastapi_app.api.deps import CurrentUser, LiveChallengeServiceDep, require_rate_limit
-from fastapi_app.core.redis_keys import lc_joined_key, lc_status_key
+from fastapi_app.core.redis_keys import lc_joined_key, lc_mode_key, lc_status_key
 from fastapi_app.core.security import decode_token
 from fastapi_app.models.live_challenge import (
+	AnswerRequest,
+	AnswerResponse,
 	EventDetailResponse,
 	JoinResponse,
 	LeaderboardResponse,
@@ -19,6 +21,7 @@ from fastapi_app.models.live_challenge import (
 	SubmitRequest,
 	SubmitResponse,
 )
+from fastapi_app.services.last_stand_engine import ANSWER_ERROR_CODES
 from fastapi_app.services.live_challenge import LiveChallengeService
 
 logger = structlog.get_logger()
@@ -33,9 +36,15 @@ _ERROR_MESSAGES: dict[str, str] = {
 	"ALREADY_JOINED": "لقد انضممت إلى هذا الامتحان مسبقًا",
 	"PLAN_NOT_ELIGIBLE": "خطتك الدراسية لا تتيح لك دخول هذا الامتحان",
 	"CAPACITY_FULL": "لم يعد هناك مقاعد متاحة في هذا الامتحان",
+	"NO_LATE_JOIN": "لا يمكن الانضمام بعد بدء المسابقة",
 	"SUBMISSION_FAILED": "تعذر تسليم إجاباتك، يرجى المحاولة مرة أخرى",
 	"NO_PARTICIPATION": "يبدو أنك لم تشارك في هذا الامتحان",
 	"EVENT_NOT_ENDED": "النتائج بالطريق ✨ بس لسه في كم طالب ما خلصوا الامتحان.",
+	"MODE_NOT_SUPPORTED": "هذا النوع من الامتحانات لا يدعم هذه العملية",
+	"ROUND_MISMATCH": "الإجابة لا تتوافق مع الجولة الحالية",
+	"WINDOW_CLOSED": "انتهى وقت الإجابة",
+	"ALREADY_ANSWERED": "لقد أجبت على هذه الجولة مسبقًا",
+	"NOT_ALIVE": "لقد تم إقصاؤك من المسابقة",
 }
 
 
@@ -133,6 +142,7 @@ async def join_event(
 			"PLAN_NOT_ELIGIBLE": status.HTTP_403_FORBIDDEN,
 			"CAPACITY_FULL": status.HTTP_422_UNPROCESSABLE_ENTITY,
 			"NO_EVENT_ACCESS": status.HTTP_403_FORBIDDEN,
+			"NO_LATE_JOIN": status.HTTP_400_BAD_REQUEST,
 		}
 		raise HTTPException(
 			status_code=status_map.get(code, status.HTTP_400_BAD_REQUEST),
@@ -146,6 +156,8 @@ async def join_event(
 		waiting_room_duration=result["waiting_room_duration"],
 		countdown_remaining=result["countdown_remaining"],
 		ws_url=f"/api/v1/live-challenge/{event_id}/ws",
+		mode=result.get("mode", "exam"),
+		starting_hearts=result.get("starting_hearts"),
 	)
 
 
@@ -172,6 +184,7 @@ async def submit_answers(
 			"NOT_A_PARTICIPANT": status.HTTP_403_FORBIDDEN,
 			"ALREADY_SUBMITTED": status.HTTP_409_CONFLICT,
 			"SUBMISSION_FAILED": status.HTTP_500_INTERNAL_SERVER_ERROR,
+			"MODE_NOT_SUPPORTED": status.HTTP_400_BAD_REQUEST,
 		}
 		raise HTTPException(
 			status_code=status_map.get(code, status.HTTP_400_BAD_REQUEST),
@@ -184,6 +197,70 @@ async def submit_answers(
 		total_questions=result["total_questions"],
 		submitted_at=result["submitted_at"],
 		corrections=result["corrections"],
+	)
+
+
+@router.post(
+	"/{event_id}/answer",
+	response_model=AnswerResponse,
+	dependencies=[Depends(require_rate_limit("lc_submit"))],
+)
+async def submit_round_answer(
+	event_id: str,
+	body: AnswerRequest,
+	user: CurrentUser,
+	service: LiveChallengeServiceDep,
+) -> AnswerResponse:
+	"""Submit answer for current round (Last Stand only).
+
+	Atomic validation via Lua script: status, alive, round_id, window, uniqueness.
+	Correctness is revealed via WebSocket round_result, not in this response.
+	"""
+	# Mode gate — only Last Stand events use POST /answer
+	mode = await service.redis.get(lc_mode_key(event_id))
+	if mode != "last_stand":
+		raise HTTPException(
+			status_code=status.HTTP_400_BAD_REQUEST,
+			detail=_error_detail("MODE_NOT_SUPPORTED"),
+		)
+
+	# Pre-flight checks (avoid hitting Lua for obviously invalid requests)
+	pipe = service.redis.pipeline()
+	pipe.get(lc_status_key(event_id))
+	pipe.sismember(lc_joined_key(event_id), user.sub)
+	event_status, is_joined = await pipe.execute()
+
+	if event_status != "active":
+		raise HTTPException(
+			status_code=status.HTTP_409_CONFLICT,
+			detail=_error_detail("EVENT_NOT_ACTIVE"),
+		)
+	if not is_joined:
+		raise HTTPException(
+			status_code=status.HTTP_403_FORBIDDEN,
+			detail=_error_detail("NOT_A_PARTICIPANT"),
+		)
+
+	# Submit via engine's Lua script
+	result = await service.submit_last_stand_answer(
+		event_id, user.sub, body.round_id, body.selected,
+	)
+
+	if result == 1:
+		return AnswerResponse(accepted=True, round_id=body.round_id)
+
+	# Map Lua error codes to HTTP errors
+	error_code = ANSWER_ERROR_CODES.get(result, "EVENT_NOT_ACTIVE")
+	status_map = {
+		"ROUND_MISMATCH": status.HTTP_400_BAD_REQUEST,
+		"WINDOW_CLOSED": status.HTTP_400_BAD_REQUEST,
+		"ALREADY_ANSWERED": status.HTTP_400_BAD_REQUEST,
+		"NOT_ALIVE": status.HTTP_400_BAD_REQUEST,
+		"EVENT_NOT_ACTIVE": status.HTTP_409_CONFLICT,
+	}
+	raise HTTPException(
+		status_code=status_map.get(error_code, status.HTTP_400_BAD_REQUEST),
+		detail=_error_detail(error_code),
 	)
 
 
@@ -270,13 +347,17 @@ async def live_challenge_ws(
 	# Accept the connection
 	await websocket.accept()
 
-	# Register connection for broadcast
-	service.register_connection(event_id, websocket)
+	# Register connection for broadcast (with player_id for personalized messages)
+	service.register_connection(event_id, websocket, user_id)
 
 	try:
 		if event_status == "active":
-			# Late join / reconnect: send exam_start immediately
-			await service.send_exam_start_to_client(event_id, websocket)
+			# Late join / reconnect: mode-specific state delivery
+			mode = await service.redis.get(lc_mode_key(event_id))
+			if mode == "last_stand":
+				await service.send_player_state_to_client(event_id, websocket, user_id)
+			else:
+				await service.send_exam_start_to_client(event_id, websocket)
 
 		# Ensure countdown loop is running (idempotent — only starts once)
 		service.start_countdown_loop(event_id)

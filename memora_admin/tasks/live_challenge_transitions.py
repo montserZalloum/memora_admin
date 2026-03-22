@@ -13,20 +13,31 @@ On Active -> Ended: triggers reconciliation + post-event processing.
 
 import json
 
+from datetime import datetime, timezone
+
 import frappe
 from frappe.utils import now_datetime
 
 from fastapi_app.core.redis_keys import (
 	LC_KEY_TTL,
 	dirty_wallets_key,
+	lc_alive_key,
+	lc_answered_counts_key,
+	lc_correct_counts_key,
 	lc_count_key,
+	lc_eliminated_at_key,
+	lc_eliminated_key,
+	lc_hearts_key,
 	lc_join_times_key,
 	lc_joined_key,
 	lc_meta_key,
+	lc_mode_key,
 	lc_questions_key,
 	lc_reconcile_lock_key,
 	lc_reconciled_key,
+	lc_response_times_key,
 	lc_results_key,
+	lc_round_key,
 	lc_status_key,
 	lc_submitted_key,
 	wallet_key,
@@ -34,9 +45,14 @@ from fastapi_app.core.redis_keys import (
 from memora_admin.utils.redis_connection import get_memora_redis
 
 
+def _utc_now() -> datetime:
+	"""Return current UTC time as a naive datetime (matches stored timestamps)."""
+	return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
 def process_live_challenge_transitions():
 	"""Process all pending state transitions for live challenge events."""
-	now = now_datetime()
+	now = _utc_now()
 
 	# 1. Draft -> Waiting: scheduled_start <= now
 	draft_events = frappe.get_all(
@@ -123,6 +139,10 @@ def _transition_to_waiting(event_name: str):
 	# Status key
 	pipe.set(lc_status_key(event_name), "waiting", ex=LC_KEY_TTL)
 
+	# Mode key (fast lookup without HGET on meta)
+	mode = getattr(event, "mode", None) or "exam"
+	pipe.set(lc_mode_key(event_name), mode, ex=LC_KEY_TTL)
+
 	# Questions JSON (with correct answers — NEVER served to client directly)
 	questions = []
 	for q in event.questions:
@@ -159,6 +179,9 @@ def _transition_to_waiting(event_name: str):
 		"third_place_xp": str(event.third_place_xp or 0),
 		"default_xp": str(event.default_xp or 0),
 		"eligible_plans": json.dumps(eligible_plans),
+		"mode": mode,
+		"starting_hearts": str(event.starting_hearts or 3),
+		"result_window_duration": str(event.result_window_duration or 3),
 	}
 	meta_key = lc_meta_key(event_name)
 	pipe.delete(meta_key)
@@ -196,6 +219,10 @@ def _transition_to_ended(event_name: str):
 
 	Reconciliation runs here (synchronously) so data is persisted even
 	if no FastAPI client hits after the event ends.
+
+	For Last Stand events, this is the safety net — the round engine normally
+	ends the event earlier.  If we reach exam_end_ts with the event still
+	Active, it means the engine crashed or FastAPI is down.
 	"""
 	event = frappe.get_doc("Memora Live Challenge Event", event_name)
 	if event.status != "Active":
@@ -203,6 +230,20 @@ def _transition_to_ended(event_name: str):
 
 	r = get_memora_redis()
 	r.set(lc_status_key(event_name), "ended", ex=LC_KEY_TTL)
+
+	# For Last Stand: set round HASH to ended with time_ceiling reason
+	# so reconnecting clients know the event ended via safety net
+	mode = getattr(event, "mode", None) or "exam"
+	if mode == "last_stand":
+		alive_count = r.scard(lc_alive_key(event_name)) or 0
+		r.hset(
+			lc_round_key(event_name),
+			mapping={
+				"phase": "ended",
+				"end_reason": "time_ceiling",
+				"final_alive_count": str(alive_count),
+			},
+		)
 
 	event.status = "Ended"
 	event.flags.ignore_validate = True
@@ -245,7 +286,7 @@ def _try_finalize_event(event_name: str, exam_end_ts=None):
 		if redis_submitted > db_submitted:
 			# Still mismatched — force after 5 minutes
 			if exam_end_ts:
-				elapsed = (now_datetime() - exam_end_ts).total_seconds()
+				elapsed = (_utc_now() - exam_end_ts).total_seconds()
 				if elapsed < 300:
 					return
 
@@ -266,6 +307,11 @@ def _cron_reconcile_event(event_name: str) -> bool:
 	This is the authoritative reconciliation path — runs from the cron job
 	so it does NOT depend on any FastAPI client hitting after the event ends.
 	Uses direct SQL for bulk inserts (no Frappe RPC overhead).
+
+	Handles both exam and last_stand modes:
+	- Exam: reads lc_results_key (score/answers from /submit)
+	- Last Stand: reads hearts, eliminated_at, correct_counts, answered_counts,
+	  response_times from Redis and computes score/stats.
 
 	Returns True if reconciliation succeeded or was already done.
 	"""
@@ -292,19 +338,26 @@ def _cron_reconcile_event(event_name: str) -> bool:
 		count_raw = r.get(lc_count_key(event_name))
 		count = int(_decode(count_raw)) if count_raw else len(player_ids_raw)
 		join_times_raw = r.hgetall(lc_join_times_key(event_name))
-		results_raw = r.hgetall(lc_results_key(event_name))
 		meta_raw = r.hgetall(lc_meta_key(event_name))
 
 		# Decode meta
 		meta = {_decode(k): _decode(v) for k, v in meta_raw.items()} if meta_raw else {}
-		default_joined_at = meta.get("exam_start_ts") or now_datetime().strftime("%Y-%m-%d %H:%M:%S")
+		default_joined_at = meta.get("exam_start_ts") or _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+		mode = meta.get("mode", "exam")
 
 		# Decode join times
 		join_times = {}
 		for k, v in join_times_raw.items():
 			join_times[_decode(k)] = _decode(v)
 
-		# Parse results
+		if mode == "last_stand":
+			return _reconcile_last_stand(
+				r, event_name, player_ids_raw, count, join_times,
+				default_joined_at, meta,
+			)
+
+		# ── Exam mode reconciliation (original path) ──
+		results_raw = r.hgetall(lc_results_key(event_name))
 		results = {}
 		for k, v in results_raw.items():
 			pid = _decode(k)
@@ -324,7 +377,7 @@ def _cron_reconcile_event(event_name: str) -> bool:
 			existing.add(row[0])
 
 		# Build rows for INSERT (only new players)
-		now_str = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
+		now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
 		insert_values = []
 		update_values = []
 
@@ -376,7 +429,7 @@ def _cron_reconcile_event(event_name: str) -> bool:
 				escaped_pid = frappe.db.escape(pid)
 				players.append(escaped_pid)
 				score_cases.append(f"WHEN player = {escaped_pid} THEN {float(score) if score is not None else 'NULL'}")
-				sub_val = f"'{submitted_at}'" if submitted_at else "NULL"
+				sub_val = frappe.db.escape(submitted_at) if submitted_at else "NULL"
 				submitted_cases.append(f"WHEN player = {escaped_pid} THEN {sub_val}")
 				ans_val = frappe.db.escape(answers_json) if answers_json else "NULL"
 				answers_cases.append(f"WHEN player = {escaped_pid} THEN {ans_val}")
@@ -414,12 +467,183 @@ def _cron_reconcile_event(event_name: str) -> bool:
 		return False
 
 
+def _reconcile_last_stand(
+	r, event_name: str, player_ids_raw, count: int,
+	join_times: dict, default_joined_at: str, meta: dict,
+) -> bool:
+	"""Reconcile a Last Stand event: Redis runtime state → MariaDB Participation.
+
+	Reads hearts, eliminated_at, correct_counts, answered_counts, response_times
+	from Redis. Computes score = (correct_count / total_questions) * 100 and
+	avg_response_time from answered questions only. Persists final_hearts,
+	is_eliminated, eliminated_at_question, avg_response_time_ms.
+	"""
+	# Read Last Stand state from Redis
+	hearts_raw = r.hgetall(lc_hearts_key(event_name))
+	eliminated_at_raw = r.hgetall(lc_eliminated_at_key(event_name))
+	correct_counts_raw = r.hgetall(lc_correct_counts_key(event_name))
+	answered_counts_raw = r.hgetall(lc_answered_counts_key(event_name))
+	response_times_raw = r.hgetall(lc_response_times_key(event_name))
+	questions_raw = r.get(lc_questions_key(event_name))
+
+	# Decode hashes
+	hearts = {_decode(k): int(_decode(v)) for k, v in hearts_raw.items()}
+	eliminated_at = {_decode(k): int(_decode(v)) for k, v in eliminated_at_raw.items()}
+	correct_counts = {_decode(k): int(_decode(v)) for k, v in correct_counts_raw.items()}
+	answered_counts = {_decode(k): int(_decode(v)) for k, v in answered_counts_raw.items()}
+	response_times = {}
+	for k, v in response_times_raw.items():
+		pid = _decode(k)
+		try:
+			response_times[pid] = json.loads(_decode(v))
+		except (json.JSONDecodeError, TypeError):
+			response_times[pid] = []
+
+	# Determine total questions from questions JSON or meta
+	total_questions = 0
+	if questions_raw:
+		try:
+			total_questions = len(json.loads(_decode(questions_raw)))
+		except (json.JSONDecodeError, TypeError):
+			pass
+	if total_questions == 0:
+		# Fallback: read from round HASH
+		round_raw = r.hgetall(lc_round_key(event_name))
+		round_data = {_decode(k): _decode(v) for k, v in round_raw.items()}
+		total_questions = int(round_data.get("total_rounds_played", "0")) or 1
+
+	now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+
+	# Find existing participation records to avoid duplicates
+	existing = set()
+	existing_rows = frappe.db.sql(
+		"SELECT player FROM `tabMemora Live Challenge Participation` WHERE event = %s",
+		(event_name,),
+		as_dict=False,
+	)
+	for row in existing_rows:
+		existing.add(row[0])
+
+	insert_values = []
+	update_values = []
+
+	for pid_raw in player_ids_raw:
+		pid = _decode(pid_raw)
+		joined_at = join_times.get(pid) or default_joined_at
+
+		# Compute per-player stats
+		player_correct = correct_counts.get(pid, 0)
+		player_answered = answered_counts.get(pid, 0)
+		player_hearts = max(0, hearts.get(pid, 0))
+		player_eliminated_at = eliminated_at.get(pid)
+		player_is_eliminated = 1 if player_eliminated_at is not None else 0
+
+		# Score: (correct_count / total_questions) * 100 — percentage of ALL questions
+		score = (player_correct / total_questions * 100) if total_questions > 0 else 0.0
+
+		# Avg response time from answered questions only
+		player_rts = response_times.get(pid, [])
+		if player_rts:
+			avg_rt_ms = int(sum(player_rts) / len(player_rts))
+		else:
+			avg_rt_ms = 0
+
+		if pid in existing:
+			update_values.append((
+				score, player_hearts, player_is_eliminated,
+				player_eliminated_at if player_eliminated_at is not None else 0,
+				avg_rt_ms, now_str, event_name, pid,
+			))
+		else:
+			name = frappe.generate_hash(length=10)
+			insert_values.append((
+				name, event_name, pid, joined_at,
+				score, now_str,  # submitted_at = now (all LS players are "submitted")
+				player_hearts, player_is_eliminated,
+				player_eliminated_at if player_eliminated_at is not None else 0,
+				avg_rt_ms,
+				now_str, now_str, "Administrator", "Administrator",
+			))
+
+	# Bulk INSERT new participation records
+	batch_size = 500
+	for i in range(0, len(insert_values), batch_size):
+		batch = insert_values[i : i + batch_size]
+		placeholders = ", ".join(
+			["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(batch)
+		)
+		flat = [v for row in batch for v in row]
+		frappe.db.sql(
+			f"""INSERT INTO `tabMemora Live Challenge Participation`
+			(name, event, player, joined_at, score, submitted_at,
+			 final_hearts, is_eliminated, eliminated_at_question, avg_response_time_ms,
+			 creation, modified, owner, modified_by)
+			VALUES {placeholders}""",
+			flat,
+		)
+
+	# Bulk UPDATE existing records with Last Stand data
+	batch_size = 500
+	for i in range(0, len(update_values), batch_size):
+		batch = update_values[i : i + batch_size]
+		if not batch:
+			continue
+		score_cases = []
+		hearts_cases = []
+		elim_cases = []
+		elim_at_cases = []
+		avg_rt_cases = []
+		sub_cases = []
+		players = []
+		for score, fh, ie, eaq, art, sub_at, ev, pid in batch:
+			escaped_pid = frappe.db.escape(pid)
+			players.append(escaped_pid)
+			score_cases.append(f"WHEN player = {escaped_pid} THEN {float(score)}")
+			hearts_cases.append(f"WHEN player = {escaped_pid} THEN {int(fh)}")
+			elim_cases.append(f"WHEN player = {escaped_pid} THEN {int(ie)}")
+			elim_at_cases.append(f"WHEN player = {escaped_pid} THEN {int(eaq)}")
+			avg_rt_cases.append(f"WHEN player = {escaped_pid} THEN {int(art)}")
+			sub_cases.append(f"WHEN player = {escaped_pid} THEN {frappe.db.escape(sub_at)}")
+		escaped_event = frappe.db.escape(event_name)
+		frappe.db.sql(f"""
+			UPDATE `tabMemora Live Challenge Participation`
+			SET score = CASE {' '.join(score_cases)} ELSE score END,
+			    submitted_at = CASE {' '.join(sub_cases)} ELSE submitted_at END,
+			    final_hearts = CASE {' '.join(hearts_cases)} ELSE final_hearts END,
+			    is_eliminated = CASE {' '.join(elim_cases)} ELSE is_eliminated END,
+			    eliminated_at_question = CASE {' '.join(elim_at_cases)} ELSE eliminated_at_question END,
+			    avg_response_time_ms = CASE {' '.join(avg_rt_cases)} ELSE avg_response_time_ms END
+			WHERE event = {escaped_event} AND player IN ({','.join(players)})
+		""")
+
+	# Sync counters — for Last Stand, all joined players count as submitted
+	submitted_count = len(player_ids_raw)
+	frappe.db.set_value(
+		"Memora Live Challenge Event", event_name,
+		{"participant_count": count, "submitted_count": submitted_count},
+		update_modified=False,
+	)
+
+	# Mark reconciled + cleanup ALL Redis keys
+	r.set(lc_reconciled_key(event_name), "1", ex=LC_KEY_TTL)
+	_cleanup_all_redis_keys(r, event_name)
+
+	frappe.logger().info(
+		f"LC cron reconcile (last_stand) complete: {event_name} "
+		f"(inserted={len(insert_values)}, updated={len(update_values)}, "
+		f"participants={count}, submitted={submitted_count})"
+	)
+	return True
+
+
 def _cleanup_all_redis_keys(r, event_name: str) -> None:
 	"""Delete ephemeral Redis keys for an event after reconciliation.
 
 	Status key is KEPT ("ended") — it is the single routing signal for
 	_resolve_event_source(). TTL is refreshed so it survives 24h
 	after reconciliation.
+
+	Cleans up both exam and Last Stand keys (no-op DELETEs for missing keys).
 	"""
 	pipe = r.pipeline()
 	# Keep status key alive as routing signal; refresh its TTL
@@ -433,22 +657,47 @@ def _cleanup_all_redis_keys(r, event_name: str) -> None:
 	pipe.delete(lc_join_times_key(event_name))
 	pipe.delete(lc_results_key(event_name))
 	pipe.delete(lc_reconcile_lock_key(event_name))
+	# Last Stand keys (no-op if exam mode — keys won't exist)
+	pipe.delete(lc_mode_key(event_name))
+	pipe.delete(lc_round_key(event_name))
+	pipe.delete(lc_hearts_key(event_name))
+	pipe.delete(lc_alive_key(event_name))
+	pipe.delete(lc_eliminated_key(event_name))
+	pipe.delete(lc_eliminated_at_key(event_name))
+	pipe.delete(lc_response_times_key(event_name))
+	pipe.delete(lc_correct_counts_key(event_name))
+	pipe.delete(lc_answered_counts_key(event_name))
 	pipe.execute()
+
+	# Clean up per-round answer keys (pattern-matched, outside pipeline)
+	round_answers_pattern = f"memora:lc:{event_name}:round_answers:*"
+	cursor = 0
+	while True:
+		cursor, keys = r.scan(cursor, match=round_answers_pattern, count=100)
+		if keys:
+			r.delete(*keys)
+		if cursor == 0:
+			break
 
 
 def compute_ranking(
 	participants: list[dict],
 	display_names: dict[str, str],
+	mode: str = "exam",
 ) -> tuple[list[dict], list[dict]]:
 	"""Compute standard competition ranking for all participants (pure function).
 
 	Standard competition ranking: tied scores share the same rank, and the next
 	rank equals the number of players ranked above (e.g., 1, 1, 3, 4).
 
+	For Last Stand mode, uses 3-tier sort:
+	  score DESC → final_hearts DESC → avg_response_time_ms ASC
+
 	Args:
-		participants: List of dicts with 'name', 'player', 'score' keys,
-			pre-sorted by score DESC.
+		participants: List of dicts with 'name', 'player', 'score' keys.
+			Last Stand mode also requires 'final_hearts' and 'avg_response_time_ms'.
 		display_names: Mapping of player_id -> display_name.
+		mode: "exam" (default) or "last_stand".
 
 	Returns:
 		Tuple of (all_ranked, top_20):
@@ -458,30 +707,40 @@ def compute_ranking(
 	if not participants:
 		return [], []
 
-	# Sort by score descending (ensure stable order)
-	sorted_parts = sorted(participants, key=lambda p: p["score"], reverse=True)
+	# Sort: exam = score DESC; last_stand = score DESC → hearts DESC → avg_rt ASC
+	if mode == "last_stand":
+		sorted_parts = sorted(
+			participants,
+			key=lambda p: (-p["score"], -p.get("final_hearts", 0), p.get("avg_response_time_ms", 0)),
+		)
+	else:
+		sorted_parts = sorted(participants, key=lambda p: p["score"], reverse=True)
+
+	def _sort_key(p):
+		if mode == "last_stand":
+			return (-p["score"], -p.get("final_hearts", 0), p.get("avg_response_time_ms", 0))
+		return (-p["score"],)
 
 	ranked: list[dict] = []
 	for i, p in enumerate(sorted_parts):
-		if i == 0 or p["score"] < sorted_parts[i - 1]["score"]:
+		if i == 0 or _sort_key(p) != _sort_key(sorted_parts[i - 1]):
 			current_rank = i + 1  # Standard competition: rank = position number
-		ranked.append({
+		entry = {
 			"name": p["name"],
 			"player": p["player"],
 			"score": p["score"],
 			"rank": current_rank,
 			"display_name": display_names.get(p["player"], p["player"]),
-		})
-
-	top_20 = [
-		{
-			"rank": r["rank"],
-			"player": r["player"],
-			"display_name": r["display_name"],
-			"score": r["score"],
 		}
-		for r in ranked[:20]
-	]
+		if mode == "last_stand":
+			entry["final_hearts"] = p.get("final_hearts", 0)
+			entry["is_eliminated"] = p.get("is_eliminated", 0)
+		ranked.append(entry)
+
+	top_20_fields = ["rank", "player", "display_name", "score"]
+	if mode == "last_stand":
+		top_20_fields.extend(["final_hearts", "is_eliminated"])
+	top_20 = [{k: r[k] for k in top_20_fields} for r in ranked[:20]]
 
 	return ranked, top_20
 
@@ -565,12 +824,21 @@ def _compute_and_store_rankings(event_name: str) -> tuple[list, int, int]:
 	Does NOT save leaderboard_json — caller saves it after XP distribution
 	so that a transient XP failure doesn't prevent retries.
 	Idempotent: CASE-based UPDATE overwrites existing rank values safely.
+
+	Mode-aware: Last Stand uses 3-tier ranking (score → hearts → avg_rt).
 	"""
-	# Query all submitted participations ordered by score DESC
+	# Determine event mode
+	mode = frappe.db.get_value("Memora Live Challenge Event", event_name, "mode") or "exam"
+
+	# Query all submitted participations
+	fields = ["name", "player", "score"]
+	if mode == "last_stand":
+		fields.extend(["final_hearts", "is_eliminated", "avg_response_time_ms"])
+
 	participations = frappe.get_all(
 		"Memora Live Challenge Participation",
 		filters={"event": event_name, "submitted_at": ["is", "set"]},
-		fields=["name", "player", "score"],
+		fields=fields,
 		order_by="score desc",
 		limit_page_length=0,
 	)
@@ -582,6 +850,13 @@ def _compute_and_store_rankings(event_name: str) -> tuple[list, int, int]:
 
 	if not participations:
 		return [], participant_count, 0
+
+	# Normalize Last Stand fields to ints (Frappe may return None)
+	if mode == "last_stand":
+		for p in participations:
+			p["final_hearts"] = int(p.get("final_hearts") or 0)
+			p["is_eliminated"] = int(p.get("is_eliminated") or 0)
+			p["avg_response_time_ms"] = int(p.get("avg_response_time_ms") or 0)
 
 	# Batch-resolve display_names in one query instead of N+1
 	player_ids = list({p["player"] for p in participations})
@@ -595,8 +870,8 @@ def _compute_and_store_rankings(event_name: str) -> tuple[list, int, int]:
 		)
 		display_names = {p["name"]: p["display_name"] for p in profiles if p.get("display_name")}
 
-	# Compute ranking
-	ranked, top_20 = compute_ranking(participations, display_names)
+	# Compute ranking (mode-aware: exam = score only; last_stand = 3-tier)
+	ranked, top_20 = compute_ranking(participations, display_names, mode=mode)
 
 	# Bulk update ranks using batched CASE statements (instead of 10k individual UPDATEs)
 	_batch_update_field(ranked, "rank")
