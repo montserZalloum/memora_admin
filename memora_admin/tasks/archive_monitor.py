@@ -42,7 +42,8 @@ def _check_live_sync_freshness() -> list[dict]:
 
 	latest = frappe.db.sql(
 		"""
-		SELECT name, completed_at
+		SELECT name, completed_at,
+		       TIMESTAMPDIFF(SECOND, completed_at, NOW()) / 3600.0 AS age_hours
 		FROM `tabMemora Live Sync Job`
 		WHERE status = 'Completed'
 		ORDER BY completed_at DESC
@@ -58,18 +59,16 @@ def _check_live_sync_freshness() -> list[dict]:
 			"message": "No completed live sync jobs found. Live analytics data may be missing.",
 		})
 	else:
-		completed_at = latest[0].get("completed_at")
-		if completed_at:
-			age_hours = frappe.utils.time_diff_in_hours(frappe.utils.now(), str(completed_at))
-			if age_hours > 24:
-				alerts.append({
-					"type": "live_sync_freshness",
-					"severity": "warning",
-					"message": (
-						f"Latest live sync ({latest[0]['name']}) completed {age_hours:.1f}h ago. "
-						f"Expected within 24h."
-					),
-				})
+		age_hours = float(latest[0].get("age_hours") or 0)
+		if age_hours > 24:
+			alerts.append({
+				"type": "live_sync_freshness",
+				"severity": "warning",
+				"message": (
+					f"Latest live sync ({latest[0]['name']}) completed {age_hours:.1f}h ago. "
+					f"Expected within 24h."
+				),
+			})
 
 	return alerts
 
@@ -80,7 +79,8 @@ def _check_archive_validation_lag() -> list[dict]:
 
 	stale_jobs = frappe.db.sql(
 		"""
-		SELECT name, status, archive_scope, exported_at
+		SELECT name, status, archive_scope, exported_at,
+		       TIMESTAMPDIFF(SECOND, exported_at, NOW()) / 3600.0 AS age_hours
 		FROM `tabMemora Archive Job`
 		WHERE status IN ('Exported', 'Transferred')
 		  AND exported_at < DATE_SUB(NOW(), INTERVAL 48 HOUR)
@@ -89,7 +89,7 @@ def _check_archive_validation_lag() -> list[dict]:
 	)
 
 	for job in stale_jobs:
-		age_hours = frappe.utils.time_diff_in_hours(frappe.utils.now(), str(job.exported_at))
+		age_hours = float(job.age_hours or 0)
 		alerts.append({
 			"type": "archive_validation_lag",
 			"severity": "warning",
@@ -147,7 +147,8 @@ def _check_stuck_state() -> list[dict]:
 	# Archive jobs
 	stuck_archive = frappe.db.sql(
 		"""
-		SELECT name, status, execution_stage, archive_scope, claimed_at
+		SELECT name, status, execution_stage, archive_scope, claimed_at,
+		       TIMESTAMPDIFF(SECOND, claimed_at, NOW()) / 3600.0 AS age_hours
 		FROM `tabMemora Archive Job`
 		WHERE status = 'Processing'
 		  AND claimed_at < DATE_SUB(NOW(), INTERVAL 6 HOUR)
@@ -156,7 +157,7 @@ def _check_stuck_state() -> list[dict]:
 	)
 
 	for job in stuck_archive:
-		age_hours = frappe.utils.time_diff_in_hours(frappe.utils.now(), str(job.claimed_at))
+		age_hours = float(job.age_hours or 0)
 		alerts.append({
 			"type": "stuck_state",
 			"severity": "warning",
@@ -169,7 +170,8 @@ def _check_stuck_state() -> list[dict]:
 	# Live sync jobs
 	stuck_live = frappe.db.sql(
 		"""
-		SELECT name, status, execution_stage, started_at
+		SELECT name, status, execution_stage, started_at,
+		       TIMESTAMPDIFF(SECOND, started_at, NOW()) / 3600.0 AS age_hours
 		FROM `tabMemora Live Sync Job`
 		WHERE status = 'Processing'
 		  AND started_at < DATE_SUB(NOW(), INTERVAL 6 HOUR)
@@ -178,7 +180,7 @@ def _check_stuck_state() -> list[dict]:
 	)
 
 	for job in stuck_live:
-		age_hours = frappe.utils.time_diff_in_hours(frappe.utils.now(), str(job.started_at))
+		age_hours = float(job.age_hours or 0)
 		alerts.append({
 			"type": "stuck_state",
 			"severity": "warning",
