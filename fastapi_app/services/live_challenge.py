@@ -39,6 +39,7 @@ from fastapi_app.core.redis_keys import (
 	lc_status_key,
 	lc_submitted_key,
 )
+from fastapi_app.models.live_challenge import _fmt_score
 from fastapi_app.services.waiting_room_reactions import ReactionEngine
 
 if TYPE_CHECKING:
@@ -163,7 +164,7 @@ def grade_answers(
 		if selected == q["correct_answer"]:
 			correct_count += 1
 
-	score = (correct_count / total) * 100 if total > 0 else 0.0
+	score = round((correct_count / total) * 100, 1) if total > 0 else 0
 
 	return {
 		"score": score,
@@ -1245,7 +1246,7 @@ class LiveChallengeService:
 			elim_at = eliminated_at_raw.get(pid)
 			is_eliminated = 1 if elim_at is not None else 0
 			elim_at_q = int(elim_at) if elim_at is not None else 0
-			score = (correct / total_questions * 100) if total_questions > 0 else 0.0
+			score = round((correct / total_questions * 100), 1) if total_questions > 0 else 0
 
 			# Avg response time from answered questions
 			rt_raw = response_times_raw.get(pid)
@@ -1263,7 +1264,7 @@ class LiveChallengeService:
 				"event": event_id,
 				"player": pid,
 				"joined_at": join_times.get(pid, default_joined_at),
-				"score": round(score, 2),
+				"score": score,
 				"submitted_at": now_str,
 				"final_hearts": player_hearts,
 				"is_eliminated": is_eliminated,
@@ -1753,7 +1754,7 @@ class LiveChallengeService:
 		return {
 			"event_id": event_id,
 			"event_name": event_name,
-			"score": float(part.get("score") or 0),
+			"score": _fmt_score(float(part.get("score") or 0)),
 			"correct_count": correct_count,
 			"total_questions": total_questions,
 			"rank": int(rank) if rank else None,
@@ -1833,7 +1834,7 @@ class LiveChallengeService:
 			)
 			if parts:
 				my_rank = int(parts[0]["rank"]) if parts[0].get("rank") else None
-				my_score = float(parts[0]["score"]) if parts[0].get("score") is not None else None
+				my_score = _fmt_score(float(parts[0]["score"])) if parts[0].get("score") is not None else None
 		except Exception:
 			pass
 
@@ -1862,12 +1863,11 @@ class LiveChallengeService:
 		try:
 			status = await self.redis.get(lc_status_key(event_id))
 			if status != "waiting":
-				logger.debug("reaction_tap_dropped_status", event_id=event_id, status=status)
+				logger.info("reaction_tap_dropped_status", event_id=event_id, status=status)
 				return
 			reaction = msg.get("reaction", "")
-			logger.debug("reaction_tap_delegating", event_id=event_id, player_id=player_id, reaction=reaction)
 			accepted = await self._reaction_engine.accept_tap(event_id, player_id, reaction)
-			logger.debug("reaction_tap_result", event_id=event_id, accepted=accepted, reaction=reaction)
+			logger.debug("reaction_tap_result", event_id=event_id, player_id=player_id, accepted=accepted, reaction=reaction)
 		except Exception:
 			logger.warning("reaction_tap_handler_error", event_id=event_id, player_id=player_id, exc_info=True)
 

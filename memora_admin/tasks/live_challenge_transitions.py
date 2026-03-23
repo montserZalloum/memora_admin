@@ -42,6 +42,7 @@ from fastapi_app.core.redis_keys import (
 	lc_submitted_key,
 	wallet_key,
 )
+from fastapi_app.models.live_challenge import _fmt_score
 from memora_admin.utils.redis_connection import get_memora_redis
 
 
@@ -385,7 +386,8 @@ def _cron_reconcile_event(event_name: str) -> bool:
 			pid = _decode(pid_raw)
 			joined_at = join_times.get(pid) or default_joined_at
 			r_data = results.get(pid)
-			score = float(r_data["score"]) if r_data and r_data.get("score") is not None else None
+			score_raw = float(r_data["score"]) if r_data and r_data.get("score") is not None else None
+			score = round(score_raw, 1) if score_raw is not None else None
 			submitted_at = r_data.get("submitted_at") if r_data else None
 			answers_json = r_data.get("answers_json") if r_data else None
 
@@ -539,7 +541,7 @@ def _reconcile_last_stand(
 		player_is_eliminated = 1 if player_eliminated_at is not None else 0
 
 		# Score: (correct_count / total_questions) * 100 — percentage of ALL questions
-		score = (player_correct / total_questions * 100) if total_questions > 0 else 0.0
+		score = round((player_correct / total_questions * 100), 1) if total_questions > 0 else 0
 
 		# Avg response time from answered questions only
 		player_rts = response_times.get(pid, [])
@@ -728,7 +730,7 @@ def compute_ranking(
 		entry = {
 			"name": p["name"],
 			"player": p["player"],
-			"score": p["score"],
+			"score": _fmt_score(p["score"]),
 			"rank": current_rank,
 			"display_name": display_names.get(p["player"], p["player"]),
 		}

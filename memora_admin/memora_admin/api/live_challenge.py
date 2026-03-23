@@ -5,6 +5,8 @@ import json
 import frappe
 from frappe.utils import now_datetime
 
+from fastapi_app.models.live_challenge import _fmt_score
+
 # Mapping correct_choice (1-4) to letter (A-D)
 _CHOICE_MAP = {1: "A", 2: "B", 3: "C", 4: "D"}
 
@@ -90,8 +92,8 @@ def get_dashboard(event_id: str) -> dict:
 			as_dict=True,
 		)
 
-		average_score = round(float(stats[0].average_score or 0), 1) if stats else 0.0
-		highest_score = round(float(stats[0].highest_score or 0), 1) if stats else 0.0
+		average_score = _fmt_score(stats[0].average_score or 0) if stats else 0
+		highest_score = _fmt_score(stats[0].highest_score or 0) if stats else 0
 
 		leaderboard = []
 		if event.leaderboard_json:
@@ -148,8 +150,8 @@ def get_full_leaderboard(event_id: str) -> list:
 	# Compute standard competition ranking in Python (rank column may be 0)
 	result = []
 	for i, r in enumerate(rows):
-		score = round(float(r.score or 0), 1)
-		if i == 0 or score < round(float(rows[i - 1].score or 0), 1):
+		score = _fmt_score(r.score or 0)
+		if i == 0 or score < _fmt_score(rows[i - 1].score or 0):
 			current_rank = i + 1
 		result.append({
 			"rank": current_rank,
@@ -228,7 +230,7 @@ def get_live_participants(event_id: str) -> dict:
 		r_data = results.get(pid)
 		if pid in submitted_ids and r_data:
 			entry["status"] = "Submitted"
-			entry["score"] = round(float(r_data.get("score", 0)), 1)
+			entry["score"] = _fmt_score(r_data.get("score", 0))
 			entry["submitted_at"] = r_data.get("submitted_at", "")
 			submitted_list.append(entry)
 		else:

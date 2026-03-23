@@ -371,7 +371,7 @@ async def live_challenge_ws(
 				continue  # silently drop malformed JSON
 			msg_type = msg.get("type")
 			if msg_type == "waiting_room_reaction_tap":
-				logger.debug("lc_ws_msg_received", event_id=event_id, user_id=user_id, msg_type=msg_type)
+				logger.debug("lc_ws_reaction_tap_received", event_id=event_id, user_id=user_id, reaction=msg.get("reaction", ""))
 				await service.handle_reaction_tap(event_id, user_id, msg)
 			else:
 				logger.info("lc_ws_msg_received", event_id=event_id, user_id=user_id, msg_type=msg_type)

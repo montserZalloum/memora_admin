@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Awaitable, Callable
 
@@ -143,7 +144,7 @@ class ReactionEngine:
 		self._flush_task: asyncio.Task | None = None
 		self._subscribed_channels: set[str] = set()
 		self._pubsub: Any = None  # redis.asyncio pubsub object
-		self._worker_id: str = f"w-{os.getpid()}-{id(self)}"
+		self._worker_id: str = f"w-{os.getpid()}-{uuid.uuid4().hex[:8]}"
 
 	async def check_rate_limit(self, event_id: str, player_id: str) -> bool:
 		"""Check per-user rate limit via Redis Lua token bucket.
@@ -181,10 +182,13 @@ class ReactionEngine:
 	async def accept_tap(self, event_id: str, player_id: str, reaction: str) -> bool:
 		"""Accept a reaction tap. Returns True if accepted, False if dropped."""
 		if not self._settings.reaction_enabled:
+			logger.info("reaction_tap_rejected", reason="disabled", event_id=event_id)
 			return False
 		if reaction not in VALID_REACTIONS:
+			logger.info("reaction_tap_rejected", reason="invalid_reaction", event_id=event_id, reaction=reaction)
 			return False
 		if event_id in self._stopped_rooms:
+			logger.info("reaction_tap_rejected", reason="room_stopped", event_id=event_id)
 			return False
 
 		try:
@@ -194,6 +198,7 @@ class ReactionEngine:
 
 			# Redis counter increment via Lua
 			if self._redis is None:
+				logger.info("reaction_tap_rejected", reason="no_redis", event_id=event_id)
 				return False
 
 			if self._tap_script is None:
@@ -220,13 +225,11 @@ class ReactionEngine:
 			self._active_events.add(event_id)
 
 			accepted = int(result) == 1
-			if accepted:
-				logger.debug("reaction_tap_accepted", event_id=event_id, reaction=reaction)
-			else:
+			if not accepted:
 				logger.info("reaction_room_cap_hit", event_id=event_id, cap=self._settings.reaction_room_cap_per_sec)
 			return accepted
 		except Exception:
-			logger.warning("reaction_accept_tap_error", event_id=event_id, player_id=player_id)
+			logger.warning("reaction_accept_tap_error", event_id=event_id, player_id=player_id, exc_info=True)
 			return False
 
 	# -----------------------------------------------------------------------
@@ -307,11 +310,21 @@ class ReactionEngine:
 
 		logger.info("reaction_burst_emit", event_id=event_id, reactions=reactions, degraded=degraded)
 
-		# Publish to Redis pub/sub for cross-worker fan-out
-		published = await self._publish_burst(event_id, msg)
-		if not published:
-			sent = await self._broadcast(event_id, msg)
-			logger.info("reaction_burst_sent_local", event_id=event_id, clients_reached=sent)
+		# Always broadcast locally first — guarantees delivery on this
+		# worker regardless of pub/sub subscriber health.
+		sent = await self._broadcast(event_id, msg)
+
+		# Publish to Redis pub/sub for cross-worker fan-out.
+		# Include _flusher so the subscriber on THIS worker can skip the
+		# duplicate (other workers' subscribers will still broadcast).
+		pub_msg = {**msg, "_flusher": self._worker_id}
+		published = await self._publish_burst(event_id, pub_msg)
+		logger.info(
+			"reaction_burst_sent",
+			event_id=event_id,
+			clients_reached=sent,
+			cross_worker_published=published,
+		)
 
 	async def _publish_burst(self, event_id: str, msg: dict) -> bool:
 		"""Publish burst message to Redis pub/sub channel.
@@ -384,6 +397,10 @@ class ReactionEngine:
 					if isinstance(data, bytes):
 						data = data.decode("utf-8")
 					msg = json.loads(data)
+					# Skip if this worker already broadcast locally during flush
+					flusher = msg.pop("_flusher", None)
+					if flusher == self._worker_id:
+						continue
 					event_id = msg.get("room_id", "")
 					if not event_id:
 						continue

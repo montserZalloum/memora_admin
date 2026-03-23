@@ -467,6 +467,7 @@ class LastStandEngine:
 			"question_idx": question_idx,
 			"alive_count": new_alive,
 			"eliminated_this_round": eliminated_this_round,
+			"result_duration": self.result_window,
 			# Defaults for spectators (not in player_states)
 			"hearts_remaining": 0,
 			"heart_lost": False,

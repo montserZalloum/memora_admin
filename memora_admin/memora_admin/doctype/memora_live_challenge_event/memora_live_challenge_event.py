@@ -133,7 +133,7 @@ class MemoraLiveChallengeEvent(Document):
 		pipe.execute()
 
 	def validate(self):
-		self._validate_last_stand_fields()
+		# self._validate_last_stand_fields()
 		self._auto_calc_exam_duration()
 		self._compute_timestamps()
 		self._validate_ranges()

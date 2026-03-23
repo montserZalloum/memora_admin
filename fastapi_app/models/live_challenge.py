@@ -3,7 +3,14 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
+
+
+def _fmt_score(v: float | int | None) -> float | None:
+	"""Round to max 1 decimal place; always returns float for type consistency."""
+	if v is None:
+		return None
+	return round(float(v), 1)
 
 
 # =============================================================================
@@ -40,6 +47,11 @@ class LeaderboardEntryItem(BaseModel):
 	# Last Stand additions (0/false for exam)
 	final_hearts: int = Field(0, description="Hearts remaining")
 	is_eliminated: bool = Field(False, description="Whether eliminated")
+
+	@field_serializer("score")
+	@classmethod
+	def _ser_score(cls, v: float) -> float:
+		return _fmt_score(v)
 
 
 # =============================================================================
@@ -127,6 +139,11 @@ class SubmitResponse(BaseModel):
 		None, description="Incorrect answers with corrections (null if disabled)"
 	)
 
+	@field_serializer("score")
+	@classmethod
+	def _ser_score(cls, v: float) -> float:
+		return _fmt_score(v)
+
 
 class ResultResponse(BaseModel):
 	"""Student's own result and rank."""
@@ -149,6 +166,11 @@ class ResultResponse(BaseModel):
 	eliminated_at_question: int = Field(0, description="Question index where eliminated (0 if not)")
 	avg_response_time_ms: int = Field(0, description="Average response time in ms")
 
+	@field_serializer("score")
+	@classmethod
+	def _ser_score(cls, v: float) -> float:
+		return _fmt_score(v)
+
 
 class LeaderboardResponse(BaseModel):
 	"""Top 20 leaderboard after event ends."""
@@ -163,6 +185,11 @@ class LeaderboardResponse(BaseModel):
 	my_score: float | None = Field(None, description="Current player's score")
 	total_participants: int = Field(0, description="Total participants")
 	exam_end_ts: str | None = Field(None, description="Exam end timestamp")
+
+	@field_serializer("my_score")
+	@classmethod
+	def _ser_score(cls, v: float | None) -> float | None:
+		return _fmt_score(v)
 
 
 # =============================================================================
@@ -277,6 +304,7 @@ class WSRoundResultMessage(BaseModel):
 	is_correct: bool | None = Field(None, description="Whether answer was correct (null if unanswered)")
 	is_eliminated: bool = Field(False, description="Whether player was eliminated this round")
 	is_alive: bool = Field(True, description="Whether player is still alive")
+	result_duration: int = Field(..., description="Result screen duration in seconds before next round")
 
 
 class WSPlayerStateMessage(BaseModel):
