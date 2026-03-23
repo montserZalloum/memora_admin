@@ -89,6 +89,12 @@ class EventDetailResponse(BaseModel):
 	top_players: list[LeaderboardEntryItem] | None = Field(
 		None, description="Top 3 leaderboard entries (only present when event is Ended)"
 	)
+	# Last Stand extensions (null for exam)
+	mode: str | None = Field(None, description="Event mode: exam or last_stand")
+	alive_count: int | None = Field(None, description="Alive players (Last Stand Active only)")
+	eliminated_count: int | None = Field(None, description="Eliminated players (Last Stand Active only)")
+	current_round: int | None = Field(None, description="Current question index 0-based (Last Stand Active only)")
+	total_rounds: int | None = Field(None, description="Total questions in event")
 
 
 class JoinResponse(BaseModel):

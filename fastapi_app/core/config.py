@@ -63,6 +63,7 @@ class Settings(BaseSettings):
 	# Live Challenge Rate Limits
 	lc_join_rate_limit: int = 5
 	lc_submit_rate_limit: int = 2
+	lc_answer_rate_limit: int = 20  # Last Stand per-round answers per player per window
 	lc_read_rate_limit: int = 20  # detail/questions/result/leaderboard per player
 
 	# Challenge Hub Rate Limits
@@ -90,6 +91,9 @@ class Settings(BaseSettings):
 	reaction_room_cap_per_sec: int = 250  # Room-level reaction cap per second
 	reaction_rl_ttl_sec: int = 5  # TTL for rate limit Redis keys
 	reaction_enabled: bool = True  # Global kill-switch for reactions
+
+	# Timezone — must match Frappe System Settings > Time Zone
+	system_timezone: str = "Asia/Amman"
 
 	# Scaling: Rate Limiter Fail Behavior
 	rate_limit_fail_open: bool = True  # True=pass on Redis failure, False=503

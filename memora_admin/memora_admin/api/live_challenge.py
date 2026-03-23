@@ -249,6 +249,41 @@ def get_live_participants(event_id: str) -> dict:
 
 
 @frappe.whitelist(allow_guest=False)
+def reconcile_event_status(
+	event_id: str, status: str, participant_count: int, submitted_count: int,
+) -> dict:
+	"""Post-event reconciliation: update status + counters without triggering validate.
+
+	Called by FastAPI LiveChallengeService._reconcile_event() after writing
+	participation records.  Uses frappe.db.set_value (raw SQL) to bypass
+	DocType validation which rejects saves on events with short waiting rooms
+	or other draft-time constraints.
+
+	Args:
+		event_id: Live Challenge Event name
+		status: Target status (typically "Ended")
+		participant_count: Total joined players
+		submitted_count: Total submitted/graded players
+	"""
+	if not frappe.db.exists("Memora Live Challenge Event", event_id):
+		frappe.throw(f"Event {event_id} not found.")
+
+	frappe.db.set_value(
+		"Memora Live Challenge Event",
+		event_id,
+		{
+			"status": status,
+			"participant_count": int(participant_count),
+			"submitted_count": int(submitted_count),
+		},
+		update_modified=True,
+	)
+	frappe.db.commit()
+
+	return {"ok": True, "event_id": event_id, "status": status}
+
+
+@frappe.whitelist(allow_guest=False)
 def import_review_items(event_id: str, review_item_ids: str | list) -> dict:
 	"""Import questions from Memora Review Items into an event's child table.
 

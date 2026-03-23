@@ -5,11 +5,9 @@ import json
 import math
 from datetime import timedelta
 
-from zoneinfo import ZoneInfo
-
 import frappe
 from frappe.model.document import Document
-from frappe.utils import get_datetime, get_system_timezone
+from frappe.utils import get_datetime
 
 VALID_TRANSITIONS = {
 	"Draft": {"Waiting"},
@@ -175,27 +173,15 @@ class MemoraLiveChallengeEvent(Document):
 			frappe.throw("Result window duration must be between 1 and 10 seconds")
 
 	def _compute_timestamps(self):
-		"""Convert scheduled_start to UTC and compute exam_start_ts / exam_end_ts.
+		"""Compute exam_start_ts / exam_end_ts from scheduled_start.
 
-		The admin enters scheduled_start in the Frappe system timezone (Asia/Amman).
-		All three timestamps are stored as UTC so both the Frappe cron
-		and the FastAPI service can compare them directly.
-
-		Conversion only runs when scheduled_start is new or changed to avoid
-		double-converting on re-saves (e.g. status transitions).
+		Timestamps are stored as naive datetimes in server-local time.
+		The FastAPI service compares them against datetime.now() (no TZ).
 		"""
 		if self.scheduled_start and self.waiting_room_duration is not None and self.exam_duration is not None:
 			start = get_datetime(self.scheduled_start)
-
-			# Only convert from local TZ on new docs or when scheduled_start changed
-			if self.is_new() or self.has_value_changed("scheduled_start"):
-				sys_tz = ZoneInfo(get_system_timezone())
-				start_aware = start.replace(tzinfo=sys_tz)
-				start = start_aware.astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
-				self.scheduled_start = start
-
 			self.exam_start_ts = start + timedelta(seconds=int(self.waiting_room_duration))
-			self.exam_end_ts = get_datetime(self.exam_start_ts) + timedelta(minutes=int(self.exam_duration))
+			self.exam_end_ts = self.exam_start_ts + timedelta(minutes=int(self.exam_duration))
 
 	def _validate_ranges(self):
 		"""Validate min/max ranges for duration and capacity fields."""

@@ -113,10 +113,11 @@
    "label": "Schedule"
   },
   {
+   "description": "Enter in UTC",
    "fieldname": "scheduled_start",
    "fieldtype": "Datetime",
    "in_list_view": 1,
-   "label": "Scheduled Start",
+   "label": "Scheduled Start (UTC)",
    "reqd": 1
   },
   {
@@ -150,9 +151,10 @@
    "label": "Computed Times"
   },
   {
+   "description": "Auto-computed (UTC)",
    "fieldname": "exam_start_ts",
    "fieldtype": "Datetime",
-   "label": "Exam Start",
+   "label": "Exam Start (UTC)",
    "read_only": 1
   },
   {
@@ -160,9 +162,10 @@
    "fieldtype": "Column Break"
   },
   {
+   "description": "Auto-computed (UTC)",
    "fieldname": "exam_end_ts",
    "fieldtype": "Datetime",
-   "label": "Exam End",
+   "label": "Exam End (UTC)",
    "read_only": 1
   },
   {

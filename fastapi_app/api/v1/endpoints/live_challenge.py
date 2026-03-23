@@ -203,7 +203,7 @@ async def submit_answers(
 @router.post(
 	"/{event_id}/answer",
 	response_model=AnswerResponse,
-	dependencies=[Depends(require_rate_limit("lc_submit"))],
+	dependencies=[Depends(require_rate_limit("lc_answer"))],
 )
 async def submit_round_answer(
 	event_id: str,

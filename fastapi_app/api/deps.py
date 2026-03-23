@@ -468,6 +468,7 @@ _SCOPE_SETTINGS = {
 	"session_end": "session_rate_limit",
 	"lc_join": "lc_join_rate_limit",
 	"lc_submit": "lc_submit_rate_limit",
+	"lc_answer": "lc_answer_rate_limit",
 	"lc_read": "lc_read_rate_limit",
 	"ch_hierarchy": "ch_hierarchy_rate_limit",
 	"ch_attempt": "ch_attempt_rate_limit",

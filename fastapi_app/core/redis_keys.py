@@ -1315,6 +1315,17 @@ def lc_answered_counts_key(event_id: str) -> str:
 	return f"memora:lc:{event_id}:answered_counts"
 
 
+def lc_engine_lock_key(event_id: str) -> str:
+	"""Lock to ensure only one worker runs the LastStandEngine.
+
+	Type: STRING (value: "1", set via SET NX)
+	Producers: LiveChallengeService._start_last_stand_engine() (SET NX)
+	Consumers: LiveChallengeService._start_last_stand_engine() (lock check)
+	TTL: LC_KEY_TTL (24h — released explicitly on engine stop/crash)
+	"""
+	return f"memora:lc:{event_id}:engine_lock"
+
+
 def lc_round_signal_key(event_id: str) -> str:
 	"""Pub/sub channel for early answer window close signal.
 
@@ -1324,6 +1335,17 @@ def lc_round_signal_key(event_id: str) -> str:
 	TTL: N/A (pub/sub channels have no TTL)
 	"""
 	return f"memora:lc:{event_id}:round_signal"
+
+
+def lc_round_broadcast_channel(event_id: str) -> str:
+	"""Redis pub/sub channel for cross-worker Last Stand round broadcasts.
+
+	Type: PUBSUB channel
+	Producers: LiveChallengeService._publish_round_broadcast() (engine worker)
+	Consumers: LiveChallengeService._round_subscriber_loop() (all workers)
+	TTL: N/A (pub/sub channels have no TTL)
+	"""
+	return f"memora:lc_round:{event_id}"
 
 
 REACTION_WIN_TTL = 3

@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import json
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
-UTC = timezone.utc
 from typing import TYPE_CHECKING, Any
 
 import redis.asyncio as redis
@@ -29,7 +28,9 @@ from fastapi_app.core.redis_keys import (
 	lc_meta_key,
 	lc_mode_key,
 	lc_questions_key,
+	lc_engine_lock_key,
 	lc_reconcile_lock_key,
+	lc_round_broadcast_channel,
 	lc_reconciled_key,
 	lc_response_times_key,
 	lc_results_key,
@@ -46,8 +47,17 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 def _now_naive() -> datetime:
-	"""Return current UTC time as a naive datetime (matches DB storage)."""
-	return datetime.now(UTC).replace(tzinfo=None)
+	"""Return current time in the Frappe system timezone as a naive datetime.
+
+	Frappe stores Datetime fields in the system timezone (e.g. Asia/Amman).
+	The server OS clock may differ (e.g. UTC), so we explicitly convert to
+	match what the admin entered and what is stored in the DB / Redis.
+	"""
+	from zoneinfo import ZoneInfo
+
+	from fastapi_app.core.config import get_settings
+
+	return datetime.now(ZoneInfo(get_settings().system_timezone)).replace(tzinfo=None)
 
 
 # Lua script for atomic join: status check + uniqueness + capacity + SADD + EXPIRE in one call.
@@ -166,6 +176,7 @@ class LiveChallengeService:
 		self._shutting_down = False
 		self._join_script: Any = None
 		self._cas_script: Any = None
+		self._answer_script: Any = None
 		# WebSocket connection tracking: event_id -> set[WebSocket]
 		self._ws_connections: dict[str, set[WebSocket]] = {}
 		# WebSocket → player_id mapping for personalized broadcasts
@@ -181,6 +192,10 @@ class LiveChallengeService:
 			broadcast=self._broadcast_json,
 			redis=self.redis,
 		)
+		# Cross-worker Last Stand round broadcast subscriber
+		self._round_subscriber_task: asyncio.Task | None = None
+		self._round_pubsub: Any = None
+		self._round_subscribed_channels: set[str] = set()
 
 	async def _get_join_script(self):
 		"""Get or register the Lua atomic join script."""
@@ -442,6 +457,165 @@ class LiveChallengeService:
 		"""Start the cross-worker reaction burst pub/sub subscriber."""
 		await self._reaction_engine.start_subscriber()
 
+	# -------------------------------------------------------------------------
+	# Cross-worker Last Stand round broadcast (pub/sub)
+	# -------------------------------------------------------------------------
+
+	async def start_round_subscriber(self) -> None:
+		"""Start the cross-worker round broadcast pub/sub subscriber.
+
+		Creates a pubsub object with no initial subscriptions.  Events are
+		subscribed dynamically when the first WS connects (register_connection).
+		Mirrors ReactionEngine.start_subscriber.
+		"""
+		if self._round_subscriber_task is not None:
+			return
+		self._round_subscriber_task = asyncio.create_task(self._round_subscriber_loop())
+
+	async def _round_subscriber_loop(self) -> None:
+		"""Poll for round broadcast messages on Redis pub/sub and relay locally.
+
+		Each worker runs this loop.  The engine worker publishes round messages
+		to the channel; every worker (including the engine worker) receives them
+		and calls the local _broadcast_json / _broadcast_personalized.
+		"""
+		pool = self.redis.connection_pool
+		client = redis.Redis(connection_pool=pool)
+		try:
+			self._round_pubsub = client.pubsub()
+			logger.info("round_subscriber_started")
+
+			while True:
+				try:
+					message = await self._round_pubsub.get_message(
+						ignore_subscribe_messages=True, timeout=0.1,
+					)
+				except asyncio.CancelledError:
+					raise
+				except Exception:
+					await asyncio.sleep(0.1)
+					continue
+
+				if message is None:
+					await asyncio.sleep(0.01)
+					continue
+
+				try:
+					data = message["data"]
+					if isinstance(data, bytes):
+						data = data.decode("utf-8")
+					envelope = json.loads(data)
+					event_id = envelope.get("event_id", "")
+					if not event_id:
+						continue
+
+					btype = envelope.get("broadcast_type")
+					if btype == "json":
+						await self._broadcast_json(event_id, envelope["message"])
+					elif btype == "personalized":
+						await self._broadcast_personalized(
+							event_id, envelope["base_msg"], envelope["player_states"],
+						)
+				except Exception:
+					logger.warning("round_subscriber_message_error", exc_info=True)
+					continue
+		except asyncio.CancelledError:
+			logger.info("round_subscriber_cancelled")
+			raise
+		except Exception:
+			logger.error("round_subscriber_error", exc_info=True)
+			raise
+		finally:
+			try:
+				if self._round_pubsub is not None:
+					for ch in list(self._round_subscribed_channels):
+						await self._round_pubsub.unsubscribe(ch)
+					self._round_subscribed_channels.clear()
+				await client.aclose()
+			except Exception:
+				logger.debug("round_subscriber_cleanup_error", exc_info=True)
+
+	async def stop_round_subscriber(self) -> None:
+		"""Cancel the round subscriber loop and clean up."""
+		if self._round_subscriber_task is not None:
+			self._round_subscriber_task.cancel()
+			try:
+				await self._round_subscriber_task
+			except asyncio.CancelledError:
+				pass
+			self._round_subscriber_task = None
+
+	async def _subscribe_round_event(self, event_id: str) -> None:
+		"""Subscribe this worker to round broadcasts for an event."""
+		if self._round_pubsub is None:
+			return
+		channel = lc_round_broadcast_channel(event_id)
+		if channel not in self._round_subscribed_channels:
+			try:
+				await self._round_pubsub.subscribe(channel)
+				self._round_subscribed_channels.add(channel)
+			except Exception:
+				logger.warning("round_subscribe_error", event_id=event_id)
+
+	async def _unsubscribe_round_event(self, event_id: str) -> None:
+		"""Unsubscribe this worker from round broadcasts for an event."""
+		if self._round_pubsub is None:
+			return
+		channel = lc_round_broadcast_channel(event_id)
+		if channel in self._round_subscribed_channels:
+			try:
+				await self._round_pubsub.unsubscribe(channel)
+				self._round_subscribed_channels.discard(channel)
+			except Exception:
+				logger.warning("round_unsubscribe_error", event_id=event_id)
+
+	async def _publish_round_broadcast(self, event_id: str, envelope: dict) -> bool:
+		"""Publish a round broadcast envelope to Redis pub/sub.
+
+		Returns True if published, False on failure (caller falls back to local).
+		"""
+		try:
+			channel = lc_round_broadcast_channel(event_id)
+			payload = json.dumps(envelope)
+			await self.redis.publish(channel, payload)
+			return True
+		except Exception:
+			logger.warning("round_broadcast_publish_error", event_id=event_id)
+			return False
+
+	async def _engine_broadcast_json(self, event_id: str, message: dict) -> int:
+		"""Pub/sub wrapper for _broadcast_json — used by LastStandEngine.
+
+		Publishes to Redis so ALL workers relay to their local connections.
+		Falls back to direct local broadcast if publish fails.
+		"""
+		envelope = {
+			"event_id": event_id,
+			"broadcast_type": "json",
+			"message": message,
+		}
+		if await self._publish_round_broadcast(event_id, envelope):
+			return 0
+		return await self._broadcast_json(event_id, message)
+
+	async def _engine_broadcast_personalized(
+		self, event_id: str, base_msg: dict, player_states: dict[str, dict],
+	) -> int:
+		"""Pub/sub wrapper for _broadcast_personalized — used by LastStandEngine.
+
+		Publishes to Redis so ALL workers relay to their local connections.
+		Falls back to direct local broadcast if publish fails.
+		"""
+		envelope = {
+			"event_id": event_id,
+			"broadcast_type": "personalized",
+			"base_msg": base_msg,
+			"player_states": player_states,
+		}
+		if await self._publish_round_broadcast(event_id, envelope):
+			return 0
+		return await self._broadcast_personalized(event_id, base_msg, player_states)
+
 	async def resume_active_last_stand_events(self) -> None:
 		"""Startup scan: resume LastStandEngine for any Active Last Stand events.
 
@@ -517,11 +691,13 @@ class LiveChallengeService:
 		"""Signal all background loops to stop and cancel countdown tasks."""
 		self._shutting_down = True
 		await self._reaction_engine.stop_subscriber()
+		await self.stop_round_subscriber()
 		for event_id in list(self._countdown_tasks):
 			self.stop_countdown_loop(event_id)
-		# Stop all Last Stand engines
-		for engine in self._engines.values():
+		# Stop all Last Stand engines and release their locks
+		for event_id, engine in self._engines.items():
 			engine.stop()
+			await self.redis.delete(lc_engine_lock_key(event_id))
 		for task in self._engine_tasks.values():
 			if not task.done():
 				task.cancel()
@@ -539,7 +715,21 @@ class LiveChallengeService:
 		reads the round HASH to determine which question index to resume
 		from.  For rounds missed during downtime (phase_end_ts < now),
 		alive players who didn't answer lose a heart.
+
+		Multi-worker safety: uses a Redis SETNX lock so only one worker
+		runs the engine per event.  Other workers skip silently.
 		"""
+		# Guard: only one worker runs the engine (multi-worker safety)
+		acquired = await self.redis.set(
+			lc_engine_lock_key(event_id), "1", nx=True, ex=LC_KEY_TTL,
+		)
+		if not acquired:
+			logger.info(
+				"last_stand_engine_lock_held",
+				event_id=event_id,
+			)
+			return
+
 		from fastapi_app.services.last_stand_engine import LastStandEngine
 
 		questions_json = await self.redis.get(lc_questions_key(event_id))
@@ -584,8 +774,8 @@ class LiveChallengeService:
 			event_id=event_id,
 			questions=questions,
 			meta=meta,
-			broadcast_json=self._broadcast_json,
-			broadcast_personalized=self._broadcast_personalized,
+			broadcast_json=self._engine_broadcast_json,
+			broadcast_personalized=self._engine_broadcast_personalized,
 			on_event_ended=self._on_last_stand_ended,
 			resume_from_idx=resume_from_idx,
 		)
@@ -673,8 +863,10 @@ class LiveChallengeService:
 		self, event_id: str, reason: str, alive_count: int, rounds_played: int,
 	) -> None:
 		"""Callback from LastStandEngine when the event ends."""
-		# Broadcast event_ended with Last Stand fields
-		await self._broadcast_json(event_id, {
+		# Release engine lock so another worker can start on crash-recovery
+		await self.redis.delete(lc_engine_lock_key(event_id))
+		# Broadcast event_ended with Last Stand fields (via pub/sub for cross-worker)
+		await self._engine_broadcast_json(event_id, {
 			"type": "event_ended",
 			"reason": reason,
 			"final_alive_count": alive_count,
@@ -694,14 +886,28 @@ class LiveChallengeService:
 	async def submit_last_stand_answer(
 		self, event_id: str, player_id: str, round_id: str, selected: str,
 	) -> int:
-		"""Submit an answer for a Last Stand round.  Returns Lua result code."""
+		"""Submit an answer for a Last Stand round.  Returns Lua result code.
+
+		Uses the atomic Lua script directly against Redis so it works
+		regardless of which uvicorn worker handles the HTTP request
+		(the engine runs in only one worker).
+		"""
 		from fastapi_app.core.redis_keys import lc_round_answers_key, lc_round_signal_key
+		from fastapi_app.services.last_stand_engine import _ATOMIC_ANSWER_LUA
 
-		engine = self._engines.get(event_id)
-		if engine is None:
-			return -1  # EVENT_NOT_ACTIVE (no engine running)
+		if self._answer_script is None:
+			self._answer_script = self.redis.register_script(_ATOMIC_ANSWER_LUA)
 
-		result = await engine.submit_answer(player_id, round_id, selected)
+		result = await self._answer_script(
+			keys=[
+				lc_status_key(event_id),
+				lc_alive_key(event_id),
+				lc_round_key(event_id),
+				lc_round_answers_key(event_id, round_id),
+			],
+			args=[player_id, round_id, selected, str(time.time())],
+		)
+		result = int(result)
 
 		# On success, check for early close signal (R-004)
 		if result == 1:
@@ -959,25 +1165,21 @@ class LiveChallengeService:
 								error=str(e),
 							)
 
-			# Sync counters to Frappe event
+			# Sync status + counters to Frappe event (bypass DocType validate)
 			count_synced = True
 			try:
 				await self.frappe.call(
-					"frappe.client.set_value",
+					"memora_admin.memora_admin.api.live_challenge.reconcile_event_status",
 					{
-						"doctype": "Memora Live Challenge Event",
-						"name": event_id,
-						"fieldname": json.dumps(
-							{
-								"participant_count": count,
-								"submitted_count": submitted_count,
-							}
-						),
+						"event_id": event_id,
+						"status": "Ended",
+						"participant_count": count,
+						"submitted_count": submitted_count,
 					},
 				)
 			except Exception:
 				count_synced = False
-				logger.warning("lc_participant_count_sync_failed", event_id=event_id)
+				logger.warning("lc_event_sync_failed", event_id=event_id)
 
 			# Step 4 — Conditional cleanup (full success only)
 			all_succeeded = not failed_players and count_synced
@@ -1297,7 +1499,7 @@ class LiveChallengeService:
 			except (json.JSONDecodeError, TypeError):
 				pass
 
-		return {
+		detail: dict[str, Any] = {
 			"event_id": event_id,
 			"event_name": meta.get("event_name", ""),
 			"description": meta.get("description") or None,
@@ -1322,6 +1524,22 @@ class LiveChallengeService:
 			"has_joined": bool(has_joined),
 			"has_submitted": bool(has_submitted),
 		}
+
+		# Enrich with Last Stand fields so client doesn't need a separate /status call
+		mode = meta.get("mode", "exam")
+		detail["mode"] = mode
+		if mode == "last_stand" and status.lower() == "active":
+			ls_pipe = self.redis.pipeline()
+			ls_pipe.scard(lc_alive_key(event_id))
+			ls_pipe.scard(lc_eliminated_key(event_id))
+			ls_pipe.hgetall(lc_round_key(event_id))
+			alive, eliminated, round_data = await ls_pipe.execute()
+			detail["alive_count"] = alive
+			detail["eliminated_count"] = eliminated
+			detail["current_round"] = int(round_data.get("question_idx", "0")) if round_data else 0
+			detail["total_rounds"] = question_count
+
+		return detail
 
 	async def _get_event_detail_from_db(self, event_id: str, player_id: str) -> dict[str, Any] | None:
 		"""Read event detail exclusively from Frappe DB. Used ONLY for ended events."""
@@ -1396,6 +1614,7 @@ class LiveChallengeService:
 			"has_joined": joined,
 			"has_submitted": submitted,
 			"top_players": top_players,
+			"mode": event.get("mode", "exam"),
 		}
 
 	# -------------------------------------------------------------------------
@@ -1665,6 +1884,7 @@ class LiveChallengeService:
 			self._ws_player_map[event_id][ws] = player_id
 		if is_first:
 			asyncio.create_task(self._reaction_engine.subscribe_event(event_id))
+			asyncio.create_task(self._subscribe_round_event(event_id))
 
 	def remove_connection(self, event_id: str, ws: WebSocket) -> None:
 		"""Remove a WebSocket connection for an event."""
@@ -1674,6 +1894,7 @@ class LiveChallengeService:
 			if not conns:
 				del self._ws_connections[event_id]
 				asyncio.create_task(self._reaction_engine.unsubscribe_event(event_id))
+				asyncio.create_task(self._unsubscribe_round_event(event_id))
 		# Clean up player mapping
 		pm = self._ws_player_map.get(event_id)
 		if pm:
@@ -1811,8 +2032,8 @@ class LiveChallengeService:
 				logger.warning("lc_countdown_missing_timestamps", event_id=event_id)
 				return
 
-			exam_start_ts = datetime.strptime(exam_start_ts_str, "%Y-%m-%d %H:%M:%S")
-			exam_end_ts = datetime.strptime(exam_end_ts_str, "%Y-%m-%d %H:%M:%S")
+			exam_start_ts = datetime.fromisoformat(exam_start_ts_str)
+			exam_end_ts = datetime.fromisoformat(exam_end_ts_str)
 
 			# Check if already active (avoid duplicate exam_start broadcast — Finding 6)
 			initial_status = await self.redis.get(lc_status_key(event_id))
@@ -1863,6 +2084,8 @@ class LiveChallengeService:
 									"last_stand_engine_stop_timeout",
 									event_id=event_id,
 								)
+						# Release engine lock (may already be released by _on_last_stand_ended)
+						await self.redis.delete(lc_engine_lock_key(event_id))
 
 					mode = await self.redis.get(lc_mode_key(event_id))
 					if mode == "last_stand":
