@@ -265,6 +265,10 @@ def reconcile_event_status(
 		participant_count: Total joined players
 		submitted_count: Total submitted/graded players
 	"""
+	_ALLOWED_RECONCILE_STATUSES = {"Ended"}
+	if status not in _ALLOWED_RECONCILE_STATUSES:
+		frappe.throw(f"Status '{status}' not allowed for reconciliation.")
+
 	if not frappe.db.exists("Memora Live Challenge Event", event_id):
 		frappe.throw(f"Event {event_id} not found.")
 

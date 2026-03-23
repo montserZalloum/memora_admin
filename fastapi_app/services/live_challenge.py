@@ -6,6 +6,7 @@ import asyncio
 import json
 import time
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from typing import TYPE_CHECKING, Any
 
@@ -46,6 +47,9 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
+_SYSTEM_TZ: ZoneInfo | None = None
+
+
 def _now_naive() -> datetime:
 	"""Return current time in the Frappe system timezone as a naive datetime.
 
@@ -53,11 +57,10 @@ def _now_naive() -> datetime:
 	The server OS clock may differ (e.g. UTC), so we explicitly convert to
 	match what the admin entered and what is stored in the DB / Redis.
 	"""
-	from zoneinfo import ZoneInfo
-
-	from fastapi_app.core.config import get_settings
-
-	return datetime.now(ZoneInfo(get_settings().system_timezone)).replace(tzinfo=None)
+	global _SYSTEM_TZ
+	if _SYSTEM_TZ is None:
+		_SYSTEM_TZ = ZoneInfo(get_settings().system_timezone)
+	return datetime.now(_SYSTEM_TZ).replace(tzinfo=None)
 
 
 # Lua script for atomic join: status check + uniqueness + capacity + SADD + EXPIRE in one call.
@@ -732,62 +735,67 @@ class LiveChallengeService:
 
 		from fastapi_app.services.last_stand_engine import LastStandEngine
 
-		questions_json = await self.redis.get(lc_questions_key(event_id))
-		if not questions_json:
-			logger.error("last_stand_no_questions", event_id=event_id)
-			return
-		questions = json.loads(questions_json)
-		meta = await self.redis.hgetall(lc_meta_key(event_id))
+		try:
+			questions_json = await self.redis.get(lc_questions_key(event_id))
+			if not questions_json:
+				logger.error("last_stand_no_questions", event_id=event_id)
+				return
+			questions = json.loads(questions_json)
+			meta = await self.redis.hgetall(lc_meta_key(event_id))
 
-		# Determine resume point from Redis round state
-		resume_from_idx = 0
-		round_data = await self.redis.hgetall(lc_round_key(event_id))
-		if round_data and round_data.get("question_idx"):
-			stored_idx = int(round_data["question_idx"])
-			phase = round_data.get("phase", "")
-			phase_end_ts = float(round_data.get("phase_end_ts", "0"))
-			now = time.time()
+			# Determine resume point from Redis round state
+			resume_from_idx = 0
+			round_data = await self.redis.hgetall(lc_round_key(event_id))
+			if round_data and round_data.get("question_idx"):
+				stored_idx = int(round_data["question_idx"])
+				phase = round_data.get("phase", "")
+				phase_end_ts = float(round_data.get("phase_end_ts", "0"))
+				now = time.time()
 
-			if phase_end_ts < now:
-				# Phase expired during downtime — fast-forward past this round
-				# Deduct hearts for alive players who didn't answer the missed round
-				await self._fast_forward_missed_round(event_id, round_data, questions)
-				resume_from_idx = stored_idx + 1
-			elif phase == "result":
-				# In result window but not expired — resume from NEXT round
-				resume_from_idx = stored_idx + 1
-			else:
-				# Still in answer window — resume from THIS round
-				resume_from_idx = stored_idx
+				if phase_end_ts < now:
+					# Phase expired during downtime — fast-forward past this round
+					# Deduct hearts for alive players who didn't answer the missed round
+					await self._fast_forward_missed_round(event_id, round_data, questions)
+					resume_from_idx = stored_idx + 1
+				elif phase == "result":
+					# In result window but not expired — resume from NEXT round
+					resume_from_idx = stored_idx + 1
+				else:
+					# Still in answer window — resume from THIS round
+					resume_from_idx = stored_idx
 
-			if resume_from_idx > 0:
-				logger.info(
-					"last_stand_engine_resuming",
-					event_id=event_id,
-					resume_from_idx=resume_from_idx,
-					stored_idx=stored_idx,
-					phase=phase,
-				)
+				if resume_from_idx > 0:
+					logger.info(
+						"last_stand_engine_resuming",
+						event_id=event_id,
+						resume_from_idx=resume_from_idx,
+						stored_idx=stored_idx,
+						phase=phase,
+					)
 
-		engine = LastStandEngine(
-			redis_client=self.redis,
-			event_id=event_id,
-			questions=questions,
-			meta=meta,
-			broadcast_json=self._engine_broadcast_json,
-			broadcast_personalized=self._engine_broadcast_personalized,
-			on_event_ended=self._on_last_stand_ended,
-			resume_from_idx=resume_from_idx,
-		)
-		self._engines[event_id] = engine
-		task = asyncio.create_task(engine.run())
-		self._engine_tasks[event_id] = task
-		logger.info(
-			"last_stand_engine_started",
-			event_id=event_id,
-			total_rounds=len(questions),
-			resume_from_idx=resume_from_idx,
-		)
+			engine = LastStandEngine(
+				redis_client=self.redis,
+				event_id=event_id,
+				questions=questions,
+				meta=meta,
+				broadcast_json=self._engine_broadcast_json,
+				broadcast_personalized=self._engine_broadcast_personalized,
+				on_event_ended=self._on_last_stand_ended,
+				resume_from_idx=resume_from_idx,
+			)
+			self._engines[event_id] = engine
+			task = asyncio.create_task(engine.run())
+			self._engine_tasks[event_id] = task
+			logger.info(
+				"last_stand_engine_started",
+				event_id=event_id,
+				total_rounds=len(questions),
+				resume_from_idx=resume_from_idx,
+			)
+		except Exception:
+			# Release lock on any failure so another worker can retry
+			await self.redis.delete(lc_engine_lock_key(event_id))
+			raise
 
 	async def _fast_forward_missed_round(
 		self, event_id: str, round_data: dict, questions: list[dict],
@@ -1301,6 +1309,7 @@ class LiveChallengeService:
 		pipe.delete(lc_results_key(event_id))
 		pipe.delete(lc_reconcile_lock_key(event_id))
 		# Last Stand keys (no-op if exam mode)
+		pipe.delete(lc_engine_lock_key(event_id))
 		pipe.delete(lc_mode_key(event_id))
 		pipe.delete(lc_round_key(event_id))
 		pipe.delete(lc_hearts_key(event_id))

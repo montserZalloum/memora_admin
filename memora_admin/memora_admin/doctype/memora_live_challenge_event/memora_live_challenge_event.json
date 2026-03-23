@@ -113,11 +113,11 @@
    "label": "Schedule"
   },
   {
-   "description": "Enter in UTC",
+   "description": "Enter in system timezone (Asia/Amman)",
    "fieldname": "scheduled_start",
    "fieldtype": "Datetime",
    "in_list_view": 1,
-   "label": "Scheduled Start (UTC)",
+   "label": "Scheduled Start",
    "reqd": 1
   },
   {
@@ -151,10 +151,10 @@
    "label": "Computed Times"
   },
   {
-   "description": "Auto-computed (UTC)",
+   "description": "Auto-computed from scheduled start + waiting room duration",
    "fieldname": "exam_start_ts",
    "fieldtype": "Datetime",
-   "label": "Exam Start (UTC)",
+   "label": "Exam Start",
    "read_only": 1
   },
   {
@@ -162,10 +162,10 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Auto-computed (UTC)",
+   "description": "Auto-computed from exam start + exam duration",
    "fieldname": "exam_end_ts",
    "fieldtype": "Datetime",
-   "label": "Exam End (UTC)",
+   "label": "Exam End",
    "read_only": 1
   },
   {
