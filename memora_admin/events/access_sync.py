@@ -144,21 +144,20 @@ def on_season_deleted(doc, method):
 
 
 def reset_challenge_data(season_id: str) -> dict:
-	"""Reset all Challenge Hub Redis data for a season.
+	"""Reset all Challenge Hub data for a season (Redis + MariaDB).
 
 	Cleans up:
 	1. All challenge progress keys (memora:ch:progress:*)
 	2. All challenge leaderboard keys for the season (memora:lb:ch:{season_id}:*)
 	3. Dirty set entries (memora:dirty:ch_progress) — flush first to avoid data loss
 	4. Attempt buffer (memora:ch:attempt_buffer) — flush first to avoid data loss
-
-	MariaDB records are preserved as archive (no deletion).
+	5. tabMemora Challenge Progress rows for this season (MariaDB)
 
 	Args:
 		season_id: The season identifier to reset.
 
 	Returns:
-		dict with counts of deleted keys.
+		dict with counts of deleted keys and rows.
 	"""
 	r = get_memora_redis()
 	deleted_progress = 0
@@ -200,15 +199,26 @@ def reset_challenge_data(season_id: str) -> dict:
 		if cursor == 0:
 			break
 
+	# Step 5: Delete MariaDB Challenge Progress rows for this season.
+	# Records are not exported to the analytics server so there is no reason
+	# to keep them after the season ends — they would just accumulate forever.
+	deleted_db_rows = frappe.db.count(
+		"Memora Challenge Progress", filters={"season": season_id}
+	)
+	if deleted_db_rows:
+		frappe.db.delete("Memora Challenge Progress", {"season": season_id})
+
 	frappe.logger().info(
 		f"Challenge Hub reset for season {season_id}: "
-		f"{deleted_progress} progress keys, {deleted_leaderboard} leaderboard keys deleted"
+		f"{deleted_progress} progress keys, {deleted_leaderboard} leaderboard keys, "
+		f"{deleted_db_rows} DB rows deleted"
 	)
 
 	return {
 		"season_id": season_id,
 		"deleted_progress": deleted_progress,
 		"deleted_leaderboard": deleted_leaderboard,
+		"deleted_db_rows": deleted_db_rows,
 	}
 
 

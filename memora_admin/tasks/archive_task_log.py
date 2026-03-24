@@ -39,7 +39,7 @@ logger = logging.getLogger(__name__)
 TASK_NAME = "archive_task_log"
 RUNTIME_CAP_SECONDS = 300
 TERMINAL_STATUSES = ("Success", "Failed", "Partial")
-RETENTION_DAYS = 90
+RETENTION_DAYS = 14
 MAX_RETRY_COUNT = 3
 
 

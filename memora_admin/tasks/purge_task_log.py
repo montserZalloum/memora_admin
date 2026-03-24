@@ -4,7 +4,7 @@ Scans Synced batches and deletes their source rows from production
 in bounded sub-batches of 10,000, each committed independently,
 with a 5-second lock timeout and a 300-second runtime cap.
 
-No row within the 90-day retention window is ever deleted.
+No row within the 14-day retention window is ever deleted.
 
 Scheduled via hooks.py: "30 3 * * *" (daily at 03:30)
 """
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 TASK_NAME = "purge_task_log"
 RUNTIME_CAP_SECONDS = 300
 TERMINAL_STATUSES = ("Success", "Failed", "Partial")
-RETENTION_DAYS = 90
+RETENTION_DAYS = 14
 SUB_BATCH_SIZE = 10_000
 SOURCE_TABLE = "tabMemora Task Run Log"
 

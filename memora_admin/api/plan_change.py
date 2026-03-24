@@ -12,6 +12,9 @@ from datetime import datetime, timedelta
 
 import frappe
 
+from fastapi_app.core.redis_keys import player_ch_progress_pattern
+from memora_admin.utils.redis_connection import get_memora_redis
+
 
 @frappe.whitelist(allow_guest=False)
 def execute_plan_change(player_id: str, new_plan_id: str) -> dict:
@@ -245,6 +248,12 @@ def execute_plan_change(player_id: str, new_plan_id: str) -> dict:
 		(player_id,),
 	)
 
+	# 8e. Clear challenge progress for this player (Redis first, then MariaDB)
+	# Redis must be cleared before MariaDB so the 1-minute dirty-flush task
+	# can never re-create the deleted rows: once the Redis hash is gone,
+	# any remaining dirty-set entries hit `if not raw: continue` and are no-ops.
+	_clear_player_challenge_progress(player_id)
+
 	# 9. Reset wallet
 	if wallet:
 		frappe.db.set_value(
@@ -330,3 +339,40 @@ def get_available_plans(current_plan_id: str) -> dict:
 			for p in plans
 		]
 	}
+
+
+def _clear_player_challenge_progress(player_id: str) -> None:
+	"""Wipe challenge progress for one player from Redis then MariaDB.
+
+	Order matters: Redis is cleared first so that any remaining dirty-set
+	entries for this player become no-ops in the next sync run
+	(`if not raw: continue` in _sync_ch_progress_members).  The MariaDB
+	delete then removes any rows that were already flushed before this call.
+
+	Redis errors are non-fatal: logged and swallowed so the plan change
+	transaction is not rolled back over a cache issue.
+	"""
+	# Step 1: clear Redis cache for this player
+	try:
+		r = get_memora_redis()
+		pattern = player_ch_progress_pattern(player_id)
+		cursor = 0
+		deleted = 0
+		while True:
+			cursor, keys = r.scan(cursor=cursor, match=pattern, count=200)
+			if keys:
+				deleted += r.delete(*keys)
+			if cursor == 0:
+				break
+		if deleted:
+			frappe.logger().info(
+				f"Plan change: cleared {deleted} challenge progress Redis keys for {player_id}"
+			)
+	except Exception:
+		frappe.log_error(title=f"Plan change: Redis challenge progress clear failed for {player_id}")
+
+	# Step 2: delete MariaDB records for this player
+	try:
+		frappe.db.delete("Memora Challenge Progress", {"player": player_id})
+	except Exception:
+		frappe.log_error(title=f"Plan change: MariaDB challenge progress clear failed for {player_id}")

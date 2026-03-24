@@ -357,7 +357,11 @@ scheduler_events = {
 			"memora_admin.tasks.archive_trigger.check_season_scoped_archives",
 		],
 		# Daily at 06:00: Notify admins of permanently failed archive jobs
-		"0 6 * * *": ["memora_admin.tasks.archive_notify.notify_failed_archive_jobs"],
+		# Daily at 06:00: Delete old Completed Memora Live Sync Job rows (10-day retention)
+		"0 6 * * *": [
+			"memora_admin.tasks.archive_notify.notify_failed_archive_jobs",
+			"memora_admin.tasks.live_sync_job_cleanup.cleanup_live_sync_jobs",
+		],
 		# Daily at 07:00: Check for stale sync_paused on archive jobs
 		"0 7 * * *": ["memora_admin.tasks.archive_stale_pause.check_stale_archive_pauses"],
 		# Daily at 04:00: Clean up old terminal rows from Memora Build Queue
