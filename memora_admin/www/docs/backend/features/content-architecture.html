@@ -1,0 +1,1321 @@
+<!--
+  ============================================================
+  هذا الملف مولّد من content-architecture.md
+  الماركداون هو المصدر الأساسي — لا تعدّل هذا الملف مباشرة.
+  Generated from content-architecture.md — markdown is the source of truth.
+  ============================================================
+-->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>بنية المحتوى — Memora</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="../../_shared/portal.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { tajawal: ['Tajawal', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="portal-page font-tajawal pb-20">
+
+  <!-- ============================== -->
+  <!-- 1. HERO                        -->
+  <!-- ============================== -->
+  <header class="portal-hero bg-gradient-to-l from-emerald-600 to-teal-700 text-white shadow-lg mb-12">
+    <div class="max-w-5xl mx-auto">
+      <h1 class="text-4xl md:text-5xl font-extrabold mb-3">
+        <i class="fa-solid fa-sitemap ml-2 opacity-80"></i>
+        بنية المحتوى
+      </h1>
+      <p class="text-lg md:text-xl opacity-90 mb-6 max-w-2xl mx-auto">
+        النموذج الأساسي الذي يُبنى عليه كل شيء في ميمورا — من المراجعة اليومية إلى التحدي المباشر
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-3 text-sm">
+        <span class="portal-badge bg-white/20 text-white">
+          <i class="fa-solid fa-server"></i> Backend
+        </span>
+        <span class="portal-badge bg-emerald-400/30 text-emerald-100">
+          <i class="fa-solid fa-circle-check"></i> فعّال
+        </span>
+        <span class="portal-badge bg-white/10 text-white/80">
+          <i class="fa-regular fa-calendar"></i> 2026-03-24
+        </span>
+        <span class="portal-badge bg-white/10 text-white/80 font-mono text-xs">
+          <i class="fa-solid fa-code-commit"></i> 76ef96d
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <div class="max-w-5xl mx-auto px-4 space-y-14">
+
+    <!-- ============================== -->
+    <!-- 2. QUICK SUMMARY               -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-teal-700">
+        <i class="fa-solid fa-bolt text-2xl"></i>
+        <h2>ملخص سريع</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <!-- Card: what -->
+        <div class="portal-card portal-card-hover border-t-4 border-teal-500">
+          <div class="flex items-center gap-2 mb-3 text-teal-600 font-bold">
+            <i class="fa-solid fa-circle-question"></i>
+            <span>ما هي؟</span>
+          </div>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            هرمية من <strong>5 مستويات</strong> (مادة &larr; مسار &larr; وحدة &larr; توبيك &larr; درس) مع نظام خطط يجمع المواد لصف/تخصص/فصل، وخط أنابيب بناء تلقائي ينتج ملفات JSON.
+          </p>
+        </div>
+
+        <!-- Card: who -->
+        <div class="portal-card portal-card-hover border-t-4 border-indigo-500">
+          <div class="flex items-center gap-2 mb-3 text-indigo-600 font-bold">
+            <i class="fa-solid fa-users"></i>
+            <span>من يستخدمها؟</span>
+          </div>
+          <p class="text-slate-600 text-sm leading-relaxed mb-2">
+            المشرفون عبر <strong>Frappe Desk</strong>. أربعة أسطح تقرأ منها:
+          </p>
+          <div class="flex flex-wrap gap-1.5">
+            <span class="portal-badge bg-indigo-100 text-indigo-700 text-xs">المراجعة اليومية</span>
+            <span class="portal-badge bg-indigo-100 text-indigo-700 text-xs">ساحة التدريب</span>
+            <span class="portal-badge bg-indigo-100 text-indigo-700 text-xs">مركز التحدي</span>
+            <span class="portal-badge bg-indigo-100 text-indigo-700 text-xs">التحدي المباشر</span>
+          </div>
+        </div>
+
+        <!-- Card: auto -->
+        <div class="portal-card portal-card-hover border-t-4 border-amber-500">
+          <div class="flex items-center gap-2 mb-3 text-amber-600 font-bold">
+            <i class="fa-solid fa-gears"></i>
+            <span>ماذا يحصل تلقائياً؟</span>
+          </div>
+          <ul class="text-slate-600 text-sm space-y-1.5 leading-relaxed">
+            <li><i class="fa-solid fa-arrow-left text-amber-400 ml-1"></i> إبطال كاش فوري + بناء JSON مؤجل</li>
+            <li><i class="fa-solid fa-arrow-left text-amber-400 ml-1"></i> استخراج أسئلة مراجعة كل دقيقتين</li>
+            <li><i class="fa-solid fa-arrow-left text-amber-400 ml-1"></i> تعيين bit_index فريد لكل درس جديد</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 3. CONTENT HIERARCHY           -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-emerald-700">
+        <i class="fa-solid fa-layer-group text-2xl"></i>
+        <h2>الهرمية</h2>
+      </div>
+
+      <div class="portal-card p-6 md:p-8">
+        <div class="flex flex-col items-center gap-0">
+
+          <!-- Level: Subject -->
+          <div class="w-full max-w-lg">
+            <div class="portal-flow-node bg-emerald-100 text-emerald-800 w-full justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-book"></i>
+                <span>المادة (Subject)</span>
+              </div>
+              <code class="text-xs bg-emerald-200/60 px-2 py-0.5 rounded">SUBJ-.#####</code>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1.5 px-2">
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">language</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_published</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_linear</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem] text-violet-600">last_bit_index</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">cdn_url</code>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Level: Track -->
+          <div class="w-full max-w-lg">
+            <div class="portal-flow-node bg-sky-100 text-sky-800 w-full justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-road"></i>
+                <span>المسار (Track)</span>
+              </div>
+              <code class="text-xs bg-sky-200/60 px-2 py-0.5 rounded">Track-.#####</code>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1.5 px-2">
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_published</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_linear</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_sold_separately</code>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Level: Unit -->
+          <div class="w-full max-w-lg">
+            <div class="portal-flow-node bg-violet-100 text-violet-800 w-full justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-box"></i>
+                <span>الوحدة (Unit)</span>
+              </div>
+              <code class="text-xs bg-violet-200/60 px-2 py-0.5 rounded">UNT-.#####</code>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1.5 px-2">
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_published</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_linear</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem] text-emerald-600">is_free</code>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Level: Topic -->
+          <div class="w-full max-w-lg">
+            <div class="portal-flow-node bg-amber-100 text-amber-800 w-full justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-bookmark"></i>
+                <span>التوبيك (Topic)</span>
+              </div>
+              <code class="text-xs bg-amber-200/60 px-2 py-0.5 rounded">TPC-.#####</code>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1.5 px-2">
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_published</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_linear</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem] text-emerald-600">is_free</code>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Level: Lesson -->
+          <div class="w-full max-w-lg">
+            <div class="portal-flow-node bg-rose-100 text-rose-800 w-full justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-graduation-cap"></i>
+                <span>الدرس (Lesson)</span>
+              </div>
+              <code class="text-xs bg-rose-200/60 px-2 py-0.5 rounded">LES-.#####</code>
+            </div>
+            <div class="flex flex-wrap gap-1 mt-1.5 px-2">
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_published</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem] text-violet-600">bit_index</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">base_xp</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">max_hearts</code>
+              <code class="bg-slate-100 px-1.5 py-0.5 rounded text-[0.65rem]">is_reviewable</code>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Level: Stage -->
+          <div class="w-full max-w-lg">
+            <div class="portal-flow-node bg-slate-200 text-slate-700 w-full justify-between">
+              <div class="flex items-center gap-2">
+                <i class="fa-solid fa-puzzle-piece"></i>
+                <span>المرحلة (Stage)</span>
+              </div>
+              <span class="text-xs text-slate-500">جدول فرعي</span>
+            </div>
+            <div class="flex flex-wrap gap-1.5 mt-2 px-2">
+              <span class="portal-badge bg-blue-100 text-blue-700 text-xs">INFORMATION</span>
+              <span class="portal-badge bg-purple-100 text-purple-700 text-xs">QUESTION</span>
+              <span class="portal-badge bg-orange-100 text-orange-700 text-xs">MATCHING</span>
+              <span class="portal-badge bg-teal-100 text-teal-700 text-xs">FILL_BLANK</span>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Key flags legend -->
+        <div class="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="bg-slate-50 rounded-lg p-3 text-xs">
+            <span class="font-bold text-slate-600">is_published:</span>
+            <span class="text-slate-500"> يتحكم بالظهور — غير المنشور يُخفي كل فروعه</span>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-3 text-xs">
+            <span class="font-bold text-slate-600">is_linear:</span>
+            <span class="text-slate-500"> يتحكم بالتسلسل — يجب إكمال السابق أولاً</span>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-3 text-xs">
+            <span class="font-bold text-emerald-600">is_free:</span>
+            <span class="text-slate-500"> على الوحدة والتوبيك فقط — يحدد الوصول المجاني</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 4. PLAN SYSTEM                 -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-indigo-700">
+        <i class="fa-solid fa-clipboard-list text-2xl"></i>
+        <h2>نظام الخطط</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- Plan structure -->
+        <div class="portal-card border-t-4 border-indigo-500">
+          <h3 class="font-bold text-indigo-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-diagram-project"></i>
+            تركيب الخطة الأكاديمية
+          </h3>
+          <div class="space-y-3">
+            <div class="flex items-start gap-3 bg-indigo-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-file-lines text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">الخطة (Academic Plan)</p>
+                <p class="text-xs text-slate-500 font-mono">PLAN-.#####</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3 mr-6">
+              <div class="w-7 h-7 rounded-lg bg-sky-100 text-sky-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-school text-xs"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">الصف (Grade)</p>
+                <p class="text-xs text-slate-500">+ التخصص (Major) — اختياري</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3 mr-6">
+              <div class="w-7 h-7 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-calendar text-xs"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">الفصل (Season)</p>
+                <p class="text-xs text-slate-500">يحدد الفترة الزمنية</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3 mr-6">
+              <div class="w-7 h-7 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-book text-xs"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">مواد الخطة (Plan Subject)</p>
+                <p class="text-xs text-slate-500">جدول فرعي: <code class="bg-white px-1 rounded">subject</code> <code class="bg-white px-1 rounded">alias_title</code> <code class="bg-white px-1 rounded">is_premium</code> <code class="bg-white px-1 rounded">meta_data</code></p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Plan Overrider -->
+        <div class="portal-card border-t-4 border-violet-500">
+          <h3 class="font-bold text-violet-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-sliders"></i>
+            تجاوزات الخطة (Plan Overrider)
+          </h3>
+          <p class="text-sm text-slate-600 mb-4">
+            يسمح بتعديل سلوك عناصر محددة داخل خطة — إخفاء محتوى أو جعله مجانياً دون تغيير المصدر الأصلي.
+          </p>
+          <div class="space-y-3">
+            <div class="flex items-start gap-3 bg-violet-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-eye-slash text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">Hide — إخفاء</p>
+                <p class="text-xs text-slate-500">إخفاء مادة أو مسار أو وحدة من خطة محددة</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-emerald-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-unlock text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">Set Free — جعله مجاني</p>
+                <p class="text-xs text-slate-500">تحرير مادة أو مسار أو وحدة في خطة محددة</p>
+              </div>
+            </div>
+          </div>
+          <div class="mt-4 bg-slate-50 rounded-lg p-3 text-xs">
+            <span class="font-bold text-slate-600">الحقول:</span>
+            <code class="bg-white px-1.5 py-0.5 rounded mr-1">plan</code>
+            <code class="bg-white px-1.5 py-0.5 rounded mr-1">ref_doctype</code>
+            <span class="text-slate-400">(Subject / Track / Unit)</span>
+            <code class="bg-white px-1.5 py-0.5 rounded mr-1">ref_name</code>
+            <code class="bg-white px-1.5 py-0.5 rounded">action</code>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 5. BUILD PIPELINE              -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-orange-700">
+        <i class="fa-solid fa-industry text-2xl"></i>
+        <h2>خط أنابيب البناء</h2>
+      </div>
+
+      <div class="portal-card p-6 md:p-8">
+        <div class="flex flex-col items-center gap-3">
+          <!-- Trigger -->
+          <div class="portal-flow-node bg-orange-100 text-orange-800 w-full max-w-lg justify-center text-center">
+            <i class="fa-solid fa-pen-to-square"></i>
+            <span>تعديل محتوى أو خطة</span>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Immediate actions -->
+          <div class="w-full max-w-lg bg-sky-50 rounded-xl p-4">
+            <p class="font-bold text-sky-700 text-sm mb-2 flex items-center gap-2">
+              <i class="fa-solid fa-bolt text-sky-500"></i>
+              فوري
+            </p>
+            <div class="flex flex-wrap gap-2">
+              <span class="portal-badge bg-sky-100 text-sky-700 text-xs">Redis DEL — حذف الكاش</span>
+              <span class="portal-badge bg-sky-100 text-sky-700 text-xs">Pubsub — إبطال FastAPI</span>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Debounce check -->
+          <div class="portal-flow-node bg-violet-100 text-violet-800 w-full max-w-lg justify-center text-center">
+            <i class="fa-solid fa-stopwatch"></i>
+            <span>فحص Debounce</span>
+            <code class="text-xs bg-violet-200/60 px-2 py-0.5 rounded mr-1">SET NX EX 120s</code>
+          </div>
+
+          <div class="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-8 w-full max-w-lg">
+            <!-- Already pending -->
+            <div class="flex-1 flex flex-col items-center gap-2">
+              <span class="portal-badge bg-slate-200 text-slate-600">نشط ← تجاهل</span>
+              <div class="portal-flow-node bg-slate-100 text-slate-500 w-full justify-center text-center text-sm">
+                <i class="fa-solid fa-forward"></i>
+                <span>بناء معلّق بالفعل</span>
+              </div>
+            </div>
+
+            <!-- New debounce -->
+            <div class="flex-1 flex flex-col items-center gap-2">
+              <span class="portal-badge bg-emerald-100 text-emerald-700">جديد</span>
+              <div class="portal-flow-node bg-emerald-100 text-emerald-700 w-full justify-center text-center text-sm">
+                <i class="fa-solid fa-plus"></i>
+                <span>إنشاء Build Queue</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Worker -->
+          <div class="w-full max-w-lg bg-amber-50 rounded-xl p-4">
+            <p class="font-bold text-amber-700 text-sm mb-2 flex items-center gap-2">
+              <i class="fa-solid fa-clock text-amber-500"></i>
+              process_pending_builds — كل دقيقة
+            </p>
+            <div class="space-y-1.5 text-sm text-slate-600">
+              <div class="flex items-center gap-2"><i class="fa-solid fa-arrow-left text-amber-400"></i> <span>الأقدم أولاً</span></div>
+              <div class="flex items-center gap-2"><i class="fa-solid fa-arrow-left text-amber-400"></i> <span>generate_plan_json()</span></div>
+              <div class="flex items-center gap-2"><i class="fa-solid fa-arrow-left text-amber-400"></i> <span>publish_to_cdn()</span></div>
+              <div class="flex items-center gap-2"><i class="fa-solid fa-arrow-left text-amber-400"></i> <span>حذف ملفات يتيمة + تطهير CDN</span></div>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Status ladder -->
+          <div class="w-full max-w-lg">
+            <p class="font-bold text-sm text-slate-600 mb-3 text-center">حالات Build Queue</p>
+            <div class="flex items-center justify-center gap-2 flex-wrap">
+              <span class="portal-badge bg-slate-200 text-slate-700">Pending</span>
+              <i class="fa-solid fa-arrow-left text-slate-300"></i>
+              <span class="portal-badge bg-blue-200 text-blue-700">Processing</span>
+              <i class="fa-solid fa-arrow-left text-slate-300"></i>
+              <span class="portal-badge bg-emerald-200 text-emerald-700">Completed</span>
+            </div>
+            <div class="flex items-center justify-center gap-2 mt-2">
+              <span class="text-xs text-slate-400">أو</span>
+              <span class="portal-badge bg-amber-200 text-amber-700">Pending</span>
+              <span class="text-xs text-slate-400">(إعادة محاولة، حتى 3)</span>
+              <span class="text-xs text-slate-400">أو</span>
+              <span class="portal-badge bg-rose-200 text-rose-700">Failed</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 6. REVIEW ITEM EXTRACTION      -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-purple-700">
+        <i class="fa-solid fa-wand-magic-sparkles text-2xl"></i>
+        <h2>استخراج أسئلة المراجعة</h2>
+      </div>
+
+      <div class="portal-card p-6 md:p-8">
+        <div class="flex flex-col items-center gap-3">
+          <!-- Trigger -->
+          <div class="portal-flow-node bg-purple-100 text-purple-800 w-full max-w-lg justify-center text-center">
+            <i class="fa-solid fa-floppy-disk"></i>
+            <span>حفظ درس (<code class="text-xs bg-purple-200/60 px-1 rounded">is_reviewable = 1</code>)</span>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Redis dirty set -->
+          <div class="portal-flow-node bg-red-100 text-red-700 w-full max-w-lg justify-center text-center">
+            <i class="fa-solid fa-database"></i>
+            <span>Redis SADD → dirty_review_items</span>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Consumer -->
+          <div class="portal-flow-node bg-indigo-100 text-indigo-800 w-full max-w-lg justify-center text-center">
+            <i class="fa-solid fa-clock-rotate-left"></i>
+            <span>sync_dirty_review_items — كل دقيقتين</span>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- Review Item -->
+          <div class="w-full max-w-lg bg-violet-50 rounded-xl p-4 text-center">
+            <p class="font-bold text-violet-700 text-sm mb-2">Memora Review Item</p>
+            <div class="flex flex-wrap justify-center gap-1.5 text-xs">
+              <code class="bg-white px-1.5 py-0.5 rounded">item_id (UUID)</code>
+              <code class="bg-white px-1.5 py-0.5 rounded">question_text</code>
+              <code class="bg-white px-1.5 py-0.5 rounded">choice_1..4</code>
+              <code class="bg-white px-1.5 py-0.5 rounded">correct_choice</code>
+            </div>
+          </div>
+
+          <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+          <!-- 4 surfaces -->
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3 w-full max-w-lg">
+            <div class="bg-emerald-50 rounded-xl p-3 text-center">
+              <i class="fa-solid fa-clock text-emerald-500 text-lg mb-1"></i>
+              <p class="text-xs font-bold text-emerald-700">المراجعة اليومية</p>
+              <p class="text-[0.6rem] text-slate-400">FSRS</p>
+            </div>
+            <div class="bg-sky-50 rounded-xl p-3 text-center">
+              <i class="fa-solid fa-dumbbell text-sky-500 text-lg mb-1"></i>
+              <p class="text-xs font-bold text-sky-700">ساحة التدريب</p>
+              <p class="text-[0.6rem] text-slate-400">حر</p>
+            </div>
+            <div class="bg-amber-50 rounded-xl p-3 text-center">
+              <i class="fa-solid fa-trophy text-amber-500 text-lg mb-1"></i>
+              <p class="text-xs font-bold text-amber-700">مركز التحدي</p>
+              <p class="text-[0.6rem] text-slate-400">تسلسلي</p>
+            </div>
+            <div class="bg-rose-50 rounded-xl p-3 text-center">
+              <i class="fa-solid fa-bolt text-rose-500 text-lg mb-1"></i>
+              <p class="text-xs font-bold text-rose-700">التحدي المباشر</p>
+              <p class="text-[0.6rem] text-slate-400">تنافسي</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Special rules -->
+        <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="bg-rose-50 rounded-lg p-3 text-xs">
+            <span class="font-bold text-rose-600">is_reviewable = 0:</span>
+            <span class="text-slate-500"> حذف جميع Review Items فوراً</span>
+          </div>
+          <div class="bg-slate-50 rounded-lg p-3 text-xs">
+            <span class="font-bold text-slate-600">التحدي المباشر:</span>
+            <span class="text-slate-500"> الأسئلة الخاطئة تُسجّل فقط — لا تدخل FSRS</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 7. ADMIN JOURNEY               -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-teal-700">
+        <i class="fa-solid fa-user-gear text-2xl"></i>
+        <h2>رحلة المشرف</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- What admin manages -->
+        <div class="portal-card border-t-4 border-teal-500">
+          <h3 class="font-bold text-teal-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-screwdriver-wrench"></i>
+            ما الذي ينشئه ويديره؟
+          </h3>
+          <div class="space-y-3">
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-book text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">إنشاء مادة</p>
+                <p class="text-xs text-slate-500">تحديد العنوان، اللغة، النشر، التسلسل + جدول Applicability</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-layer-group text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">بناء الهرمية</p>
+                <p class="text-xs text-slate-500">مسارات &larr; وحدات &larr; توبيكات &larr; دروس بالترتيب (idx)</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-puzzle-piece text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">تصميم الدروس</p>
+                <p class="text-xs text-slate-500">إضافة مراحل: شرح، سؤال، مطابقة، ملء فراغ</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-unlock text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">تحديد المحتوى المجاني</p>
+                <p class="text-xs text-slate-500">تفعيل <code class="bg-white px-1 rounded">is_free</code> على الوحدة أو التوبيك</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-file-lines text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">إنشاء خطة أكاديمية</p>
+                <p class="text-xs text-slate-500">ربط الصف + التخصص + الفصل + إضافة مواد مع meta_data</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-sliders text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">تجاوزات الخطة</p>
+                <p class="text-xs text-slate-500">إخفاء أو تحرير عناصر عبر Plan Overrider</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-hammer text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">بناء يدوي</p>
+                <p class="text-xs text-slate-500 font-mono">queue_manual_build(subject_id)</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- What admin should verify -->
+        <div class="portal-card border-t-4 border-sky-500">
+          <h3 class="font-bold text-sky-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-check"></i>
+            ما يجب التحقق منه
+          </h3>
+          <div class="space-y-3">
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">is_published مفعّل</p>
+                <p class="text-xs text-slate-500">على جميع المستويات — العنصر غير المنشور يُخفي فروعه</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">bit_index مُعيّن</p>
+                <p class="text-xs text-slate-500">تلقائي لكل درس — لا يجب تغييره يدوياً</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">Build Queue نظيفة</p>
+                <p class="text-xs text-slate-500">لا سجلات Failed متراكمة</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">Review Items موجودة</p>
+                <p class="text-xs text-slate-500">للدروس التي <code class="bg-white px-1 rounded text-xs">is_reviewable = 1</code></p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">meta_data في Plan Subject</p>
+                <p class="text-xs text-slate-500">free_units و free_topics مملوءة يدوياً</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 8. COMMON / EDGE CASES         -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-orange-700">
+        <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+        <h2>الحالات الشائعة وحالات الحافة</h2>
+      </div>
+
+      <div class="portal-card overflow-x-auto">
+        <table class="portal-table">
+          <thead>
+            <tr>
+              <th class="min-w-[160px]">الحالة</th>
+              <th class="min-w-[200px]">السبب</th>
+              <th class="min-w-[220px]">ما يجب التحقق منه</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="font-bold text-sm">المادة لا تظهر</td>
+              <td class="text-sm text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">is_published = 0</code> على المادة أو أحد مستوياتها</td>
+              <td class="text-sm">تحقق من <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">is_published</code> على كل مستوى في السلسلة</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">لا أسئلة مراجعة</td>
+              <td class="text-sm text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">is_reviewable = 0</code> أو لم يُعالج بعد</td>
+              <td class="text-sm">تحقق من <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">is_reviewable</code> + حالة dirty set</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">البناء فشل</td>
+              <td class="text-sm text-slate-600">خطأ في التوليد أو الرفع بعد 3 محاولات</td>
+              <td class="text-sm"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">error_message</code> في Build Queue</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">محتوى قديم في التطبيق</td>
+              <td class="text-sm text-slate-600">الكاش لم يُبطل أو debounce نشط</td>
+              <td class="text-sm">مفاتيح Redis أو انتظار 2 دقيقة</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">bit_index = 0 متكرر</td>
+              <td class="text-sm text-slate-600">استيراد بيانات بدون <code class="bg-slate-100 px-1 rounded text-xs">bit_index</code></td>
+              <td class="text-sm">أعد تعيين <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">last_bit_index</code> على المادة</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">خطة بدون مواد</td>
+              <td class="text-sm text-slate-600">جميع المواد <code class="bg-slate-100 px-1 rounded text-xs">is_premium = 1</code></td>
+              <td class="text-sm">تحقق من <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">is_premium</code> في Plan Subject</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">Overrider لا يعمل</td>
+              <td class="text-sm text-slate-600"><code class="bg-slate-100 px-1 rounded text-xs">ref_doctype</code> أو <code class="bg-slate-100 px-1 rounded text-xs">ref_name</code> غير صحيح</td>
+              <td class="text-sm">تحقق من وجود العنصر وصحة <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">action</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 9. TROUBLESHOOTING             -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-amber-700">
+        <i class="fa-solid fa-stethoscope text-2xl"></i>
+        <h2>استكشاف الأخطاء</h2>
+      </div>
+
+      <div class="portal-alert portal-alert-warning">
+        <div class="space-y-4">
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-spinner"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">البناء عالق في Processing</p>
+              <p class="text-sm mt-0.5">تحقق من Frappe scheduler وسجلات الأخطاء — قد يكون الـ worker معطّل</p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-rotate"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">Review Items غير محدّثة</p>
+              <p class="text-sm mt-0.5">تحقق من <code class="bg-white/60 px-1 rounded text-xs font-mono">sync_dirty_review_items</code> في scheduler + حالة Redis dirty set</p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-ban"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">الهرمية ترجع null</p>
+              <p class="text-sm mt-0.5">المادة غير موجودة أو <code class="bg-white/60 px-1 rounded text-xs font-mono">is_published = 0</code></p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-database"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">الكاش قديم بعد التعديل</p>
+              <p class="text-sm mt-0.5">استدعاء <code class="bg-white/60 px-1 rounded text-xs font-mono">queue_manual_build</code> أو انتظار 2 دقيقة (debounce)</p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-link-slash"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">Plan Subject يتيم بعد حذف المادة</p>
+              <p class="text-sm mt-0.5">الـ cascade delete يجب أن يحذفها تلقائياً — تحقق من سجلات الأخطاء في <code class="bg-white/60 px-1 rounded text-xs font-mono">build_trigger.py</code></p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-bell-slash"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">إشعار بناء لم يصل</p>
+              <p class="text-sm mt-0.5">تحقق من اتصال Redis pubsub + <code class="bg-white/60 px-1 rounded text-xs font-mono">build_complete</code> realtime event</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 10. TECHNICAL DETAILS          -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-slate-700">
+        <i class="fa-solid fa-code text-2xl"></i>
+        <h2>التفاصيل التقنية</h2>
+      </div>
+
+      <div class="portal-card p-0 divide-y divide-slate-100">
+
+        <!-- Accordion: DocTypes -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-doctypes">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-database text-teal-500"></i>
+              أنواع المستندات (DocTypes)
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-doctypes" class="portal-accordion-content">
+            <div class="px-5 pb-5 space-y-4">
+
+              <!-- Subject -->
+              <div class="bg-emerald-50 rounded-xl p-4">
+                <h4 class="font-bold text-emerald-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-book"></i>
+                  Memora Subject
+                </h4>
+                <p class="text-xs text-slate-500 mb-2 font-mono">الترقيم: SUBJ-.#####</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs">subject_title</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">language</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">is_published</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">is_linear</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">last_bit_index</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">total_tracks</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">total_lessons</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">json_hash</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">cdn_url</code>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">جدول فرعي: Subject Applicability (grade, major)</p>
+              </div>
+
+              <!-- Lesson -->
+              <div class="bg-rose-50 rounded-xl p-4">
+                <h4 class="font-bold text-rose-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-graduation-cap"></i>
+                  Memora Lesson
+                </h4>
+                <p class="text-xs text-slate-500 mb-2 font-mono">الترقيم: LES-.#####</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs">lesson_title</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">topic</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">bit_index</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">base_xp</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">max_hearts</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">is_reviewable</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">content_hash</code>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">جدول فرعي: Lesson Stage (stage_type, config_json)</p>
+              </div>
+
+              <!-- Academic Plan -->
+              <div class="bg-indigo-50 rounded-xl p-4">
+                <h4 class="font-bold text-indigo-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-file-lines"></i>
+                  Memora Academic Plan
+                </h4>
+                <p class="text-xs text-slate-500 mb-2 font-mono">الترقيم: PLAN-.#####</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs">plan_name</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">grade</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">major</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">season</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">is_published</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">json_version</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">json_hash</code>
+                </div>
+                <p class="text-xs text-slate-400 mt-2">جدول فرعي: Plan Subject (subject, alias_title, is_premium, meta_data)</p>
+              </div>
+
+              <!-- Review Item -->
+              <div class="bg-violet-50 rounded-xl p-4">
+                <h4 class="font-bold text-violet-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-circle-question"></i>
+                  Memora Review Item
+                </h4>
+                <p class="text-xs text-slate-500 mb-2 font-mono">الترقيم: بحسب item_id (UUID)</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">item_id</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">subject</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">track</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">unit</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">topic</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">lesson</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">stage_type</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">question_text</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">choice_1..4</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">correct_choice</code>
+                </div>
+              </div>
+
+              <!-- Build Queue -->
+              <div class="bg-amber-50 rounded-xl p-4">
+                <h4 class="font-bold text-amber-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-industry"></i>
+                  Memora Build Queue
+                </h4>
+                <p class="text-xs text-slate-500 mb-2 font-mono">الترقيم: BLD-.#####</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs">target_type</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">target_name</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">trigger_reason</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">status</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">files_generated</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">error_message</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">duration_sec</code>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
+                  <span class="portal-badge bg-slate-200 text-slate-700">Pending</span>
+                  <span class="portal-badge bg-blue-100 text-blue-700">Processing</span>
+                  <span class="portal-badge bg-emerald-100 text-emerald-700">Completed</span>
+                  <span class="portal-badge bg-rose-100 text-rose-700">Failed</span>
+                </div>
+              </div>
+
+              <!-- Plan Overrider -->
+              <div class="bg-slate-50 rounded-xl p-4">
+                <h4 class="font-bold text-slate-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-sliders"></i>
+                  Memora Plan Overrider
+                </h4>
+                <p class="text-xs text-slate-500 mb-2 font-mono">الترقيم: OVR-.#####</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs">plan</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">ref_doctype</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">ref_name</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">action</code>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
+                  <span class="portal-badge bg-slate-200 text-slate-700">Hide</span>
+                  <span class="portal-badge bg-emerald-100 text-emerald-700">Set Free</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion: System Behavior -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-behavior">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-gears text-emerald-500"></i>
+              سلوك النظام
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-behavior" class="portal-accordion-content">
+            <div class="px-5 pb-5 space-y-4">
+
+              <!-- Bit Index -->
+              <div class="bg-violet-50 rounded-xl p-4">
+                <h4 class="font-bold text-violet-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-fingerprint"></i>
+                  Bit Index (فهرس البت)
+                </h4>
+                <ul class="text-sm text-slate-600 space-y-1.5">
+                  <li><i class="fa-solid fa-arrow-left text-violet-400 ml-1"></i> تلقائي عند إنشاء درس (<code class="bg-white px-1 rounded text-xs">before_insert</code>)</li>
+                  <li><i class="fa-solid fa-arrow-left text-violet-400 ml-1"></i> تسلسلي لكل مادة (يبدأ من 0)</li>
+                  <li><i class="fa-solid fa-arrow-left text-violet-400 ml-1"></i> لا يُعاد استخدامه أبداً حتى لو حُذف الدرس</li>
+                  <li><i class="fa-solid fa-arrow-left text-violet-400 ml-1"></i> قفل <code class="bg-white px-1 rounded text-xs">SELECT FOR UPDATE</code> لمنع التعارض</li>
+                  <li><i class="fa-solid fa-arrow-left text-violet-400 ml-1"></i> يُستخدم في FSRS لتتبع إتقان كل درس</li>
+                </ul>
+              </div>
+
+              <!-- Cache -->
+              <div class="bg-sky-50 rounded-xl p-4">
+                <h4 class="font-bold text-sky-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-bolt"></i>
+                  إبطال الكاش
+                </h4>
+                <p class="text-sm text-slate-600 mb-2">نمط ثنائي المسار:</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div class="bg-white rounded-lg p-2.5 text-xs">
+                    <span class="font-bold text-sky-600">1. Redis DEL</span>
+                    <span class="text-slate-500"> — تأثير فوري</span>
+                  </div>
+                  <div class="bg-white rounded-lg p-2.5 text-xs">
+                    <span class="font-bold text-sky-600">2. Pubsub</span>
+                    <span class="text-slate-500"> — إبطال FastAPI sidecar</span>
+                  </div>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1 text-xs">
+                  <code class="bg-white px-1.5 py-0.5 rounded">hierarchy_key</code>
+                  <code class="bg-white px-1.5 py-0.5 rounded">catalog_key</code>
+                  <code class="bg-white px-1.5 py-0.5 rounded">plan_manifest_key</code>
+                  <code class="bg-white px-1.5 py-0.5 rounded">plan_free_subjects_key</code>
+                  <code class="bg-white px-1.5 py-0.5 rounded">build_debounce_key</code>
+                </div>
+              </div>
+
+              <!-- Free content -->
+              <div class="bg-emerald-50 rounded-xl p-4">
+                <h4 class="font-bold text-emerald-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-unlock"></i>
+                  انتشار المحتوى المجاني
+                </h4>
+                <ul class="text-sm text-slate-600 space-y-1.5">
+                  <li><i class="fa-solid fa-arrow-left text-emerald-400 ml-1"></i> <code class="bg-white px-1 rounded text-xs">is_free</code> على الوحدة أو التوبيك</li>
+                  <li><i class="fa-solid fa-arrow-left text-emerald-400 ml-1"></i> إذا أي توبيك في وحدة مجاني ← الوحدة تُعامل كمجانية</li>
+                  <li><i class="fa-solid fa-arrow-left text-emerald-400 ml-1"></i> <code class="bg-white px-1 rounded text-xs">meta_data</code> في Plan Subject يحدد free_units / free_topics يدوياً</li>
+                  <li><i class="fa-solid fa-arrow-left text-emerald-400 ml-1"></i> شبكة أمان كل 6 ساعات: <code class="bg-white px-1 rounded text-xs">sync_all_plan_subjects_to_redis</code></li>
+                </ul>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion: API -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-api">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-plug text-violet-500"></i>
+              واجهات API
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-api" class="portal-accordion-content">
+            <div class="px-5 pb-5 space-y-3">
+              <div class="bg-teal-50 rounded-xl p-4">
+                <div class="space-y-2">
+                  <div class="bg-white rounded-lg p-2.5">
+                    <code class="text-xs font-mono text-teal-700">get_subject_hierarchy(subject_id)</code>
+                    <p class="text-xs text-slate-500 mt-0.5">هرمية كاملة: مسارات &rarr; وحدات &rarr; توبيكات &rarr; دروس مع bit_index و XP و free flags</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-2.5">
+                    <code class="text-xs font-mono text-teal-700">get_plan_manifest(plan_id)</code>
+                    <p class="text-xs text-slate-500 mt-0.5">بيانات الخطة (من CDN أو توليد فوري كـ fallback)</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-2.5">
+                    <code class="text-xs font-mono text-teal-700">queue_manual_build(subject_id)</code>
+                    <p class="text-xs text-slate-500 mt-0.5">إطلاق بناء يدوي مع إبطال كاش فوري</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion: Scheduler -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-scheduler">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-clock text-amber-500"></i>
+              المهام المجدولة
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-scheduler" class="portal-accordion-content">
+            <div class="px-5 pb-5">
+              <div class="space-y-2">
+                <div class="flex items-center gap-3 bg-amber-50 rounded-lg p-3">
+                  <code class="text-xs font-mono bg-amber-100 px-2 py-1 rounded flex-shrink-0">* * * * *</code>
+                  <div>
+                    <p class="text-sm font-bold">process_pending_builds</p>
+                    <p class="text-xs text-slate-500">معالجة Build Queue — الأقدم أولاً</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 bg-purple-50 rounded-lg p-3">
+                  <code class="text-xs font-mono bg-purple-100 px-2 py-1 rounded flex-shrink-0">*/2 * * * *</code>
+                  <div>
+                    <p class="text-sm font-bold">sync_dirty_review_items</p>
+                    <p class="text-xs text-slate-500">استخراج Review Items من الدروس القذرة</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 bg-slate-50 rounded-lg p-3">
+                  <code class="text-xs font-mono bg-slate-200 px-2 py-1 rounded flex-shrink-0">0 4 * * *</code>
+                  <div>
+                    <p class="text-sm font-bold">cleanup_build_queue</p>
+                    <p class="text-xs text-slate-500">تنظيف سجلات البناء المنتهية</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 bg-sky-50 rounded-lg p-3">
+                  <code class="text-xs font-mono bg-sky-100 px-2 py-1 rounded flex-shrink-0">0 */6 * * *</code>
+                  <div>
+                    <p class="text-sm font-bold">sync_all_plan_subjects_to_redis</p>
+                    <p class="text-xs text-slate-500">شبكة أمان — مزامنة المواد المجانية لجميع الخطط</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-3 bg-indigo-50 rounded-lg p-3">
+                  <code class="text-xs font-mono bg-indigo-100 px-2 py-1 rounded flex-shrink-0">15 4 * * *</code>
+                  <div>
+                    <p class="text-sm font-bold">reconcile_dimensions</p>
+                    <p class="text-xs text-slate-500">شبكة أمان — مطابقة أبعاد التحليلات</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion: Source Files -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-source">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-folder-open text-sky-500"></i>
+              الملفات المصدرية
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-source" class="portal-accordion-content">
+            <div class="px-5 pb-5">
+              <div class="bg-slate-50 rounded-xl p-4 space-y-2 text-xs font-mono" dir="ltr">
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>memora_admin/doctype/memora_lesson/memora_lesson.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— Lesson + bit_index assignment</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>memora_admin/api/hierarchy.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— get_subject_hierarchy API</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>memora_admin/api/plan.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— get_plan_manifest API</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>memora_admin/api/build.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— queue_manual_build API</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>events/build_trigger.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— Build triggers + cache invalidation</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>events/review_item_sync.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— Review Item dirty-set pattern</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>events/access_sync.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— Free content sync</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>events/dimension_sync.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— Analytics dimension refresh</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>tasks/build_worker.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— Build Queue processor</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>tasks/sync.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— Review Item consumer</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>hooks.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— doc_events (156-295) + scheduler (300-385)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 11. 4 CONSUMER SURFACES        -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-rose-700">
+        <i class="fa-solid fa-table-columns text-2xl"></i>
+        <h2>الأماكن الأربعة — مقارنة</h2>
+      </div>
+
+      <div class="portal-card overflow-x-auto">
+        <table class="portal-table text-center">
+          <thead>
+            <tr>
+              <th class="text-start min-w-[100px]"></th>
+              <th class="min-w-[140px]"><i class="fa-solid fa-clock text-emerald-500 ml-1"></i> المراجعة اليومية</th>
+              <th class="min-w-[140px]"><i class="fa-solid fa-dumbbell text-sky-500 ml-1"></i> ساحة التدريب</th>
+              <th class="min-w-[140px]"><i class="fa-solid fa-trophy text-amber-500 ml-1"></i> مركز التحدي</th>
+              <th class="min-w-[140px]"><i class="fa-solid fa-bolt text-rose-500 ml-1"></i> التحدي المباشر</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="font-bold text-sm text-start">من يقرر</td>
+              <td class="text-sm text-slate-600">النظام</td>
+              <td class="text-sm text-slate-600">الطالب</td>
+              <td class="text-sm text-slate-600">تسلسل إجباري</td>
+              <td class="text-sm text-slate-600">الأدمن</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm text-start">الأسئلة</td>
+              <td class="text-sm text-slate-600">10 / مادة + إكمال</td>
+              <td class="text-sm text-slate-600">اختيار حر</td>
+              <td class="text-sm text-slate-600">توبيك واحد</td>
+              <td class="text-sm text-slate-600">يختارها الأدمن</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm text-start">FSRS</td>
+              <td class="text-sm"><span class="portal-badge bg-emerald-100 text-emerald-700 text-xs">نعم</span></td>
+              <td class="text-sm"><span class="portal-badge bg-slate-100 text-slate-500 text-xs">لا</span></td>
+              <td class="text-sm"><span class="portal-badge bg-slate-100 text-slate-500 text-xs">لا</span></td>
+              <td class="text-sm"><span class="portal-badge bg-slate-100 text-slate-500 text-xs">لا</span></td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm text-start">شرط الفتح</td>
+              <td class="text-sm text-slate-600">الدروس المختومة</td>
+              <td class="text-sm text-slate-600">التوبيكات المختومة</td>
+              <td class="text-sm text-slate-600">ختم مسار + توبيك سابق</td>
+              <td class="text-sm text-slate-600">لا شرط</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm text-start">الخاطئة</td>
+              <td class="text-sm text-slate-600">بال FSRS أصلاً</td>
+              <td class="text-sm text-slate-600">تدخل FSRS</td>
+              <td class="text-sm text-slate-600">تدخل FSRS</td>
+              <td class="text-sm text-slate-600">تُسجّل فقط</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 12. DIMENSION SYNC             -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-slate-600">
+        <i class="fa-solid fa-chart-bar text-2xl"></i>
+        <h2>مزامنة أبعاد التحليلات</h2>
+      </div>
+
+      <div class="portal-alert portal-alert-info">
+        <p class="text-sm mb-3">عند تغيير أي عنصر محتوى، يتم تحديث أبعاد التحليلات بشكل غير متزامن عبر <code class="bg-white/60 px-1 rounded text-xs font-mono">frappe.enqueue(deduplicate=True)</code></p>
+        <div class="flex flex-wrap gap-2">
+          <span class="portal-badge bg-white/60 text-blue-800 text-xs">Lesson &rarr; on_lesson_changed</span>
+          <span class="portal-badge bg-white/60 text-blue-800 text-xs">Plan &rarr; on_plan_changed</span>
+          <span class="portal-badge bg-white/60 text-blue-800 text-xs">Review Item &rarr; on_review_item_changed</span>
+          <span class="portal-badge bg-white/60 text-blue-800 text-xs">Season &rarr; on_season_changed</span>
+          <span class="portal-badge bg-white/60 text-blue-800 text-xs">Player &rarr; on_player_changed</span>
+        </div>
+        <p class="text-xs text-blue-600 mt-3">
+          <i class="fa-solid fa-shield ml-1"></i>
+          شبكة أمان: <code class="bg-white/60 px-1 rounded font-mono">reconcile_dimensions</code> يومياً عند 04:15
+        </p>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 13. RELATED PAGES              -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-slate-500">
+        <i class="fa-solid fa-link text-2xl"></i>
+        <h2>الصفحات ذات الصلة</h2>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="portal-card bg-slate-50 border border-dashed border-slate-300 text-center py-5 opacity-60">
+          <i class="fa-solid fa-clock text-slate-400 text-xl mb-2"></i>
+          <p class="text-sm text-slate-500 font-bold">المراجعة اليومية</p>
+          <span class="text-xs text-slate-400">قريباً</span>
+        </div>
+        <div class="portal-card bg-slate-50 border border-dashed border-slate-300 text-center py-5 opacity-60">
+          <i class="fa-solid fa-dumbbell text-slate-400 text-xl mb-2"></i>
+          <p class="text-sm text-slate-500 font-bold">ساحة التدريب</p>
+          <span class="text-xs text-slate-400">قريباً</span>
+        </div>
+        <div class="portal-card bg-slate-50 border border-dashed border-slate-300 text-center py-5 opacity-60">
+          <i class="fa-solid fa-trophy text-slate-400 text-xl mb-2"></i>
+          <p class="text-sm text-slate-500 font-bold">مركز التحدي</p>
+          <span class="text-xs text-slate-400">قريباً</span>
+        </div>
+        <a href="event-access" class="portal-card portal-card-hover border border-indigo-200 text-center py-5 bg-indigo-50/40">
+          <i class="fa-solid fa-key text-indigo-400 text-xl mb-2"></i>
+          <p class="text-sm text-indigo-600 font-bold">صلاحية الوصول للفعاليات</p>
+          <span class="text-xs text-indigo-400">متوفر</span>
+        </a>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-16 py-8 text-center text-sm text-slate-400 border-t border-slate-200">
+    <p>Memora Admin Knowledge Portal</p>
+    <p class="text-xs mt-1">آخر تحديث: 2026-03-24</p>
+  </footer>
+
+  <script src="../../_shared/portal.js"></script>
+</body>
+</html>

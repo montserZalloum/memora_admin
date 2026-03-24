@@ -382,7 +382,7 @@ def _cron_reconcile_event(event_name: str) -> bool:
 			joined_at = join_times.get(pid) or default_joined_at
 			r_data = results.get(pid)
 			score_raw = float(r_data["score"]) if r_data and r_data.get("score") is not None else None
-			score = round(score_raw, 1) if score_raw is not None else None
+			score = round(score_raw, 1) if score_raw is not None else 0
 			submitted_at = r_data.get("submitted_at") if r_data else None
 			answers_json = r_data.get("answers_json") if r_data else None
 

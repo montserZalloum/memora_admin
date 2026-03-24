@@ -3,6 +3,12 @@
 
 frappe.ui.form.on("Memora Academic Plan", {
 	refresh(frm) {
+		// Season, Grade, and Major are immutable after creation
+		const locked = !frm.is_new();
+		frm.set_df_property("season", "read_only", locked);
+		frm.set_df_property("grade", "read_only", locked);
+		frm.set_df_property("major", "read_only", locked);
+
 		// Set up Major filter on form load
 		frm.trigger("setup_major_filter");
 		frm.trigger("setup_subject_filter");

@@ -1,0 +1,882 @@
+<!--
+  ============================================================
+  هذا الملف مولّد من event-access.md
+  الماركداون هو المصدر الأساسي — لا تعدّل هذا الملف مباشرة.
+  Generated from event-access.md — markdown is the source of truth.
+  ============================================================
+-->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>صلاحية الوصول للفعاليات — Memora</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="../../_shared/portal.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { tajawal: ['Tajawal', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="portal-page font-tajawal pb-20">
+
+  <!-- ============================== -->
+  <!-- 1. HERO                        -->
+  <!-- ============================== -->
+  <header class="portal-hero bg-gradient-to-l from-violet-600 to-indigo-700 text-white shadow-lg mb-12">
+    <div class="max-w-5xl mx-auto">
+      <h1 class="text-4xl md:text-5xl font-extrabold mb-3">
+        <i class="fa-solid fa-key ml-2 opacity-80"></i>
+        صلاحية الوصول للفعاليات
+      </h1>
+      <p class="text-lg md:text-xl opacity-90 mb-6 max-w-2xl mx-auto">
+        تتحكم بمن يمكنه الانضمام إلى فعاليات التحدي المباشر — سواء كانت مجانية أو مدفوعة
+      </p>
+      <div class="flex flex-wrap items-center justify-center gap-3 text-sm">
+        <span class="portal-badge bg-white/20 text-white">
+          <i class="fa-solid fa-server"></i> Backend
+        </span>
+        <span class="portal-badge bg-emerald-400/30 text-emerald-100">
+          <i class="fa-solid fa-circle-check"></i> فعّال
+        </span>
+        <span class="portal-badge bg-white/10 text-white/80">
+          <i class="fa-regular fa-calendar"></i> 2026-03-24
+        </span>
+        <span class="portal-badge bg-white/10 text-white/80 font-mono text-xs">
+          <i class="fa-solid fa-code-commit"></i> 76ef96d
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <div class="max-w-5xl mx-auto px-4 space-y-14">
+
+    <!-- ============================== -->
+    <!-- 2. QUICK SUMMARY               -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-indigo-700">
+        <i class="fa-solid fa-bolt text-2xl"></i>
+        <h2>ملخص سريع</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <!-- Card: what -->
+        <div class="portal-card portal-card-hover border-t-4 border-indigo-500">
+          <div class="flex items-center gap-2 mb-3 text-indigo-600 font-bold">
+            <i class="fa-solid fa-circle-question"></i>
+            <span>ماذا تفعل؟</span>
+          </div>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            تحدد ما إذا كان الطالب مؤهلاً للانضمام إلى فعالية تحدي مباشر بناءً على نوع الفعالية وحالة الاشتراك والشراء.
+          </p>
+        </div>
+
+        <!-- Card: when -->
+        <div class="portal-card portal-card-hover border-t-4 border-amber-500">
+          <div class="flex items-center gap-2 mb-3 text-amber-600 font-bold">
+            <i class="fa-solid fa-clock"></i>
+            <span>متى تكون مهمة؟</span>
+          </div>
+          <p class="text-slate-600 text-sm leading-relaxed">
+            عند وجود فعالية مدفوعة
+            (<code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs font-mono">is_paid = 1</code>)
+            — عندها يجب التحقق من وجود صلاحية قبل السماح بالانضمام.
+          </p>
+        </div>
+
+        <!-- Card: blocks -->
+        <div class="portal-card portal-card-hover border-t-4 border-rose-500">
+          <div class="flex items-center gap-2 mb-3 text-rose-600 font-bold">
+            <i class="fa-solid fa-ban"></i>
+            <span>ما يمنع الوصول؟</span>
+          </div>
+          <ul class="text-slate-600 text-sm space-y-1.5 leading-relaxed">
+            <li><i class="fa-solid fa-xmark text-rose-400 ml-1"></i> لا يوجد اشتراك بريميوم فعّال</li>
+            <li><i class="fa-solid fa-xmark text-rose-400 ml-1"></i> لم يتم شراء تذكرة</li>
+            <li><i class="fa-solid fa-xmark text-rose-400 ml-1"></i> لم يتم استخدام قسيمة</li>
+            <li><i class="fa-solid fa-xmark text-rose-400 ml-1"></i> لم يمنح المشرف صلاحية يدوية</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 3. VISUAL FLOW                 -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-violet-700">
+        <i class="fa-solid fa-diagram-project text-2xl"></i>
+        <h2>مسار القرار</h2>
+      </div>
+
+      <div class="portal-card p-6 md:p-8">
+        <!-- Row 1: Is event free? -->
+        <div class="flex flex-col items-center gap-3">
+          <div class="portal-flow-node bg-indigo-100 text-indigo-800 w-full max-w-md justify-center text-center">
+            <i class="fa-solid fa-ticket"></i>
+            <span>هل الفعالية مجانية؟</span>
+          </div>
+
+          <div class="flex flex-col md:flex-row items-center md:items-start gap-4 md:gap-8 w-full max-w-2xl">
+            <!-- YES branch -->
+            <div class="flex-1 flex flex-col items-center gap-2">
+              <span class="portal-badge bg-emerald-100 text-emerald-700">نعم</span>
+              <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+              <div class="portal-flow-node bg-emerald-100 text-emerald-800 w-full justify-center text-center">
+                <i class="fa-solid fa-door-open"></i>
+                <span>الجميع يستطيع الانضمام</span>
+              </div>
+              <span class="text-xs text-slate-400 font-mono">access_type = free</span>
+            </div>
+
+            <!-- NO branch -->
+            <div class="flex-1 flex flex-col items-center gap-2">
+              <span class="portal-badge bg-rose-100 text-rose-700">لا (مدفوعة)</span>
+              <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+              <!-- Sub-decision: premium? -->
+              <div class="portal-flow-node bg-violet-100 text-violet-800 w-full justify-center text-center">
+                <i class="fa-solid fa-crown"></i>
+                <span>هل لديه بريميوم فعّال؟</span>
+              </div>
+
+              <div class="flex flex-col sm:flex-row items-center sm:items-start gap-4 w-full mt-2">
+                <!-- Premium YES -->
+                <div class="flex-1 flex flex-col items-center gap-2">
+                  <span class="portal-badge bg-emerald-100 text-emerald-700">نعم</span>
+                  <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+                  <div class="portal-flow-node bg-emerald-100 text-emerald-800 w-full justify-center text-center text-sm">
+                    <i class="fa-solid fa-door-open"></i>
+                    <span>الانضمام مجاناً</span>
+                  </div>
+                  <span class="text-xs text-slate-400 font-mono">access_type = premium</span>
+                </div>
+
+                <!-- Premium NO -->
+                <div class="flex-1 flex flex-col items-center gap-2">
+                  <span class="portal-badge bg-rose-100 text-rose-700">لا</span>
+                  <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down"></i></div>
+
+                  <!-- Sub-decision: LEA record? -->
+                  <div class="portal-flow-node bg-sky-100 text-sky-800 w-full justify-center text-center text-sm">
+                    <i class="fa-solid fa-id-card"></i>
+                    <span>هل يوجد سجل وصول فعّال؟</span>
+                  </div>
+
+                  <div class="flex flex-col xs:flex-row items-center gap-3 w-full mt-1">
+                    <!-- LEA YES -->
+                    <div class="flex-1 flex flex-col items-center gap-1.5">
+                      <span class="portal-badge bg-emerald-100 text-emerald-700 text-xs">نعم</span>
+                      <div class="portal-flow-node bg-emerald-50 text-emerald-700 w-full justify-center text-center text-xs py-2">
+                        <i class="fa-solid fa-check"></i>
+                        <span>الانضمام</span>
+                      </div>
+                      <span class="text-[0.65rem] text-slate-400 font-mono">purchase | voucher | admin</span>
+                    </div>
+
+                    <!-- LEA NO -->
+                    <div class="flex-1 flex flex-col items-center gap-1.5">
+                      <span class="portal-badge bg-rose-100 text-rose-700 text-xs">لا</span>
+                      <div class="portal-flow-node bg-amber-50 text-amber-800 w-full justify-center text-center text-xs py-2">
+                        <i class="fa-solid fa-lock"></i>
+                        <span>لا يمكن الانضمام</span>
+                      </div>
+                      <div class="flex flex-wrap justify-center gap-1.5 mt-1">
+                        <span class="portal-badge bg-slate-100 text-slate-600 text-[0.65rem]"><i class="fa-solid fa-cart-shopping"></i> شراء</span>
+                        <span class="portal-badge bg-slate-100 text-slate-600 text-[0.65rem]"><i class="fa-solid fa-ticket-simple"></i> قسيمة</span>
+                        <span class="portal-badge bg-slate-100 text-slate-600 text-[0.65rem]"><i class="fa-solid fa-user-shield"></i> مشرف</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 4. ADMIN JOURNEY               -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-teal-700">
+        <i class="fa-solid fa-user-gear text-2xl"></i>
+        <h2>رحلة المشرف</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- What admin manages -->
+        <div class="portal-card border-t-4 border-teal-500">
+          <h3 class="font-bold text-teal-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-screwdriver-wrench"></i>
+            ما الذي ينشئه ويديره المشرف؟
+          </h3>
+          <div class="space-y-3">
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-plus text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">إنشاء فعالية مدفوعة</p>
+                <p class="text-xs text-slate-500">تفعيل <code class="bg-white px-1 rounded">is_paid</code>، تحديد <code class="bg-white px-1 rounded">price</code> و <code class="bg-white px-1 rounded">currency</code></p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-list-check text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">تحديد الخطط المؤهلة</p>
+                <p class="text-xs text-slate-500">إضافة الخطط في <code class="bg-white px-1 rounded">eligible_plans</code></p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-teal-100 text-teal-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-hand-holding-heart text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">منح صلاحية يدوياً</p>
+                <p class="text-xs text-slate-500 font-mono">grant_event_access(player, event)</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-rose-100 text-rose-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-ban text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">إلغاء صلاحية</p>
+                <p class="text-xs text-slate-500 font-mono">revoke_event_access(access_id)</p>
+              </div>
+            </div>
+            <div class="flex items-start gap-3 bg-slate-50 rounded-xl p-3">
+              <div class="w-8 h-8 rounded-lg bg-amber-100 text-amber-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <i class="fa-solid fa-rotate-left text-sm"></i>
+              </div>
+              <div>
+                <p class="font-bold text-sm">معالجة استرداد</p>
+                <p class="text-xs text-slate-500 font-mono">refund_event_purchase(purchase_id)</p>
+                <p class="text-xs text-slate-400 mt-0.5">يلغي الصلاحية وينشئ إشعار ائتمان تلقائياً</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- What admin should verify -->
+        <div class="portal-card border-t-4 border-sky-500">
+          <h3 class="font-bold text-sky-700 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-clipboard-check"></i>
+            ما الذي يجب التحقق منه؟
+          </h3>
+          <div class="space-y-3">
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">سجل LEA موجود</p>
+                <p class="text-xs text-slate-500">الحالة: <code class="bg-white px-1 rounded">active</code></p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">سجل LEP صحيح</p>
+                <p class="text-xs text-slate-500">الحالة تعكس واقع الدفع (paid/pending/refunded)</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">استجابة access-state متسقة</p>
+                <p class="text-xs text-slate-500 font-mono">GET /events/{'{event_id}'}/access-state</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 bg-sky-50 rounded-xl p-3">
+              <i class="fa-solid fa-circle-check text-sky-500"></i>
+              <div>
+                <p class="font-bold text-sm">الكاش متزامن</p>
+                <p class="text-xs text-slate-500">Redis HASH يتطابق مع البيانات في Frappe</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 5. STUDENT JOURNEY             -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-purple-700">
+        <i class="fa-solid fa-graduation-cap text-2xl"></i>
+        <h2>رحلة الطالب</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <!-- Access exists -->
+        <div class="portal-card portal-card-hover border-2 border-emerald-300 bg-emerald-50/40">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-10 h-10 rounded-full bg-emerald-500 text-white flex items-center justify-center">
+              <i class="fa-solid fa-check"></i>
+            </div>
+            <h3 class="font-bold text-emerald-700">عند وجود صلاحية وصول</h3>
+          </div>
+          <div class="space-y-3 text-sm text-slate-700">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-arrow-left text-emerald-400"></i>
+              <span>يرى الطالب زر <strong>"الانضمام"</strong> فعّالاً</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-arrow-left text-emerald-400"></i>
+              <span>يدخل مباشرة إلى الفعالية</span>
+            </div>
+            <div class="mt-3 bg-emerald-100 rounded-lg p-3 text-xs text-emerald-700">
+              <i class="fa-solid fa-info-circle ml-1"></i>
+              يعمل لجميع أنواع الوصول: مجاني، بريميوم، شراء، قسيمة، أو منحة مشرف
+            </div>
+          </div>
+        </div>
+
+        <!-- Access missing -->
+        <div class="portal-card portal-card-hover border-2 border-rose-300 bg-rose-50/40">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-10 h-10 rounded-full bg-rose-500 text-white flex items-center justify-center">
+              <i class="fa-solid fa-lock"></i>
+            </div>
+            <h3 class="font-bold text-rose-700">عند عدم وجود صلاحية وصول</h3>
+          </div>
+          <div class="space-y-3 text-sm text-slate-700">
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-arrow-left text-rose-400"></i>
+              <span>يرى الطالب <strong>السعر</strong> وزر <strong>"شراء تذكرة"</strong></span>
+            </div>
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-arrow-left text-rose-400"></i>
+              <span>بعد الشراء يتم إنشاء سجل وصول تلقائياً</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <i class="fa-solid fa-arrow-left text-rose-400"></i>
+              <span>أو يمكنه استخدام <strong>قسيمة</strong> إن توفرت</span>
+            </div>
+            <div class="mt-3 bg-amber-100 rounded-lg p-3 text-xs text-amber-700">
+              <i class="fa-solid fa-clock ml-1"></i>
+              مهلة الشراء: <strong>30 دقيقة</strong> — بعدها يتم إلغاء الشراء تلقائياً
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 6. COMMON / EDGE CASES         -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-orange-700">
+        <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+        <h2>الحالات الشائعة وحالات الحافة</h2>
+      </div>
+
+      <div class="portal-card overflow-x-auto">
+        <table class="portal-table">
+          <thead>
+            <tr>
+              <th class="min-w-[140px]">الحالة</th>
+              <th class="min-w-[180px]">السبب</th>
+              <th class="min-w-[200px]">ما يجب التحقق منه</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="font-bold text-sm">مدفوعة ولا يمكن الانضمام</td>
+              <td class="text-sm text-slate-600">لا يوجد سجل LEA فعّال</td>
+              <td class="text-sm"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">Memora Live Event Access</code></td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">بريميوم موجود لكن غير معتبر</td>
+              <td class="text-sm text-slate-600">الخطة غير مدرجة في <code class="bg-slate-100 px-1 rounded text-xs">eligible_plans</code> أو البريميوم منتهي</td>
+              <td class="text-sm"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">eligible_plans</code> + <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">is_plan_premium_usable</code></td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">صلاحية ملغاة</td>
+              <td class="text-sm text-slate-600">المشرف ألغى الصلاحية أو تم الاسترداد</td>
+              <td class="text-sm">حقل <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">status</code> في LEA: revoked / refunded</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">الفعالية غير قابلة للانضمام</td>
+              <td class="text-sm text-slate-600">الفعالية ليست في حالة Active</td>
+              <td class="text-sm">حقل <code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">status</code> على الفعالية</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">شراء مزدوج محظور</td>
+              <td class="text-sm text-slate-600">يوجد شراء معلق أو صلاحية فعّالة أو بريميوم يغطي</td>
+              <td class="text-sm">
+                <div class="flex flex-wrap gap-1">
+                  <code class="bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded text-xs">PENDING_PURCHASE</code>
+                  <code class="bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded text-xs">ALREADY_HAS_ACCESS</code>
+                  <code class="bg-rose-50 text-rose-700 px-1.5 py-0.5 rounded text-xs">COVERED_BY_PREMIUM</code>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">الشراء انتهت صلاحيته</td>
+              <td class="text-sm text-slate-600">مرّت 30 دقيقة بدون إتمام الدفع</td>
+              <td class="text-sm"><code class="bg-slate-100 px-1.5 py-0.5 rounded text-xs">expires_at</code> في LEP</td>
+            </tr>
+            <tr>
+              <td class="font-bold text-sm">تتالي الاسترداد</td>
+              <td class="text-sm text-slate-600">الاسترداد يلغي LEP و LEA وينشئ إشعار ائتمان</td>
+              <td class="text-sm">كل شيء ذري — إما ينجح كله أو يفشل كله</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 7. TROUBLESHOOTING BOX         -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-amber-700">
+        <i class="fa-solid fa-stethoscope text-2xl"></i>
+        <h2>استكشاف الأخطاء</h2>
+      </div>
+
+      <div class="portal-alert portal-alert-warning">
+        <div class="space-y-4">
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-magnifying-glass"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">الطالب لا يستطيع الانضمام لفعالية مدفوعة</p>
+              <p class="text-sm mt-0.5">تحقق من حالة LEA في Frappe + استجابة <code class="bg-white/60 px-1 rounded text-xs font-mono">/access-state</code></p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-crown"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">البريميوم يجب أن يغطي لكنه لا يغطي</p>
+              <p class="text-sm mt-0.5">تحقق من <code class="bg-white/60 px-1 rounded text-xs font-mono">eligible_plans</code> على الفعالية + <code class="bg-white/60 px-1 rounded text-xs font-mono">is_plan_premium_usable</code></p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-hourglass-half"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">الشراء عالق في pending</p>
+              <p class="text-sm mt-0.5">تحقق من حقل <code class="bg-white/60 px-1 rounded text-xs font-mono">expires_at</code> + التحقق من وصول webhook الدفع</p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-database"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">الكاش يعرض حالة خاطئة</p>
+              <p class="text-sm mt-0.5">استدعاء <code class="bg-white/60 px-1 rounded text-xs font-mono">invalidate_event_access_cache(player, event)</code> أو انتظار 5 دقائق</p>
+            </div>
+          </div>
+
+          <div class="border-t border-amber-200"></div>
+
+          <div class="flex items-start gap-3">
+            <div class="w-7 h-7 rounded-lg bg-amber-200 text-amber-700 flex items-center justify-center flex-shrink-0 mt-0.5 text-sm">
+              <i class="fa-solid fa-lock"></i>
+            </div>
+            <div>
+              <p class="font-bold text-sm">خطأ CONCURRENT_REQUEST</p>
+              <p class="text-sm mt-0.5">إعادة المحاولة بعد ثوانٍ قليلة — قفل Redis مؤقت (10 ثوانٍ TTL)</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 8. TECHNICAL DETAILS           -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-slate-700">
+        <i class="fa-solid fa-code text-2xl"></i>
+        <h2>التفاصيل التقنية</h2>
+      </div>
+
+      <div class="portal-card p-0 divide-y divide-slate-100">
+
+        <!-- Accordion: DocTypes -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-doctypes">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-database text-indigo-500"></i>
+              أنواع المستندات (DocTypes)
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-doctypes" class="portal-accordion-content">
+            <div class="px-5 pb-5 space-y-4">
+
+              <!-- LEA -->
+              <div class="bg-indigo-50 rounded-xl p-4">
+                <h4 class="font-bold text-indigo-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-id-card"></i>
+                  Memora Live Event Access (LEA)
+                </h4>
+                <p class="text-xs text-slate-500 mb-2 font-mono">الترقيم: LEA-.#####</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs">player</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">event</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">status</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">access_type</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">purchase_ref</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">voucher_ref</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">granted_by</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">revoked_at</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">revoked_by</code>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
+                  <span class="portal-badge bg-emerald-100 text-emerald-700">active</span>
+                  <span class="portal-badge bg-rose-100 text-rose-700">revoked</span>
+                  <span class="portal-badge bg-amber-100 text-amber-700">refunded</span>
+                </div>
+              </div>
+
+              <!-- LEP -->
+              <div class="bg-violet-50 rounded-xl p-4">
+                <h4 class="font-bold text-violet-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-receipt"></i>
+                  Memora Live Event Purchase (LEP)
+                </h4>
+                <p class="text-xs text-slate-500 mb-2 font-mono">الترقيم: LEP-.#####</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs">player</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">event</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">status</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">amount</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">currency</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">expires_at</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">payment_gateway</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">payment_reference</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">erpnext_invoice</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">event_access_ref</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">paid_at</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">refunded_at</code>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1.5 text-xs">
+                  <span class="portal-badge bg-slate-200 text-slate-700">pending</span>
+                  <span class="portal-badge bg-emerald-100 text-emerald-700">paid</span>
+                  <span class="portal-badge bg-rose-100 text-rose-700">failed</span>
+                  <span class="portal-badge bg-slate-100 text-slate-600">cancelled</span>
+                  <span class="portal-badge bg-amber-100 text-amber-700">refunded</span>
+                </div>
+              </div>
+
+              <!-- Event -->
+              <div class="bg-sky-50 rounded-xl p-4">
+                <h4 class="font-bold text-sky-700 mb-2 flex items-center gap-2">
+                  <i class="fa-solid fa-calendar-day"></i>
+                  Memora Live Challenge Event
+                </h4>
+                <p class="text-xs text-slate-500 mb-2">الحقول المتعلقة بالوصول</p>
+                <div class="flex flex-wrap gap-1.5">
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">is_paid</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">price</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs">currency</code>
+                  <code class="bg-white px-2 py-1 rounded text-xs text-violet-600">eligible_plans</code>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion: Cache Architecture -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-cache">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-layer-group text-emerald-500"></i>
+              آلية التخزين المؤقت (3 طبقات)
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-cache" class="portal-accordion-content">
+            <div class="px-5 pb-5">
+              <div class="flex flex-col gap-3">
+                <!-- Layer 1 -->
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center font-bold flex-shrink-0">1</div>
+                  <div class="flex-1 bg-emerald-50 rounded-xl p-3">
+                    <p class="font-bold text-sm">ذاكرة العملية (Process-Local)</p>
+                    <p class="text-xs text-slate-500">TTL: 60 ثانية — الحد الأقصى: 10,000 مدخل</p>
+                  </div>
+                </div>
+
+                <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down text-sm"></i></div>
+
+                <!-- Layer 2 -->
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold flex-shrink-0">2</div>
+                  <div class="flex-1 bg-red-50 rounded-xl p-3">
+                    <p class="font-bold text-sm">Redis HASH</p>
+                    <p class="text-xs text-slate-500 font-mono">memora:event_access:{'{player}'}:{'{event}'}</p>
+                    <div class="flex flex-wrap gap-1 mt-1">
+                      <code class="bg-white px-1.5 py-0.5 rounded text-xs">has_access</code>
+                      <code class="bg-white px-1.5 py-0.5 rounded text-xs">access_type</code>
+                      <code class="bg-white px-1.5 py-0.5 rounded text-xs">access_id</code>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down text-sm"></i></div>
+
+                <!-- Layer 3 -->
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-10 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold flex-shrink-0">3</div>
+                  <div class="flex-1 bg-indigo-50 rounded-xl p-3">
+                    <p class="font-bold text-sm">Frappe API</p>
+                    <p class="text-xs text-slate-500">مصدر الحقيقة النهائي</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="bg-slate-50 rounded-lg p-3 text-xs">
+                  <span class="font-bold text-slate-600">الكاش السلبي:</span>
+                  <span class="text-slate-500"> 300 ثانية (يمنع الرفض الدائم الخاطئ)</span>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-3 text-xs">
+                  <span class="font-bold text-slate-600">مفتاح القفل:</span>
+                  <span class="text-slate-500 font-mono"> event_access_lock — TTL: 10 ثوانٍ</span>
+                </div>
+                <div class="bg-slate-50 rounded-lg p-3 text-xs sm:col-span-2">
+                  <span class="font-bold text-slate-600">المزامنة:</span>
+                  <span class="text-slate-500"> Frappe hooks في <code class="bg-white px-1 rounded">event_access_sync.py</code> (after_insert, on_update)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion: Endpoints -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-endpoints">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-plug text-violet-500"></i>
+              النقاط الطرفية (Endpoints)
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-endpoints" class="portal-accordion-content">
+            <div class="px-5 pb-5 space-y-3">
+              <!-- Player endpoints -->
+              <div class="bg-violet-50 rounded-xl p-4">
+                <h4 class="font-bold text-violet-700 mb-3 text-sm">واجهات الطالب (FastAPI)</h4>
+                <div class="space-y-2">
+                  <div class="flex items-start gap-2 bg-white rounded-lg p-2.5">
+                    <span class="portal-badge bg-emerald-100 text-emerald-700 text-xs flex-shrink-0">POST</span>
+                    <div>
+                      <code class="text-xs font-mono">/events/{'{event_id}'}/purchase</code>
+                      <p class="text-xs text-slate-500 mt-0.5">إنشاء شراء تذكرة — الحراسات: فحص بريميوم، وصول موجود، شراء معلق، قفل Redis</p>
+                    </div>
+                  </div>
+                  <div class="flex items-start gap-2 bg-white rounded-lg p-2.5">
+                    <span class="portal-badge bg-sky-100 text-sky-700 text-xs flex-shrink-0">GET</span>
+                    <div>
+                      <code class="text-xs font-mono">/events/{'{event_id}'}/access-state</code>
+                      <p class="text-xs text-slate-500 mt-0.5">حالة الوصول الكاملة للواجهة الأمامية</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Admin endpoints -->
+              <div class="bg-teal-50 rounded-xl p-4">
+                <h4 class="font-bold text-teal-700 mb-3 text-sm">واجهات المشرف (Frappe Whitelisted)</h4>
+                <div class="space-y-2">
+                  <div class="bg-white rounded-lg p-2.5">
+                    <code class="text-xs font-mono text-teal-700">grant_event_access(player, event)</code>
+                    <p class="text-xs text-slate-500 mt-0.5">منح صلاحية يدوية — مشرفون فقط</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-2.5">
+                    <code class="text-xs font-mono text-teal-700">revoke_event_access(access_id)</code>
+                    <p class="text-xs text-slate-500 mt-0.5">إلغاء صلاحية — مشرفون فقط</p>
+                  </div>
+                  <div class="bg-white rounded-lg p-2.5">
+                    <code class="text-xs font-mono text-teal-700">refund_event_purchase(purchase_id)</code>
+                    <p class="text-xs text-slate-500 mt-0.5">استرداد مع تتالي ذري (LEP + LEA + إشعار ائتمان)</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion: State Machines -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-states">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-diagram-successor text-amber-500"></i>
+              آلات الحالة
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-states" class="portal-accordion-content">
+            <div class="px-5 pb-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+              <!-- Purchase lifecycle -->
+              <div class="bg-violet-50 rounded-xl p-4">
+                <h4 class="font-bold text-violet-700 mb-3 text-sm flex items-center gap-2">
+                  <i class="fa-solid fa-receipt"></i>
+                  دورة حياة الشراء
+                </h4>
+                <div class="flex flex-col items-center gap-2 text-sm">
+                  <div class="portal-flow-node bg-slate-200 text-slate-700 w-full justify-center">pending</div>
+                  <div class="flex gap-6 w-full">
+                    <div class="flex-1 flex flex-col items-center gap-1.5">
+                      <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down text-xs"></i></div>
+                      <div class="portal-flow-node bg-emerald-100 text-emerald-700 w-full justify-center text-xs">paid</div>
+                      <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down text-xs"></i></div>
+                      <div class="portal-flow-node bg-amber-100 text-amber-700 w-full justify-center text-xs">refunded</div>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-1.5">
+                      <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down text-xs"></i></div>
+                      <div class="portal-flow-node bg-rose-100 text-rose-700 w-full justify-center text-xs">failed</div>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-1.5">
+                      <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down text-xs"></i></div>
+                      <div class="portal-flow-node bg-slate-100 text-slate-600 w-full justify-center text-xs">cancelled</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Access lifecycle -->
+              <div class="bg-teal-50 rounded-xl p-4">
+                <h4 class="font-bold text-teal-700 mb-3 text-sm flex items-center gap-2">
+                  <i class="fa-solid fa-id-card"></i>
+                  دورة حياة الوصول
+                </h4>
+                <div class="flex flex-col items-center gap-2 text-sm">
+                  <div class="portal-flow-node bg-emerald-200 text-emerald-800 w-full justify-center">active</div>
+                  <div class="flex gap-6 w-full">
+                    <div class="flex-1 flex flex-col items-center gap-1.5">
+                      <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down text-xs"></i></div>
+                      <div class="portal-flow-node bg-rose-100 text-rose-700 w-full justify-center text-xs">revoked</div>
+                      <p class="text-[0.65rem] text-slate-400 text-center">إلغاء من المشرف</p>
+                    </div>
+                    <div class="flex-1 flex flex-col items-center gap-1.5">
+                      <div class="portal-flow-connector"><i class="fa-solid fa-arrow-down text-xs"></i></div>
+                      <div class="portal-flow-node bg-amber-100 text-amber-700 w-full justify-center text-xs">refunded</div>
+                      <p class="text-[0.65rem] text-slate-400 text-center">تتالي من استرداد الشراء</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Accordion: Source Files -->
+        <div>
+          <button class="portal-accordion-toggle" data-accordion-toggle="acc-source">
+            <span class="flex items-center gap-2">
+              <i class="fa-solid fa-folder-open text-sky-500"></i>
+              الملفات المصدرية
+            </span>
+            <i class="fa-solid fa-chevron-down chevron text-slate-400"></i>
+          </button>
+          <div id="acc-source" class="portal-accordion-content">
+            <div class="px-5 pb-5">
+              <div class="bg-slate-50 rounded-xl p-4 space-y-2 text-xs font-mono" dir="ltr">
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>fastapi_app/services/event_access.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— خدمة الوصول مع الكاش ثلاثي الطبقات</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>fastapi_app/api/v1/endpoints/event_access.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— نقاط الطالب الطرفية</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>memora_admin/services/premium/event_purchase.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— إنشاء وتأكيد الشراء</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>memora_admin/api/premium.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— واجهات المشرف</span>
+                </div>
+                <div class="flex items-center gap-2">
+                  <i class="fa-brands fa-python text-sky-500 w-4"></i>
+                  <span>memora_admin/events/event_access_sync.py</span>
+                  <span class="text-slate-400 font-sans mr-auto">— مزامنة الكاش عبر Hooks</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================== -->
+    <!-- 9. RELATED PAGES               -->
+    <!-- ============================== -->
+    <section>
+      <div class="portal-section-title text-slate-500">
+        <i class="fa-solid fa-link text-2xl"></i>
+        <h2>الصفحات ذات الصلة</h2>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div class="portal-card bg-slate-50 border border-dashed border-slate-300 text-center py-5 opacity-60">
+          <i class="fa-solid fa-crown text-slate-400 text-xl mb-2"></i>
+          <p class="text-sm text-slate-500 font-bold">إدارة الاشتراكات البريميوم</p>
+          <span class="text-xs text-slate-400">قريباً</span>
+        </div>
+        <div class="portal-card bg-slate-50 border border-dashed border-slate-300 text-center py-5 opacity-60">
+          <i class="fa-solid fa-ticket-simple text-slate-400 text-xl mb-2"></i>
+          <p class="text-sm text-slate-500 font-bold">نظام القسائم</p>
+          <span class="text-xs text-slate-400">قريباً</span>
+        </div>
+        <div class="portal-card bg-slate-50 border border-dashed border-slate-300 text-center py-5 opacity-60">
+          <i class="fa-solid fa-bolt text-slate-400 text-xl mb-2"></i>
+          <p class="text-sm text-slate-500 font-bold">فعاليات التحدي المباشر</p>
+          <span class="text-xs text-slate-400">قريباً</span>
+        </div>
+        <div class="portal-card bg-slate-50 border border-dashed border-slate-300 text-center py-5 opacity-60">
+          <i class="fa-solid fa-file-invoice text-slate-400 text-xl mb-2"></i>
+          <p class="text-sm text-slate-500 font-bold">الفواتير وإشعارات الائتمان</p>
+          <span class="text-xs text-slate-400">قريباً</span>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- Footer -->
+  <footer class="mt-16 py-8 text-center text-sm text-slate-400 border-t border-slate-200">
+    <p>Memora Admin Knowledge Portal</p>
+    <p class="text-xs mt-1">آخر تحديث: 2026-03-24</p>
+  </footer>
+
+  <script src="../../_shared/portal.js"></script>
+</body>
+</html>

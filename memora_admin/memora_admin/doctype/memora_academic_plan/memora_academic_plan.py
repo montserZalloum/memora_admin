@@ -6,7 +6,23 @@ from frappe.model.document import Document
 
 
 class MemoraAcademicPlan(Document):
-	pass
+	IMMUTABLE_FIELDS = ("season", "grade", "major")
+
+	def validate(self):
+		if not self.is_new():
+			self._prevent_immutable_field_changes()
+
+	def _prevent_immutable_field_changes(self):
+		old = self.get_doc_before_save()
+		if not old:
+			return
+		for field in self.IMMUTABLE_FIELDS:
+			if self.get(field) != old.get(field):
+				frappe.throw(
+					frappe._(
+						"Field <b>{0}</b> cannot be changed after creation."
+					).format(frappe._(self.meta.get_label(field)))
+				)
 
 
 @frappe.whitelist()
