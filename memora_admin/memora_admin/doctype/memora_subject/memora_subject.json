@@ -17,9 +17,6 @@
   "sb_applicability",
   "applicable_to",
   "json_generated_at",
-  "sb_stats",
-  "total_tracks",
-  "total_lessons",
   "sb_json",
   "json_hash",
   "cdn_url"
@@ -74,6 +71,7 @@
    "label": "Applicability"
   },
   {
+   "description": "For filtering purposes only",
    "fieldname": "applicable_to",
    "fieldtype": "Table",
    "label": "Applicable To",
@@ -88,26 +86,8 @@
   {
    "fieldname": "last_bit_index",
    "fieldtype": "Int",
+   "hidden": 1,
    "label": "Next Bit Index"
-  },
-  {
-   "fieldname": "sb_stats",
-   "fieldtype": "Section Break",
-   "label": "Statistics"
-  },
-  {
-   "default": "0",
-   "fieldname": "total_tracks",
-   "fieldtype": "Int",
-   "label": "Total Tracks",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "total_lessons",
-   "fieldtype": "Int",
-   "label": "Total Lessons",
-   "read_only": 1
   },
   {
    "fieldname": "sb_json",

@@ -17,8 +17,7 @@
   "is_published",
   "sb_hierarchy",
   "track",
-  "subject",
-  "total_lessons"
+  "subject"
  ],
  "fields": [
   {
@@ -95,13 +94,6 @@
    "options": "Memora Subject",
    "read_only": 1,
    "search_index": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "total_lessons",
-   "fieldtype": "Int",
-   "label": "Total Lessons",
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,

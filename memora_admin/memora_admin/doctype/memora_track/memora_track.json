@@ -16,10 +16,7 @@
   "description",
   "is_sold_separately",
   "is_published",
-  "is_linear",
-  "sb_stats",
-  "total_units",
-  "total_lessons"
+  "is_linear"
  ],
  "fields": [
   {
@@ -49,7 +46,8 @@
    "in_standard_filter": 1,
    "label": "Subject",
    "options": "Memora Subject",
-   "reqd": 1
+   "reqd": 1,
+   "set_only_once": 1
   },
   {
    "default": "0",
@@ -85,25 +83,6 @@
    "fieldname": "is_linear",
    "fieldtype": "Check",
    "label": "Is Linear"
-  },
-  {
-   "fieldname": "sb_stats",
-   "fieldtype": "Section Break",
-   "label": "Statistics"
-  },
-  {
-   "default": "0",
-   "fieldname": "total_units",
-   "fieldtype": "Int",
-   "label": "Total Units",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "total_lessons",
-   "fieldtype": "Int",
-   "label": "Total Lessons",
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,

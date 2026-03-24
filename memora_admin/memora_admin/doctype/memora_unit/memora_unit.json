@@ -15,10 +15,7 @@
   "sort_order",
   "is_free",
   "is_published",
-  "is_linear",
-  "sb_stats",
-  "total_topics",
-  "total_lessons"
+  "is_linear"
  ],
  "fields": [
   {
@@ -76,11 +73,6 @@
    "label": "Is Linear"
   },
   {
-   "fieldname": "sb_stats",
-   "fieldtype": "Section Break",
-   "label": "Statistics"
-  },
-  {
    "fieldname": "subject",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -89,20 +81,6 @@
    "options": "Memora Subject",
    "read_only": 1,
    "search_index": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "total_topics",
-   "fieldtype": "Int",
-   "label": "Total Topics",
-   "read_only": 1
-  },
-  {
-   "default": "0",
-   "fieldname": "total_lessons",
-   "fieldtype": "Int",
-   "label": "Total Lessons",
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,
