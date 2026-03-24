@@ -7,7 +7,7 @@ import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, WebSocket, WebSocketDisconnect, status
 
 from fastapi_app.api.deps import CurrentUser, LiveChallengeServiceDep, require_rate_limit
-from fastapi_app.core.redis_keys import lc_joined_key, lc_mode_key, lc_status_key
+from fastapi_app.core.redis_keys import lc_joined_key, lc_meta_key, lc_mode_key, lc_status_key
 from fastapi_app.core.security import decode_token
 from fastapi_app.models.live_challenge import (
 	AnswerRequest,
@@ -85,7 +85,7 @@ async def get_event_detail(
 	service: LiveChallengeServiceDep,
 ) -> EventDetailResponse:
 	"""Get public event details with player-specific flags."""
-	detail = await service.get_event_detail(event_id, user.sub)
+	detail = await service.get_event_detail(event_id, user.sub, player_plan=user.plan)
 	if detail is None:
 		raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=_error_detail("EVENT_NOT_FOUND"))
 	return EventDetailResponse(**detail)
@@ -176,13 +176,14 @@ async def submit_answers(
 	answers = [{"question_idx": a.question_idx, "selected": a.selected} for a in body.answers]
 
 	try:
-		result = await service.grade(event_id, user.sub, answers)
+		result = await service.grade(event_id, user.sub, answers, player_plan=user.plan)
 	except ValueError as e:
 		code = str(e)
 		status_map = {
 			"EVENT_NOT_ACTIVE": status.HTTP_400_BAD_REQUEST,
 			"NOT_A_PARTICIPANT": status.HTTP_403_FORBIDDEN,
 			"ALREADY_SUBMITTED": status.HTTP_409_CONFLICT,
+			"PLAN_NOT_ELIGIBLE": status.HTTP_403_FORBIDDEN,
 			"SUBMISSION_FAILED": status.HTTP_500_INTERNAL_SERVER_ERROR,
 			"MODE_NOT_SUPPORTED": status.HTTP_400_BAD_REQUEST,
 		}
@@ -228,7 +229,8 @@ async def submit_round_answer(
 	pipe = service.redis.pipeline()
 	pipe.get(lc_status_key(event_id))
 	pipe.sismember(lc_joined_key(event_id), user.sub)
-	event_status, is_joined = await pipe.execute()
+	pipe.hget(lc_meta_key(event_id), "eligible_plans")
+	event_status, is_joined, eligible_plans_json = await pipe.execute()
 
 	if event_status != "active":
 		raise HTTPException(
@@ -240,6 +242,14 @@ async def submit_round_answer(
 			status_code=status.HTTP_403_FORBIDDEN,
 			detail=_error_detail("NOT_A_PARTICIPANT"),
 		)
+	# Plan eligibility gate (zero extra RT — piggybacked on pre-flight pipeline)
+	if eligible_plans_json:
+		eligible_plans = json.loads(eligible_plans_json)
+		if eligible_plans and user.plan not in eligible_plans:
+			raise HTTPException(
+				status_code=status.HTTP_403_FORBIDDEN,
+				detail=_error_detail("PLAN_NOT_ELIGIBLE"),
+			)
 
 	# Submit via engine's Lua script
 	result = await service.submit_last_stand_answer(

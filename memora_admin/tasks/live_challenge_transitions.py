@@ -13,7 +13,7 @@ On Active -> Ended: triggers reconciliation + post-event processing.
 
 import json
 
-from datetime import datetime, timezone
+from datetime import datetime
 
 import frappe
 from frappe.utils import now_datetime
@@ -46,14 +46,9 @@ from fastapi_app.models.live_challenge import _fmt_score
 from memora_admin.utils.redis_connection import get_memora_redis
 
 
-def _utc_now() -> datetime:
-	"""Return current UTC time as a naive datetime (matches stored timestamps)."""
-	return datetime.now(timezone.utc).replace(tzinfo=None)
-
-
 def process_live_challenge_transitions():
 	"""Process all pending state transitions for live challenge events."""
-	now = _utc_now()
+	now = now_datetime()
 
 	# 1. Draft -> Waiting: scheduled_start <= now
 	draft_events = frappe.get_all(
@@ -287,7 +282,7 @@ def _try_finalize_event(event_name: str, exam_end_ts=None):
 		if redis_submitted > db_submitted:
 			# Still mismatched — force after 5 minutes
 			if exam_end_ts:
-				elapsed = (_utc_now() - exam_end_ts).total_seconds()
+				elapsed = (now_datetime() - exam_end_ts).total_seconds()
 				if elapsed < 300:
 					return
 
@@ -343,7 +338,7 @@ def _cron_reconcile_event(event_name: str) -> bool:
 
 		# Decode meta
 		meta = {_decode(k): _decode(v) for k, v in meta_raw.items()} if meta_raw else {}
-		default_joined_at = meta.get("exam_start_ts") or _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+		default_joined_at = meta.get("exam_start_ts") or now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 		mode = meta.get("mode", "exam")
 
 		# Decode join times
@@ -378,7 +373,7 @@ def _cron_reconcile_event(event_name: str) -> bool:
 			existing.add(row[0])
 
 		# Build rows for INSERT (only new players)
-		now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+		now_str = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 		insert_values = []
 		update_values = []
 
@@ -514,7 +509,7 @@ def _reconcile_last_stand(
 		round_data = {_decode(k): _decode(v) for k, v in round_raw.items()}
 		total_questions = int(round_data.get("total_rounds_played", "0")) or 1
 
-	now_str = _utc_now().strftime("%Y-%m-%d %H:%M:%S")
+	now_str = now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 
 	# Find existing participation records to avoid duplicates
 	existing = set()

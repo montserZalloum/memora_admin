@@ -1341,6 +1341,7 @@ class LiveChallengeService:
 		event_id: str,
 		player_id: str,
 		answers: list[dict],
+		player_plan: str | None = None,
 	) -> dict[str, Any]:
 		"""Grade submitted answers (pure Redis — DB persistence deferred to reconciliation).
 
@@ -1385,6 +1386,13 @@ class LiveChallengeService:
 			await self.redis.srem(lc_submitted_key(event_id), player_id)
 			raise ValueError("EVENT_NOT_ACTIVE")
 		questions = json.loads(questions_json)
+
+		# 4.5 Check plan eligibility (zero extra Redis RT — meta already loaded)
+		eligible_plans_json = meta.get("eligible_plans", "[]")
+		eligible_plans = json.loads(eligible_plans_json)
+		if eligible_plans and player_plan not in eligible_plans:
+			await self.redis.srem(lc_submitted_key(event_id), player_id)
+			raise ValueError("PLAN_NOT_ELIGIBLE")
 
 		# 5. Grade
 		result = grade_answers(questions, answers)
@@ -1464,7 +1472,7 @@ class LiveChallengeService:
 			return "redis"
 		return None
 
-	async def get_event_detail(self, event_id: str, player_id: str) -> dict[str, Any] | None:
+	async def get_event_detail(self, event_id: str, player_id: str, player_plan: str | None = None) -> dict[str, Any] | None:
 		"""Get public event details with player-specific flags.
 
 		Explicit source selection: ended events read from DB,
@@ -1474,10 +1482,10 @@ class LiveChallengeService:
 		if source is None:
 			return None
 		if source == "db":
-			return await self._get_event_detail_from_db(event_id, player_id)
-		return await self._get_event_detail_from_redis(event_id, player_id)
+			return await self._get_event_detail_from_db(event_id, player_id, player_plan)
+		return await self._get_event_detail_from_redis(event_id, player_id, player_plan)
 
-	async def _get_event_detail_from_redis(self, event_id: str, player_id: str) -> dict[str, Any] | None:
+	async def _get_event_detail_from_redis(self, event_id: str, player_id: str, player_plan: str | None = None) -> dict[str, Any] | None:
 		"""Read event detail exclusively from Redis. MUST NOT fall back to DB.
 
 		Single pipeline read — zero Frappe calls. Returns None if Redis data
@@ -1531,6 +1539,7 @@ class LiveChallengeService:
 			"default_xp": int(meta.get("default_xp", "0")),
 			"question_count": question_count,
 			"eligible_plans": eligible_plans,
+			"is_plan_eligible": (not eligible_plans) or (player_plan in eligible_plans),
 			"has_joined": bool(has_joined),
 			"has_submitted": bool(has_submitted),
 		}
@@ -1551,7 +1560,7 @@ class LiveChallengeService:
 
 		return detail
 
-	async def _get_event_detail_from_db(self, event_id: str, player_id: str) -> dict[str, Any] | None:
+	async def _get_event_detail_from_db(self, event_id: str, player_id: str, player_plan: str | None = None) -> dict[str, Any] | None:
 		"""Read event detail exclusively from Frappe DB. Used ONLY for ended events."""
 		try:
 			event = await self.frappe.call(
@@ -1621,6 +1630,7 @@ class LiveChallengeService:
 			"default_xp": int(event.get("default_xp", 0)),
 			"question_count": len(event.get("questions", [])),
 			"eligible_plans": [ep.get("plan") for ep in event.get("eligible_plans", [])],
+			"is_plan_eligible": (not event.get("eligible_plans")) or (player_plan in [ep.get("plan") for ep in event.get("eligible_plans", [])]),
 			"has_joined": joined,
 			"has_submitted": submitted,
 			"top_players": top_players,

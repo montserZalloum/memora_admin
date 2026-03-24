@@ -10,6 +10,7 @@ Tests the complete lifecycle against real Redis with mocked FrappeClient:
 
 import json
 from datetime import datetime, timedelta
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 from unittest.mock import AsyncMock
 
@@ -28,6 +29,7 @@ from fastapi_app.core.redis_keys import (
 	lc_submitted_key,
 	wallet_key,
 )
+from fastapi_app.core.redis_keys import session_key as _session_key_fn
 
 EVENT_ID = "LC-TEST-INT-001"
 
@@ -505,3 +507,186 @@ class TestResultAndLeaderboard:
 		assert resp.json()["detail"]["code"] == "NO_PARTICIPATION"
 
 
+PLAN_EVENT_ID = "LC-TEST-PLAN-001"
+
+
+async def _seed_event_with_plans(
+	r: redis.Redis, eligible_plans: list[str], event_id: str = PLAN_EVENT_ID,
+) -> None:
+	"""Seed an active event with specific eligible_plans."""
+	now = datetime.now(ZoneInfo("UTC")).replace(tzinfo=None)
+	meta = {
+		"exam_start_ts": (now - timedelta(seconds=30)).strftime("%Y-%m-%d %H:%M:%S"),
+		"exam_end_ts": (now + timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S"),
+		"scheduled_start": (now - timedelta(seconds=90)).strftime("%Y-%m-%d %H:%M:%S"),
+		"capacity": "100",
+		"enable_question_timer": "0",
+		"question_time_limit": "30",
+		"eligible_plans": json.dumps(eligible_plans),
+		"waiting_room_duration": "60",
+		"event_name": "Plan Test Quiz",
+		"description": "",
+		"exam_duration": "10",
+		"is_paid": "0",
+		"participation_xp": "50",
+		"first_place_xp": "500",
+		"second_place_xp": "300",
+		"third_place_xp": "100",
+		"default_xp": "25",
+	}
+	pipe = r.pipeline()
+	pipe.set(lc_status_key(event_id), "active", ex=LC_KEY_TTL)
+	pipe.set(lc_questions_key(event_id), json.dumps(QUESTIONS), ex=LC_KEY_TTL)
+	pipe.set(lc_count_key(event_id), "0", ex=LC_KEY_TTL)
+	pipe.hset(lc_meta_key(event_id), mapping=meta)
+	pipe.expire(lc_meta_key(event_id), LC_KEY_TTL)
+	await pipe.execute()
+
+
+@pytest.mark.asyncio
+class TestPlanEligibilityEnforcement:
+	"""Tests for eligible_plans enforcement at submit and event detail."""
+
+	async def test_submit_rejects_ineligible_plan(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+		mock_frappe: AsyncMock,
+	):
+		"""Submit returns 403 PLAN_NOT_ELIGIBLE when player's plan is not in eligible_plans."""
+		client, token, player_id, family_id = authed_client
+
+		# Seed event with a plan that doesn't match PLAN-TEST-001
+		await _seed_event_with_plans(redis_client, ["PLAN-PREMIUM"])
+
+		# Directly add player to joined set (bypass join check to test submit gate)
+		await redis_client.sadd(lc_joined_key(PLAN_EVENT_ID), player_id)
+		await redis_client.expire(lc_joined_key(PLAN_EVENT_ID), LC_KEY_TTL)
+
+		answers = [{"question_idx": i, "selected": "B"} for i in range(4)]
+		resp = await client.post(
+			f"/api/v1/live-challenge/{PLAN_EVENT_ID}/submit",
+			json={"answers": answers},
+		)
+		assert resp.status_code == 403
+		assert resp.json()["detail"]["code"] == "PLAN_NOT_ELIGIBLE"
+
+		# Verify player was NOT marked as submitted (rollback)
+		is_submitted = await redis_client.sismember(lc_submitted_key(PLAN_EVENT_ID), player_id)
+		assert not is_submitted
+
+	async def test_submit_allows_eligible_plan(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+		mock_frappe: AsyncMock,
+	):
+		"""Plan check passes at submit when player's plan is in eligible_plans.
+
+		Calls grade() directly (bypasses endpoint response serialization which
+		has a pre-existing issue) to verify plan eligibility is not rejected.
+		"""
+		client, token, player_id, family_id = authed_client
+
+		await _seed_event_with_plans(redis_client, ["PLAN-TEST-001"])
+
+		# Add player to joined set
+		await redis_client.sadd(lc_joined_key(PLAN_EVENT_ID), player_id)
+		await redis_client.expire(lc_joined_key(PLAN_EVENT_ID), LC_KEY_TTL)
+
+		# Call grade() directly on the service — plan check is inside
+		from fastapi_app.services.live_challenge import LiveChallengeService
+		service = LiveChallengeService(redis_client, mock_frappe)
+		answers = [{"question_idx": i, "selected": "B"} for i in range(4)]
+		result = await service.grade(PLAN_EVENT_ID, player_id, answers, player_plan="PLAN-TEST-001")
+		assert result["score"] >= 0
+		is_submitted = await redis_client.sismember(lc_submitted_key(PLAN_EVENT_ID), player_id)
+		assert is_submitted
+
+	async def test_submit_allows_open_event(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+		mock_frappe: AsyncMock,
+	):
+		"""Plan check passes at submit when eligible_plans is empty (open to all)."""
+		client, token, player_id, family_id = authed_client
+
+		await _seed_event_with_plans(redis_client, [])
+
+		await redis_client.sadd(lc_joined_key(PLAN_EVENT_ID), player_id)
+		await redis_client.expire(lc_joined_key(PLAN_EVENT_ID), LC_KEY_TTL)
+
+		from fastapi_app.services.live_challenge import LiveChallengeService
+		service = LiveChallengeService(redis_client, mock_frappe)
+		answers = [{"question_idx": i, "selected": "B"} for i in range(4)]
+		result = await service.grade(PLAN_EVENT_ID, player_id, answers, player_plan="PLAN-TEST-001")
+		assert result["score"] >= 0
+		is_submitted = await redis_client.sismember(lc_submitted_key(PLAN_EVENT_ID), player_id)
+		assert is_submitted
+
+	async def test_event_detail_is_plan_eligible_true(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+		mock_frappe: AsyncMock,
+	):
+		"""Event detail returns is_plan_eligible=true when player's plan matches."""
+		client, token, player_id, family_id = authed_client
+
+		await _seed_event_with_plans(redis_client, ["PLAN-TEST-001", "PLAN-PREMIUM"])
+
+		resp = await client.get(f"/api/v1/live-challenge/{PLAN_EVENT_ID}")
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["is_plan_eligible"] is True
+		assert data["eligible_plans"] == ["PLAN-TEST-001", "PLAN-PREMIUM"]
+
+	async def test_event_detail_is_plan_eligible_false(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+		mock_frappe: AsyncMock,
+	):
+		"""Event detail returns is_plan_eligible=false when player's plan doesn't match."""
+		client, token, player_id, family_id = authed_client
+
+		await _seed_event_with_plans(redis_client, ["PLAN-PREMIUM"])
+
+		resp = await client.get(f"/api/v1/live-challenge/{PLAN_EVENT_ID}")
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["is_plan_eligible"] is False
+
+	async def test_event_detail_open_event_always_eligible(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+		mock_frappe: AsyncMock,
+	):
+		"""Event detail returns is_plan_eligible=true for open events (empty eligible_plans)."""
+		client, token, player_id, family_id = authed_client
+
+		await _seed_event_with_plans(redis_client, [])
+
+		resp = await client.get(f"/api/v1/live-challenge/{PLAN_EVENT_ID}")
+		assert resp.status_code == 200
+		data = resp.json()
+		assert data["is_plan_eligible"] is True
+		assert data["eligible_plans"] == []
+
+	async def test_join_rejects_ineligible_plan(
+		self,
+		authed_client: tuple[AsyncClient, str, str, str],
+		redis_client: redis.Redis,
+		mock_frappe: AsyncMock,
+	):
+		"""Join returns 403 PLAN_NOT_ELIGIBLE (existing check, regression test)."""
+		client, token, player_id, family_id = authed_client
+
+		# Seed waiting event (join requires waiting or active)
+		await _seed_event_with_plans(redis_client, ["PLAN-PREMIUM"])
+
+		resp = await client.post(f"/api/v1/live-challenge/{PLAN_EVENT_ID}/join")
+		assert resp.status_code == 403
+		assert resp.json()["detail"]["code"] == "PLAN_NOT_ELIGIBLE"

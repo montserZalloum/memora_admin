@@ -96,6 +96,7 @@ class EventDetailResponse(BaseModel):
 	default_xp: int = Field(0, description="Bonus for rank 4+")
 	question_count: int = Field(0, description="Number of questions")
 	eligible_plans: list[str] = Field(default_factory=list, description="Eligible plan IDs")
+	is_plan_eligible: bool = Field(True, description="Whether requesting player's plan is eligible")
 	has_joined: bool = Field(False, description="Whether current player has joined")
 	has_submitted: bool = Field(False, description="Whether current player has submitted")
 	top_players: list[LeaderboardEntryItem] | None = Field(
