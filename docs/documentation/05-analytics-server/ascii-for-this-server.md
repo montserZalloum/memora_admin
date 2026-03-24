@@ -4,7 +4,7 @@
 ╔════════════════════════════════════════════════════════════════════════════════════╗
 ║                      DATA MOVEMENT & ANALYTICS PLATFORM                          ║
 ║                                                                                  ║
-║   4 data streams  ·  21 source tables  ·  rsync over SSH  ·  DuckDB warehouse   ║
+║   4 data streams  ·  23 source tables  ·  rsync over SSH  ·  DuckDB warehouse   ║
 ╚════════════════════════════════════════════════════════════════════════════════════╝
 
 
@@ -32,6 +32,9 @@ PRODUCTION SERVER (MariaDB / Frappe)                    ANALYTICS SERVER (DuckDB
  │ tabMemora Challenge Attempt   │ │
  │ tabMemora Challenge Detail    │ │
  │ tabMemora Live Challenge Event│ │
+ │ tabMemora Live Challenge      │ │
+ │   Participation              │ │
+ │ tabMemora Build Queue         │ │
  │ tabMemora Content Report      │ │
  │ tabMemora Archive Job         │ │
  └────────────────────────────────┘ │
@@ -578,4 +581,247 @@ STREAM                    FACTS   DIMS   TOTAL FILES   OUTPUT FORMAT
 [2] Live Sync Executor     1       6       7 per batch  Parquet + JSON
 [3] Dimension Refresh      —       6       6            Parquet
 [4] Analytics Exporter    15       6      21            Parquet + JSON
+```
+
+---
+
+## Source Data Lifecycle — Cleanup & Purge
+
+Three categories of removal: (A) scheduled age-based cleanup, (B) event-triggered
+deletion, (C) archive-pipeline purge where data is exported to the analytics server
+first, then deleted from MariaDB.
+
+---
+
+### [A] Scheduled Age-Based Cleanup
+
+```
+Hard-deleted on a Frappe cron schedule. No export occurs — data is permanently gone.
+
+DOCTYPE / TABLE                         SCHEDULE      RETENTION         BATCH    REASON
+──────────────────────────────────────  ────────────  ────────────────  ───────  ──────────────────────────────────────────
+tabMemora Voucher Redemption Log        daily 05:30   100 days          1,000    Short-lived redemption audit trail.
+                                                                                 No long-term analytics value after 100 days.
+
+tabMemora Sync Log                      daily 05:00   7 days            1,000    Operational rsync/transfer log.
+                                                                                 Stale after one week.
+
+tabMemora Build Queue                   daily 04:00   Completed: 7d     1,000    Job records only needed for short post-run
+  (status = Completed / Failed only)                  Failed:    14d             review; failed jobs kept longer for debugging.
+
+tabMemora Task Log Archive Batch        daily 04:30   14 days           500      Tracking rows become redundant once the
+  (status = Purged only)                                                         source Task Run Log is confirmed purged.
+
+tabMemora Archive Job                   daily 06:30   Purged: 30d       500      Job metadata no longer needed after data
+  (status = Purged / Failed only)                     Failed:  90d               is confirmed archived and purged.
+                                                                                 Guard: only deleted when no child batches
+                                                                                 are still active.
+
+tabMemora Live Sync Job                 daily 06:00   10 days           500      Job tracking rows only needed while
+  (status = Completed only)                                                      pipeline is active; 10 days covers any
+                                                                                 late debugging window.
+
+tabMemora Announcement (expired only)   daily 01:00   effective_end     —        Past announcements have no value after
+                                                      _date < today              their display window closes.
+
+tabMemora Voucher Batch                 daily 02:30   30 days           —        Encrypted card export file attachments
+  (encrypted_file_url attachment only)                                           purged to reclaim storage.
+                                                                                 The Batch doc itself is NOT deleted.
+```
+
+---
+
+### [B] Event-Triggered Deletion
+
+```
+Rows are deleted immediately when a business event occurs, not on a schedule.
+
+──────────────────────────────────────────────────────────────────────────────────────
+EVENT: Player Plan Change  (FR-024 "clean slate")
+──────────────────────────────────────────────────────────────────────────────────────
+
+When:   Player.plan field changes  OR  execute_plan_change() API called.
+
+Why:    A plan change moves a player to entirely different content.
+        Carrying over old learning state would corrupt progress metrics and
+        produce misleading analytics.  Wallet is also reset to 0.
+
+Tables deleted (all in a single atomic transaction):
+
+  tabMemora Player Subscription   DELETE WHERE player = {player_id}            (all rows)
+  tabMemora Structure Progress    DELETE WHERE player = {player_id}            (all rows)
+  tabMemora Memory State          DELETE WHERE player = {player_id}
+                                         AND season_seq = {current_season_seq} (current season only)
+  tabMemora Practice Log          DELETE WHERE player_id = {player_id}         (all rows)
+  tabPlayer Practice Summary      DELETE WHERE player_id = {player_id}         (all rows, derived table)
+  tabMemora Challenge Progress    DELETE WHERE player = {player_id}            (all rows)
+
+Redis also cleared for this player:
+  memora:ch:progress:{player_id}:*   ← cleared before MariaDB delete so the
+                                       dirty-flush task cannot re-create rows
+
+  Note: a snapshot of the player's state is created before deletion for audit purposes.
+
+──────────────────────────────────────────────────────────────────────────────────────
+EVENT: Season End / Unpublish
+──────────────────────────────────────────────────────────────────────────────────────
+
+When:   season.end_date < today  OR  is_published set to 0.
+        Detected by: daily cron 01:05 (season_expiration task) + on_update doc_event.
+
+Sub-event A — Voucher Card expiration  (status transition, NOT deletion)
+
+  tabMemora Voucher Card
+    Available → Expired   (void_reason = "Season Ended")
+    Allocated → Expired   (void_reason = "Season Ended")
+    Redeemed, Void        — terminal; never modified.
+
+  If all cards in a batch reach a terminal state → Batch is auto-closed.
+
+  Why:  Cards tied to an inactive season can no longer be redeemed.
+        Keeping them "Available" would cause failed redemptions and support noise.
+
+Sub-event B — Redis leaderboard & challenge hub cache wipe + MariaDB cleanup
+
+  Redis keys deleted:
+    memora:ch:progress:*             ← challenge hub in-flight progress (all players)
+    memora:lb:ch:{season_id}:*       ← challenge leaderboard keys (season-scoped)
+    memora:lbmeta:ch:{season_id}:*   ← challenge leaderboard tier metadata
+
+  MariaDB rows deleted:
+    tabMemora Challenge Progress     DELETE WHERE season = {season_id}
+
+  Pre-flush: dirty challenge progress is written back to MariaDB BEFORE the cache
+             is wiped so no completed work is lost.  MariaDB delete happens after
+             Redis is cleared so the dirty-flush task cannot re-create deleted rows.
+
+  Why:  Cache holds hot in-flight data for an active season.
+        Once a season ends no new activity is expected; stale cache wastes memory
+        and could serve incorrect data to any late reader.
+        Challenge Progress is not exported to the analytics server so keeping
+        rows in MariaDB after season end serves no purpose.
+
+──────────────────────────────────────────────────────────────────────────────────────
+EVENT: Redis session orphan cleanup  (hourly, not season-tied)
+──────────────────────────────────────────────────────────────────────────────────────
+
+  memora:gamesession:{id}   — deleted when TTL = -1 (no expiry set, i.e. orphaned)
+  Schedule: hourly @ :15
+
+  Why:  Crashed or interrupted game sessions can leave keys with no TTL.
+        Orphaned sessions block players from starting new sessions.
+```
+
+---
+
+### [C] Archive Pipeline Purge
+
+```
+Data is only deleted from MariaDB AFTER the full archive pipeline has completed:
+  Exported → Transferred → Ingested → Completed → Purged
+
+All purges are:
+  · Resumable   — purge_progress JSON tracks batch position; safe to interrupt/restart
+  · Audited     — archive_delete_audit_log records rows_deleted, batches, duration, executor
+  · Guarded     — os.path.isdir(file_path) verified before any destructive operation
+  · Rate-limited — 2-second sleep between batches to reduce replication lag
+
+──────────────────────────────────────────────────────────────────────────────────────────────
+SOURCE TABLE           PURGE MODE       TRIGGER                        DELETE STRATEGY
+─────────────────────  ───────────────  ─────────────────────────────  ────────────────────────
+tabMemora             season_scope      Season end_date passes.         ALTER TABLE DROP PARTITION
+  Memory State        (DROP PARTITION)  archive_trigger creates job     p_season_{seq}
+                                        with filter_type = "season"
+                                        post_archive_action = "Delete"  4 safety gates required before
+                                                                         DROP executes:
+                                                                          1. archive files exist on disk
+                                                                          2. season data integrity check
+                                                                          3. player access verification
+                                                                          4. downstream replica sync confirmed
+
+                                        Why: Memory State is range-partitioned by season_seq.
+                                             Dropping the partition is O(1) and avoids row-by-row
+                                             DELETE on millions of rows.  Data is already in DuckDB.
+
+──────────────────────────────────────────────────────────────────────────────────────────────
+tabMemora             player_scope      Season ends.                    Batched DELETE
+  Practice Log                          archive_trigger creates job      WHERE player_id IN (...)
+  tabPlayer                             with post_archive_action          5,000 players / batch
+  Practice Summary                      = "Delete"                       10,000 rows / sub-batch
+  (derived table)                                                         2s sleep between sub-batches
+
+                                        Why: Practice Log is partitioned by player; deleting by
+                                             player_id matches the access pattern and keeps
+                                             batch sizes predictable.  Summary table is derived
+                                             and must stay in sync.
+
+──────────────────────────────────────────────────────────────────────────────────────────────
+tabMemora             date_window       Logs older than 14 days.        Batched DELETE
+  Task Run Log                          archive_task_log.py creates       WHERE completed_at IN window
+                                        archive job; purge_task_log.py    AND status IN (Success, Failed,
+                                        handles the actual DELETE.        Partial)
+                                                                          10,000 rows / batch
+                                                                          lock_wait_timeout = 5s
+
+                                        Why: Task logs are operational; 14 days covers any
+                                             meaningful post-mortem window.  Archived copy in
+                                             DuckDB is the long-term record.
+
+──────────────────────────────────────────────────────────────────────────────────────────────
+tabMemora             date_window       Season date range.              Batched DELETE
+  Interaction Log                       archive_trigger creates job      WHERE timestamp IN date_from…date_to
+                                        with post_archive_action          10,000 rows / batch
+                                        = "Delete"
+
+                                        Why: Interaction logs grow unboundedly with player
+                                             activity.  After archival to DuckDB they no longer
+                                             need to live in the transactional database.
+──────────────────────────────────────────────────────────────────────────────────────────────
+```
+
+---
+
+### Cleanup Schedule Summary
+
+```
+TIME        TASK                              ENTRY POINT
+──────────  ────────────────────────────────  ──────────────────────────────────────────────
+01:00       Announcement cleanup              memora_admin.tasks.announcement_cleanup
+            (delete expired announcements)      .cleanup_expired_announcements
+
+01:05       Season card expiration            memora_admin.tasks.season_expiration
+            (Available/Allocated → Expired)     .expire_season_cards
+
+01:10       Challenge hub reset              memora_admin.events.access_sync
+            (expired season → unpublish)       .check_expired_seasons_challenge_reset
+
+02:30       Voucher export file cleanup       memora_admin.tasks.voucher_cleanup
+            (delete encrypted file attachments) .cleanup_voucher_export_files
+
+03:00       Leaderboard cleanup               memora_admin.tasks.leaderboard_cleanup
+            (daily: 30d, weekly: 90d)           .cleanup_leaderboard_data
+
+03:30       Task log purge                    memora_admin.tasks.purge_task_log
+            (delete archived task run rows)     .purge_task_log
+
+04:00       Build queue cleanup               memora_admin.tasks.build_cleanup
+            (Completed: 7d, Failed: 14d)        .cleanup_build_queue
+
+04:30       Task log batch cleanup            memora_admin.tasks.task_log_archive_batch_cleanup
+            (delete Purged batch records)       .cleanup_task_log_archive_batches
+
+05:00       Sync log cleanup                  memora_admin.tasks.sync_log_cleanup
+            (7-day retention)                   .cleanup_sync_logs
+
+05:30       Voucher redemption log cleanup    memora_admin.tasks.voucher_log_cleanup
+            (100-day retention)                 .cleanup_voucher_redemption_logs
+
+06:00       Live sync job cleanup            memora_admin.tasks.live_sync_job_cleanup
+            (Completed: 10d retention)         .cleanup_live_sync_jobs
+
+06:30       Archive job cleanup               memora_admin.tasks.archive_job_cleanup
+            (Purged: 30d, Failed: 90d)          .cleanup_archive_jobs
+
+*/1h:15     Session orphan cleanup            memora_admin.tasks.session_cleanup
+            (Redis TTL=-1 orphaned sessions)    .cleanup_orphaned_sessions
 ```

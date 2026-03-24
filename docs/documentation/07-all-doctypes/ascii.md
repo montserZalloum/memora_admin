@@ -2,9 +2,9 @@
 
 Generated from `memora_admin/memora_admin/doctype/*/*.json`.
 
-- Top-level DocTypes: 42
-- Child Table DocTypes: 14
-- Declared fields: 608
+- Top-level DocTypes: 46
+- Child Table DocTypes: 15
+- Declared fields: 698
 
 ```text
 Memora Admin DocTypes
@@ -237,11 +237,15 @@ Memora Admin DocTypes
 |           |-- title_en [Data]
 |           |-- title_ar [Data]
 |           `-- icon [Attach Image]
-|-- Memora Live Challenge Event [DocType, 39 fields]
+|-- Memora Live Challenge Event [DocType, 43 fields]
 |   |-- event_name [Data]
 |   |-- status [Select]
 |   |-- column_break_basic [Column Break]
 |   |-- description [Text Editor]
+|   |-- section_break_mode [Section Break]
+|   |-- mode [Select]
+|   |-- starting_hearts [Int]
+|   |-- result_window_duration [Int]
 |   |-- section_break_schedule [Section Break]
 |   |-- scheduled_start [Datetime]
 |   |-- waiting_room_duration [Int]
@@ -257,9 +261,9 @@ Memora Admin DocTypes
 |   |-- question_time_limit [Int]
 |   |-- section_break_settings [Section Break]
 |   |-- is_paid [Check]
-|   |-- show_correct_answers [Check]
+|   |-- price [Currency]
+|   |-- currency [Link] -> Currency
 |   |-- column_break_settings [Column Break]
-|   |-- show_student_rank [Check]
 |   |-- section_break_xp [Section Break]
 |   |-- participation_xp [Int]
 |   |-- first_place_xp [Int]
@@ -287,7 +291,7 @@ Memora Admin DocTypes
 |   |-- submitted_count [Int]
 |   |-- column_break_stats [Column Break]
 |   `-- leaderboard_json [JSON]
-|-- Memora Live Challenge Participation [DocType, 12 fields]
+|-- Memora Live Challenge Participation [DocType, 18 fields]
 |   |-- event [Link] -> Memora Live Challenge Event
 |   |-- player [Link] -> Memora Player Profile
 |   |-- column_break_main [Column Break]
@@ -299,7 +303,53 @@ Memora Admin DocTypes
 |   |-- column_break_results [Column Break]
 |   |-- xp_awarded [Int]
 |   |-- section_break_detail [Section Break]
-|   `-- answers_json [JSON]
+|   |-- answers_json [JSON]
+|   |-- section_break_last_stand [Section Break]
+|   |-- final_hearts [Int]
+|   |-- is_eliminated [Check]
+|   |-- column_break_last_stand [Column Break]
+|   |-- eliminated_at_question [Int]
+|   `-- avg_response_time_ms [Int]
+|-- Memora Live Event Access [DocType, 15 fields]
+|   |-- section_main [Section Break]
+|   |-- player [Link] -> Memora Player Profile
+|   |-- event [Link] -> Memora Live Challenge Event
+|   |-- column_break_main [Column Break]
+|   |-- status [Select]
+|   |-- access_type [Select]
+|   |-- section_source [Section Break]
+|   |-- purchase_ref [Link] -> Memora Live Event Purchase
+|   |-- voucher_ref [Link] -> Memora Voucher Card
+|   |-- column_break_source [Column Break]
+|   |-- granted_by [Link] -> User
+|   |-- section_revocation [Section Break]
+|   |-- revoked_at [Datetime]
+|   |-- column_break_revocation [Column Break]
+|   `-- revoked_by [Link] -> User
+|-- Memora Live Event Purchase [DocType, 23 fields]
+|   |-- section_main [Section Break]
+|   |-- player [Link] -> Memora Player Profile
+|   |-- event [Link] -> Memora Live Challenge Event
+|   |-- column_break_main [Column Break]
+|   |-- plan_snapshot [Link] -> Memora Academic Plan
+|   |-- season [Link] -> Memora Season
+|   |-- status [Select]
+|   |-- expires_at [Datetime]
+|   |-- section_payment [Section Break]
+|   |-- amount [Currency]
+|   |-- currency [Link] -> Currency
+|   |-- column_break_payment [Column Break]
+|   |-- erpnext_invoice [Link] -> Sales Invoice
+|   |-- section_gateway [Section Break]
+|   |-- payment_gateway [Data]
+|   |-- column_break_gateway [Column Break]
+|   |-- payment_reference [Data]
+|   |-- section_timestamps [Section Break]
+|   |-- paid_at [Datetime]
+|   |-- column_break_timestamps [Column Break]
+|   |-- refunded_at [Datetime]
+|   |-- section_references [Section Break]
+|   `-- event_access_ref [Link] -> Memora Live Event Access
 |-- Memora Live Sync Job [DocType, 27 fields]
 |   |-- sync_type [Data]
 |   |-- schema_version [Data]
@@ -348,6 +398,45 @@ Memora Admin DocTypes
 |   |-- ref_doctype [Link] -> DocType
 |   |-- ref_name [Dynamic Link] -> ref_doctype
 |   `-- action [Select]
+|-- Memora Plan Premium [DocType, 15 fields]
+|   |-- player [Link] -> Memora Player Profile
+|   |-- plan [Link] -> Memora Academic Plan
+|   |-- column_break_basic [Column Break]
+|   |-- season [Link] -> Memora Season
+|   |-- status [Select]
+|   |-- section_break_source [Section Break]
+|   |-- source_type [Select]
+|   |-- column_break_source [Column Break]
+|   |-- purchase_ref [Link] -> Memora Plan Premium Purchase
+|   |-- voucher_ref [Link] -> Memora Voucher Card
+|   |-- granted_by [Link] -> User
+|   |-- section_break_revocation [Section Break]
+|   |-- revoked_at [Datetime]
+|   |-- column_break_revocation [Column Break]
+|   `-- revoked_by [Link] -> User
+|-- Memora Plan Premium Purchase [DocType, 22 fields]
+|   |-- section_main [Section Break]
+|   |-- player [Link] -> Memora Player Profile
+|   |-- plan [Link] -> Memora Academic Plan
+|   |-- column_break_main [Column Break]
+|   |-- season [Link] -> Memora Season
+|   |-- status [Select]
+|   |-- section_payment [Section Break]
+|   |-- amount [Currency]
+|   |-- currency [Link] -> Currency
+|   |-- column_break_payment [Column Break]
+|   |-- erpnext_item_code [Link] -> Item
+|   |-- erpnext_invoice [Link] -> Sales Invoice
+|   |-- section_gateway [Section Break]
+|   |-- payment_gateway [Data]
+|   |-- column_break_gateway [Column Break]
+|   |-- payment_reference [Data]
+|   |-- section_timestamps [Section Break]
+|   |-- paid_at [Datetime]
+|   |-- column_break_timestamps [Column Break]
+|   |-- refunded_at [Datetime]
+|   |-- section_references [Section Break]
+|   `-- premium_ref [Link] -> Memora Plan Premium
 |-- Memora Player Plan History [DocType, 21 fields]
 |   |-- player [Link] -> Memora Player Profile
 |   |-- trigger_reason [Select]
@@ -608,14 +697,20 @@ Memora Admin DocTypes
 |   |-- notes [Small Text]
 |   |-- section_return [Section Break]
 |   `-- return_reason [Small Text]
-|-- Memora Voucher Batch [DocType, 22 fields]
+|-- Memora Voucher Batch [DocType, 26 fields]
 |   |-- batch_name [Data]
 |   |-- batch_purpose [Select]
+|   |-- grant_type [Select]
 |   |-- status [Select]
 |   |-- column_break_1 [Column Break]
 |   |-- quantity [Int]
 |   |-- pin_length [Select]
 |   |-- face_value [Currency]
+|   |-- target_event [Link] -> Memora Live Challenge Event
+|   |-- section_eligible_plans [Section Break]
+|   |-- eligible_plans [Table] -> Memora Voucher Batch Eligible Plan
+|   |   `-- Memora Voucher Batch Eligible Plan [Child DocType, 1 fields]
+|   |       `-- plan [Link] -> Memora Academic Plan
 |   |-- section_grants [Section Break]
 |   |-- batch_grants [Table] -> Memora Voucher Batch Grant
 |   |   `-- Memora Voucher Batch Grant [Child DocType, 3 fields]
