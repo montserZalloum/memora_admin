@@ -456,6 +456,7 @@ async def player_register(
 		grade=body.grade,
 		plan=body.plan,
 		major=body.major,
+		avatar=body.avatar,
 		ip_address=client_ip,
 	)
 
@@ -536,6 +537,7 @@ async def player_register_verify(
 				"season": season,
 				"display_name": reg_data["display_name"],
 				"gender": reg_data["gender"],
+				"avatar": reg_data.get("avatar") or "",
 			},
 		)
 	except FrappeAPIError as e:

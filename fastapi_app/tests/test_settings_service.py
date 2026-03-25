@@ -91,6 +91,41 @@ class TestCacheMiss:
 		assert await redis_client.exists(SETTINGS_SENTINEL_KEY) == 0
 
 
+class TestReviewSessionSize:
+	"""review_session_size round-trips through Redis cache."""
+
+	async def test_tc_set_04_review_session_size_cached(self, settings_svc, redis_client, mock_frappe):
+		"""TC-SET-04: review_session_size is included in cached settings."""
+		settings = GamificationSettings(review_session_size=15)
+		await redis_client.set(SETTINGS_CACHE_KEY, settings.model_dump_json())
+
+		result = await settings_svc.get_gamification_settings()
+		assert result.review_session_size == 15
+
+	async def test_tc_set_05_review_session_size_from_frappe(self, settings_svc, redis_client, mock_frappe):
+		"""TC-SET-05: review_session_size hydrated from Frappe on cache miss."""
+		mock_frappe.call.return_value = {
+			"base_lesson_xp": 100,
+			"replay_xp": 25,
+			"review_session_size": 20,
+		}
+
+		result = await settings_svc.get_gamification_settings()
+		assert result.review_session_size == 20
+
+		# Verify it was persisted to Redis
+		cached = await redis_client.get(SETTINGS_CACHE_KEY)
+		cached_obj = GamificationSettings.model_validate_json(cached)
+		assert cached_obj.review_session_size == 20
+
+	async def test_tc_set_06_review_session_size_defaults_to_10(self, settings_svc, redis_client, mock_frappe):
+		"""TC-SET-06: review_session_size defaults to 10 when not provided."""
+		mock_frappe.call.return_value = {"base_lesson_xp": 100}
+
+		result = await settings_svc.get_gamification_settings()
+		assert result.review_session_size == 10
+
+
 class TestFrappeUnavailable:
 	"""Frappe unavailable returns defaults."""
 

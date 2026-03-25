@@ -1473,7 +1473,7 @@ def ch_progress_key(player_id: str, subject_id: str) -> str:
 def ch_settings_key() -> str:
 	"""Challenge settings cache key.
 
-	Type: STRING (JSON: xp_per_question, pass_threshold, lb_top_count, lb_refresh_interval)
+	Type: STRING (JSON: xp_per_question, pass_threshold)
 	Producers: ChallengeService._get_challenge_settings() on cache miss
 	Consumers: ChallengeService._get_challenge_settings()
 	TTL: 300s (CH_SETTINGS_KEY_TTL)

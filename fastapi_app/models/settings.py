@@ -19,3 +19,4 @@ class GamificationSettings(BaseModel):
 	default_max_hearts: int = 5
 	xp_per_heart: int = 0
 	session_timeout_days: int = 30
+	review_session_size: int = 10

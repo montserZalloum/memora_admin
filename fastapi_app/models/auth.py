@@ -105,6 +105,7 @@ class RegisterRequest(BaseModel):
 	grade: str
 	plan: str
 	major: str | None = None
+	avatar: str | None = None
 
 
 class RegisterResponse(BaseModel):

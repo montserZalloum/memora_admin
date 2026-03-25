@@ -1002,7 +1002,7 @@ class ChallengeService:
 		logger.info("ch_fsrs_pushed", player_id=player_id, pushed=pushed, total=len(questions))
 
 	async def _get_challenge_settings(self) -> dict:
-		"""Get challenge settings (xp_per_question, pass_threshold, etc.).
+		"""Get challenge settings (xp_per_question, pass_threshold).
 
 		Uses Redis cache first, then Frappe on miss.
 		Falls back to defaults if unavailable.
@@ -1010,8 +1010,6 @@ class ChallengeService:
 		defaults = {
 			"xp_per_question": 5,
 			"pass_threshold": 50,
-			"lb_top_count": 20,
-			"lb_refresh_interval": 300,
 		}
 
 		try:
@@ -1021,8 +1019,6 @@ class ChallengeService:
 				return {
 					"xp_per_question": payload.get("xp_per_question", 5),
 					"pass_threshold": payload.get("pass_threshold", 50),
-					"lb_top_count": payload.get("lb_top_count", 20),
-					"lb_refresh_interval": payload.get("lb_refresh_interval", 300),
 				}
 		except Exception as e:
 			logger.warning("ch_settings_cache_read_failed", error=str(e))
@@ -1038,8 +1034,6 @@ class ChallengeService:
 			settings = {
 				"xp_per_question": result.get("xp_per_question", 5),
 				"pass_threshold": result.get("pass_threshold", 50),
-				"lb_top_count": result.get("lb_top_count", 20),
-				"lb_refresh_interval": result.get("lb_refresh_interval", 300),
 			}
 			await self.redis.set(ch_settings_key(), json.dumps(settings), ex=CH_SETTINGS_KEY_TTL)
 			return settings

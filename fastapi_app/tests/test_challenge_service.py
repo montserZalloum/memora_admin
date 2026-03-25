@@ -822,7 +822,7 @@ class TestFsrsPush:
 					{"item_id": "q3", "lesson": "LES-002", "stage_id": "STG-003", "correct_choice": 4},
 				]
 			if "get_challenge_settings" in method:
-				return {"xp_per_question": 5, "pass_threshold": 50, "lb_top_count": 20, "lb_refresh_interval": 300}
+				return {"xp_per_question": 5, "pass_threshold": 50}
 			if "get_player_challenge_progress" in method:
 				return []
 			return None

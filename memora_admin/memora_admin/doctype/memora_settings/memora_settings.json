@@ -25,22 +25,9 @@
   "session_timeout_days",
   "fsrs_section",
   "review_session_size",
-  "practice_section",
-  "practice_session_size",
-  "column_break_practice",
-  "practice_session_ttl",
   "challenge_section",
   "challenge_xp_per_question",
-  "challenge_pass_threshold",
-  "column_break_challenge",
-  "challenge_lb_top_count",
-  "challenge_lb_refresh_interval",
-  "analytics_section",
-  "analytics_ssh_host",
-  "analytics_ssh_user",
-  "column_break_analytics",
-  "analytics_ssh_key_path",
-  "analytics_remote_path"
+  "challenge_pass_threshold"
  ],
  "fields": [
   {
@@ -152,29 +139,6 @@
    "label": "Review Session Size"
   },
   {
-   "fieldname": "practice_section",
-   "fieldtype": "Section Break",
-   "label": "Practice Arena"
-  },
-  {
-   "default": "20",
-   "description": "Number of questions per practice batch",
-   "fieldname": "practice_session_size",
-   "fieldtype": "Int",
-   "label": "Practice Session Size"
-  },
-  {
-   "fieldname": "column_break_practice",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "3600",
-   "description": "Practice session timeout in seconds",
-   "fieldname": "practice_session_ttl",
-   "fieldtype": "Int",
-   "label": "Practice Session TTL"
-  },
-  {
    "fieldname": "challenge_section",
    "fieldtype": "Section Break",
    "label": "Challenge Hub"
@@ -192,60 +156,6 @@
    "fieldname": "challenge_pass_threshold",
    "fieldtype": "Int",
    "label": "Challenge Pass Threshold (%)"
-  },
-  {
-   "fieldname": "column_break_challenge",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "20",
-   "description": "Number of top players shown on leaderboard",
-   "fieldname": "challenge_lb_top_count",
-   "fieldtype": "Int",
-   "label": "Challenge Leaderboard Top N"
-  },
-  {
-   "default": "300",
-   "description": "Leaderboard refresh interval in seconds",
-   "fieldname": "challenge_lb_refresh_interval",
-   "fieldtype": "Int",
-   "label": "Challenge LB Refresh Interval"
-  },
-  {
-   "fieldname": "analytics_section",
-   "fieldtype": "Section Break",
-   "label": "Analytics Server"
-  },
-  {
-   "description": "Hostname or IP of the analytics server (display only — executor reads from env vars)",
-   "fieldname": "analytics_ssh_host",
-   "fieldtype": "Data",
-   "label": "Analytics SSH Host",
-   "read_only": 1
-  },
-  {
-   "fieldname": "analytics_ssh_user",
-   "fieldtype": "Data",
-   "label": "Analytics SSH User",
-   "read_only": 1
-  },
-  {
-   "fieldname": "column_break_analytics",
-   "fieldtype": "Column Break"
-  },
-  {
-   "description": "Path to SSH private key on executor server",
-   "fieldname": "analytics_ssh_key_path",
-   "fieldtype": "Data",
-   "label": "Analytics SSH Key Path",
-   "read_only": 1
-  },
-  {
-   "description": "Base path on analytics server for archive/live data",
-   "fieldname": "analytics_remote_path",
-   "fieldtype": "Data",
-   "label": "Analytics Remote Path",
-   "read_only": 1
   }
  ],
  "grid_page_length": 50,

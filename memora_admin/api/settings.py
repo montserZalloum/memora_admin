@@ -30,4 +30,7 @@ def get_gamification_settings() -> dict:
 		"session_timeout_days": settings.session_timeout_days
 		if settings.session_timeout_days is not None
 		else 30,
+		"review_session_size": settings.review_session_size
+		if settings.review_session_size is not None
+		else 10,
 	}

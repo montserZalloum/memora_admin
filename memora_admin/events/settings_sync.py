@@ -32,6 +32,9 @@ def on_settings_updated(doc, method):
 				"session_timeout_days": doc.session_timeout_days
 				if doc.session_timeout_days is not None
 				else 30,
+				"review_session_size": doc.review_session_size
+				if doc.review_session_size is not None
+				else 10,
 			}
 		)
 

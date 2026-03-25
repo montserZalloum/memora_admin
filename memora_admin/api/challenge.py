@@ -90,7 +90,7 @@ def get_challenge_settings() -> dict:
 
 	Called by ChallengeService._get_challenge_settings() on cache miss.
 
-	Returns dict with xp_per_question, pass_threshold, lb_top_count, lb_refresh_interval.
+	Returns dict with xp_per_question, pass_threshold.
 	"""
 	settings = frappe.get_single("Memora Settings")
 
@@ -101,12 +101,6 @@ def get_challenge_settings() -> dict:
 		"pass_threshold": settings.challenge_pass_threshold
 		if settings.challenge_pass_threshold is not None
 		else 50,
-		"lb_top_count": settings.challenge_lb_top_count
-		if settings.challenge_lb_top_count is not None
-		else 20,
-		"lb_refresh_interval": settings.challenge_lb_refresh_interval
-		if settings.challenge_lb_refresh_interval is not None
-		else 300,
 	}
 
 

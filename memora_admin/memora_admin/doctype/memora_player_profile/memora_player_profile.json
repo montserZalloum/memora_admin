@@ -47,6 +47,7 @@
    "fieldtype": "Link",
    "label": "Current Plan",
    "options": "Memora Academic Plan",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -54,6 +55,7 @@
    "fieldname": "avatar",
    "fieldtype": "Data",
    "label": "Avatar",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -67,6 +69,7 @@
    "fieldtype": "Link",
    "label": "Grade",
    "options": "Memora Grade",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -74,6 +77,7 @@
    "fieldtype": "Link",
    "label": "Major",
    "options": "Memora Major",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -81,6 +85,7 @@
    "fieldtype": "Link",
    "label": "Season",
    "options": "Memora Season",
+   "read_only": 1,
    "reqd": 1
   },
   {

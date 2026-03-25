@@ -154,6 +154,7 @@ class OTPService:
 		grade: str,
 		plan: str,
 		major: str | None,
+		avatar: str | None,
 		ip_address: str,
 	) -> str:
 		"""Create a pending registration with OTP verification.
@@ -199,6 +200,7 @@ class OTPService:
 			"grade": grade,
 			"plan": plan,
 			"major": major,
+			"avatar": avatar,
 			"otp": otp,
 			"attempts": 0,
 		}

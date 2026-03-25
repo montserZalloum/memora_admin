@@ -138,6 +138,9 @@ async def cleanup_keys(redis_client: redis.Redis, test_prefix: str) -> AsyncGene
 	from fastapi_app.services.progress import _progress_exists_cache
 
 	_progress_exists_cache.clear()
+	import fastapi_app.services.settings as settings_module
+
+	settings_module._local_settings_cache = None
 
 	yield
 
@@ -575,6 +578,7 @@ async def seed_settings(redis: redis.Redis) -> None:
 		"max_streak_multiplier_percent": 50,
 		"session_timeout_days": 30,
 		"max_devices_per_player": 3,
+		"review_session_size": 10,
 	}
 
 	key = gamification_settings_key()
