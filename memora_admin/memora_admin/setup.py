@@ -6,6 +6,8 @@ after_migrate ensures database schema extensions (UUID polyfills, BINARY column
 overrides, RANGE partitioning, composite indexes) survive Frappe migrations.
 """
 
+import os
+
 import frappe
 
 
@@ -14,6 +16,23 @@ def after_install():
 	create_task_admin_role()
 	_setup_voucher_schema()
 	_setup_nginx_websocket_proxies()
+	_remove_backup_crontab()
+
+
+def _remove_backup_crontab():
+	"""Remove the automatic 6-hour backup crontab entry for this bench."""
+	from crontab import CronTab
+
+	bench_dir = os.path.abspath(frappe.utils.get_bench_path())
+	cron = CronTab(user=True)
+	removed = 0
+	for job in cron.find_comment("bench auto backups set for every 6 hours"):
+		if bench_dir in str(job):
+			cron.remove(job)
+			removed += 1
+	if removed:
+		cron.write()
+		print(f"Removed {removed} automatic backup crontab entry(ies) for {bench_dir}")
 
 
 def create_task_admin_role():
