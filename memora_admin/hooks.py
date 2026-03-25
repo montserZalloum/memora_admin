@@ -4,6 +4,11 @@ app_publisher = "corex"
 app_description = "Memora"
 app_email = "dev@corex.com"
 app_license = "mit"
+# *********IMPORTANT*************************
+# For Backup to google drive
+# add these credentials to google drive OAuth credentials
+# Authorised JavaScript origins: https://x.conanacademy.com
+# Authorised redirect URIs: https://x.conanacademy.com/api/method/frappe.integrations.google_oauth.callback
 
 # Apps
 # ------------------
