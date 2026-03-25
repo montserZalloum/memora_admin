@@ -6,7 +6,32 @@ from frappe.model.document import Document
 
 
 class MemoraUnit(Document):
-	pass
+	def validate(self):
+		if not self.is_new() and self.has_value_changed("track"):
+			self._cascade_track_change()
+
+	def _cascade_track_change(self):
+		"""When a unit moves to a different track, resolve subject from the new track and cascade."""
+		new_track = self.track
+		new_subject = frappe.db.get_value("Memora Track", new_track, "subject")
+
+		if new_subject:
+			self.subject = new_subject
+
+		unit_name = self.name
+
+		frappe.db.sql(
+			"""UPDATE `tabMemora Topic`
+			   SET track = %s, subject = %s
+			   WHERE unit = %s AND (track != %s OR subject != %s)""",
+			(new_track, new_subject, unit_name, new_track, new_subject),
+		)
+		frappe.db.sql(
+			"""UPDATE `tabMemora Lesson`
+			   SET track = %s, subject = %s
+			   WHERE unit = %s AND (track != %s OR subject != %s)""",
+			(new_track, new_subject, unit_name, new_track, new_subject),
+		)
 
 
 @frappe.whitelist()
