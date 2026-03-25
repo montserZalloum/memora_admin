@@ -30,13 +30,11 @@ class TestPlansEndpoints:
 					"id": "SUB-MATH",
 					"title": "Mathematics",
 					"total_lessons": 100,
-					"hierarchy_url": "/api/v1/hierarchy/SUB-MATH",
 				},
 				{
 					"id": "SUB-SCIENCE",
 					"title": "Science",
 					"total_lessons": 80,
-					"hierarchy_url": "/api/v1/hierarchy/SUB-SCIENCE",
 				},
 			],
 		}

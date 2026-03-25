@@ -18,7 +18,6 @@ class PlanSubject(BaseModel):
 	total_tracks: int = Field(0, description="Total track count")
 	is_premium: bool = Field(False, description="Requires subscription")
 	is_free_preview: bool = Field(False, description="Has free preview content")
-	hierarchy_url: str = Field(..., description="URL to hierarchy JSON")
 
 
 class PlanManifest(BaseModel):

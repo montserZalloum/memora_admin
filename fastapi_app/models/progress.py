@@ -359,7 +359,6 @@ class LessonCompletionStatus(BaseModel):
 	"""
 
 	lesson_id: str
-	bit_index: int  # Position in bitmap (useful for debugging/verification)
 	completed: bool
 
 

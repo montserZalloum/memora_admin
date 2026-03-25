@@ -66,7 +66,7 @@ class TestChallengeSubjectSummaries:
 				generated_at=datetime.now(),
 				plan_id="PLAN-TEST",
 				title="Test Plan",
-				subjects=[PlanSubject(id=subject_id, title="Challenge Subject", hierarchy_url="")],
+				subjects=[PlanSubject(id=subject_id, title="Challenge Subject")],
 			)
 		)
 		return mock_plan_svc
@@ -494,7 +494,7 @@ class TestEmptyTopicAutoStampChain:
 				generated_at=datetime.now(),
 				plan_id="PLAN-TEST",
 				title="Test Plan",
-				subjects=[PlanSubject(id=subject_id, title="Test Subject", hierarchy_url="")],
+				subjects=[PlanSubject(id=subject_id, title="Test Subject")],
 			)
 		)
 		return mock_plan_svc

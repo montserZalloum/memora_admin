@@ -79,7 +79,7 @@ def _prefetch_plan_subject_tree(subject_id: str) -> PlanSubjectTree:
 	all_lessons = frappe.get_all(
 		"Memora Lesson",
 		filters={"subject": subject_id, "is_published": 1},
-		fields=["name", "topic", "lesson_title", "bit_index", "base_xp", "max_hearts", "is_reviewable"],
+		fields=["name", "topic", "lesson_title", "base_xp", "max_hearts", "is_reviewable"],
 		order_by="name asc",
 	)
 	lessons_by_topic = defaultdict(list)
@@ -291,7 +291,6 @@ def _generate_manifest(
 				"total_tracks": stats["total_tracks"],
 				"is_premium": ps_meta.get("is_premium", True),
 				"is_free_preview": stats["is_free_preview"],
-				"hierarchy_url": f"/files/cdn/plans/{plan_doc.name}/subjects/{subject_id}/_h.json?v={version}",
 			}
 		)
 
@@ -475,7 +474,6 @@ def _generate_hierarchy(
 					"sort_order": unit["sort_order"] or 0,
 					"is_linear": bool(unit.get("is_linear")),
 					"is_free": unit_is_free,
-					"content_url": f"/files/cdn/plans/{plan_id}/subjects/{subject_doc.name}/units/{unit['name']}_c.json?v={version}",
 				}
 			)
 
@@ -538,8 +536,6 @@ def _generate_unit_content_from_tree(
 			{
 				"id": lesson["name"],
 				"title": lesson["lesson_title"],
-				"bit_index": lesson.get("bit_index") or 0,
-				"content_url": f"/files/cdn/lessons/{lesson['name']}.json?v={version}",
 			}
 			for lesson in lessons
 		]
@@ -595,7 +591,6 @@ def _generate_lesson_json_from_tree(lesson: dict, tree: PlanSubjectTree) -> dict
 		"title": lesson["lesson_title"],
 		"base_xp": lesson.get("base_xp") or 10,
 		"max_hearts": lesson.get("max_hearts") or 3,
-		"bit_index": lesson.get("bit_index") or 0,
 		"is_reviewable": bool(lesson.get("is_reviewable")),
 		"stages": stages,
 	}
@@ -665,7 +660,6 @@ def _generate_lesson_json(lesson_name: str) -> dict | None:
 		"title": lesson_doc.lesson_title,
 		"base_xp": lesson_doc.base_xp or 10,
 		"max_hearts": lesson_doc.max_hearts or 3,
-		"bit_index": lesson_doc.bit_index or 0,
 		"is_reviewable": bool(lesson_doc.is_reviewable),
 		"stages": stages,
 	}
@@ -710,7 +704,7 @@ def _generate_unit_content(unit_id: str, overrides: dict) -> dict:
 		lessons = frappe.get_all(
 			"Memora Lesson",
 			filters={"topic": topic["name"], "is_published": 1},
-			fields=["name", "lesson_title", "bit_index"],
+			fields=["name", "lesson_title"],
 			order_by="name asc",
 		)
 
@@ -718,8 +712,6 @@ def _generate_unit_content(unit_id: str, overrides: dict) -> dict:
 			{
 				"id": lesson["name"],
 				"title": lesson["lesson_title"],
-				"bit_index": lesson.get("bit_index") or 0,
-				"content_url": f"/files/cdn/lessons/{lesson['name']}.json?v={version}",
 			}
 			for lesson in lessons
 		]

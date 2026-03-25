@@ -734,7 +734,7 @@ async def get_topic_lessons(
 	"""
 	Get completion status for all lessons in a topic.
 
-	Returns lesson_id, bit_index, and completed boolean for each lesson.
+	Returns lesson_id and completed boolean for each lesson.
 	Uses pipeline GETBIT for <5ms response regardless of lesson count.
 
 	Performance:
@@ -801,7 +801,6 @@ async def get_topic_lessons(
 			lessons_status.append(
 				LessonCompletionStatus(
 					lesson_id=lesson.lesson_id,
-					bit_index=lesson.bit_index,
 					completed=completed,
 				)
 			)

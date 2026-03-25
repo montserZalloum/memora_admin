@@ -31,7 +31,6 @@ async def get_plan_manifest(
 	- Subject titles and images
 	- total_lessons, total_tracks counts
 	- is_free_preview flag
-	- hierarchy_url for each subject
 
 	Raises:
 		404: Plan not found
