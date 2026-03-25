@@ -1,4 +1,6 @@
 Method,Name,Error,Occurrences
-GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":""SUBJECT_NOT_FOUND""}')",600
-POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""No active lesson session""}}')",169
-POST,/api/v1/sessions/end,"CatchResponseError('403: {""detail"":{""code"":""NO_ACTIVE_SESSION"",""message"":""Session already ended""}}')",1
+POST,/api/v1/practice/start,"CatchResponseError('400: {""detail"":""Unknown subject_id: LOAD-SCI-01""}')",2
+POST,/api/v1/practice/start,"CatchResponseError('400: {""detail"":""Unknown subject_id: LOAD-MATH-01""}')",6
+POST,/api/v1/practice/start,"CatchResponseError('400: {""detail"":""Unknown subject_id: LOAD-SCI-02""}')",6
+POST,/api/v1/practice/start,"CatchResponseError('400: {""detail"":""Unknown subject_id: LOAD-MATH-02""}')",8
+POST,/api/v1/practice/start,"CatchResponseError('400: {""detail"":""Unknown subject_id: LOAD-ARAB-01""}')",3

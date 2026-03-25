@@ -87,16 +87,11 @@
   Path: /api/v1/reviews/{subject}/submit
   Description: Submit reviewed items batch
 
-  Practice Arena (4)
+  Practice Arena (3)
 
   ┌───────┬──────────────────────────┬────────────┐
   │ Metho │           Path           │ Descriptio │
   │   d   │                          │     n      │
-  ├───────┼──────────────────────────┼────────────┤
-  │       │                          │ Browse     │
-  │ GET   │ /api/v1/practice/hierarc │ content    │
-  │       │ hy                       │ with item  │
-  │       │                          │ counts     │
   ├───────┼──────────────────────────┼────────────┤
   │       │                          │ Start      │
   │ POST  │ /api/v1/practice/start   │ practice   │
