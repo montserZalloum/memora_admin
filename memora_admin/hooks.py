@@ -409,6 +409,13 @@ scheduler_events = {
 
 # before_tests = "memora_admin.install.before_tests"
 
+standard_queries = {
+	"Memora Subject": "memora_admin.memora_admin.doctype.memora_subject.memora_subject.subject_query",
+	"Memora Track": "memora_admin.memora_admin.doctype.memora_track.memora_track.track_query",
+	"Memora Unit": "memora_admin.memora_admin.doctype.memora_unit.memora_unit.unit_query",
+	"Memora Topic": "memora_admin.memora_admin.doctype.memora_topic.memora_topic.topic_query",
+}
+
 # Overriding Methods
 # ------------------------------
 #
