@@ -77,8 +77,7 @@
    "fieldtype": "Link",
    "label": "Major",
    "options": "Memora Major",
-   "read_only": 1,
-   "reqd": 1
+   "read_only": 1
   },
   {
    "fieldname": "season",

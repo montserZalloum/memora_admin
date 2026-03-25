@@ -35,11 +35,11 @@ SUBJECTS = [
 
 # Test players created by setup_players.py
 PLAYER_IDS = [
-	"PLAYER-00324",
-	"PLAYER-00325",
-	"PLAYER-00326",
-	"PLAYER-00327",
-	"PLAYER-00328",
+	"PLAYER-02948",
+	"PLAYER-02949",
+	"PLAYER-02950",
+	"PLAYER-02951",
+	"PLAYER-02952",
 ]
 
 # Structure: 10 tracks x 10 units x 10 topics x 50 lessons = 50,000

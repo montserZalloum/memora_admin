@@ -515,15 +515,6 @@ async def player_register_verify(
 				major = p.get("major")
 				break
 
-		# If plan has no major, use first major of the selected grade
-		if not major:
-			grade_name = reg_data["grade"]
-			grades = options.get("grades", [])
-			for g in grades:
-				if g["name"] == grade_name and g.get("majors"):
-					major = g["majors"][0]["name"]
-					break
-
 	# Create player via Frappe API
 	try:
 		profile = await frappe_client.call(

@@ -14,8 +14,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import frappe
 
 SITE = "x.conanacademy.com"
-SEASON = "SEAS-00635"
-PLAN = "PLAN-00572"
+SEASON = "SEAS-00648"
+PLAN = "PLAN-00926"
 GRADE = "GRD-00025"
 MAJOR = "MJR-00026"
 PASSWORD = "LoadTest2026!"
@@ -24,11 +24,7 @@ AVATAR = "pre"
 MOBILES = [f"078000000{i}" for i in range(1, 6)]
 
 SUBJECTS = [
-	"SUBJ-00704",
-	"SUBJ-00705",
-	"SUBJ-00706",
-	"SUBJ-00707",
-	"SUBJ-00708",
+	"SUBJ-00713",
 ]
 
 

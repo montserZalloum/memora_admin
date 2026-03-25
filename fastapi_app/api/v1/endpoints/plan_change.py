@@ -8,7 +8,11 @@ from fastapi_app.models.plan_change import (
 	AvailablePlan,
 	AvailablePlansResponse,
 	GradePlanGroup,
+	OptionGrade,
+	OptionMajor,
+	OptionPlan,
 	PlanChangeErrorResponse,
+	PlanChangeOptionsResponse,
 	PlanChangeRequest,
 	PlanChangeResponse,
 )
@@ -64,6 +68,45 @@ async def change_plan(
 		previous_plan_id=result.previous_plan,
 		new_plan_id=result.new_plan,
 	)
+
+
+@router.get("/options", response_model=PlanChangeOptionsResponse)
+async def get_plan_change_options(
+	user: CurrentUser,
+	plan_change_service: PlanChangeServiceDep,
+):
+	"""Get cascading options for plan change picker.
+
+	Returns grades with their majors and eligible plans.
+	The client flow: select grade → select major (if any) → select plan.
+	Excludes the player's current plan.
+	"""
+	current_plan_id = user.plan or ""
+
+	data = await plan_change_service.get_plan_change_options(current_plan_id)
+
+	grades = [
+		OptionGrade(
+			id=g["id"],
+			title=g["title"],
+			sort_order=g.get("sort_order", 0),
+			majors=[OptionMajor(id=m["id"], title=m["title"]) for m in g.get("majors", [])],
+			plans=[
+				OptionPlan(
+					id=p["id"],
+					title=p["title"],
+					major_id=p.get("major_id"),
+					major_title=p.get("major_title"),
+					season_id=p["season_id"],
+					season_title=p["season_title"],
+				)
+				for p in g.get("plans", [])
+			],
+		)
+		for g in data.get("grades", [])
+	]
+
+	return PlanChangeOptionsResponse(grades=grades)
 
 
 @router.get("/available", response_model=AvailablePlansResponse)

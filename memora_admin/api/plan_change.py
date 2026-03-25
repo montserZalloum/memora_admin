@@ -278,7 +278,7 @@ def execute_plan_change(player_id: str, new_plan_id: str) -> dict:
 		{
 			"plan": new_plan_id,
 			"grade": plan.grade,
-			"major": plan.major,
+			"major": plan.major or "",
 			"season": plan.season,
 		},
 	)
@@ -339,6 +339,91 @@ def get_available_plans(current_plan_id: str) -> dict:
 			for p in plans
 		]
 	}
+
+
+@frappe.whitelist(allow_guest=False)
+def get_plan_change_options(current_plan_id: str) -> dict:
+	"""Return grades, majors, and plans for the plan-change picker.
+
+	Cascading structure: grade → majors (for that grade) → plans (for that grade).
+	Only includes plans linked to active seasons (published, end_date >= today),
+	excluding the player's current plan.
+
+	Args:
+		current_plan_id: Player's current plan ID (excluded from results)
+
+	Returns:
+		{"grades": [{"id", "title", "sort_order", "majors": [...], "plans": [...]}]}
+	"""
+	from frappe.utils import today
+
+	# 1. Fetch eligible plans with grade/major/season info
+	plans = frappe.db.sql(
+		"""
+		SELECT ap.name, ap.plan_name, ap.grade, ap.major, ap.season,
+			g.grade_title, g.sort_order AS grade_sort_order,
+			m.major_title, s.season_title
+		FROM `tabMemora Academic Plan` ap
+		INNER JOIN `tabMemora Season` s ON s.name = ap.season
+		LEFT JOIN `tabMemora Grade` g ON g.name = ap.grade
+		LEFT JOIN `tabMemora Major` m ON m.name = ap.major
+		WHERE ap.is_published = 1
+			AND s.is_published = 1
+			AND s.end_date >= %(today)s
+			AND ap.name != %(current_plan)s
+		ORDER BY g.sort_order, g.grade_title, m.major_title, ap.plan_name
+		""",
+		{"today": today(), "current_plan": current_plan_id},
+		as_dict=True,
+	)
+
+	# 2. Fetch all grades with their majors (so we include the full major list
+	#    even if some majors have no eligible plans)
+	all_grades = frappe.get_all(
+		"Memora Grade",
+		fields=["name", "grade_title", "sort_order"],
+		order_by="sort_order ASC",
+	)
+	grade_majors_map: dict[str, list[dict]] = {}
+	for g in all_grades:
+		gm_rows = frappe.get_all(
+			"Memora Grade Major",
+			filters={"parent": g["name"]},
+			fields=["major"],
+		)
+		majors = []
+		for gm in gm_rows:
+			title = frappe.db.get_value("Memora Major", gm["major"], "major_title")
+			majors.append({"id": gm["major"], "title": title or gm["major"]})
+		grade_majors_map[g["name"]] = majors
+
+	# 3. Group plans by grade
+	grade_map: dict[str, dict] = {}
+	for p in plans:
+		gid = p.grade or ""
+		if gid not in grade_map:
+			grade_map[gid] = {
+				"id": gid,
+				"title": p.grade_title or "",
+				"sort_order": p.grade_sort_order or 0,
+				"majors": grade_majors_map.get(gid, []),
+				"plans": [],
+			}
+		grade_map[gid]["plans"].append(
+			{
+				"id": p.name,
+				"title": p.plan_name or "",
+				"major_id": p.major or None,
+				"major_title": p.major_title or None,
+				"season_id": p.season or "",
+				"season_title": p.season_title or "",
+			}
+		)
+
+	# 4. Sort by sort_order
+	grades = sorted(grade_map.values(), key=lambda g: (g["sort_order"], g["title"]))
+
+	return {"grades": grades}
 
 
 def _clear_player_challenge_progress(player_id: str) -> None:

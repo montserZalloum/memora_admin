@@ -324,6 +324,34 @@ class PlanChangeService:
 		_local_available_plans_cache[current_plan_id] = (plans, time.monotonic() + _LOCAL_AVAILABLE_PLANS_TTL)
 		return plans
 
+	async def get_plan_change_options(self, current_plan_id: str) -> dict:
+		"""Fetch cascading plan-change options (grade → major → plan).
+
+		Returns the raw dict from Frappe with grades, their majors, and eligible plans.
+		"""
+		entry = _local_available_plans_cache.get(f"options:{current_plan_id}")
+		if entry is not None:
+			data, exp = entry
+			if time.monotonic() < exp:
+				return data
+
+		result = await self.frappe.call(
+			"memora_admin.api.plan_change.get_plan_change_options",
+			params={"current_plan_id": current_plan_id},
+		)
+		if not result or not isinstance(result, dict):
+			_local_available_plans_cache[f"options:{current_plan_id}"] = (
+				{"grades": []},
+				time.monotonic() + _LOCAL_AVAILABLE_PLANS_TTL,
+			)
+			return {"grades": []}
+
+		_local_available_plans_cache[f"options:{current_plan_id}"] = (
+			result,
+			time.monotonic() + _LOCAL_AVAILABLE_PLANS_TTL,
+		)
+		return result
+
 	async def _release_freeze(self, player_id: str) -> None:
 		"""Release per-player freeze lock."""
 		try:

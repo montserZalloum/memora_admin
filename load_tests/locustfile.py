@@ -405,30 +405,11 @@ class PracticeUser(AuthMixin, HttpUser):
 	@task
 	def practice(self):
 		subject_id = _pick_subject()
-		resp = api_get(
-			self,
-			f"/api/v1/practice/hierarchy?subject_id={subject_id}",
-			name="/api/v1/practice/hierarchy",
-		)
-		if not resp:
-			return
-
-		try:
-			hierarchy = resp.json()
-			tracks = hierarchy.get("tracks", [])
-		except Exception:
-			tracks = []
-		if not tracks:
-			return
-
-		accessible_tracks = [t for t in tracks if t.get("has_access")]
-		if not accessible_tracks:
-			return
-
-		track = random.choice(accessible_tracks)
+		# Pick a random track from the seeded hierarchy (10 tracks per subject)
+		track_idx = random.randint(1, 10)
 		start_payload = {
 			"subject_id": subject_id,
-			"track_ids": [track["track_id"]],
+			"track_ids": [f"TRK-{subject_id}-T{track_idx:02d}"],
 		}
 
 		start_resp = api_post(

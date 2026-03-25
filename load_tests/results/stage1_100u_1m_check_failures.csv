@@ -1,0 +1,4 @@
+Method,Name,Error,Occurrences
+POST,/api/v1/sessions/start,"CatchResponseError('403: {""detail"":{""code"":""SEASON_INACTIVE"",""message"":""Season is not active""}}')",170
+GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":""Not Found""}')",78
+GET,/api/v1/progress/[subject]/topics/[topic]/lessons,"CatchResponseError('404: {""detail"":{""code"":""SUBJECT_NOT_FOUND"",""message"":""Subject not found""}}')",170

@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences
+GET,/api/v1/practice/hierarchy,"CatchResponseError('404: {""detail"":""Not Found""}')",77
