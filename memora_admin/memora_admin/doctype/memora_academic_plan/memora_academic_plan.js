@@ -9,6 +9,41 @@ frappe.ui.form.on("Memora Academic Plan", {
 		frm.set_df_property("grade", "read_only", locked);
 		frm.set_df_property("major", "read_only", locked);
 
+		// Freeze form if the linked season has ended
+		if (locked && frm.doc.season) {
+			frappe.db.get_value("Memora Season", frm.doc.season, "end_date", (r) => {
+				if (r && r.end_date) {
+					const end_date = frappe.datetime.str_to_obj(r.end_date);
+					const now = frappe.datetime.str_to_obj(frappe.datetime.nowdate());
+					if (end_date < now) {
+						frm.disable_save();
+						frm.set_intro(
+							__("This Academic Plan cannot be modified because its season has already ended."),
+							"red"
+						);
+						frm.fields.forEach((field) => {
+							if (field.df.fieldname) {
+								frm.set_df_property(field.df.fieldname, "read_only", 1);
+							}
+						});
+						// Lock child table: disable add/delete and make all row fields read-only
+						if (frm.fields_dict.plan_subjects) {
+							const grid = frm.fields_dict.plan_subjects.grid;
+							grid.cannot_add_rows = true;
+							grid.cannot_delete_rows = true;
+							grid.wrapper
+								.find(".grid-add-row, .grid-remove-rows, .row-check")
+								.hide();
+							["subject", "alias_title", "notes", "meta_data", "is_premium"].forEach((f) => {
+								grid.toggle_enable(f, false);
+							});
+							grid.refresh();
+						}
+					}
+				}
+			});
+		}
+
 		// Set up Major filter on form load
 		frm.trigger("setup_major_filter");
 		frm.trigger("setup_subject_filter");

@@ -3,6 +3,7 @@
 
 import frappe
 from frappe.model.document import Document
+from frappe.utils import getdate, today
 
 
 class MemoraAcademicPlan(Document):
@@ -10,7 +11,17 @@ class MemoraAcademicPlan(Document):
 
 	def validate(self):
 		if not self.is_new():
+			self._prevent_update_on_ended_season()
 			self._prevent_immutable_field_changes()
+
+	def _prevent_update_on_ended_season(self):
+		end_date = frappe.db.get_value("Memora Season", self.season, "end_date")
+		if end_date and getdate(end_date) < getdate(today()):
+			frappe.throw(
+				frappe._(
+					"Cannot update this Academic Plan because its season has already ended."
+				)
+			)
 
 	def _prevent_immutable_field_changes(self):
 		old = self.get_doc_before_save()
