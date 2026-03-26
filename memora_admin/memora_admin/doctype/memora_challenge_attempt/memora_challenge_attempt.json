@@ -1,156 +1,168 @@
 {
-	"actions": [],
-	"autoname": "naming_series:",
-	"creation": "2026-03-08 12:00:00.000000",
-	"doctype": "DocType",
-	"editable_grid": 1,
-	"engine": "InnoDB",
-	"field_order": [
-		"naming_series",
-		"player",
-		"topic",
-		"subject",
-		"season",
-		"attempt_number",
-		"total_questions",
-		"correct_count",
-		"score_pct",
-		"passed",
-		"time_spent",
-		"xp_earned",
-		"submitted_at",
-		"details"
-	],
-	"fields": [
-		{
-			"fieldname": "naming_series",
-			"fieldtype": "Select",
-			"hidden": 1,
-			"label": "Series",
-			"options": "CHA-.#####",
-			"reqd": 1
-		},
-		{
-			"fieldname": "player",
-			"fieldtype": "Link",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-			"label": "Player",
-			"options": "Memora Player Profile",
-			"reqd": 1
-		},
-		{
-			"fieldname": "topic",
-			"fieldtype": "Link",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-			"label": "Topic",
-			"options": "Memora Topic",
-			"reqd": 1
-		},
-		{
-			"fieldname": "subject",
-			"fieldtype": "Link",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-			"label": "Subject",
-			"options": "Memora Subject",
-			"reqd": 1
-		},
-		{
-			"fieldname": "season",
-			"fieldtype": "Link",
-			"in_list_view": 1,
-			"in_standard_filter": 1,
-			"label": "Season",
-			"options": "Memora Season",
-			"reqd": 1
-		},
-		{
-			"fieldname": "attempt_number",
-			"fieldtype": "Int",
-			"in_list_view": 1,
-			"label": "Attempt Number",
-			"reqd": 1
-		},
-		{
-			"fieldname": "total_questions",
-			"fieldtype": "Int",
-			"label": "Total Questions",
-			"reqd": 1
-		},
-		{
-			"fieldname": "correct_count",
-			"fieldtype": "Int",
-			"in_list_view": 1,
-			"label": "Correct Count",
-			"reqd": 1
-		},
-		{
-			"fieldname": "score_pct",
-			"fieldtype": "Percent",
-			"in_list_view": 1,
-			"label": "Score %",
-			"reqd": 1
-		},
-		{
-			"default": "0",
-			"fieldname": "passed",
-			"fieldtype": "Check",
-			"in_list_view": 1,
-			"label": "Passed"
-		},
-		{
-			"default": "0",
-			"fieldname": "time_spent",
-			"fieldtype": "Int",
-			"label": "Time Spent (s)"
-		},
-		{
-			"default": "0",
-			"fieldname": "xp_earned",
-			"fieldtype": "Int",
-			"label": "XP Earned"
-		},
-		{
-			"fieldname": "submitted_at",
-			"fieldtype": "Datetime",
-			"label": "Submitted At",
-			"reqd": 1
-		},
-		{
-			"fieldname": "details",
-			"fieldtype": "Table",
-			"label": "Details",
-			"options": "Memora Challenge Attempt Detail"
-		}
-	],
-	"grid_page_length": 50,
-	"index_web_pages_for_search": 1,
-	"links": [],
-	"modified": "2026-03-08 12:00:00.000000",
-	"modified_by": "Administrator",
-	"module": "Memora Admin",
-	"name": "Memora Challenge Attempt",
-	"naming_rule": "By \"Naming Series\" field",
-	"owner": "Administrator",
-	"permissions": [
-		{
-			"create": 1,
-			"delete": 1,
-			"email": 1,
-			"export": 1,
-			"print": 1,
-			"read": 1,
-			"report": 1,
-			"role": "System Manager",
-			"share": 1,
-			"write": 1
-		}
-	],
-	"row_format": "Dynamic",
-	"rows_threshold_for_grid_search": 20,
-	"sort_field": "modified",
-	"sort_order": "DESC",
-	"states": []
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-03-08 12:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "player",
+  "topic",
+  "subject",
+  "season",
+  "attempt_number",
+  "total_questions",
+  "correct_count",
+  "score_pct",
+  "passed",
+  "time_spent",
+  "xp_earned",
+  "submitted_at",
+  "details"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "hidden": 1,
+   "label": "Series",
+   "options": "CHA-.#####",
+   "reqd": 1
+  },
+  {
+   "fieldname": "player",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Player",
+   "options": "Memora Player Profile",
+   "reqd": 1
+  },
+  {
+   "fieldname": "topic",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Topic",
+   "options": "Memora Topic",
+   "reqd": 1
+  },
+  {
+   "fieldname": "subject",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Subject",
+   "options": "Memora Subject",
+   "reqd": 1
+  },
+  {
+   "fieldname": "season",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Season",
+   "options": "Memora Season",
+   "reqd": 1
+  },
+  {
+   "fieldname": "attempt_number",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Attempt Number",
+   "reqd": 1
+  },
+  {
+   "fieldname": "total_questions",
+   "fieldtype": "Int",
+   "label": "Total Questions",
+   "reqd": 1
+  },
+  {
+   "fieldname": "correct_count",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Correct Count",
+   "reqd": 1
+  },
+  {
+   "fieldname": "score_pct",
+   "fieldtype": "Percent",
+   "in_list_view": 1,
+   "label": "Score %",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "passed",
+   "fieldtype": "Check",
+   "in_list_view": 1,
+   "label": "Passed"
+  },
+  {
+   "default": "0",
+   "fieldname": "time_spent",
+   "fieldtype": "Int",
+   "label": "Time Spent (s)"
+  },
+  {
+   "default": "0",
+   "fieldname": "xp_earned",
+   "fieldtype": "Int",
+   "label": "XP Earned"
+  },
+  {
+   "fieldname": "submitted_at",
+   "fieldtype": "Datetime",
+   "label": "Submitted At",
+   "reqd": 1
+  },
+  {
+   "fieldname": "details",
+   "fieldtype": "Table",
+   "label": "Details",
+   "options": "Memora Challenge Attempt Detail"
+  }
+ ],
+ "grid_page_length": 50,
+ "index_web_pages_for_search": 1,
+ "links": [],
+ "modified": "2026-03-08 12:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Memora Admin",
+ "name": "Memora Challenge Attempt",
+ "naming_rule": "By \"Naming Series\" field",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Memora Admin",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "row_format": "Dynamic",
+ "rows_threshold_for_grid_search": 20,
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "states": []
 }

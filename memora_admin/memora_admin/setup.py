@@ -13,6 +13,7 @@ import frappe
 
 def after_install():
 	"""Create custom roles, voucher schema extensions, and nginx WS proxies after app installation."""
+	create_memora_admin_role()
 	create_task_admin_role()
 	_setup_voucher_schema()
 	_setup_nginx_websocket_proxies()
@@ -33,6 +34,24 @@ def _remove_backup_crontab():
 	if removed:
 		cron.write()
 		print(f"Removed {removed} automatic backup crontab entry(ies) for {bench_dir}")
+
+
+def create_memora_admin_role():
+	"""Create Memora Admin role for full administrative access to the Memora app."""
+	if frappe.db.exists("Role", "Memora Admin"):
+		return  # Already exists
+
+	role = frappe.get_doc(
+		{
+			"doctype": "Role",
+			"role_name": "Memora Admin",
+			"desk_access": 1,
+			"is_custom": 1,
+		}
+	)
+	role.insert(ignore_permissions=True)
+	frappe.db.commit()
+	print("Created Memora Admin role")
 
 
 def create_task_admin_role():
