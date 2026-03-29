@@ -2,32 +2,25 @@
 
 Generated from `memora_admin/memora_admin/doctype/*/*.json`.
 
-- Top-level DocTypes: 46
+- Top-level DocTypes: 45
 - Child Table DocTypes: 15
-- Declared fields: 698
+- Declared fields: 667
 
 ```text
 Memora Admin DocTypes
-|-- Memora Academic Plan [DocType, 13 fields]
+|-- Memora Academic Plan [DocType, 6 fields]
 |   |-- plan_name [Data]
 |   |-- grade [Link] -> Memora Grade
 |   |-- major [Link] -> Memora Major
 |   |-- season [Link] -> Memora Season
 |   |-- is_published [Check]
-|   |-- plan_subjects [Table] -> Memora Plan Subject
-|   |   `-- Memora Plan Subject [Child DocType, 5 fields]
-|   |       |-- subject [Link] -> Memora Subject
-|   |       |-- alias_title [Data]
-|   |       |-- notes [Small Text]
-|   |       |-- meta_data [JSON]
-|   |       `-- is_premium [Check]
-|   |-- sb_stats [Section Break]
-|   |-- total_subjects [Int]
-|   |-- total_lessons [Int]
-|   |-- sb_json [Section Break]
-|   |-- json_version [Int]
-|   |-- json_hash [Data]
-|   `-- json_generated_at [Datetime]
+|   `-- plan_subjects [Table] -> Memora Plan Subject
+|       `-- Memora Plan Subject [Child DocType, 5 fields]
+|           |-- subject [Link] -> Memora Subject
+|           |-- notes [Small Text]
+|           |-- is_premium [Check]
+|           |-- alias_title [Data]
+|           `-- meta_data [JSON]
 |-- Memora Achievement [DocType, 11 fields]
 |   |-- achievement_title [Data]
 |   |-- description [Small Text]
@@ -58,12 +51,6 @@ Memora Admin DocTypes
 |   |-- test_level [Select]
 |   |-- test_filter_btn [Button]
 |   `-- test_results_html [HTML]
-|-- Memora Analytics Aggregate [DocType, 5 fields]
-|   |-- lesson [Link] -> Memora Lesson
-|   |-- date [Date]
-|   |-- total_attempts [Int]
-|   |-- avg_time_spent [Float]
-|   `-- success_rate [Float]
 |-- Memora Announcement [DocType, 19 fields]
 |   |-- title_ar [Data]
 |   |-- title_en [Data]
@@ -204,22 +191,22 @@ Memora Admin DocTypes
 |   |-- lesson_title [Data]
 |   |-- topic [Link] -> Memora Topic
 |   |-- base_xp [Int]
-|   |-- is_reviewable [Check]
 |   |-- max_hearts [Int]
 |   |-- is_published [Check]
 |   |-- content_hash [Data]
 |   |-- stages [Table] -> Memora Lesson Stage
 |   |   `-- Memora Lesson Stage [Child DocType, 5 fields]
-|   |       |-- stage_title [Data]
 |   |       |-- stage_type [Link] -> Memora Lesson Stage Settings
 |   |       |-- is_skippable [Check]
 |   |       |-- config_json [Code]
-|   |       `-- edit_content_btn [Button]
+|   |       |-- edit_content_btn [Button]
+|   |       `-- stage_title [Data]
 |   |-- bit_index [Int]
 |   |-- sb_hierarchy [Section Break]
 |   |-- unit [Link] -> Memora Unit
 |   |-- track [Link] -> Memora Track
-|   `-- subject [Link] -> Memora Subject
+|   |-- subject [Link] -> Memora Subject
+|   `-- is_reviewable [Check]
 |-- Memora Lesson Stage Settings [DocType, 3 fields]
 |   |-- stage_title [Data]
 |   |-- is_skippable [Check]
@@ -463,9 +450,9 @@ Memora Admin DocTypes
 |   |-- mobile [Data]
 |   |-- password [Password]
 |   |-- display_name [Data]
-|   |-- gender [Select]
 |   |-- plan [Link] -> Memora Academic Plan
 |   |-- avatar [Data]
+|   |-- gender [Select]
 |   |-- grade [Link] -> Memora Grade
 |   |-- major [Link] -> Memora Major
 |   |-- season [Link] -> Memora Season
@@ -530,7 +517,7 @@ Memora Admin DocTypes
 |   |-- start_date [Date]
 |   |-- end_date [Date]
 |   `-- is_published [Check]
-|-- Memora Settings [DocType, 35 fields]
+|-- Memora Settings [DocType, 22 fields]
 |   |-- cdn_section [Section Break]
 |   |-- cdn_enabled [Check]
 |   |-- cdn_base_url [Data]
@@ -550,35 +537,21 @@ Memora Admin DocTypes
 |   |-- session_timeout_days [Int]
 |   |-- fsrs_section [Section Break]
 |   |-- review_session_size [Int]
-|   |-- practice_section [Section Break]
-|   |-- practice_session_size [Int]
-|   |-- column_break_practice [Column Break]
-|   |-- practice_session_ttl [Int]
 |   |-- challenge_section [Section Break]
 |   |-- challenge_xp_per_question [Int]
-|   |-- challenge_pass_threshold [Int]
-|   |-- column_break_challenge [Column Break]
-|   |-- challenge_lb_top_count [Int]
-|   |-- challenge_lb_refresh_interval [Int]
-|   |-- analytics_section [Section Break]
-|   |-- analytics_ssh_host [Data]
-|   |-- analytics_ssh_user [Data]
-|   |-- column_break_analytics [Column Break]
-|   |-- analytics_ssh_key_path [Data]
-|   `-- analytics_remote_path [Data]
+|   `-- challenge_pass_threshold [Int]
 |-- Memora Structure Progress [DocType, 4 fields]
 |   |-- player [Link] -> Memora Player Profile
 |   |-- subject [Link] -> Memora Subject
 |   |-- passed_lessons_bitset [Long Text]
 |   `-- completion_percentage [Float]
-|-- Memora Subject [DocType, 17 fields]
+|-- Memora Subject [DocType, 14 fields]
 |   |-- subject_title [Data]
 |   |-- language [Select]
 |   |-- image [Attach Image]
 |   |-- description [Text Editor]
 |   |-- in_linear [Check]
 |   |-- is_published [Check]
-|   |-- last_bit_index [Int]
 |   |-- sort_order [Int]
 |   |-- sb_applicability [Section Break]
 |   |-- applicable_to [Table] -> Memora Subject Applicability
@@ -586,9 +559,7 @@ Memora Admin DocTypes
 |   |       |-- grade [Link] -> Memora Grade
 |   |       `-- major [Link] -> Memora Major
 |   |-- json_generated_at [Datetime]
-|   |-- sb_stats [Section Break]
-|   |-- total_tracks [Int]
-|   |-- total_lessons [Int]
+|   |-- last_bit_index [Int]
 |   |-- sb_json [Section Break]
 |   |-- json_hash [Data]
 |   `-- cdn_url [Data]
@@ -635,7 +606,7 @@ Memora Admin DocTypes
 |   |-- section_break_errors [Section Break]
 |   |-- error_message [Text]
 |   `-- failed_details [Code]
-|-- Memora Topic [DocType, 13 fields]
+|-- Memora Topic [DocType, 12 fields]
 |   |-- filter_section [Section Break]
 |   |-- admin_filter_html [HTML]
 |   |-- main_section [Section Break]
@@ -647,9 +618,8 @@ Memora Admin DocTypes
 |   |-- is_published [Check]
 |   |-- sb_hierarchy [Section Break]
 |   |-- track [Link] -> Memora Track
-|   |-- subject [Link] -> Memora Subject
-|   `-- total_lessons [Int]
-|-- Memora Track [DocType, 14 fields]
+|   `-- subject [Link] -> Memora Subject
+|-- Memora Track [DocType, 11 fields]
 |   |-- filter_section [Section Break]
 |   |-- admin_filter_html [HTML]
 |   |-- main_section [Section Break]
@@ -660,24 +630,18 @@ Memora Admin DocTypes
 |   |-- description [Small Text]
 |   |-- is_sold_separately [Check]
 |   |-- is_published [Check]
-|   |-- is_linear [Check]
-|   |-- sb_stats [Section Break]
-|   |-- total_units [Int]
-|   `-- total_lessons [Int]
-|-- Memora Unit [DocType, 13 fields]
+|   `-- is_linear [Check]
+|-- Memora Unit [DocType, 10 fields]
 |   |-- filter_section [Section Break]
 |   |-- admin_filter_html [HTML]
 |   |-- main_section [Section Break]
 |   |-- unit_title [Data]
 |   |-- track [Link] -> Memora Track
-|   |-- subject [Link] -> Memora Subject
 |   |-- sort_order [Int]
 |   |-- is_free [Check]
 |   |-- is_published [Check]
 |   |-- is_linear [Check]
-|   |-- sb_stats [Section Break]
-|   |-- total_topics [Int]
-|   `-- total_lessons [Int]
+|   `-- subject [Link] -> Memora Subject
 |-- Memora Voucher Allocation [DocType, 14 fields]
 |   |-- allocation_type [Select]
 |   |-- batch [Link] -> Memora Voucher Batch
@@ -734,7 +698,7 @@ Memora Admin DocTypes
 |   |-- void_reason [Small Text]
 |   |-- section_notes [Section Break]
 |   `-- notes [Small Text]
-|-- Memora Voucher Card [DocType, 19 fields]
+|-- Memora Voucher Card [DocType, 21 fields]
 |   |-- serial_no [Data]
 |   |-- pin_hmac [Data]
 |   |-- batch [Link] -> Memora Voucher Batch
@@ -750,11 +714,13 @@ Memora Admin DocTypes
 |   |-- redeemed_at [Datetime]
 |   |-- redeemed_grant [Link] -> Memora Product Grant
 |   |-- subscription_transaction [Link] -> Memora Subscription Transaction
+|   |-- event_access [Link] -> Memora Live Event Access
+|   |-- plan_premium [Link] -> Memora Plan Premium
 |   |-- section_void [Section Break]
 |   |-- void_reason [Small Text]
 |   |-- section_recipient [Section Break]
 |   `-- recipient_note [Small Text]
-`-- Memora Voucher Redemption Log [DocType, 12 fields]
+`-- Memora Voucher Redemption Log [DocType, 14 fields]
     |-- player [Link] -> Memora Player Profile
     |-- pin_masked [Data]
     |-- card [Link] -> Memora Voucher Card
@@ -762,6 +728,8 @@ Memora Admin DocTypes
     |-- column_break_1 [Column Break]
     |-- batch [Link] -> Memora Voucher Batch
     |-- requested_grant [Link] -> Memora Product Grant
+    |-- requested_event [Link] -> Memora Live Challenge Event
+    |-- requested_plan [Link] -> Memora Academic Plan
     |-- status [Select]
     |-- section_details [Section Break]
     |-- failure_reason [Data]
