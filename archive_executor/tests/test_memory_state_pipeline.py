@@ -204,7 +204,6 @@ def _insert_ms_rows(conn, prefix: str, count: int, season_seq: int, num_players:
             f"Science-{(n % 3) + 1}",
             player_id,
             item_uuid,
-            f"STAGE-{(n % 4) + 1}",
             round(0.5 + (n % 100) * 0.05, 4),
             round((n % 100) / 100.0, 4),
             ts.strftime("%Y-%m-%d %H:%M:%S"),
@@ -220,11 +219,11 @@ def _insert_ms_rows(conn, prefix: str, count: int, season_seq: int, num_players:
 
     sql = (
         "INSERT IGNORE INTO `tabMemora Memory State` "
-        "(`name`, `season_seq`, `subject`, `player`, `item_id`, `stage_id`, "
+        "(`name`, `season_seq`, `subject`, `player`, `item_id`, "
         " `stability`, `difficulty`, `next_review`, `lesson`, "
         " `state`, `step`, `last_review`, "
         " `creation`, `modified`, `modified_by`, `owner`) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     )
     with conn.cursor() as cursor:
         cursor.executemany(sql, rows)
@@ -650,10 +649,10 @@ class TestSeasonExport:
         with db_conn.cursor() as cursor:
             cursor.execute(
                 "INSERT IGNORE INTO `tabMemora Memory State` "
-                "(`season_seq`, `subject`, `player`, `item_id`, `stage_id`, "
+                "(`season_seq`, `subject`, `player`, `item_id`, "
                 " `stability`, `difficulty`, `next_review`, `lesson`, "
                 " `state`, `last_review`, `creation`, `modified`, `modified_by`, `owner`) "
-                "VALUES (%s, 'Science-1', 'MS-PLAYER-RT', %s, 'STAGE-1', "
+                "VALUES (%s, 'Science-1', 'MS-PLAYER-RT', %s, "
                 " 0.7, 0.3, '2099-06-01 12:00:00', 'MS-LESSON-RT-001', "
                 " 1, '2099-06-01 12:00:00', '2099-06-01 12:00:00', '2099-06-01 12:00:00', "
                 " 'test@test.com', 'test@test.com')",

@@ -225,7 +225,6 @@ class TestGradeAttempt:
 				# If test marks q.correct=False, set correct_choice to a different value
 				question_lookup[q.item_id] = {
 					"lesson": "L-TEST",
-					"stage_id": "S-TEST",
 					"correct_choice": q.chosen_answer if q.correct else (q.chosen_answer % 4) + 1,
 				}
 		return svc._grade_attempt(questions, threshold, question_lookup)
@@ -275,8 +274,8 @@ class TestGradeAttempt:
 		# Client says both correct, but only q0's chosen_answer matches correct_choice
 		qs = [_q("q0", correct=True, chosen=2), _q("q1", correct=True, chosen=3)]
 		lookup = {
-			"q0": {"lesson": "L", "stage_id": "S", "correct_choice": 2},  # match
-			"q1": {"lesson": "L", "stage_id": "S", "correct_choice": 1},  # mismatch: client says 3, answer is 1
+			"q0": {"lesson": "L", "correct_choice": 2},  # match
+			"q1": {"lesson": "L", "correct_choice": 1},  # mismatch: client says 3, answer is 1
 		}
 		correct_count, score_pct, passed = self._grade(qs, 50, question_lookup=lookup)
 		assert correct_count == 1  # Only q0 is actually correct
@@ -287,14 +286,14 @@ class TestGradeAttempt:
 		"""Raises ValueError for item_id not in question_lookup."""
 		qs = [_q("q-unknown", correct=True, chosen=1)]
 		# Lookup has 1 entry so count matches, but item_id doesn't match
-		lookup = {"q-other": {"lesson": "L", "stage_id": "S", "correct_choice": 1}}
+		lookup = {"q-other": {"lesson": "L", "correct_choice": 1}}
 		with pytest.raises(ValueError, match="UNKNOWN_ITEM"):
 			self._grade(qs, 50, question_lookup=lookup)
 
 	def test_no_answer_key_raises(self):
 		"""Raises ValueError when correct_choice is None in lookup."""
 		qs = [_q("q0", correct=True, chosen=1)]
-		lookup = {"q0": {"lesson": "L", "stage_id": "S", "correct_choice": None}}
+		lookup = {"q0": {"lesson": "L", "correct_choice": None}}
 		with pytest.raises(ValueError, match="NO_ANSWER_KEY"):
 			self._grade(qs, 50, question_lookup=lookup)
 
@@ -309,9 +308,9 @@ class TestGradeAttempt:
 		# Lookup has 3 items but we only submit 2
 		qs = [_q("q0", correct=True, chosen=1), _q("q1", correct=False, chosen=2)]
 		lookup = {
-			"q0": {"lesson": "L", "stage_id": "S", "correct_choice": 1},
-			"q1": {"lesson": "L", "stage_id": "S", "correct_choice": 1},
-			"q2": {"lesson": "L", "stage_id": "S", "correct_choice": 1},
+			"q0": {"lesson": "L", "correct_choice": 1},
+			"q1": {"lesson": "L", "correct_choice": 1},
+			"q2": {"lesson": "L", "correct_choice": 1},
 		}
 		with pytest.raises(ValueError, match="QUESTION_COUNT_MISMATCH"):
 			self._grade(qs, 50, question_lookup=lookup)
@@ -817,9 +816,9 @@ class TestFsrsPush:
 		async def frappe_call_handler(method, params=None):
 			if "get_topic_question_items" in method:
 				return [
-					{"item_id": "q1", "lesson": "LES-001", "stage_id": "STG-001", "correct_choice": 2},
-					{"item_id": "q2", "lesson": "LES-001", "stage_id": "STG-002", "correct_choice": 1},
-					{"item_id": "q3", "lesson": "LES-002", "stage_id": "STG-003", "correct_choice": 4},
+					{"item_id": "q1", "lesson": "LES-001", "correct_choice": 2},
+					{"item_id": "q2", "lesson": "LES-001", "correct_choice": 1},
+					{"item_id": "q3", "lesson": "LES-002", "correct_choice": 4},
 				]
 			if "get_challenge_settings" in method:
 				return {"xp_per_question": 5, "pass_threshold": 50}
@@ -876,7 +875,6 @@ class TestFsrsPush:
 			assert interaction["event_type"] == "Completed"
 			assert interaction["metadata"]["source"] == "challenge_hub"
 			assert "lesson" in interaction
-			assert "stage_id" in interaction
 			assert "item_id" in interaction
 			assert "timestamp" in interaction
 
@@ -885,7 +883,6 @@ class TestFsrsPush:
 		assert i0["item_id"] == "q1"
 		assert i0["errors_count"] == 0  # chosen=2 == correct_choice=2
 		assert i0["lesson"] == "LES-001"
-		assert i0["stage_id"] == "STG-001"
 
 		i2 = json.loads(await redis_client.lindex(buf_key, 2))
 		assert i2["item_id"] == "q3"

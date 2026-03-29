@@ -13,17 +13,13 @@
   "unit",
   "topic",
   "lesson",
-  "stage_section",
-  "stage_id",
-  "stage_type",
   "question_section",
   "question_text",
   "choice_1",
   "choice_2",
   "choice_3",
   "choice_4",
-  "correct_choice",
-  "content_json"
+  "correct_choice"
  ],
  "fields": [
   {
@@ -76,25 +72,6 @@
    "reqd": 1
   },
   {
-   "fieldname": "stage_section",
-   "fieldtype": "Section Break",
-   "label": "Stage"
-  },
-  {
-   "fieldname": "stage_id",
-   "fieldtype": "Data",
-   "label": "Stage ID",
-   "reqd": 1
-  },
-  {
-   "fieldname": "stage_type",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Stage Type",
-   "options": "Memora Lesson Stage Settings",
-   "reqd": 1
-  },
-  {
    "fieldname": "question_section",
    "fieldtype": "Section Break",
    "label": "Question Data"
@@ -129,12 +106,6 @@
    "fieldname": "correct_choice",
    "fieldtype": "Int",
    "label": "Correct Choice"
-  },
-  {
-   "fieldname": "content_json",
-   "fieldtype": "Code",
-   "label": "Content JSON",
-   "options": "JSON"
   }
  ],
  "grid_page_length": 50,
@@ -174,7 +145,7 @@
  ],
  "row_format": "Dynamic",
  "rows_threshold_for_grid_search": 20,
- "search_fields": "lesson,stage_type,question_text",
+ "search_fields": "lesson,question_text",
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": []

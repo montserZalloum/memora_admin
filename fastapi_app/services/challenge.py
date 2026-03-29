@@ -963,7 +963,7 @@ class ChallengeService:
 	) -> None:
 		"""Push per-question FSRS interactions to the interaction buffer via pipeline.
 
-		question_lookup maps item_id → {lesson, stage_id} from the Review Item data.
+		question_lookup maps item_id → {lesson} from the Review Item data.
 		graded_correctness maps item_id → bool (server-graded result).
 		Skips items not found in the lookup (graceful degradation).
 		If question_lookup is None, all items are skipped.
@@ -987,7 +987,6 @@ class ChallengeService:
 				{
 					"player": player_id,
 					"lesson": item_meta["lesson"],
-					"stage_id": item_meta["stage_id"],
 					"item_id": q.item_id,
 					"event_type": "Completed",
 					"errors_count": 0 if is_correct else 1,
@@ -1043,10 +1042,10 @@ class ChallengeService:
 		return defaults
 
 	async def _get_question_lookup(self, topic_id: str) -> dict[str, dict] | None:
-		"""Get item_id → {lesson, stage_id, correct_choice} mapping for a topic's MCQ Review Items.
+		"""Get item_id → {lesson, correct_choice} mapping for a topic's MCQ Review Items.
 
 		Queries Frappe for Review Item records. Returns dict mapping item_id
-		to {lesson, stage_id, correct_choice} needed for grading and FSRS interaction push.
+		to {lesson, correct_choice} needed for grading and FSRS interaction push.
 
 		Returns None if FrappeClient is unavailable or the call fails (triggers
 		degraded fallback in _grade_attempt). Returns {} if topic has no questions.
@@ -1079,7 +1078,6 @@ class ChallengeService:
 			lookup = {
 				r["item_id"]: {
 					"lesson": r["lesson"],
-					"stage_id": r["stage_id"],
 					"correct_choice": int(r["correct_choice"]) if r.get("correct_choice") else None,
 				}
 				for r in records

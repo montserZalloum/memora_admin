@@ -690,7 +690,7 @@ def _make_season_job_meta(season_seq: int, season_name: str) -> str:
         },
         "export_columns": [
             "name", "season_seq", "subject", "player", "item_id",
-            "stage_id", "stability", "difficulty", "next_review",
+            "stability", "difficulty", "next_review",
             "lesson", "state", "step", "last_review", "modified",
         ],
         "schema_snapshot": {
@@ -700,7 +700,6 @@ def _make_season_job_meta(season_seq: int, season_name: str) -> str:
                 {"name": "subject", "type": "VARCHAR(140)"},
                 {"name": "player", "type": "VARCHAR(140)"},
                 {"name": "item_id", "type": "VARCHAR(36)"},
-                {"name": "stage_id", "type": "VARCHAR(140)"},
                 {"name": "stability", "type": "FLOAT"},
                 {"name": "difficulty", "type": "FLOAT"},
                 {"name": "next_review", "type": "DATETIME"},
@@ -729,7 +728,7 @@ def _make_season_job_meta(season_seq: int, season_name: str) -> str:
             "filtered": (
                 "SELECT ms.`name`, ms.`season_seq`, ms.`subject`, ms.`player`, "
                 "BIN_TO_UUID(ms.`item_id`) AS item_id, "
-                "ms.`stage_id`, ms.`stability`, ms.`difficulty`, ms.`next_review`, "
+                "ms.`stability`, ms.`difficulty`, ms.`next_review`, "
                 "ms.`lesson`, ms.`state`, ms.`step`, ms.`last_review`, ms.`modified` "
                 "FROM `tabMemora Memory State` ms "
                 "WHERE ms.`season_seq` = %s ORDER BY ms.`name`"
@@ -737,7 +736,7 @@ def _make_season_job_meta(season_seq: int, season_name: str) -> str:
             "incremental": (
                 "SELECT ms.`name`, ms.`season_seq`, ms.`subject`, ms.`player`, "
                 "BIN_TO_UUID(ms.`item_id`) AS item_id, "
-                "ms.`stage_id`, ms.`stability`, ms.`difficulty`, ms.`next_review`, "
+                "ms.`stability`, ms.`difficulty`, ms.`next_review`, "
                 "ms.`lesson`, ms.`state`, ms.`step`, ms.`last_review`, ms.`modified` "
                 "FROM `tabMemora Memory State` ms "
                 "WHERE ms.`season_seq` = %s AND ms.`modified` >= %s "
@@ -780,7 +779,6 @@ def insert_memory_state_rows(
             f"Science-{(n % 3) + 1}",                 # subject
             player_id,                                 # player
             item_uuid,                                 # item_id (BINARY(16))
-            f"STAGE-{(n % 4) + 1}",                   # stage_id
             round(0.5 + (n % 100) * 0.05, 4),         # stability (>= 0)
             round((n % 100) / 100.0, 4),               # difficulty (0–1)
             ts.strftime("%Y-%m-%d %H:%M:%S"),          # next_review
@@ -808,11 +806,11 @@ def _flush_memory_state_rows(conn, rows: list) -> int:
     """Batch-insert rows into tabMemora Memory State."""
     sql = (
         "INSERT IGNORE INTO `tabMemora Memory State` "
-        "(`season_seq`, `subject`, `player`, `item_id`, `stage_id`, "
+        "(`season_seq`, `subject`, `player`, `item_id`, "
         " `stability`, `difficulty`, `next_review`, `lesson`, "
         " `state`, `step`, `last_review`, "
         " `creation`, `modified`, `modified_by`, `owner`) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     )
     with conn.cursor() as cursor:
         cursor.executemany(sql, rows)

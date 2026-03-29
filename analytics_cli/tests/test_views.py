@@ -43,7 +43,6 @@ def _write_memory_state_no_season(path: Path, n: int = 3) -> None:
         ("subject", pa.string()),
         ("player", pa.string()),
         ("item_id", pa.string()),
-        ("stage_id", pa.string()),
         ("stability", pa.float64()),
         ("difficulty", pa.float64()),
         ("next_review", pa.timestamp("us")),
@@ -59,7 +58,6 @@ def _write_memory_state_no_season(path: Path, n: int = 3) -> None:
             "subject": "math",
             "player": f"PLR-{i:04d}",
             "item_id": f"ITEM-{i:04d}",
-            "stage_id": "STAGE-01",
             "stability": 2.5 + i * 0.1,
             "difficulty": 0.3 + i * 0.05,
             "next_review": datetime(2025, 7, 1, 10, 0, 0),
@@ -371,10 +369,10 @@ class TestCombinedViews:
         ensure_live_tables(db)
         db.execute("""
             INSERT INTO memory_state_current
-                (name, season_seq, subject, player, item_id, stage_id,
+                (name, season_seq, subject, player, item_id,
                  stability, difficulty, next_review, lesson, state, step,
                  last_review, modified)
-            VALUES (9999, 6, 'math', 'PLR-CUR', 'ITEM-CUR', 'STG-01',
+            VALUES (9999, 6, 'math', 'PLR-CUR', 'ITEM-CUR',
                     3.0, 0.5, '2025-08-01', 'L001', 2, 1, '2025-07-01', '2025-07-01')
         """)
 

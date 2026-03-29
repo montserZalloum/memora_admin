@@ -108,7 +108,7 @@ class Ctx:
     subjects_with_lessons: list = field(default_factory=list)
     lessons: dict = field(default_factory=dict)              # subject → [lesson_name, ...]
     stages: dict = field(default_factory=dict)               # lesson → [stage_id, ...]
-    review_items: dict = field(default_factory=dict)         # subject → [{item_id, topic, lesson, stage_id}]
+    review_items: dict = field(default_factory=dict)         # subject → [{item_id, topic, lesson}]
     all_review_items: list = field(default_factory=list)
     topics: dict = field(default_factory=dict)               # subject → [{name, topic_title}]
     product_grants: list = field(default_factory=list)
@@ -260,7 +260,7 @@ def inspect() -> Ctx:
 
     subj_names = [s.name for s in ctx.subjects_with_lessons]
     for row in frappe.db.sql(
-        "SELECT item_id, subject, topic, lesson, stage_id "
+        "SELECT item_id, subject, topic, lesson "
         "FROM `tabMemora Review Item` WHERE subject IN %s",
         (subj_names,), as_dict=True,
     ):
@@ -557,7 +557,7 @@ def wave_04_memory_state(ctx: Ctx, rng):
 
         params_batch.append((
             n, seq, player, subj.name, item_bin,
-            ri.stage_id or "", ri.lesson or "",
+            ri.lesson or "",
             stability, difficulty, next_rev, state, step, last_rev,
             last_rev, last_rev, OWNER, OWNER, 0, 0,
         ))
@@ -579,7 +579,7 @@ def wave_04_memory_state(ctx: Ctx, rng):
 def _insert_ms_batch(params_batch):
     """Batch-insert Memory State rows via raw SQL with parameterized values."""
     placeholders = ", ".join(
-        ["(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"]
+        ["(%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"]
         * len(params_batch)
     )
     flat = []
@@ -588,7 +588,7 @@ def _insert_ms_batch(params_batch):
 
     frappe.db.sql(
         f"INSERT INTO `tabMemora Memory State` "
-        f"(name, season_seq, player, subject, item_id, stage_id, lesson, "
+        f"(name, season_seq, player, subject, item_id, lesson, "
         f"stability, difficulty, next_review, state, step, last_review, "
         f"creation, modified, modified_by, owner, docstatus, idx) "
         f"VALUES {placeholders}",

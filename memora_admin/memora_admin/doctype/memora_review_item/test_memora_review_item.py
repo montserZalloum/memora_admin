@@ -49,17 +49,20 @@ class TestItemExtraction(FrappeTestCase):
 		item = items[0]
 		# Uses the correct answer's item_id
 		self.assertEqual(item["item_id"], "aaaa0000-0000-0000-0000-000000000001")
-		self.assertEqual(item["stage_type"], "QUESTION")
 		self.assertEqual(item["question_text"], "كم عظمة في جسم الانسان")
 		self.assertEqual(item["choice_1"], "10")
 		self.assertEqual(item["choice_2"], "12")
 		self.assertEqual(item["choice_3"], "14")
 		self.assertIsNone(item["choice_4"])
 		self.assertEqual(item["correct_choice"], 1)
-		self.assertIsNone(item["content_json"])
+		# Only QUESTION keys remain — no stage_type or content_json
+		self.assertEqual(
+			set(item.keys()),
+			{"item_id", "question_text", "choice_1", "choice_2", "choice_3", "choice_4", "correct_choice"},
+		)
 
-	def test_fill_blank_stage_extracts_content_json(self):
-		"""FILL_BLANK stage → content_json with blank data, MCQ fields are None."""
+	def test_fill_blank_stage_returns_empty(self):
+		"""FILL_BLANK stage → empty list (non-QUESTION stages no longer produce items)."""
 		stage = _make_stage(
 			"FILL_BLANK",
 			{
@@ -72,24 +75,10 @@ class TestItemExtraction(FrappeTestCase):
 			},
 		)
 
-		items = extract_items_from_stage(stage)
+		self.assertEqual(extract_items_from_stage(stage), [])
 
-		self.assertEqual(len(items), 1)
-		item = items[0]
-		self.assertEqual(item["item_id"], "bbbb0000-0000-0000-0000-000000000001")
-		self.assertEqual(item["stage_type"], "FILL_BLANK")
-		self.assertEqual(item["question_text"], "مرحب كيفك")
-		self.assertIsNone(item["choice_1"])
-		self.assertIsNone(item["correct_choice"])
-
-		cj = json.loads(item["content_json"])
-		self.assertEqual(cj["blank_from"], 5)
-		self.assertEqual(cj["blank_to"], 9)
-		self.assertEqual(cj["correct_word"], "كيفك")
-		self.assertEqual(cj["distractors"], ["طيب"])
-
-	def test_matching_stage_extracts_content_json(self):
-		"""MATCHING stage → content_json with pair data."""
+	def test_matching_stage_returns_empty(self):
+		"""MATCHING stage → empty list (non-QUESTION stages no longer produce items)."""
 		stage = _make_stage(
 			"MATCHING",
 			{
@@ -111,19 +100,10 @@ class TestItemExtraction(FrappeTestCase):
 			},
 		)
 
-		items = extract_items_from_stage(stage)
+		self.assertEqual(extract_items_from_stage(stage), [])
 
-		self.assertEqual(len(items), 2)
-		for item in items:
-			self.assertEqual(item["stage_type"], "MATCHING")
-			self.assertEqual(item["question_text"], "طابق العناصر")
-			self.assertIsNone(item["choice_1"])
-			cj = json.loads(item["content_json"])
-			self.assertIn("left", cj)
-			self.assertIn("right", cj)
-
-	def test_unknown_stage_type_uses_content_json_fallback(self):
-		"""Unknown stage type with item_ids → content_json fallback."""
+	def test_unknown_stage_type_returns_empty(self):
+		"""Unknown stage type → empty list (only QUESTION stages produce items)."""
 		stage = _make_stage(
 			"REVEAL",
 			{
@@ -134,13 +114,7 @@ class TestItemExtraction(FrappeTestCase):
 			},
 		)
 
-		items = extract_items_from_stage(stage)
-
-		self.assertEqual(len(items), 1)
-		item = items[0]
-		self.assertEqual(item["stage_type"], "REVEAL")
-		self.assertEqual(item["question_text"], "Some reveal content")
-		self.assertIsNotNone(item["content_json"])
+		self.assertEqual(extract_items_from_stage(stage), [])
 
 	def test_empty_config_json_returns_no_items(self):
 		"""Empty or null config_json → no items extracted."""
@@ -216,7 +190,7 @@ class TestSyncReviewItems(FrappeTestCase):
 
 	@patch("memora_admin.api.review_items._get_globally_skippable_types")
 	def test_sync_creates_items_from_stages(self, mock_skip):
-		"""Save lesson with stages → Review Items created with correct hierarchy refs."""
+		"""Save lesson with stages → only QUESTION stages produce Review Items."""
 		mock_skip.return_value = {"INFORMATION", "MINDMAP", "SENTENCE_BUILDER"}
 
 		stages = [
@@ -244,27 +218,22 @@ class TestSyncReviewItems(FrappeTestCase):
 
 		doc = self._make_lesson_doc(stages)
 
-		# Track for cleanup (QUESTION produces 1 item using correct answer's id)
-		self._cleanup_items.extend(
-			[
-				"11110000-0000-0000-0000-000000000001",
-				"11110000-0000-0000-0000-000000000003",
-			]
-		)
+		# Track for cleanup (only QUESTION produces an item now)
+		self._cleanup_items.append("11110000-0000-0000-0000-000000000001")
 
 		result = sync_review_items(doc)
 		frappe.db.commit()
 
-		# 1 from QUESTION (correct answer's id) + 1 from FILL_BLANK = 2
-		self.assertEqual(result["created"], 2)
+		# Only 1 from QUESTION — FILL_BLANK no longer produces items
+		self.assertEqual(result["created"], 1)
 		self.assertEqual(result["updated"], 0)
 		self.assertEqual(result["deleted"], 0)
 
-		# Verify items exist with correct hierarchy
+		# Verify item exists with correct hierarchy
 		items = frappe.get_all("Memora Review Item", filters={"lesson": doc.name}, fields=["*"])
 		created_ids = {i.item_id for i in items}
 		self.assertIn("11110000-0000-0000-0000-000000000001", created_ids)
-		self.assertIn("11110000-0000-0000-0000-000000000003", created_ids)
+		self.assertNotIn("11110000-0000-0000-0000-000000000003", created_ids)
 
 		# Check hierarchy fields
 		for item in items:
@@ -331,13 +300,16 @@ class TestSyncReviewItems(FrappeTestCase):
 		"""Stage switched to skippable → its items are not synced (deleted if existed)."""
 		mock_skip.return_value = {"INFORMATION", "MINDMAP", "SENTENCE_BUILDER"}
 
-		# First sync: create items from a non-skippable stage
+		# First sync: create items from a non-skippable QUESTION stage
 		stages = [
 			_make_stage(
-				"MATCHING",
+				"QUESTION",
 				{
-					"instruction": "Match",
-					"pairs": [{"left": "a", "right": "b", "item_id": "33330000-0000-0000-0000-000000000001"}],
+					"question": "Skippable test?",
+					"answers": [
+						{"text": "A", "is_correct": True, "item_id": "33330000-0000-0000-0000-000000000001"},
+						{"text": "B", "is_correct": False, "item_id": "33330000-0000-0000-0000-000000000002"},
+					],
 				},
 				name="stage-m1",
 				is_skippable=0,
@@ -396,7 +368,7 @@ class TestDeleteReviewItems(FrappeTestCase):
 
 		mock_skip.return_value = {"INFORMATION", "MINDMAP", "SENTENCE_BUILDER"}
 
-		# Create items via sync (2 stages → 2 items)
+		# Create items via sync (2 QUESTION stages → 2 items)
 		stages = [
 			_make_stage(
 				"QUESTION",
@@ -418,11 +390,16 @@ class TestDeleteReviewItems(FrappeTestCase):
 				name="stage-del1",
 			),
 			_make_stage(
-				"FILL_BLANK",
+				"QUESTION",
 				{
-					"text": "Hello World",
-					"blanks": [{"from": 6, "to": 11, "item_id": "44440000-0000-0000-0000-000000000003"}],
-					"distractors": ["Earth"],
+					"question": "Delete test 2?",
+					"answers": [
+						{
+							"text": "A",
+							"is_correct": True,
+							"item_id": "44440000-0000-0000-0000-000000000003",
+						},
+					],
 				},
 				name="stage-del2",
 			),
@@ -438,7 +415,7 @@ class TestDeleteReviewItems(FrappeTestCase):
 		sync_review_items(doc)
 		frappe.db.commit()
 
-		# Verify items exist (1 QUESTION + 1 FILL_BLANK)
+		# Verify items exist (2 QUESTION items)
 		self.assertTrue(frappe.db.exists("Memora Review Item", "44440000-0000-0000-0000-000000000001"))
 		self.assertTrue(frappe.db.exists("Memora Review Item", "44440000-0000-0000-0000-000000000003"))
 
@@ -459,11 +436,12 @@ class TestDeleteReviewItems(FrappeTestCase):
 
 		stages = [
 			_make_stage(
-				"MATCHING",
+				"QUESTION",
 				{
-					"instruction": "Match pairs",
-					"pairs": [
-						{"left": "x", "right": "y", "item_id": "55550000-0000-0000-0000-000000000001"},
+					"question": "Trash test?",
+					"answers": [
+						{"text": "X", "is_correct": True, "item_id": "55550000-0000-0000-0000-000000000001"},
+						{"text": "Y", "is_correct": False, "item_id": "55550000-0000-0000-0000-000000000002"},
 					],
 				},
 				name="stage-trash1",
@@ -495,7 +473,7 @@ class TestDeleteReviewItems(FrappeTestCase):
 		"""Removing a stage from a lesson and re-saving cleans up orphaned items."""
 		mock_skip.return_value = {"INFORMATION", "MINDMAP", "SENTENCE_BUILDER"}
 
-		# Sync with 2 stages
+		# Sync with 2 QUESTION stages
 		stages = [
 			_make_stage(
 				"QUESTION",
@@ -508,11 +486,12 @@ class TestDeleteReviewItems(FrappeTestCase):
 				name="stage-keep",
 			),
 			_make_stage(
-				"FILL_BLANK",
+				"QUESTION",
 				{
-					"text": "Remove this",
-					"blanks": [{"from": 7, "to": 11, "item_id": "66660000-0000-0000-0000-000000000002"}],
-					"distractors": [],
+					"question": "Remove?",
+					"answers": [
+						{"text": "B", "is_correct": True, "item_id": "66660000-0000-0000-0000-000000000002"},
+					],
 				},
 				name="stage-remove",
 			),
@@ -820,22 +799,10 @@ class TestContentHashDebounce(FrappeTestCase):
 
 
 class TestMindmapExtraction(FrappeTestCase):
-	"""T033: MINDMAP recursive extraction — nested children[] with item_ids
-	at every depth level are all extracted into Review Items."""
+	"""T033: MINDMAP stages no longer produce Review Items (only QUESTION does)."""
 
-	def setUp(self):
-		super().setUp()
-		self._cleanup_items = []
-
-	def tearDown(self):
-		for item_id in self._cleanup_items:
-			if frappe.db.exists("Memora Review Item", item_id):
-				frappe.delete_doc("Memora Review Item", item_id, force=True, ignore_permissions=True)
-		frappe.db.commit()
-		super().tearDown()
-
-	def test_mindmap_unit_extraction_nested_children(self):
-		"""MINDMAP with 3 levels of nesting → all item_ids extracted."""
+	def test_mindmap_returns_empty(self):
+		"""MINDMAP with nested children → empty list (non-QUESTION stage)."""
 		stage = _make_stage(
 			"MINDMAP",
 			{
@@ -849,12 +816,6 @@ class TestMindmapExtraction(FrappeTestCase):
 							{
 								"text": "فرع1.1",
 								"item_id": "a0330000-0000-0000-0000-000000000002",
-								"children": [
-									{
-										"text": "فرع1.1.1",
-										"item_id": "a0330000-0000-0000-0000-000000000003",
-									}
-								],
 							}
 						],
 					},
@@ -866,97 +827,7 @@ class TestMindmapExtraction(FrappeTestCase):
 			},
 		)
 
-		items = extract_items_from_stage(stage)
-
-		self.assertEqual(len(items), 4)
-		extracted_ids = {i["item_id"] for i in items}
-		self.assertEqual(
-			extracted_ids,
-			{
-				"a0330000-0000-0000-0000-000000000001",
-				"a0330000-0000-0000-0000-000000000002",
-				"a0330000-0000-0000-0000-000000000003",
-				"a0330000-0000-0000-0000-000000000004",
-			},
-		)
-
-		# All items should have the instruction as question_text
-		for item in items:
-			self.assertEqual(item["stage_type"], "MINDMAP")
-			self.assertEqual(item["question_text"], "أكمل خريطة المفاهيم")
-			self.assertIsNotNone(item["content_json"])
-
-	def test_mindmap_nodes_without_item_id_skipped(self):
-		"""Nodes without item_id are traversed but not extracted."""
-		stage = _make_stage(
-			"MINDMAP",
-			{
-				"central": "Root",
-				"children": [
-					{
-						"text": "No ID node",
-						"children": [
-							{"text": "Leaf with ID", "item_id": "a0330000-0000-0000-0000-000000000005"},
-						],
-					},
-				],
-			},
-		)
-
-		items = extract_items_from_stage(stage)
-
-		self.assertEqual(len(items), 1)
-		self.assertEqual(items[0]["item_id"], "a0330000-0000-0000-0000-000000000005")
-
-	@patch("memora_admin.api.review_items._get_globally_skippable_types")
-	def test_mindmap_integration_via_sync(self, mock_skip):
-		"""MINDMAP extraction works end-to-end via sync_review_items."""
-		mock_skip.return_value = set()
-
-		real = frappe.db.get_value(
-			"Memora Lesson", {}, ["name", "subject", "track", "unit", "topic"], as_dict=True
-		)
-		stages = [
-			_make_stage(
-				"MINDMAP",
-				{
-					"instruction": "خريطة ذهنية",
-					"children": [
-						{
-							"text": "A",
-							"item_id": "a0330000-0000-0000-0000-000000000006",
-							"children": [
-								{"text": "A1", "item_id": "a0330000-0000-0000-0000-000000000007"},
-							],
-						},
-					],
-				},
-				name="stage-033mm",
-			),
-		]
-		doc = SimpleNamespace(
-			name=real.name,
-			subject=real.subject,
-			track=real.track,
-			unit=real.unit,
-			topic=real.topic,
-			stages=stages,
-			is_reviewable=1,
-			content_hash=None,
-		)
-		self._cleanup_items.extend(
-			[
-				"a0330000-0000-0000-0000-000000000006",
-				"a0330000-0000-0000-0000-000000000007",
-			]
-		)
-
-		result = sync_review_items(doc)
-		frappe.db.commit()
-
-		self.assertEqual(result["created"], 2)
-		self.assertTrue(frappe.db.exists("Memora Review Item", "a0330000-0000-0000-0000-000000000006"))
-		self.assertTrue(frappe.db.exists("Memora Review Item", "a0330000-0000-0000-0000-000000000007"))
+		self.assertEqual(extract_items_from_stage(stage), [])
 
 
 class TestPracticeLogCascade(FrappeTestCase):
@@ -1000,11 +871,12 @@ class TestPracticeLogCascade(FrappeTestCase):
 				name="stage-034a",
 			),
 			_make_stage(
-				"FILL_BLANK",
+				"QUESTION",
 				{
-					"text": "Hello World",
-					"blanks": [{"from": 6, "to": 11, "item_id": "a0340000-0000-0000-0000-000000000005"}],
-					"distractors": ["Earth"],
+					"question": "Cascade test 2?",
+					"answers": [
+						{"text": "C", "is_correct": True, "item_id": "a0340000-0000-0000-0000-000000000005"},
+					],
 				},
 				name="stage-034a2",
 			),
@@ -1026,7 +898,7 @@ class TestPracticeLogCascade(FrappeTestCase):
 			]
 		)
 
-		# Create Review Items (1 QUESTION + 1 FILL_BLANK = 2)
+		# Create Review Items (2 QUESTION stages = 2 items)
 		sync_review_items(doc)
 		frappe.db.commit()
 		self.assertTrue(frappe.db.exists("Memora Review Item", "a0340000-0000-0000-0000-000000000001"))
@@ -1086,11 +958,16 @@ class TestPracticeLogCascade(FrappeTestCase):
 				name="stage-034b-keep",
 			),
 			_make_stage(
-				"FILL_BLANK",
+				"QUESTION",
 				{
-					"text": "Remove this blank",
-					"blanks": [{"from": 12, "to": 17, "item_id": "a0340000-0000-0000-0000-000000000004"}],
-					"distractors": ["other"],
+					"question": "Remove this?",
+					"answers": [
+						{
+							"text": "Remove",
+							"is_correct": True,
+							"item_id": "a0340000-0000-0000-0000-000000000004",
+						},
+					],
 				},
 				name="stage-034b-remove",
 			),
@@ -1112,7 +989,7 @@ class TestPracticeLogCascade(FrappeTestCase):
 			]
 		)
 
-		# Create both Review Items (1 QUESTION + 1 FILL_BLANK)
+		# Create both Review Items (2 QUESTION stages)
 		sync_review_items(doc)
 		frappe.db.commit()
 

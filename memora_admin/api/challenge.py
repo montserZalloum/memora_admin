@@ -108,12 +108,12 @@ def get_challenge_settings() -> dict:
 def get_topic_question_items(topic_id: str) -> list[dict]:
 	"""Get Review Item records for a topic's MCQ questions.
 
-	Returns item_id, lesson, stage_id for FSRS interaction push.
+	Returns item_id, lesson, correct_choice for grading and FSRS interaction push.
 	Called by ChallengeService._get_question_lookup().
 	"""
 	records = frappe.get_all(
 		"Memora Review Item",
 		filters={"topic": topic_id},
-		fields=["item_id", "lesson", "stage_id", "correct_choice"],
+		fields=["item_id", "lesson", "correct_choice"],
 	)
 	return records

@@ -188,7 +188,6 @@ def _insert_memory_state(
 	subject: str,
 	player: str,
 	item_id: str,
-	stage_id: str,
 	lesson: str,
 	stability: float,
 	difficulty: float,
@@ -210,12 +209,12 @@ def _insert_memory_state(
 	frappe.db.sql(
 		"""
 		INSERT INTO `tabMemora Memory State`
-		(name, season, season_seq, subject, player, item_id, stage_id, lesson,
+		(name, season, season_seq, subject, player, item_id, lesson,
 		 stability, difficulty, next_review, state, step, last_review,
 		 creation, modified, owner, modified_by, docstatus, idx)
 		VALUES
 		(%(name)s, %(season)s, %(season_seq)s, %(subject)s, %(player)s,
-		 UUID_TO_BIN(%(item_id)s), %(stage_id)s, %(lesson)s,
+		 UUID_TO_BIN(%(item_id)s), %(lesson)s,
 		 %(stability)s, %(difficulty)s, %(next_review)s, %(state)s, %(step)s, %(last_review)s,
 		 NOW(6), NOW(6), 'Administrator', 'Administrator', 0, 0)
 		""",
@@ -226,7 +225,6 @@ def _insert_memory_state(
 			"subject": subject,
 			"player": player,
 			"item_id": item_id,
-			"stage_id": stage_id,
 			"lesson": lesson,
 			"stability": stability,
 			"difficulty": difficulty,
@@ -484,7 +482,6 @@ def process_fsrs_reviews():
 					subject=subject,
 					player=player,
 					item_id=item_id,
-					stage_id=stage_id,
 					lesson=lesson,
 					stability=card.stability,
 					difficulty=card.difficulty,
@@ -527,7 +524,6 @@ def process_fsrs_reviews():
 					"step": card_step,
 					"last_review": card_last_review.isoformat() if card_last_review else None,
 					"lesson": lesson,
-					"stage_id": stage_id,
 				}
 			)
 			r.setex(redis_key, 86400, fsrs_data)  # 24hr TTL

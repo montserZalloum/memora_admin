@@ -57,7 +57,7 @@ async def get_due_items(
 ):
 	"""Get up to 10 due items for a specific subject, oldest first (FIFO).
 
-	Each item includes item_id, stage_id, lesson_id, and stage_type.
+	Each item includes item_id, lesson_id, and MCQ content.
 	Always returns fresh data (no cache).
 	"""
 	result = await review_service.get_due_items(user.sub, subject)
@@ -65,13 +65,10 @@ async def get_due_items(
 	items = [
 		DueItem(
 			item_id=i.get("item_id", ""),
-			stage_id=i.get("stage_id", ""),
 			lesson_id=i.get("lesson_id", ""),
-			stage_type=i.get("stage_type", ""),
 			question_text=i.get("question_text"),
 			choices=i.get("choices", []),
 			correct_choice=i.get("correct_choice"),
-			content_json=i.get("content_json"),
 		)
 		for i in result.get("items", [])
 	]

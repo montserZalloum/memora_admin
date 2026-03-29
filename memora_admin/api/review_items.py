@@ -3,6 +3,10 @@
 Extracts reviewable items from lesson stages and upserts them into the
 Memora Review Item DocType. Called from the Memora Lesson on_update hook.
 
+Only QUESTION stages produce Review Items (MCQ). Non-MCQ content
+(FILL_BLANK, MATCHING, MINDMAP) lives in Lesson Stage config_json and
+CDN JSON — it is not duplicated in Review Items.
+
 Stage types with `is_skippable=1` in Memora Lesson Stage Settings are
 globally excluded. Per-stage `is_skippable` overrides are also respected.
 """
@@ -38,17 +42,17 @@ def _get_globally_skippable_types() -> set[str]:
 
 
 def extract_items_from_stage(stage) -> list[dict]:
-	"""Extract review items from a single stage's config_json.
+	"""Extract review items from a QUESTION stage's config_json.
 
-	Dispatches by stage_type:
-	  QUESTION   → one item per answer (MCQ fields populated)
-	  FILL_BLANK → one item per blank (content_json populated)
-	  MATCHING   → one item per pair (content_json populated)
-	  Other      → one item per item_id found (content_json fallback)
+	Only QUESTION stages produce Review Items (MCQ). All other stage
+	types return an empty list.
 
-	Returns list of dicts with keys: item_id, stage_type, question_text,
-	choice_1..4, correct_choice, content_json.
+	Returns list of dicts with keys: item_id, question_text,
+	choice_1..4, correct_choice.
 	"""
+	if stage.stage_type != "QUESTION":
+		return []
+
 	config_str = stage.config_json
 	if not config_str:
 		return []
@@ -58,20 +62,10 @@ def extract_items_from_stage(stage) -> list[dict]:
 	except (json.JSONDecodeError, TypeError):
 		return []
 
-	stage_type = stage.stage_type
-	if stage_type == "QUESTION":
-		return _extract_question(config, stage_type)
-	elif stage_type == "FILL_BLANK":
-		return _extract_fill_blank(config, stage_type)
-	elif stage_type == "MATCHING":
-		return _extract_matching(config, stage_type)
-	elif stage_type == "MINDMAP":
-		return _extract_mindmap(config, stage_type)
-	else:
-		return _extract_generic(config, stage_type)
+	return _extract_question(config)
 
 
-def _extract_question(config: dict, stage_type: str) -> list[dict]:
+def _extract_question(config: dict) -> list[dict]:
 	"""Extract ONE item from a QUESTION stage.
 
 	A QUESTION is a single reviewable unit — the student sees one question
@@ -108,188 +102,14 @@ def _extract_question(config: dict, stage_type: str) -> list[dict]:
 	return [
 		{
 			"item_id": representative_item_id,
-			"stage_type": stage_type,
 			"question_text": question_text,
 			"choice_1": choices[0] if len(choices) > 0 else None,
 			"choice_2": choices[1] if len(choices) > 1 else None,
 			"choice_3": choices[2] if len(choices) > 2 else None,
 			"choice_4": choices[3] if len(choices) > 3 else None,
 			"correct_choice": correct_idx,
-			"content_json": None,
 		}
 	]
-
-
-def _extract_fill_blank(config: dict, stage_type: str) -> list[dict]:
-	"""Extract items from a FILL_BLANK stage.
-
-	Each blank has its own item_id. The question_text is the full sentence.
-	"""
-	text = config.get("text", "")
-	blanks = config.get("blanks", [])
-	distractors = config.get("distractors", [])
-	if not blanks:
-		return []
-
-	items = []
-	for blank in blanks:
-		item_id = blank.get("item_id")
-		if not item_id:
-			continue
-
-		blank_from = blank.get("from", 0)
-		blank_to = blank.get("to", 0)
-		correct_word = text[blank_from:blank_to] if text else ""
-
-		items.append(
-			{
-				"item_id": item_id,
-				"stage_type": stage_type,
-				"question_text": text,
-				"choice_1": None,
-				"choice_2": None,
-				"choice_3": None,
-				"choice_4": None,
-				"correct_choice": None,
-				"content_json": json.dumps(
-					{
-						"blank_from": blank_from,
-						"blank_to": blank_to,
-						"correct_word": correct_word,
-						"distractors": distractors,
-					}
-				),
-			}
-		)
-	return items
-
-
-def _extract_matching(config: dict, stage_type: str) -> list[dict]:
-	"""Extract items from a MATCHING stage.
-
-	Each pair has its own item_id.
-	"""
-	instruction = config.get("instruction", "")
-	pairs = config.get("pairs", [])
-	if not pairs:
-		return []
-
-	items = []
-	for pair in pairs:
-		item_id = pair.get("item_id")
-		if not item_id:
-			continue
-		items.append(
-			{
-				"item_id": item_id,
-				"stage_type": stage_type,
-				"question_text": instruction,
-				"choice_1": None,
-				"choice_2": None,
-				"choice_3": None,
-				"choice_4": None,
-				"correct_choice": None,
-				"content_json": json.dumps(
-					{
-						"left": pair.get("left", ""),
-						"right": pair.get("right", ""),
-					}
-				),
-			}
-		)
-	return items
-
-
-def _extract_mindmap(config: dict, stage_type: str) -> list[dict]:
-	"""Recursively extract items from MINDMAP children[].
-
-	MINDMAP stages have a tree of nodes, each with an optional item_id.
-	Generic fallback only finds top-level children — this traverses the
-	full depth.
-	"""
-	instruction = config.get("instruction") or config.get("central") or ""
-	items = []
-
-	def _walk(nodes):
-		for node in nodes or []:
-			if not isinstance(node, dict):
-				continue
-			item_id = node.get("item_id")
-			if item_id:
-				items.append(
-					{
-						"item_id": item_id,
-						"stage_type": stage_type,
-						"question_text": instruction,
-						"choice_1": None,
-						"choice_2": None,
-						"choice_3": None,
-						"choice_4": None,
-						"correct_choice": None,
-						"content_json": json.dumps(node),
-					}
-				)
-			_walk(node.get("children"))
-
-	_walk(config.get("children"))
-	return items
-
-
-def _extract_generic(config: dict, stage_type: str) -> list[dict]:
-	"""Fallback extraction for unknown non-skippable stage types.
-
-	Searches for item_id at top level and in common list fields.
-	"""
-	items = []
-
-	# Check for top-level item_id
-	if config.get("item_id"):
-		items.append(
-			{
-				"item_id": config["item_id"],
-				"stage_type": stage_type,
-				"question_text": config.get("text")
-				or config.get("question")
-				or config.get("instruction")
-				or "",
-				"choice_1": None,
-				"choice_2": None,
-				"choice_3": None,
-				"choice_4": None,
-				"correct_choice": None,
-				"content_json": json.dumps(config),
-			}
-		)
-		return items
-
-	# Search common list fields for item_ids
-	for key in ("items", "answers", "blanks", "pairs", "elements"):
-		entries = config.get(key, [])
-		if not isinstance(entries, list):
-			continue
-		for entry in entries:
-			if not isinstance(entry, dict):
-				continue
-			item_id = entry.get("item_id")
-			if item_id:
-				items.append(
-					{
-						"item_id": item_id,
-						"stage_type": stage_type,
-						"question_text": config.get("text")
-						or config.get("question")
-						or config.get("instruction")
-						or "",
-						"choice_1": None,
-						"choice_2": None,
-						"choice_3": None,
-						"choice_4": None,
-						"correct_choice": None,
-						"content_json": json.dumps(entry),
-					}
-				)
-
-	return items
 
 
 # ---------------------------------------------------------------------------
@@ -322,7 +142,7 @@ def sync_review_items(lesson_doc) -> dict:
 
 	1. Check is_reviewable — if disabled, delete existing items and bail
 	2. Debounce via content_hash — skip if unchanged
-	3. Collect all item_ids from non-skippable stages
+	3. Collect all item_ids from non-skippable QUESTION stages
 	4. Fetch existing Review Items for this lesson
 	5. Upsert new/changed items
 	6. Delete orphans (in DB but not in current config)
@@ -356,7 +176,6 @@ def sync_review_items(lesson_doc) -> dict:
 
 		extracted = extract_items_from_stage(stage)
 		for item in extracted:
-			item["stage_id"] = stage.name  # child table row name
 			current_items[item["item_id"]] = item
 
 	# --- Step 2: Fetch existing Review Items for this lesson ---
@@ -366,15 +185,12 @@ def sync_review_items(lesson_doc) -> dict:
 		fields=[
 			"name",
 			"item_id",
-			"stage_id",
-			"stage_type",
 			"question_text",
 			"choice_1",
 			"choice_2",
 			"choice_3",
 			"choice_4",
 			"correct_choice",
-			"content_json",
 		],
 	)
 	existing_by_id = {r.item_id: r for r in existing}
@@ -389,30 +205,24 @@ def sync_review_items(lesson_doc) -> dict:
 			# Check if anything changed
 			ex = existing_by_id[item_id]
 			changed = (
-				ex.stage_id != item_data["stage_id"]
-				or ex.stage_type != item_data["stage_type"]
-				or (ex.question_text or "") != (item_data["question_text"] or "")
+				(ex.question_text or "") != (item_data["question_text"] or "")
 				or (ex.choice_1 or "") != (item_data["choice_1"] or "")
 				or (ex.choice_2 or "") != (item_data["choice_2"] or "")
 				or (ex.choice_3 or "") != (item_data["choice_3"] or "")
 				or (ex.choice_4 or "") != (item_data["choice_4"] or "")
 				or (ex.correct_choice or 0) != (item_data["correct_choice"] or 0)
-				or (ex.content_json or "") != (item_data["content_json"] or "")
 			)
 			if changed:
 				frappe.db.set_value(
 					"Memora Review Item",
 					item_id,
 					{
-						"stage_id": item_data["stage_id"],
-						"stage_type": item_data["stage_type"],
 						"question_text": item_data["question_text"],
 						"choice_1": item_data["choice_1"],
 						"choice_2": item_data["choice_2"],
 						"choice_3": item_data["choice_3"],
 						"choice_4": item_data["choice_4"],
 						"correct_choice": item_data["correct_choice"],
-						"content_json": item_data["content_json"],
 					},
 					update_modified=True,
 				)
@@ -426,15 +236,12 @@ def sync_review_items(lesson_doc) -> dict:
 			doc.unit = lesson_doc.unit
 			doc.topic = lesson_doc.topic
 			doc.lesson = lesson_name
-			doc.stage_id = item_data["stage_id"]
-			doc.stage_type = item_data["stage_type"]
 			doc.question_text = item_data["question_text"]
 			doc.choice_1 = item_data["choice_1"]
 			doc.choice_2 = item_data["choice_2"]
 			doc.choice_3 = item_data["choice_3"]
 			doc.choice_4 = item_data["choice_4"]
 			doc.correct_choice = item_data["correct_choice"]
-			doc.content_json = item_data["content_json"]
 			doc.flags.ignore_permissions = True
 			doc.insert()
 			created += 1

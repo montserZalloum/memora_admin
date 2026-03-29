@@ -25,5 +25,5 @@ class MemoraReviewItem(Document):
 				frappe.throw("Correct Choice must be between 1 and 4")
 
 	def _validate_content(self):
-		if not self.choice_1 and not self.content_json:
-			frappe.throw("At least one of Choice 1 or Content JSON must be provided")
+		if not self.choice_1:
+			frappe.throw("Choice 1 is required for Review Items")

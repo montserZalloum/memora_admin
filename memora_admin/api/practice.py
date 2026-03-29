@@ -324,12 +324,12 @@ def select_practice_candidates(
 	rows = frappe.db.sql(
 		f"""
 		SELECT candidates.item_id, candidates.question_text, candidates.choice_1, candidates.choice_2,
-			   candidates.choice_3, candidates.choice_4, candidates.correct_choice, candidates.content_json,
-			   candidates.stage_type, candidates.topic, candidates.priority, candidates.sort_seen
+			   candidates.choice_3, candidates.choice_4, candidates.correct_choice,
+			   candidates.topic, candidates.priority, candidates.sort_seen
 		FROM (
 			SELECT ri.item_id, ri.question_text, ri.choice_1, ri.choice_2,
-				   ri.choice_3, ri.choice_4, ri.correct_choice, ri.content_json,
-				   ri.stage_type, ri.topic,
+				   ri.choice_3, ri.choice_4, ri.correct_choice,
+				   ri.topic,
 				   {priority_case} AS priority,
 				   {sort_seen_expr} AS sort_seen,
 				   ROW_NUMBER() OVER (
@@ -375,8 +375,8 @@ def select_practice_questions_for_topic(
 	rows = frappe.db.sql(
 		"""
 		SELECT ri.item_id, ri.question_text, ri.choice_1, ri.choice_2,
-			   ri.choice_3, ri.choice_4, ri.correct_choice, ri.content_json,
-			   ri.stage_type, ri.topic,
+			   ri.choice_3, ri.choice_4, ri.correct_choice,
+			   ri.topic,
 			   CASE
 				   WHEN pl.item_id IS NULL THEN 0
 				   ELSE 1

@@ -47,15 +47,11 @@ class TestReviewEndpoints:
 				"items": [
 					{
 						"item_id": "uuid-1",
-						"stage_id": "STG-001",
 						"lesson_id": "LSN-001",
-						"stage_type": "quiz",
 					},
 					{
 						"item_id": "uuid-2",
-						"stage_id": "STG-002",
 						"lesson_id": "LSN-002",
-						"stage_type": "review",
 					},
 				],
 				"has_more": False,

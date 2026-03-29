@@ -66,7 +66,6 @@ CREATE TABLE IF NOT EXISTS memory_state_current (
     subject      VARCHAR,
     player       VARCHAR,
     item_id      VARCHAR,
-    stage_id     VARCHAR,
     stability    DOUBLE,
     difficulty   DOUBLE,
     next_review  TIMESTAMP,
@@ -164,13 +163,13 @@ FROM practice_log_live""")
         conn.execute("""\
 CREATE OR REPLACE VIEW memory_state_combined AS
 SELECT name, season_seq, subject, player, item_id,
-       stage_id, stability, difficulty, next_review,
+       stability, difficulty, next_review,
        lesson, state, step, last_review, modified,
        'archive' AS source
 FROM memory_state_archive
 UNION ALL
 SELECT name, season_seq, subject, player, item_id,
-       stage_id, stability, difficulty, next_review,
+       stability, difficulty, next_review,
        lesson, state, step, last_review, modified,
        'current' AS source
 FROM memory_state_current""")

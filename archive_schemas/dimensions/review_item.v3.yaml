@@ -1,5 +1,5 @@
 entity: review_item
-version: v2
+version: v3
 source_table: "tabMemora Review Item"
 id_column: item_id
 fields:
@@ -11,7 +11,6 @@ fields:
   - lesson
   - lesson_title
   - question_text
-  - item_type
   - difficulty
 query: >
   SELECT
@@ -23,7 +22,6 @@ query: >
     ri.`lesson`,
     les.`lesson_title`,
     ri.`question_text`,
-    'QUESTION' AS item_type,
     NULL AS difficulty
   FROM `tabMemora Review Item` ri
   LEFT JOIN `tabMemora Subject` subj ON ri.`subject` = subj.`name`

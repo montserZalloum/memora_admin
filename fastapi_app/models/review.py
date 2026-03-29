@@ -17,16 +17,13 @@ class ReviewOverviewResponse(BaseModel):
 
 
 class DueItem(BaseModel):
-	"""A single item due for review, with question content."""
+	"""A single item due for review, with MCQ content."""
 
 	item_id: str  # UUID string
-	stage_id: str
 	lesson_id: str
-	stage_type: str
 	question_text: str | None = None
 	choices: list[str] = []
 	correct_choice: int | None = None
-	content_json: dict | None = None
 
 
 class DueItemsResponse(BaseModel):

@@ -1,9 +1,9 @@
 """Integration tests for dim_review_item export.
 
 Scenarios:
-  RI-FULL:    Full export -> 8-column Parquet with correct columns.
+  RI-FULL:    Full export -> 6-column Parquet with correct columns.
   RI-NONULL:  No null item_id values in output.
-  RI-NEW:     New columns (stage_id, stage_type, question_text, correct_choice) present.
+  RI-NEW:     New columns (question_text, correct_choice) present.
 
 Run:
     DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=... DB_PASSWORD=... DB_NAME=... \
@@ -30,7 +30,7 @@ DRI_PREFIX = "DIMRI"
 
 EXPECTED_COLUMNS = {
 	"item_id", "subject_id", "topic_id", "lesson_id",
-	"stage_id", "stage_type", "question_text", "correct_choice",
+	"question_text", "correct_choice",
 }
 
 
@@ -68,13 +68,12 @@ def _insert_test_review_items(conn, count: int = 3) -> list[str]:
 			cur.execute(
 				"INSERT IGNORE INTO `tabMemora Review Item` "
 				"(`name`, `item_id`, `subject`, `topic`, `lesson`, "
-				" `stage_id`, `stage_type`, `question_text`, `correct_choice`, "
+				" `question_text`, `correct_choice`, "
 				" `creation`, `modified`, `modified_by`, `owner`, `docstatus`, `idx`) "
-				"VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, "
+				"VALUES (%s, %s, %s, %s, %s, %s, %s, "
 				"        NOW(), NOW(), 'test@test.com', 'test@test.com', 0, %s)",
 				(item_id, item_id,
 				 f"SUBJ-{DRI_PREFIX}", f"TOPIC-{DRI_PREFIX}", f"LESSON-{DRI_PREFIX}",
-				 f"STAGE-{DRI_PREFIX}-{n}", "MCQ",
 				 f"What is {n}+{n}?", n % 4 + 1,
 				 n),
 			)
@@ -92,12 +91,12 @@ def _cleanup_test_review_items(conn) -> None:
 
 
 # ---------------------------------------------------------------------------
-# RI-FULL: Full export with 8 columns
+# RI-FULL: Full export with 6 columns
 # ---------------------------------------------------------------------------
 
 @pytest.mark.integration
 def test_dim_review_item_full_export(analytics_db_config, db_conn, tmp_path):
-	"""dim_review_item export produces 8-column Parquet with correct column names."""
+	"""dim_review_item export produces 6-column Parquet with correct column names."""
 	_cleanup_test_review_items(db_conn)
 	try:
 		inserted_ids = _insert_test_review_items(db_conn, 3)
@@ -153,7 +152,7 @@ def test_dim_review_item_no_null_item_id(analytics_db_config, db_conn, tmp_path)
 
 @pytest.mark.integration
 def test_dim_review_item_new_columns_populated(analytics_db_config, db_conn, tmp_path):
-	"""New columns (stage_id, stage_type, question_text, correct_choice) are present and populated."""
+	"""New columns (question_text, correct_choice) are present and populated."""
 	_cleanup_test_review_items(db_conn)
 	try:
 		inserted_ids = _insert_test_review_items(db_conn, 1)
@@ -166,8 +165,6 @@ def test_dim_review_item_new_columns_populated(analytics_db_config, db_conn, tmp
 		all_ids = table.column("item_id").to_pylist()
 		idx = all_ids.index(inserted_ids[0])
 
-		assert table.column("stage_id")[idx].as_py() is not None
-		assert table.column("stage_type")[idx].as_py() == "MCQ"
 		assert table.column("question_text")[idx].as_py() == "What is 1+1?"
 		assert table.column("correct_choice")[idx].as_py() == 2  # (1 % 4) + 1 = 2
 	finally:

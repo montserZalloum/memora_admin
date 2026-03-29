@@ -148,7 +148,6 @@ MS_PARQUET_SCHEMA = pa.schema([
     pa.field("subject",        pa.string()),
     pa.field("player",         pa.string()),
     pa.field("item_id",        pa.string()),
-    pa.field("stage_id",       pa.string()),
     pa.field("stability",      pa.float64()),
     pa.field("difficulty",     pa.float64()),
     pa.field("next_review",    pa.timestamp("us")),
@@ -185,7 +184,6 @@ def _insert_exec_ms_rows(conn, prefix: str, count: int, season_seq: int, num_pla
             f"Science-{(n % 3) + 1}",
             player_id,
             item_uuid,
-            f"STAGE-{(n % 4) + 1}",
             round(0.5 + (n % 100) * 0.05, 4),
             round(0.1 + (n % 9) * 0.09, 4),   # difficulty in [0.10, 0.91]
             ts.strftime("%Y-%m-%d %H:%M:%S"),
@@ -201,11 +199,11 @@ def _insert_exec_ms_rows(conn, prefix: str, count: int, season_seq: int, num_pla
 
     sql = (
         "INSERT IGNORE INTO `tabMemora Memory State` "
-        "(`name`, `season_seq`, `subject`, `player`, `item_id`, `stage_id`, "
+        "(`name`, `season_seq`, `subject`, `player`, `item_id`, "
         " `stability`, `difficulty`, `next_review`, `lesson`, "
         " `state`, `step`, `last_review`, "
         " `creation`, `modified`, `modified_by`, `owner`) "
-        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+        "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     )
     with conn.cursor() as cursor:
         cursor.executemany(sql, rows)
@@ -363,7 +361,6 @@ def _make_good_ms_parquet(tmp_path: str, count: int = 10) -> str:
     subjects    = [f"Science-{(i % 3) + 1}" for i in range(count)]
     players     = [f"{EXEC_PLAYER_PREFIX}-{(i % 5) + 1:03d}" for i in range(count)]
     item_ids    = [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"good-item-{i}")) for i in range(count)]
-    stage_ids   = [f"STAGE-{(i % 4) + 1}" for i in range(count)]
     stabilities = [round(0.5 + i * 0.1, 4) for i in range(count)]
     difficulties = [round(0.1 + (i % 9) * 0.09, 4) for i in range(count)]
     ts_vals     = [base_ts + timedelta(minutes=i) for i in range(count)]
@@ -381,7 +378,6 @@ def _make_good_ms_parquet(tmp_path: str, count: int = 10) -> str:
         "subject":        pa.array(subjects,     type=pa.string()),
         "player":         pa.array(players,      type=pa.string()),
         "item_id":        pa.array(item_ids,     type=pa.string()),
-        "stage_id":       pa.array(stage_ids,    type=pa.string()),
         "stability":      pa.array(stabilities,  type=pa.float64()),
         "difficulty":     pa.array(difficulties, type=pa.float64()),
         "next_review":    pa.array(ts_vals,      type=pa.timestamp("us")),
@@ -422,7 +418,6 @@ def _make_bad_ms_parquet(
     subjects    = [f"Science-{(i % 3) + 1}" for i in range(count)]
     players     = [f"{EXEC_PLAYER_PREFIX}-{(i % 5) + 1:03d}" for i in range(count)]
     item_ids    = [str(uuid.uuid5(uuid.NAMESPACE_DNS, f"bad-item-{i}")) for i in range(count)]
-    stage_ids   = [f"STAGE-{(i % 4) + 1}" for i in range(count)]
     stabilities = [round(0.5 + i * 0.1, 4) for i in range(count)]
     difficulties = [round(0.1 + (i % 9) * 0.09, 4) for i in range(count)]
     ts_vals     = [base_ts + timedelta(minutes=i) for i in range(count)]
@@ -461,7 +456,6 @@ def _make_bad_ms_parquet(
         "subject":        pa.array(subjects,     type=pa.string()),
         "player":         pa.array(players,      type=pa.string()),
         "item_id":        pa.array(item_ids,     type=pa.string()),
-        "stage_id":       pa.array(stage_ids,    type=pa.string()),
         "stability":      pa.array(stabilities,  type=pa.float64()),
         "difficulty":     pa.array(difficulties, type=pa.float64()),
         "next_review":    pa.array(ts_vals,      type=pa.timestamp("us")),
@@ -971,7 +965,6 @@ class TestDQFailurePaths:
             "subject":        pa.array(["S"] * count, type=pa.string()),
             "player":         pa.array([f"{EXEC_PLAYER_PREFIX}-001"] * count, type=pa.string()),
             "item_id":        pa.array([str(uuid.uuid4()) for _ in range(count)], type=pa.string()),
-            "stage_id":       pa.array(["STAGE-1"] * count, type=pa.string()),
             "stability":      pa.array([0.5] * count, type=pa.float64()),
             "difficulty":     pa.array([-0.1, 0.2, 0.3, 0.4, 0.5], type=pa.float64()),
             "next_review":    pa.array([base_ts] * count, type=pa.timestamp("us")),
@@ -1448,7 +1441,6 @@ class TestRealisticHighVolumeData:
         now = datetime(2099, 8, 1, 10, 0, 0)
         rows = []
         subjects = ["Biology", "Chemistry", "Physics", "Mathematics", "History"]
-        stage_ids = ["STAGE-1", "STAGE-2", "STAGE-3", "STAGE-4"]
 
         for n in range(1, count + 1):
             ts = now + timedelta(seconds=n * 30)
@@ -1479,7 +1471,6 @@ class TestRealisticHighVolumeData:
                 subjects[n % len(subjects)],
                 player_id,
                 item_uuid,
-                stage_ids[n % len(stage_ids)],
                 stability,
                 difficulty,
                 ts.strftime("%Y-%m-%d %H:%M:%S"),
@@ -1495,11 +1486,11 @@ class TestRealisticHighVolumeData:
 
         sql = (
             "INSERT IGNORE INTO `tabMemora Memory State` "
-            "(`name`, `season_seq`, `subject`, `player`, `item_id`, `stage_id`, "
+            "(`name`, `season_seq`, `subject`, `player`, `item_id`, "
             " `stability`, `difficulty`, `next_review`, `lesson`, "
             " `state`, `step`, `last_review`, "
             " `creation`, `modified`, `modified_by`, `owner`) "
-            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
         )
         with conn.cursor() as cursor:
             cursor.executemany(sql, rows)

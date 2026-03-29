@@ -1484,7 +1484,7 @@ def ch_settings_key() -> str:
 def ch_question_lookup_key(topic_id: str) -> str:
 	"""Per-topic question lookup cache used for server-side challenge grading.
 
-	Type: STRING (JSON: item_id -> {lesson, stage_id, correct_choice})
+	Type: STRING (JSON: item_id -> {lesson, correct_choice})
 	Producers: ChallengeService._get_question_lookup() on cache miss
 	Consumers: ChallengeService._get_question_lookup()
 	TTL: 300s (CH_QUESTION_LOOKUP_KEY_TTL)
