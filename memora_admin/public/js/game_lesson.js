@@ -159,11 +159,22 @@ function open_matching_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 // 🔍 2. نافذة إعدادات الكشف (Reveal)
 // =================================================
 function open_reveal_dialog(frm, cdt, cdn, row, data, skipItemIds) {
-	let existing_data = (data.highlights || []).map((h) => ({
-		item_1: h.word,
-		item_2: h.explanation,
-		item_id: h.item_id || null,
-	}));
+	let sentence = data.sentence || "";
+
+	// Convert old word-based format → from/to by locating each word in the sentence
+	let reveals = [];
+	for (let h of data.highlights || []) {
+		if (!h.word) continue;
+		let idx = sentence.indexOf(h.word);
+		if (idx !== -1) {
+			reveals.push({
+				from: idx,
+				to: idx + h.word.length,
+				explanation: h.explanation || "",
+				item_id: h.item_id || null,
+			});
+		}
+	}
 
 	let d = new frappe.ui.Dialog({
 		title: "إعدادات الكشف (Reveal)",
@@ -175,70 +186,285 @@ function open_reveal_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 				default: data.image,
 			},
 			{
+				label: "التعليمات",
+				fieldname: "instruction",
+				fieldtype: "Data",
+				default: data.instruction || "اكتشف معاني الكلمات",
+			},
+			{
+				fieldtype: "Section Break",
+				label: "المحتوى",
+			},
+			{
 				label: "الجملة",
 				fieldname: "sentence",
 				fieldtype: "Small Text",
 				reqd: 1,
-				default: data.sentence,
+				default: sentence,
+				description: "تعديل الجملة قد يُبطل الكشوفات الحالية إذا تغيّر موضع الكلمات",
 			},
 			{
-				label: "الكلمات",
-				fieldname: "highlights_table",
-				fieldtype: "Table",
-				cannot_add_rows: false,
-				fields: [
-					{
-						label: "الكلمة (Word)",
-						fieldname: "item_1",
-						fieldtype: "Data",
-						in_list_view: 1,
-						reqd: 1,
-					},
-					{
-						label: "الشرح (Explanation)",
-						fieldname: "item_2",
-						fieldtype: "Data",
-						in_list_view: 1,
-					},
-					{
-						fieldname: "item_id",
-						fieldtype: "Data",
-						hidden: 1,
-					},
-				],
-				data: existing_data,
-				get_data: () => existing_data,
+				fieldtype: "Section Break",
+				label: "المعاينة — حدد نصاً لإضافة كشف، واضغط على كلمة مكشوفة لإزالتها",
+			},
+			{
+				fieldname: "preview_html",
+				fieldtype: "HTML",
 			},
 		],
-		size: "large",
+		size: "extra-large",
 		primary_action_label: "حفظ (Save)",
 		primary_action: function (values) {
+			if (!values.sentence) {
+				frappe.msgprint("يجب إدخال الجملة.");
+				return;
+			}
+			let text = values.sentence;
 			let config_payload = {
 				image: values.image,
-				sentence: values.sentence,
-				highlights: values.highlights_table.map((h) => {
-					let highlight = {
-						word: h.item_1,
-						explanation: h.item_2,
-					};
+				instruction: values.instruction,
+				sentence: text,
+				highlights: reveals.map((h) => {
+					let hl = { word: text.slice(h.from, h.to), explanation: h.explanation };
 					if (!skipItemIds) {
-						highlight.item_id = h.item_id || generateItemUUID();
+						hl.item_id = h.item_id || generateItemUUID();
 					}
-					return highlight;
+					return hl;
 				}),
 			};
-			frappe.model.set_value(
-				cdt,
-				cdn,
-				"config_json",
-				JSON.stringify(config_payload, null, 2)
-			);
+			frappe.model.set_value(cdt, cdn, "config_json", JSON.stringify(config_payload, null, 2));
 			d.hide();
 			frappe.show_alert({ message: "تم الحفظ", indicator: "green" });
 		},
 	});
 
+	// --- helpers ---
+
+	function _escapeHtml(str) {
+		return str
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
+	}
+
+	function _getTextOffset(container, targetNode, targetOffset) {
+		let walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+		let offset = 0;
+		while (walker.nextNode()) {
+			if (walker.currentNode === targetNode) {
+				return offset + targetOffset;
+			}
+			offset += walker.currentNode.textContent.length;
+		}
+		return offset;
+	}
+
+	// --- preview renderer ---
+
+	function renderPreview() {
+		let text = d.get_value("sentence") || "";
+
+		// Drop reveals that fell out of bounds after a text edit
+		reveals = reveals.filter((h) => h.from >= 0 && h.to <= text.length && h.from < h.to);
+
+		let sorted = [...reveals].sort((a, b) => a.from - b.from);
+
+		// Build highlighted sentence HTML
+		let html = "";
+		let lastEnd = 0;
+		for (let h of sorted) {
+			if (h.from < lastEnd) continue;
+			if (h.from > lastEnd) html += _escapeHtml(text.slice(lastEnd, h.from));
+			html +=
+				'<mark class="reveal-hl" data-from="' +
+				h.from +
+				'" data-to="' +
+				h.to +
+				'" style="background:#cff4fc;padding:2px 6px;border-radius:4px;cursor:pointer;' +
+				'border-bottom:2px solid #0dcaf0;" title="' +
+				_escapeHtml(h.explanation || "(بدون شرح)") +
+				' — اضغط لإزالة">' +
+				_escapeHtml(text.slice(h.from, h.to)) +
+				"</mark>";
+			lastEnd = h.to;
+		}
+		if (lastEnd < text.length) html += _escapeHtml(text.slice(lastEnd));
+
+		// Build reveals list
+		let listHtml = "";
+		if (sorted.length > 0) {
+			listHtml =
+				'<div style="margin-top:14px;border-top:1px solid #eee;padding-top:10px;">' +
+				'<div style="font-weight:600;font-size:12px;color:#6c757d;margin-bottom:8px;">الكشوفات المضافة</div>';
+			for (let h of sorted) {
+				let word = _escapeHtml(text.slice(h.from, h.to));
+				let expl = _escapeHtml(h.explanation || "");
+				listHtml +=
+					'<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;' +
+					'background:#f8f9fa;border-radius:4px;padding:6px 10px;">' +
+					'<span style="font-weight:600;color:#0c7c8c;min-width:80px;direction:rtl;">' +
+					word +
+					"</span>" +
+					'<span style="color:#adb5bd;font-size:12px;">←</span>' +
+					'<span style="flex:1;direction:rtl;color:#212529;">' +
+					(expl || '<em style="color:#adb5bd;">بدون شرح</em>') +
+					"</span>" +
+					'<button class="reveal-edit-btn btn btn-xs btn-default" data-from="' +
+					h.from +
+					'" data-to="' +
+					h.to +
+					'" title="تعديل الشرح">✏️</button>' +
+					'<button class="reveal-remove-btn btn btn-xs btn-danger" data-from="' +
+					h.from +
+					'" data-to="' +
+					h.to +
+					'" title="إزالة">×</button>' +
+					"</div>";
+			}
+			listHtml += "</div>";
+		}
+
+		let wrapper =
+			'<div style="position:relative;">' +
+			'<div class="reveal-preview-text" style="padding:15px;border:1px solid #d1d8dd;' +
+			"border-radius:4px;min-height:80px;line-height:2.5;font-size:15px;" +
+			'direction:rtl;white-space:pre-wrap;user-select:text;">' +
+			(html || '<span style="color:#8d99a6;">اكتب الجملة أعلاه لتظهر المعاينة</span>') +
+			"</div>" +
+			'<div class="reveal-add-tip" style="display:none;position:absolute;' +
+			"background:#171717;color:#fff;padding:6px 14px;border-radius:6px;" +
+			"cursor:pointer;font-size:13px;z-index:10;" +
+			'box-shadow:0 2px 8px rgba(0,0,0,.15);white-space:nowrap;">إضافة كشف</div>' +
+			listHtml +
+			"</div>";
+
+		let $wrapper = d.fields_dict.preview_html.$wrapper;
+		$wrapper.html(wrapper);
+
+		let $preview = $wrapper.find(".reveal-preview-text");
+		let $tip = $wrapper.find(".reveal-add-tip");
+
+		// --- text selection → "إضافة كشف" tooltip ---
+		$preview.on("mouseup", function () {
+			let sel = window.getSelection();
+			if (!sel || sel.isCollapsed || !sel.rangeCount) {
+				$tip.hide();
+				return;
+			}
+			let range = sel.getRangeAt(0);
+			let el = $preview[0];
+			if (!el.contains(range.startContainer) || !el.contains(range.endContainer)) {
+				$tip.hide();
+				return;
+			}
+			let from = _getTextOffset(el, range.startContainer, range.startOffset);
+			let to = _getTextOffset(el, range.endContainer, range.endOffset);
+			if (from === to) {
+				$tip.hide();
+				return;
+			}
+			if (from > to) [from, to] = [to, from];
+
+			let rect = range.getBoundingClientRect();
+			let cRect = $wrapper.find("> div")[0].getBoundingClientRect();
+			$tip.css({
+				top: rect.top - cRect.top - 36,
+				left: rect.left - cRect.left + rect.width / 2 - 50,
+				display: "block",
+			});
+
+			$tip.off("click").on("click", function () {
+				if (reveals.some((h) => from < h.to && to > h.from)) {
+					frappe.msgprint("هذا التحديد يتداخل مع كشف موجود.");
+					$tip.hide();
+					sel.removeAllRanges();
+					return;
+				}
+				$tip.hide();
+				sel.removeAllRanges();
+				let selectedWord = (d.get_value("sentence") || "").slice(from, to);
+				frappe.prompt(
+					{
+						label: "الشرح",
+						fieldname: "explanation",
+						fieldtype: "Small Text",
+						description: 'شرح الكلمة: "' + selectedWord + '"',
+					},
+					function (vals) {
+						reveals.push({ from, to, explanation: vals.explanation || "", item_id: null });
+						renderPreview();
+					},
+					"إضافة كشف",
+					"إضافة"
+				);
+			});
+		});
+
+		// --- click highlight in preview → remove ---
+		$preview.on("click", ".reveal-hl", function (e) {
+			e.stopPropagation();
+			let f = parseInt($(this).data("from"));
+			let t = parseInt($(this).data("to"));
+			reveals = reveals.filter((h) => !(h.from === f && h.to === t));
+			renderPreview();
+		});
+
+	}
+
+	// Hide tooltip on outside click
+	d.$wrapper.on("mousedown.reveal_hl", function (e) {
+		if (!$(e.target).closest(".reveal-add-tip").length) {
+			d.fields_dict.preview_html.$wrapper.find(".reveal-add-tip").hide();
+		}
+	});
+
+	// Re-render preview when sentence changes (debounced)
+	d.$wrapper.on(
+		"input",
+		'[data-fieldname="sentence"] textarea',
+		frappe.utils.debounce(renderPreview, 400)
+	);
+
+	d.onhide = function () {
+		d.$wrapper.off("mousedown.reveal_hl");
+	};
+
 	d.show();
+	renderPreview();
+
+	// Bound ONCE after show — delegate on the stable $wrapper, not re-bound inside renderPreview
+	let $hlWrapper = d.fields_dict.preview_html.$wrapper;
+
+	$hlWrapper.on("click", ".reveal-edit-btn", function () {
+		let f = parseInt($(this).data("from"));
+		let t = parseInt($(this).data("to"));
+		let reveal = reveals.find((h) => h.from === f && h.to === t);
+		if (!reveal) return;
+		let word = (d.get_value("sentence") || "").slice(f, t);
+		frappe.prompt(
+			{
+				label: "الشرح",
+				fieldname: "explanation",
+				fieldtype: "Small Text",
+				description: 'تعديل شرح: "' + word + '"',
+				default: reveal.explanation,
+			},
+			function (vals) {
+				reveal.explanation = vals.explanation || "";
+				renderPreview();
+			},
+			"تعديل الشرح",
+			"حفظ"
+		);
+	});
+
+	$hlWrapper.on("click", ".reveal-remove-btn", function () {
+		let f = parseInt($(this).data("from"));
+		let t = parseInt($(this).data("to"));
+		reveals = reveals.filter((h) => !(h.from === f && h.to === t));
+		renderPreview();
+	});
 }
 
 // =================================================

@@ -16,6 +16,11 @@ VALID_TRANSITIONS = {
 
 
 class MemoraLiveSyncJob(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("LSYNC-.#####.")
+
 	def validate(self):
 		self._validate_status_transition()
 

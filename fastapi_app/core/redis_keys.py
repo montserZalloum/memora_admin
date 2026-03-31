@@ -260,20 +260,6 @@ def devices_key(user_id: str) -> str:
 # =============================================================================
 
 
-def dirty_review_items_key() -> str:
-	"""Dirty set of lesson IDs pending Review Item extraction.
-
-	Type: SET of lesson names (e.g., "LES-00001")
-	Producers: review_item_sync.on_lesson_save() (SADD)
-	Consumers: sync.py sync_dirty_review_items() (SMEMBERS + SREM)
-	TTL: None (protected — never evicted)
-	Schedule: Every 2 minutes (*/2 * * * *)
-	"""
-	return "memora:dirty:review_items"
-
-
-
-
 # =============================================================================
 # Leaderboard
 # =============================================================================
@@ -1673,6 +1659,7 @@ Consumers: practice_map.py (FastAPI workers, evict in-process cache)
 Message: subject_id string
 """
 
+
 # Practice content pipeline
 def practice_content_debounce_key(subject_id: str) -> str:
 	"""Debounce key for practice content regeneration (SET NX EX pattern).
@@ -1683,6 +1670,17 @@ def practice_content_debounce_key(subject_id: str) -> str:
 	TTL: 10 seconds (batches rapid edits)
 	"""
 	return f"memora:practice:content:pending:{subject_id}"
+
+
+def challenge_question_debounce_key(topic_id: str) -> str:
+	"""Debounce key for challenge question file rebuild (SET NX EX pattern).
+
+	Type: STRING (timestamp)
+	Producers: build_trigger.on_review_item_changed() on Review Item change
+	Consumers: build_trigger._debounced_challenge_rebuild() (NX check)
+	TTL: 10 seconds (batches rapid edits during bulk imports)
+	"""
+	return f"memora:challenge:question:pending:{topic_id}"
 
 
 # Practice SCAN patterns
@@ -1787,5 +1785,3 @@ def monetized_webhook_idempotency_key(idempotency_key: str) -> str:
 	TTL: 24h (MONETIZED_WEBHOOK_IDEM_TTL)
 	"""
 	return f"memora:webhook:monetized:{idempotency_key}"
-
-

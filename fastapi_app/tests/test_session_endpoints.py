@@ -35,7 +35,7 @@ def _end_request_body(session_id: str) -> dict:
 		"session_id": session_id,
 		"stages": [
 			{
-				"stage_id": "STAGE-001",
+				"stage_type": "QUESTION",
 				"time_spent": 30,
 				"fail_count": 0,
 				"completed_at": "2026-02-17T00:00:00Z",

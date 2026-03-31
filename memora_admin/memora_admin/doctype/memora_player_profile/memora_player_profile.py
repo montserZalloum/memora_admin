@@ -10,6 +10,11 @@ MOBILE_PATTERN = re.compile(r"^\d{9,15}$")
 
 
 class MemoraPlayerProfile(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("PLAYER-.#####.")
+
 	__new_password = None
 
 	def __setup__(self):

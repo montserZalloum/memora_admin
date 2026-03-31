@@ -21,7 +21,6 @@ import frappe
 
 from fastapi_app.core.constants import (
 	DIRTY_PROGRESS_KEY,
-	DIRTY_REVIEW_ITEMS_KEY,
 	DIRTY_WALLETS_KEY,
 	INTERACTION_BUFFER_KEY,
 )
@@ -90,12 +89,14 @@ def _get_paused_filters() -> list[dict]:
 			meta = json.loads(job.job_meta) if isinstance(job.job_meta, str) else (job.job_meta or {})
 			qf = meta.get("query_filter", {})
 			if qf.get("date_from") and qf.get("date_to"):
-				result.append({
-					"source_doctype": job.source_doctype,
-					"date_from": qf["date_from"],
-					"date_to": qf["date_to"],
-					"filter_column": qf.get("filter_column", "last_seen_at"),
-				})
+				result.append(
+					{
+						"source_doctype": job.source_doctype,
+						"date_from": qf["date_from"],
+						"date_to": qf["date_to"],
+						"filter_column": qf.get("filter_column", "last_seen_at"),
+					}
+				)
 		except (json.JSONDecodeError, TypeError, AttributeError):
 			continue
 
@@ -700,59 +701,6 @@ def sync_dirty_wallets():
 	logger.info(f"Wallet sync: {synced} synced, {len(errors)} errors")
 
 
-def sync_dirty_review_items():
-	"""Process dirty set of lessons pending Review Item extraction.
-
-	Reads SMEMBERS, processes each lesson via sync_review_items(),
-	SREMs on success. On failure, entry remains for auto-retry on next run.
-	Handles DoesNotExistError by SREMing deleted lessons.
-
-	Scheduled: every 2 minutes via hooks.py (*/2 * * * *)
-	"""
-	from memora_admin.api.review_items import sync_review_items
-	from memora_admin.events.build_trigger import rebuild_challenge_questions_for_lesson
-
-	r = get_memora_redis()
-	dirty_lessons = r.smembers(DIRTY_REVIEW_ITEMS_KEY)
-	if not dirty_lessons:
-		return
-
-	processed = 0
-	failed = 0
-
-	for lesson_name in dirty_lessons:
-		# Normalize bytes to str (decode_responses=True should handle this,
-		# but be defensive)
-		if isinstance(lesson_name, bytes):
-			lesson_name = lesson_name.decode()
-
-		try:
-			lesson_doc = frappe.get_doc("Memora Lesson", lesson_name)
-			result = sync_review_items(lesson_doc)
-			r.srem(DIRTY_REVIEW_ITEMS_KEY, lesson_name)
-			processed += 1
-			if result["created"] or result["updated"] or result["deleted"]:
-				logger.info(
-					f"Review Item sync for {lesson_name}: "
-					f"created={result['created']}, updated={result['updated']}, deleted={result['deleted']}"
-				)
-				# Rebuild challenge question file for the affected topic
-				rebuild_challenge_questions_for_lesson(lesson_name)
-		except frappe.DoesNotExistError:
-			# Lesson was deleted — remove from dirty set
-			r.srem(DIRTY_REVIEW_ITEMS_KEY, lesson_name)
-			logger.info(f"Review Item sync: lesson {lesson_name} no longer exists, removed from dirty set")
-		except Exception as e:
-			# Leave in dirty set for retry on next run
-			failed += 1
-			logger.error(f"Review Item sync failed for {lesson_name}: {e}")
-
-	if processed or failed:
-		logger.info(f"Review Item dirty sync: processed={processed}, failed={failed}")
-
-	frappe.db.commit()
-
-
 def _reserve_name_block(prefix: str, count: int) -> int:
 	"""Reserve a block of sequential names from tabSeries.
 
@@ -780,12 +728,28 @@ def flush_interaction_buffer():
 	3. Bulk INSERT valid rows via single raw SQL statement
 	4. LTRIM to remove entire batch atomically
 
-	Scheduled: every 1 minute via hooks.py
+	Scheduled: every 1 minute via hooks.py.
+	Also called by content_import.execute_import (replace mode) to drain
+	pending interactions before lessons are deleted.
+
+	Uses a Redis lock (NX, 60 s TTL) to prevent concurrent LRANGE+LTRIM
+	races between the scheduler and ad-hoc callers.
 	"""
 	_write_debug_log("=== flush_interaction_buffer STARTED ===")
 
+	# Mutual-exclusion lock: prevents concurrent LRANGE+LTRIM races
+	# that could duplicate or lose records.
+	_lock_held = False
+	_lock_key = "memora:lock:flush_interactions"
+
 	try:
 		r = get_memora_redis()
+
+		_lock_held = bool(r.set(_lock_key, "1", nx=True, ex=60))
+		if not _lock_held:
+			logger.info("flush_interaction_buffer: skipped — another instance holds the lock")
+			_write_debug_log("=== SKIPPED: lock held by another caller ===")
+			return
 
 		batch_size = 5000
 
@@ -839,7 +803,7 @@ def flush_interaction_buffer():
 				(
 					item["player"],
 					item["lesson"],
-					str(item.get("stage_id", "")),
+					item.get("stage_type", ""),
 					item.get("item_id", ""),
 					item.get("event_type", "Completed"),
 					int(item.get("time_spent", 0)),
@@ -872,7 +836,7 @@ def flush_interaction_buffer():
 			frappe.db.sql(
 				f"""
 				INSERT INTO `tabMemora Interaction Log`
-				(name, player, lesson, stage_id, item_id, event_type,
+				(name, player, lesson, stage_type, item_id, event_type,
 				 time_spent, errors_count, timestamp, client_metadata,
 				 creation, modified, modified_by, owner)
 				VALUES {placeholders}
@@ -899,6 +863,12 @@ def flush_interaction_buffer():
 		_write_debug_log(error_msg)
 		logger.error(error_msg, exc_info=True)
 		frappe.log_error(error_msg)
+	finally:
+		if _lock_held:
+			try:
+				r.delete(_lock_key)
+			except Exception:
+				pass  # lock expires via 60s TTL if delete fails
 
 
 def _get_subject_lesson_count(r, subject_id: str) -> int:

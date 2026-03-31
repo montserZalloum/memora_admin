@@ -28,8 +28,8 @@ TEST_LESSONS = [
 		"subject_id": "SUBJ-00001",
 		"topic_id": "TOPIC-00001",
 		"stages": [
-			{"stage_id": "STAGE-001", "min_time_ms": 3000, "max_time_ms": 8000, "max_fail_count": 2},
-			{"stage_id": "STAGE-002", "min_time_ms": 2000, "max_time_ms": 6000, "max_fail_count": 2},
+			{"stage_type": "STAGE-001", "min_time_ms": 3000, "max_time_ms": 8000, "max_fail_count": 2},
+			{"stage_type": "STAGE-002", "min_time_ms": 2000, "max_time_ms": 6000, "max_fail_count": 2},
 		],
 	},
 ]

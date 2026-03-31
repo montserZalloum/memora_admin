@@ -13,6 +13,11 @@ VALID_TRANSITIONS = {
 
 
 class MemoraVoucherBatch(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("VBATCH-.#####.")
+
 	def validate(self):
 		self._validate_status_transition()
 		self._validate_pin_length()

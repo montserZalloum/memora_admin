@@ -51,6 +51,12 @@ def on_content_updated(doc, method):
 	# Previously this happened as a side effect of the subject build completing (~2 min delay).
 	_invalidate_hierarchy_cache(subject_id)
 
+	# Schedule a second invalidation AFTER commit.  The immediate DEL above runs
+	# before the transaction commits, so a concurrent FastAPI request can refill
+	# the cache with pre-commit (stale) data.  Re-invalidating post-commit
+	# closes this race window.  Idempotent — DEL on a missing key is a no-op.
+	_schedule_post_commit_hierarchy_invalidation(subject_id)
+
 	# When a lesson is deleted, its shared JSON file (lessons/{lesson_id}.json) is orphaned
 	# since no plan will reference it anymore. Delete it directly from storage + CDN.
 	if doc.doctype == "Memora Lesson" and method == "on_trash":
@@ -291,6 +297,7 @@ def on_plan_subject_changed(doc, method):
 	# Catalog cache: alias_title/notes in product subjects come from Plan Subject
 	if subject_id:
 		_invalidate_hierarchy_cache(subject_id)
+		_schedule_post_commit_hierarchy_invalidation(subject_id)
 
 	_invalidate_catalog_cache(plan_id)
 
@@ -471,6 +478,35 @@ def _invalidate_hierarchy_cache(subject_id: str):
 		frappe.log_error(
 			f"Failed to invalidate hierarchy cache for {subject_id}: {e}",
 			"Hierarchy Cache Invalidation Error",
+		)
+
+
+def _schedule_post_commit_hierarchy_invalidation(subject_id: str):
+	"""Re-invalidate hierarchy cache after the current transaction commits.
+
+	Doc-event hooks fire before commit, so a concurrent request can refill
+	the cache with stale pre-commit data.  This schedules a lightweight
+	background job (via ``enqueue_after_commit``) that re-DELs the key once
+	the data is visible to all transactions.
+
+	Deduplicates per subject per request via ``frappe.flags``.
+	"""
+	flag_key = f"_hierarchy_post_commit_{subject_id}"
+	if frappe.flags.get(flag_key):
+		return  # Already scheduled for this subject in this request
+	frappe.flags[flag_key] = True
+
+	try:
+		frappe.enqueue(
+			"memora_admin.events.build_trigger._invalidate_hierarchy_cache",
+			subject_id=subject_id,
+			queue="short",
+			enqueue_after_commit=True,
+		)
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to schedule post-commit hierarchy invalidation for {subject_id}: {e}",
+			"Post-Commit Invalidation Error",
 		)
 
 
@@ -712,28 +748,57 @@ def _remove_subject_from_plan_free_subjects(subject_id: str):
 # Challenge Hub: Question File Rebuild Trigger
 # =============================================================================
 
+# Debounce window: 10 seconds — batches rapid edits to the same topic.
+_CHALLENGE_DEBOUNCE_SECONDS = 10
 
-def rebuild_challenge_questions_for_lesson(lesson_name: str):
-	"""Rebuild challenge question JSON file for the topic of a given lesson.
 
-	Called after sync_dirty_review_items processes a lesson — at that point
-	the Review Item records in MariaDB are up to date.
+def on_review_item_changed(doc, method):
+	"""Rebuild challenge question file when a Review Item changes (debounced).
 
-	Looks up the lesson's topic and triggers a question file rebuild.
-	Best-effort: errors are logged but never bubble up.
+	Registered as doc_event on Memora Review Item (after_insert, on_update, on_trash).
+	Uses Redis SET NX EX debounce + frappe.enqueue to batch rapid edits
+	during bulk imports into a single background rebuild per topic.
 	"""
+	if not doc.topic:
+		return
+
+	_debounced_challenge_rebuild(doc.topic, doc.name, method)
+
+
+def _debounced_challenge_rebuild(topic_id: str, item_id: str, method: str) -> None:
+	"""Queue a challenge question file rebuild with debounce.
+
+	Uses Redis SET NX EX pattern — identical to practice_content_trigger.py.
+	"""
+	from memora_admin.utils.redis_connection import get_memora_redis
+
 	try:
-		topic_id = frappe.db.get_value("Memora Lesson", lesson_name, "topic", cache=True)
-		if not topic_id:
-			return
-
-		from memora_admin.memora_admin.services.build.challenge_questions import (
-			rebuild_topic_question_file,
-		)
-
-		rebuild_topic_question_file(topic_id)
+		r = get_memora_redis()
 	except Exception as e:
 		frappe.log_error(
-			f"Failed to rebuild challenge question file for lesson {lesson_name}: {e}",
-			"Challenge Question Rebuild Error",
+			title="Challenge Question Trigger: Redis Unavailable",
+			message=f"item={item_id} method={method}: {e}",
+		)
+		return
+
+	from fastapi_app.core.redis_keys import challenge_question_debounce_key
+
+	debounce_key = challenge_question_debounce_key(topic_id)
+	was_set = r.set(debounce_key, str(int(time.time())), nx=True, ex=_CHALLENGE_DEBOUNCE_SECONDS)
+
+	if not was_set:
+		return
+
+	try:
+		frappe.enqueue(
+			"memora_admin.memora_admin.services.build.challenge_questions.rebuild_topic_question_file",
+			topic_id=topic_id,
+			queue="short",
+			enqueue_after_commit=True,
+		)
+	except Exception as e:
+		r.delete(debounce_key)
+		frappe.log_error(
+			title="Challenge Question Trigger: Enqueue Failed",
+			message=f"topic={topic_id} item={item_id}: {e}",
 		)

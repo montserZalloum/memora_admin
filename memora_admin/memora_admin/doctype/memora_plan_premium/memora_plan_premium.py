@@ -6,6 +6,11 @@ from frappe.model.document import Document
 
 
 class MemoraPlanPremium(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("PP-.#####.")
+
 	def validate(self):
 		self._validate_source_type_fields()
 

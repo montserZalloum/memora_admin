@@ -1,6 +1,6 @@
 {
  "actions": [],
- "autoname": "PLHIST-.#####.",
+ "autoname": "hash",
  "creation": "2026-02-26 10:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",

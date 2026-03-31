@@ -5,4 +5,7 @@ from frappe.model.document import Document
 
 
 class MemoraPlayerPlanHistory(Document):
-	pass
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("PLHIST-.#####.")

@@ -1,6 +1,6 @@
 {
  "actions": [],
- "autoname": "FILT-.#####.",
+ "autoname": "hash",
  "creation": "2026-02-12 10:00:00",
  "description": "Reusable filter presets for content creators. Content items (Track, Unit, Topic, Lesson) can share identical names across different subjects, making it hard to pick the right one. This DocType lets admins create named presets (e.g. 'G9 - Arabic - Math - S2') with cascading fields (Season > Grade > Major > Plan > Subject > Track > Unit > Topic). Selecting a preset from any content form automatically narrows the Link dropdowns to only relevant items. Loaded globally via admin_filter_helper.js and consumed by MemoraAdminFilter.setup() in each content form's JS.",
  "doctype": "DocType",

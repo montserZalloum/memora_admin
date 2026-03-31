@@ -17,6 +17,11 @@ VALID_TRANSITIONS = {
 
 
 class MemoraArchiveJob(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("ARCH-.#####.")
+
 	def validate(self):
 		self._validate_status_transition()
 

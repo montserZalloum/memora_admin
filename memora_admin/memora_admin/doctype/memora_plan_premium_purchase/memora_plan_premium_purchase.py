@@ -6,6 +6,11 @@ from frappe.model.document import Document
 
 
 class MemoraPlanPremiumPurchase(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("PPP-.#####.")
+
 	def validate(self):
 		self._validate_no_duplicate_pending()
 

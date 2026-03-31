@@ -6,6 +6,11 @@ from frappe.model.document import Document
 
 
 class MemoraLiveEventAccess(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("LEA-.#####.")
+
 	def validate(self):
 		self._validate_access_type_fields()
 

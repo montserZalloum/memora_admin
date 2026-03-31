@@ -12,6 +12,11 @@ from memora_admin.utils.redis_connection import get_memora_redis
 
 
 class MemoraSubscriptionTransaction(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("TRX-.#####.")
+
 	def on_update(self):
 		if not self.has_value_changed("status"):
 			return

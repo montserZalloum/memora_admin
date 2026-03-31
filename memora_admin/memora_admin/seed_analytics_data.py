@@ -455,7 +455,7 @@ def wave_03_interactions(ctx: Ctx, rng):
     start = _reserve("LOG-", T_INTERACTIONS)
 
     fields = [
-        "name", "player", "lesson", "stage_id", "item_id", "event_type",
+        "name", "player", "lesson", "stage_type", "item_id", "event_type",
         "time_spent", "errors_count", "timestamp", "client_metadata",
         "owner", "modified_by", "creation", "modified", "docstatus", "idx",
     ]

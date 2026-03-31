@@ -6,6 +6,11 @@ from frappe.model.document import Document
 
 
 class MemoraSubject(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("SUBJ-.#####.")
+
 	pass
 
 

@@ -6,6 +6,11 @@ from frappe.model.document import Document
 
 
 class MemoraTopic(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("TPC-.#####.")
+
 	def validate(self):
 		if not self.is_new() and self.has_value_changed("unit"):
 			self._cascade_unit_change()

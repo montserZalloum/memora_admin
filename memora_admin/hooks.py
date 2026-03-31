@@ -30,7 +30,7 @@ app_license = "mit"
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/memora_admin/css/memora_admin.css"
+app_include_css = "/assets/memora_admin/css/content_import.css"
 app_include_js = "/assets/memora_admin/js/admin_filter_helper.js"
 
 # include js, css files in header of web template
@@ -51,6 +51,7 @@ app_include_js = "/assets/memora_admin/js/admin_filter_helper.js"
 doctype_js = {
 	"Memora Player Profile": "memora_admin/doctype/memora_player_profile/memora_player_profile.js",
 	"Memora Lesson": "public/js/game_lesson.js",
+	"Memora Topic": "public/js/content_import.js",
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
@@ -115,6 +116,7 @@ fixtures = [
 		"dt": "Default Workspace Sidebar",
 		"filters": [["name", "in", ["Memora", "Memora Library"]]],
 	},
+	{"dt": "Memora Lesson Stage Settings"},
 ]
 
 # before_app_install = "memora_admin.utils.before_app_install"
@@ -232,12 +234,13 @@ doc_events = {
 	"Memora Lesson": {
 		"on_update": [
 			"memora_admin.events.build_trigger.on_content_updated",
-			"memora_admin.events.review_item_sync.on_lesson_save",
 			"memora_admin.events.dimension_sync.on_lesson_changed",
+			"memora_admin.events.lesson_cleanup.on_lesson_stages_updated",
 		],
 		"on_trash": [
 			"memora_admin.events.build_trigger.on_content_updated",
-			"memora_admin.events.review_item_sync.on_lesson_trash",
+			"memora_admin.events.dimension_sync.on_lesson_changed",
+			"memora_admin.events.lesson_cleanup.on_lesson_trash",
 		],
 	},
 	# Plan build trigger events (debounced)
@@ -290,12 +293,20 @@ doc_events = {
 	},
 	# Analytics dimension refresh + Practice content regeneration
 	"Memora Review Item": {
-		"after_insert": "memora_admin.events.practice_content_trigger.on_review_item_changed",
+		"after_insert": [
+			"memora_admin.events.practice_content_trigger.on_review_item_changed",
+			"memora_admin.events.build_trigger.on_review_item_changed",
+		],
 		"on_update": [
 			"memora_admin.events.dimension_sync.on_review_item_changed",
 			"memora_admin.events.practice_content_trigger.on_review_item_changed",
+			"memora_admin.events.build_trigger.on_review_item_changed",
 		],
-		"on_trash": "memora_admin.events.practice_content_trigger.on_review_item_deleted",
+		"on_trash": [
+			"memora_admin.events.dimension_sync.on_review_item_changed",
+			"memora_admin.events.practice_content_trigger.on_review_item_deleted",
+			"memora_admin.events.build_trigger.on_review_item_changed",
+		],
 	},
 }
 
@@ -314,10 +325,6 @@ scheduler_events = {
 			"memora_admin.tasks.build_worker.process_pending_builds",
 			"memora_admin.tasks.live_challenge_transitions.process_live_challenge_transitions",
 			"memora_admin.tasks.practice_writer.process_write_queue",
-		],
-		# Every 2 minutes: Sync dirty Review Item extraction from Redis to MariaDB
-		"*/2 * * * *": [
-			"memora_admin.tasks.sync.sync_dirty_review_items",
 		],
 		# Daily at 00:05: Streak reset (after midnight Asia/Amman)
 		"5 0 * * *": ["memora_admin.tasks.streak_reset.reset_broken_streaks"],
@@ -372,9 +379,7 @@ scheduler_events = {
 		# Daily at 04:00: Clean up old terminal rows from Memora Build Queue
 		"0 4 * * *": ["memora_admin.tasks.build_cleanup.cleanup_build_queue"],
 		# Daily at 04:30: Delete old Purged Memora Task Log Archive Batch rows
-		"30 4 * * *": [
-			"memora_admin.tasks.task_log_archive_batch_cleanup.cleanup_task_log_archive_batches"
-		],
+		"30 4 * * *": ["memora_admin.tasks.task_log_archive_batch_cleanup.cleanup_task_log_archive_batches"],
 		# Daily at 05:00: Delete old Memora Sync Log rows (7-day retention)
 		"0 5 * * *": ["memora_admin.tasks.sync_log_cleanup.cleanup_sync_logs"],
 		# Daily at 05:30: Delete old Memora Voucher Redemption Log rows (100-day retention)

@@ -531,7 +531,7 @@ def insert_interaction_log_rows(
             n,                                     # idx
             player_id,                             # player
             lesson_id,                             # lesson
-            f"STAGE-{(n % 3) + 1}",                # stage_id
+            f"STAGE-{(n % 3) + 1}",                # stage_type
             event_types[n % 4],                    # event_type
             (n % 60) + 5,                          # time_spent
             n % 3,                                 # errors_count
@@ -553,7 +553,7 @@ def _flush_interaction_log_rows(conn, rows: list) -> int:
     sql = (
         "INSERT IGNORE INTO `tabMemora Interaction Log` "
         "(`name`, `creation`, `modified`, `modified_by`, `owner`, "
-        " `docstatus`, `idx`, `player`, `lesson`, `stage_id`, "
+        " `docstatus`, `idx`, `player`, `lesson`, `stage_type`, "
         " `event_type`, `time_spent`, `errors_count`, `timestamp`) "
         "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"
     )

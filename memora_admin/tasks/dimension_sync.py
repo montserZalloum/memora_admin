@@ -16,6 +16,6 @@ def reconcile_dimensions():
 
     try:
         results = refresh_all_dimensions()
-        frappe.logger().info(f"Dimension reconciliation complete: {results}")
+        frappe.logger("dimension_sync").info(f"Dimension reconciliation complete: {results}")
     except Exception:
         frappe.log_error(title="Dimension reconciliation failed")

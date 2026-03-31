@@ -6,6 +6,11 @@ from frappe.model.document import Document
 
 
 class MemoraTrack(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("Track-.#####.")
+
 	def validate(self):
 		if not self.is_new() and self.has_value_changed("subject"):
 			self._cascade_subject_change()

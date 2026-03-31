@@ -36,7 +36,6 @@ from __future__ import annotations
 
 import json
 import logging
-import uuid
 from datetime import date, datetime, time, timedelta, timezone
 
 import frappe
@@ -57,16 +56,6 @@ from memora_admin.utils.redis_connection import get_memora_redis
 logger = logging.getLogger(__name__)
 
 FSRS_PROCESSED_KEY = fsrs_last_processed_key()
-
-
-def _get_skippable_stage_types() -> set[str]:
-	"""Get set of stage type names (from Memora Lesson Stage Settings) where is_skippable=1."""
-	stages = frappe.get_all(
-		"Memora Lesson Stage Settings",
-		filters={"is_skippable": 1},
-		fields=["stage_title"],  # stage_title is the name/primary key of Settings
-	)
-	return {s.stage_title for s in stages}
 
 
 def _get_fsrs_scheduler():
@@ -242,20 +231,16 @@ def process_fsrs_reviews():
 
 	Flow:
 	1. Get recent interactions from Memora Interaction Log (last 10 minutes)
-	2. Filter out skippable stages and non-reviewable lessons
+	2. Filter out non-reviewable lessons and interactions without item_id
 	3. For each interaction:
-	   a. Determine item_id (from interaction or deterministic UUID from stage_id for legacy)
-	   b. Look up or create FSRS Card from Memora Memory State via raw SQL
-	   c. Apply review with mapped rating
-	   d. Persist via raw SQL INSERT/UPDATE (BINARY item_id + BIGINT PK + season_seq partition)
-	   e. Cache state in Redis for fast access
+	   a. Look up or create FSRS Card from Memora Memory State via raw SQL
+	   b. Apply review with mapped rating
+	   c. Persist via raw SQL INSERT/UPDATE (BINARY item_id + BIGINT PK + season_seq partition)
+	   d. Cache state in Redis for fast access
 
 	Scheduled: every 1 minute via hooks.py
 	"""
 	r = get_memora_redis()
-
-	# Get skippable stage types to exclude
-	skippable_types = _get_skippable_stage_types()
 
 	# Get FSRS scheduler
 	scheduler = _get_fsrs_scheduler()
@@ -270,7 +255,7 @@ def process_fsrs_reviews():
 			"event_type": "Completed",
 			"creation": [">=", cutoff],
 		},
-		fields=["player", "lesson", "stage_id", "item_id", "errors_count", "time_spent", "creation"],
+		fields=["player", "lesson", "item_id", "errors_count", "time_spent", "creation"],
 		order_by="creation asc",
 		limit_page_length=2000,
 	)
@@ -298,19 +283,7 @@ def process_fsrs_reviews():
 	)
 	lesson_map = {l.name: l for l in lessons_data}
 
-	# 2. Batch-fetch stage metadata (stage_type, is_skippable)
-	unique_stages = list({i.stage_id for i in interactions if i.stage_id})
-	if unique_stages:
-		stages_data = frappe.get_all(
-			"Memora Lesson Stage",
-			filters={"name": ["in", unique_stages]},
-			fields=["name", "stage_type", "is_skippable", "parent"],
-		)
-		stage_map = {s.name: s for s in stages_data}
-	else:
-		stage_map = {}
-
-	# 3. For lessons missing subject, batch-resolve via hierarchy chain
+	# 2. For lessons missing subject, batch-resolve via hierarchy chain
 	missing_subject_ids = [
 		lid for lid in unique_lessons if lid in lesson_map and not lesson_map[lid].get("subject")
 	]
@@ -356,9 +329,15 @@ def process_fsrs_reviews():
 	from fsrs import Card, State
 
 	for interaction in interactions:
-		stage_id = interaction.stage_id
 		player = interaction.player
 		lesson = interaction.lesson
+
+		# Skip interactions without item_id (skippable stages have item_ids stripped in CDN)
+		raw_item_id = interaction.item_id
+		if not raw_item_id or not str(raw_item_id).strip():
+			skipped += 1
+			continue
+		item_id = str(raw_item_id).strip()
 
 		# Resolve this player's season (from Player Profile -> Plan -> Season)
 		season_info = player_seasons.get(player)
@@ -367,18 +346,6 @@ def process_fsrs_reviews():
 			skipped += 1
 			continue
 		player_season, player_season_seq = season_info
-
-		# Look up stage metadata from pre-fetched dict (was N+1: 1 query per interaction)
-		stage_row = stage_map.get(stage_id)
-		if stage_row:
-			# Per-stage override takes priority over global setting
-			if stage_row.is_skippable:
-				skipped += 1
-				continue
-			# Fall back to global setting from stage type
-			if stage_row.stage_type in skippable_types:
-				skipped += 1
-				continue
 
 		# Resolve subject and reviewable from pre-fetched dict (was N+1: 2-6 queries per interaction)
 		lesson_data = lesson_map.get(lesson)
@@ -391,14 +358,6 @@ def process_fsrs_reviews():
 		if not (lesson_data and lesson_data.get("is_reviewable")):
 			skipped += 1
 			continue
-
-		# Determine item_id: use from interaction if present, else deterministic UUID from stage_id
-		raw_item_id = interaction.item_id
-		if raw_item_id and str(raw_item_id).strip():
-			item_id = str(raw_item_id).strip()
-		else:
-			# Legacy interaction without item_id -- generate deterministic UUID from stage_id
-			item_id = str(uuid.uuid5(uuid.NAMESPACE_OID, stage_id))
 
 		try:
 			# Check for idempotency -- skip if already processed
@@ -513,7 +472,7 @@ def process_fsrs_reviews():
 			except Exception:
 				pass  # Best-effort; counters self-heal on next read
 
-			# T008: Cache in Redis for fast access (keyed by item_id, not stage_id)
+			# T008: Cache in Redis for fast access (keyed by item_id)
 			redis_key = fsrs_card_state_key(player, item_id)
 			fsrs_data = json.dumps(
 				{

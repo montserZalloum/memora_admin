@@ -22,6 +22,11 @@ def get_next_season_seq():
 
 
 class MemoraSeason(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("SEAS-.#####.")
+
 	def before_insert(self):
 		# Always auto-assign if blank (field is read_only in UI)
 		if not self.season_seq:

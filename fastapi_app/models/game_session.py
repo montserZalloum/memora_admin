@@ -80,7 +80,7 @@ class StageResult(BaseModel):
 	- Empty items list = legacy stage-level only (backward compatible)
 	"""
 
-	stage_id: str
+	stage_type: str
 	time_spent: int  # milliseconds
 	fail_count: int = 0
 	completed_at: str  # ISO timestamp

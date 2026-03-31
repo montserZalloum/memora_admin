@@ -9,6 +9,11 @@ from frappe.utils import today
 
 
 class MemoraAnnouncement(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("ANN-.#####.")
+
 	def validate(self):
 		self._validate_title_length()
 		self._validate_target_plans()

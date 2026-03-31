@@ -45,7 +45,7 @@ def main():
 				logger.info(f"\nProcessing item {i+1}:")
 				logger.info(f"  Player: {item['player']}")
 				logger.info(f"  Lesson: {item['lesson']}")
-				logger.info(f"  Stage ID: {item.get('stage_id', 'N/A')}")
+				logger.info(f"  Stage Type: {item.get('stage_type', 'N/A')}")
 
 				# Check if player exists
 				player_exists = frappe.db.exists("Memora Player Profile", item["player"])
@@ -62,7 +62,7 @@ def main():
 						"doctype": "Memora Interaction Log",
 						"player": item["player"],
 						"lesson": item["lesson"],
-						"stage_id": str(item.get("stage_id", "")),
+						"stage_type": str(item.get("stage_type", "")),
 						"event_type": item.get("event_type", "Completed"),
 						"time_spent": item.get("time_spent", 0),
 						"errors_count": item.get("errors_count", 0),

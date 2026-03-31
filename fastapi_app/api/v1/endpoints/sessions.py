@@ -297,7 +297,7 @@ async def end_session(
 				interaction = {
 					"player": user.sub,
 					"lesson": session.lesson_id,
-					"stage_id": stage.stage_id,
+					"stage_type": stage.stage_type,
 					"item_id": item.item_id,
 					"event_type": "Completed",
 					"time_spent": stage.time_spent,
@@ -311,7 +311,7 @@ async def end_session(
 			interaction = {
 				"player": user.sub,
 				"lesson": session.lesson_id,
-				"stage_id": stage.stage_id,
+				"stage_type": stage.stage_type,
 				"event_type": "Completed",
 				"time_spent": stage.time_spent,
 				"errors_count": stage.fail_count,

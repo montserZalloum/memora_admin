@@ -2,7 +2,6 @@
 
 from fastapi_app.core.redis_keys import (
 	dirty_progress_key,
-	dirty_review_items_key,
 	dirty_wallets_key,
 	interaction_buffer_key,
 )
@@ -11,7 +10,6 @@ from fastapi_app.core.redis_keys import (
 # Frappe sync tasks process these sets to persist to MariaDB
 DIRTY_PROGRESS_KEY = dirty_progress_key()
 DIRTY_WALLETS_KEY = dirty_wallets_key()
-DIRTY_REVIEW_ITEMS_KEY = dirty_review_items_key()
 
 # Interaction buffer key
 INTERACTION_BUFFER_KEY = interaction_buffer_key()

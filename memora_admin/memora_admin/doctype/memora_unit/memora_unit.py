@@ -6,6 +6,11 @@ from frappe.model.document import Document
 
 
 class MemoraUnit(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("UNT-.#####.")
+
 	def validate(self):
 		if not self.is_new() and self.has_value_changed("track"):
 			self._cascade_track_change()

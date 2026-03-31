@@ -8,6 +8,11 @@ from frappe.model.document import Document
 
 
 class MemoraLiveEventPurchase(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("LEP-.#####.")
+
 	def before_insert(self):
 		if self.status == "pending" and not self.expires_at:
 			self.expires_at = frappe.utils.now_datetime() + timedelta(minutes=30)

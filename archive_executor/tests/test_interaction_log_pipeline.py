@@ -97,7 +97,7 @@ def _make_il_job_meta(date_from: str, date_to: str) -> str:
             "filter_column": "timestamp",
         },
         "export_columns": [
-            "name", "player", "lesson", "stage_id", "item_id",
+            "name", "player", "lesson", "stage_type", "item_id",
             "event_type", "time_spent", "errors_count", "timestamp",
         ],
         "schema_snapshot": {
@@ -105,7 +105,7 @@ def _make_il_job_meta(date_from: str, date_to: str) -> str:
                 {"name": "name",         "type": "VARCHAR(140)"},
                 {"name": "player",       "type": "VARCHAR(140)"},
                 {"name": "lesson",       "type": "VARCHAR(140)"},
-                {"name": "stage_id",     "type": "VARCHAR(140)"},
+                {"name": "stage_type",     "type": "VARCHAR(140)"},
                 {"name": "item_id",      "type": "VARCHAR(140)"},
                 {"name": "event_type",   "type": "VARCHAR(20)"},
                 {"name": "time_spent",   "type": "INT"},
@@ -135,7 +135,7 @@ def _upsert_il_job(conn, name: str, status: str, date_from: str, date_to: str,
         " `duration_seconds`, `row_count`, `file_size_bytes`, "
         " `file_path`, `job_meta`) "
         "VALUES (%s, NOW(), NOW(), 'test@test.com', 'test@test.com', 0, 0, "
-        "        'Memora Interaction Log', %s, 'v1', 'interaction_log', "
+        "        'Memora Interaction Log', %s, 'v2', 'interaction_log', "
         "        %s, 'Normal', 0, 'Delete', 0, 0, "
         "        0, 0, 0, "
         "        %s, %s) "
@@ -456,7 +456,7 @@ def _build_exported_batch(archive_dir: str, job_name: str, meta: dict) -> str:
         "name": pa.array(["IL-TX-00000001", "IL-TX-00000002"]),
         "player": pa.array(["IL-PLAYER-001", "IL-PLAYER-002"]),
         "lesson": pa.array(["IL-LESSON-TX-001", "IL-LESSON-TX-001"]),
-        "stage_id": pa.array(["STAGE-1", "STAGE-2"]),
+        "stage_type": pa.array(["STAGE-1", "STAGE-2"]),
         "item_id": pa.array([None, None], type=pa.string()),
         "event_type": pa.array(["Started", "Completed"]),
         "time_spent": pa.array([10, 20]),
@@ -464,7 +464,7 @@ def _build_exported_batch(archive_dir: str, job_name: str, meta: dict) -> str:
         "timestamp": pa.array(["2099-10-01 00:00:00", "2099-10-01 00:01:00"]),
         "archive_scope": pa.array(["2099-10-01", "2099-10-01"]),
         "archive_job_id": pa.array([job_name, job_name]),
-        "schema_version": pa.array(["v1", "v1"]),
+        "schema_version": pa.array(["v2", "v2"]),
         "exported_at": pa.array(["2099-10-01T02:00:00", "2099-10-01T02:00:00"]),
     })
     pq.write_table(table, fact_path)
@@ -510,7 +510,7 @@ def _upsert_il_job_at_stage(
         " `duration_seconds`, `row_count`, `file_size_bytes`, "
         " `file_path`, `remote_path`, `file_checksum`, `job_meta`) "
         "VALUES (%s, NOW(), NOW(), 'test@test.com', 'test@test.com', 0, 0, "
-        "        'Memora Interaction Log', %s, 'v1', 'interaction_log', "
+        "        'Memora Interaction Log', %s, 'v2', 'interaction_log', "
         "        %s, 'Normal', %s, 'Delete', 0, 1, "
         "        1.0, 2, 1024, "
         "        %s, %s, 'abc123', %s) "
@@ -1200,7 +1200,7 @@ class TestBatchLogging:
                 "filter_column": "timestamp",
             },
             "export_columns": [
-                "name", "player", "lesson", "stage_id",
+                "name", "player", "lesson", "stage_type",
                 "event_type", "time_spent", "errors_count", "timestamp",
             ],
             "schema_snapshot": {
@@ -1208,7 +1208,7 @@ class TestBatchLogging:
                     {"name": "name",         "type": "VARCHAR(140)"},
                     {"name": "player",       "type": "VARCHAR(140)"},
                     {"name": "lesson",       "type": "VARCHAR(140)"},
-                    {"name": "stage_id",     "type": "VARCHAR(140)"},
+                    {"name": "stage_type",     "type": "VARCHAR(140)"},
                     {"name": "event_type",   "type": "VARCHAR(20)"},
                     {"name": "time_spent",   "type": "INT"},
                     {"name": "errors_count", "type": "INT"},
@@ -1228,7 +1228,7 @@ class TestBatchLogging:
                 " `source_deleted`, `sync_paused`, `duration_seconds`, `row_count`, `file_size_bytes`, "
                 " `job_meta`) "
                 "VALUES (%s, NOW(), NOW(), 'test@test.com', 'test@test.com', 0, 0, "
-                "        'Memora Interaction Log', %s, 'v1', 'interaction_log', "
+                "        'Memora Interaction Log', %s, 'v2', 'interaction_log', "
                 "        'Pending', 'Normal', 0, 'Keep', 0, 0, 0, 0, 0, %s)",
                 (IL_TEST_JOB_LOGGING, date_from, job_meta),
             )

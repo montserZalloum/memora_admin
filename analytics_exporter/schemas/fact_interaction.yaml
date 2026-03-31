@@ -13,7 +13,7 @@ sql_full: >-
     `name` AS event_id,
     `player` AS player_id,
     `lesson` AS lesson_id,
-    `stage_id`,
+    `stage_type`,
     `item_id`,
     `event_type`,
     `time_spent` AS time_spent_sec,
@@ -28,7 +28,7 @@ columns:
   - {name: event_id,        type: VARCHAR}
   - {name: player_id,       type: VARCHAR}
   - {name: lesson_id,       type: VARCHAR}
-  - {name: stage_id,        type: VARCHAR}
+  - {name: stage_type,       type: VARCHAR}
   - {name: item_id,         type: VARCHAR}
   - {name: event_type,      type: VARCHAR}
   - {name: time_spent_sec,  type: INT}

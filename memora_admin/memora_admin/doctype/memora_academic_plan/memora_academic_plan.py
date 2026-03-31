@@ -7,6 +7,11 @@ from frappe.utils import getdate, today
 
 
 class MemoraAcademicPlan(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("PLAN-.#####.")
+
 	IMMUTABLE_FIELDS = ("season", "grade", "major")
 
 	def validate(self):

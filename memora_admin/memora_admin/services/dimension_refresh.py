@@ -143,9 +143,7 @@ def _transfer_dimensions(output_dir: str) -> None:
     remote_path = _get_ssh_var("ANALYTICS_REMOTE_PATH", _env, "/data/analytics")
 
     if not ssh_host or not ssh_user:
-        frappe.logger().warning(
-            "ANALYTICS_SSH_HOST/USER not set — skipping dimension transfer"
-        )
+        frappe.logger("dimension_refresh").warning("ANALYTICS_SSH_HOST/USER not set — skipping dimension transfer")
         return
 
     dims_remote = f"{remote_path}/dimensions/"
@@ -185,9 +183,7 @@ def refresh_dimension(entity: str, version: str = None) -> int:
     with tempfile.TemporaryDirectory() as tmpdir:
         path, count = _export_dimension(entity, version, tmpdir)
         _transfer_dimensions(tmpdir)
-        frappe.logger().info(
-            f"Dimension refresh: {entity} {version} — {count} rows exported"
-        )
+        frappe.logger("dimension_refresh").info(f"Dimension refresh: {entity} {version} — {count} rows exported")
 
     return count
 
@@ -215,5 +211,5 @@ def refresh_all_dimensions() -> dict:
 
         _transfer_dimensions(tmpdir)
 
-    frappe.logger().info(f"Full dimension refresh complete: {results}")
+    frappe.logger("dimension_refresh").info(f"Full dimension refresh complete: {results}")
     return results

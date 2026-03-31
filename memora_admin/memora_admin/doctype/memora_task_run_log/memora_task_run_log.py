@@ -11,4 +11,9 @@ class MemoraTaskRunLog(Document):
 	Used by task_utils.log_task_run() for consistent logging across all tasks.
 	"""
 
+
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("TASK-.#####.")
 	pass

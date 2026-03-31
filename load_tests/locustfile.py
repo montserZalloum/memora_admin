@@ -229,7 +229,7 @@ class LessonPlayer(AuthMixin, HttpUser):
 				tpl = templates[i]
 				stages.append(
 					{
-						"stage_id": tpl["stage_id"],
+						"stage_type": tpl["stage_type"],
 						"time_spent": random.randint(
 							tpl.get("min_time_ms", 3000),
 							tpl.get("max_time_ms", 10000),
@@ -242,7 +242,7 @@ class LessonPlayer(AuthMixin, HttpUser):
 			else:
 				stages.append(
 					{
-						"stage_id": f"STAGE-{i + 1:03d}",
+						"stage_type": f"STAGE-{i + 1:03d}",
 						"time_spent": random.randint(3000, 10000),
 						"fail_count": random.randint(0, 2),
 						"completed_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"),

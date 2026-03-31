@@ -23,7 +23,7 @@ from memora_admin.utils.review_item_counts import get_question_counts_by_topic
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 
 @dataclass
@@ -568,21 +568,12 @@ def _generate_lesson_json_from_tree(lesson: dict, tree: PlanSubjectTree) -> dict
 	lesson_name = lesson["name"]
 	stages_raw = tree.stages_by_lesson.get(lesson_name, [])
 
-	stages = []
-	for stage in stages_raw:
-		effective_skippable = bool(stage.is_skippable) or (stage.stage_type in tree.skippable_types)
+	items = _group_stages_into_items(stages_raw, tree.skippable_types)
 
-		config = _parse_stage_config(stage.config_json)
-		if effective_skippable:
-			_strip_item_ids(config)
-
-		stage_data = {
-			"stage_id": stage.name,
-			"stage_type": stage.stage_type,
-			"is_skippable": effective_skippable,
-			"config": config,
-		}
-		stages.append(stage_data)
+	max_hearts = lesson.get("max_hearts")
+	if not max_hearts:
+		settings = frappe.get_single("Memora Settings")
+		max_hearts = settings.default_max_hearts or 5
 
 	lesson_data = {
 		"schema_version": SCHEMA_VERSION,
@@ -590,9 +581,9 @@ def _generate_lesson_json_from_tree(lesson: dict, tree: PlanSubjectTree) -> dict
 		"lesson_id": lesson_name,
 		"title": lesson["lesson_title"],
 		"base_xp": lesson.get("base_xp") or 10,
-		"max_hearts": lesson.get("max_hearts") or 3,
+		"max_hearts": max_hearts,
 		"is_reviewable": bool(lesson.get("is_reviewable")),
-		"stages": stages,
+		"items": items,
 	}
 
 	return {
@@ -625,6 +616,116 @@ def _strip_item_ids(config: dict) -> None:
 								child.pop("item_id", None)
 
 
+# Stage types where a single stage references multiple item_ids.
+_MULTI_ITEM_STAGE_TYPES = {"MATCHING", "MINDMAP"}
+
+
+def _extract_item_id(config: dict) -> str | None:
+	"""Extract the primary item_id from a single-item stage config.
+
+	Scans all known config array keys across every stage type:
+	highlights (INFORMATION/REVEAL), blanks (FILL_BLANK), answers (QUESTION),
+	pairs (MATCHING fallback), words (SENTENCE_BUILDER), steps (STORY), items, children.
+	"""
+	for key in ("highlights", "blanks", "answers", "words", "steps", "items", "pairs", "children"):
+		entries = config.get(key)
+		if isinstance(entries, list):
+			for entry in entries:
+				if isinstance(entry, dict) and entry.get("item_id"):
+					return entry["item_id"]
+	return config.get("item_id")
+
+
+def _extract_multi_item_ids(config: dict, stage_type: str) -> list[str]:
+	"""Extract all item_ids from a multi-item stage (MATCHING or MINDMAP)."""
+	ids = []
+	if stage_type == "MATCHING":
+		for pair in config.get("pairs", []):
+			if isinstance(pair, dict) and pair.get("item_id"):
+				ids.append(pair["item_id"])
+	elif stage_type == "MINDMAP":
+		for branch in config.get("children", []):
+			if isinstance(branch, dict):
+				if branch.get("item_id"):
+					ids.append(branch["item_id"])
+				for child in branch.get("children", []):
+					if isinstance(child, dict) and child.get("item_id"):
+						ids.append(child["item_id"])
+	return ids
+
+
+def _group_stages_into_items(stages_raw, skippable_types: set) -> list[dict]:
+	"""Group stages by item_id into items[].
+
+	Single-item stages are grouped by item_id.
+	Multi-item stages (MATCHING, MINDMAP) appear as separate entries with item_ids[].
+	"""
+	mindmap_entries: list[dict] = []
+	item_stages: dict[str, list[dict]] = {}
+	# Ordered list of (type, key) tuples to preserve original idx order.
+	# type is "item" for regular item_id groups, "matching" for MATCHING stages.
+	ordered_keys: list[tuple[str, str | int]] = []
+	matching_entries: dict[int, dict] = {}
+	matching_counter = 0
+
+	for stage in stages_raw:
+		effective_skippable = bool(stage.is_skippable) or (stage.stage_type in skippable_types)
+		config = _parse_stage_config(stage.config_json)
+
+		if stage.stage_type == "MINDMAP":
+			item_ids = _extract_multi_item_ids(config, stage.stage_type)
+			if effective_skippable:
+				_strip_item_ids(config)
+			mindmap_entries.append({
+				"item_ids": item_ids,
+				"stages": [{
+					"stage_type": stage.stage_type,
+					"is_skippable": effective_skippable,
+					"config": config,
+				}],
+			})
+		elif stage.stage_type == "MATCHING":
+			item_ids = _extract_multi_item_ids(config, stage.stage_type)
+			if effective_skippable:
+				_strip_item_ids(config)
+			key = matching_counter
+			matching_counter += 1
+			matching_entries[key] = {
+				"item_ids": item_ids,
+				"stages": [{
+					"stage_type": stage.stage_type,
+					"is_skippable": effective_skippable,
+					"config": config,
+				}],
+			}
+			ordered_keys.append(("matching", key))
+		else:
+			item_id = _extract_item_id(config)
+			if effective_skippable:
+				_strip_item_ids(config)
+			stage_data = {
+				"stage_type": stage.stage_type,
+				"is_skippable": effective_skippable,
+				"config": config,
+			}
+			if item_id:
+				if item_id not in item_stages:
+					ordered_keys.append(("item", item_id))
+					item_stages[item_id] = []
+				item_stages[item_id].append(stage_data)
+			else:
+				logger.warning("Stage %s has no item_id, skipping grouping", stage.name)
+
+	items = []
+	for kind, key in ordered_keys:
+		if kind == "item":
+			items.append({"item_id": key, "stages": item_stages[key]})
+		else:
+			items.append(matching_entries[key])
+	items.extend(mindmap_entries)
+	return items
+
+
 def _generate_lesson_json(lesson_name: str) -> dict | None:
 	"""Generate lesson JSON (shared across plans). Fallback for non-tree usage."""
 	try:
@@ -633,25 +734,13 @@ def _generate_lesson_json(lesson_name: str) -> dict | None:
 		logger.warning(f"Lesson {lesson_name} not found, skipping")
 		return None
 
-	# Fetch global skippable types once per lesson
 	skippable_types = _get_skippable_stage_types()
+	items = _group_stages_into_items(lesson_doc.stages or [], skippable_types)
 
-	stages = []
-	for stage in lesson_doc.stages or []:
-		# Two-tier resolution: per-stage override then global stage type setting
-		effective_skippable = bool(stage.is_skippable) or (stage.stage_type in skippable_types)
-
-		config = _parse_stage_config(stage.config_json)
-		if effective_skippable:
-			_strip_item_ids(config)
-
-		stage_data = {
-			"stage_id": stage.name,
-			"stage_type": stage.stage_type,
-			"is_skippable": effective_skippable,
-			"config": config,
-		}
-		stages.append(stage_data)
+	max_hearts = lesson_doc.max_hearts
+	if not max_hearts:
+		settings = frappe.get_single("Memora Settings")
+		max_hearts = settings.default_max_hearts or 5
 
 	lesson_data = {
 		"schema_version": SCHEMA_VERSION,
@@ -659,9 +748,9 @@ def _generate_lesson_json(lesson_name: str) -> dict | None:
 		"lesson_id": lesson_doc.name,
 		"title": lesson_doc.lesson_title,
 		"base_xp": lesson_doc.base_xp or 10,
-		"max_hearts": lesson_doc.max_hearts or 3,
+		"max_hearts": max_hearts,
 		"is_reviewable": bool(lesson_doc.is_reviewable),
-		"stages": stages,
+		"items": items,
 	}
 
 	return {

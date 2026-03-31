@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "autoname": "VRLOG-.#####.",
+ "autoname": "hash",
  "creation": "2026-02-14 08:20:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",

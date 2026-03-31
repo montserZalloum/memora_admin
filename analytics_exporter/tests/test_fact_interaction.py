@@ -29,7 +29,7 @@ FI_PREFIX = "TEST-FI"
 INTERACTION_TABLE = "tabMemora Interaction Log"
 
 EXPECTED_COLUMNS = {
-	"event_id", "player_id", "lesson_id", "stage_id", "item_id",
+	"event_id", "player_id", "lesson_id", "stage_type", "item_id",
 	"event_type", "time_spent_sec", "errors_count", "event_ts",
 	"client_metadata",
 }
@@ -84,7 +84,7 @@ def _insert_test_interactions(conn, count: int = 5, prefix: str = FI_PREFIX) -> 
 		with conn.cursor() as cur:
 			cur.execute(
 				"INSERT IGNORE INTO `tabMemora Interaction Log` "
-				"(`name`, `player`, `lesson`, `stage_id`, `item_id`, `event_type`, "
+				"(`name`, `player`, `lesson`, `stage_type`, `item_id`, `event_type`, "
 				" `time_spent`, `errors_count`, `timestamp`, `client_metadata`, "
 				" `creation`, `modified`, `modified_by`, `owner`, `docstatus`, `idx`) "
 				"VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "
@@ -122,7 +122,7 @@ def _insert_out_of_range_interactions(conn, prefix: str = FI_PREFIX) -> list[str
 		with conn.cursor() as cur:
 			cur.execute(
 				"INSERT IGNORE INTO `tabMemora Interaction Log` "
-				"(`name`, `player`, `lesson`, `stage_id`, `item_id`, `event_type`, "
+				"(`name`, `player`, `lesson`, `stage_type`, `item_id`, `event_type`, "
 				" `time_spent`, `errors_count`, `timestamp`, `client_metadata`, "
 				" `creation`, `modified`, `modified_by`, `owner`, `docstatus`, `idx`) "
 				"VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, "

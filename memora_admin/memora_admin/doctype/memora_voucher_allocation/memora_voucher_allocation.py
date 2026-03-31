@@ -15,6 +15,11 @@ VALID_TRANSITIONS = {
 
 
 class MemoraVoucherAllocation(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("VALLOC-.#####.")
+
 	def validate(self):
 		self._validate_status_transition()
 		self._update_quantity()

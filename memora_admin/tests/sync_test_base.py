@@ -184,7 +184,7 @@ class SyncTestCase(FrappeTestCase):
 		Push interaction JSON to Redis buffer.
 
 		Args:
-			data: Interaction dict with player, lesson, stage_id, event_type, etc.
+			data: Interaction dict with player, lesson, stage_type, event_type, etc.
 
 		Tracks Redis key for cleanup.
 		"""

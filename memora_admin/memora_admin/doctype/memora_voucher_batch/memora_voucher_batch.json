@@ -1,7 +1,7 @@
 {
  "actions": [],
  "allow_rename": 0,
- "autoname": "VBATCH-.#####.",
+ "autoname": "hash",
  "creation": "2026-02-14 08:08:21.637330",
  "doctype": "DocType",
  "editable_grid": 1,

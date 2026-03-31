@@ -93,7 +93,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		data = {
 			"player": player or self.player_id,
 			"lesson": lesson or self.lesson_id,
-			"stage_id": "STG-1",
+			"stage_type": "STG-1",
 			"event_type": "Completed",
 			"time_spent": 30,
 			"timestamp": "2026-02-17T10:00:00Z",
@@ -216,7 +216,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		for i in range(6000):
 			self._push_interaction(
 				self._make_interaction(
-					stage_id=f"STG-{i % 10}",
+					stage_type=f"STG-{i % 10}",
 					time_spent=(i % 60) + 1,
 				)
 			)
@@ -246,7 +246,7 @@ class TestFlushInteractionBuffer(SyncTestCase):
 		- Assert: Buffer still has 3 items (nothing trimmed)
 		"""
 		for i in range(3):
-			self._push_interaction(self._make_interaction(stage_id=f"STG-{i+1}"))
+			self._push_interaction(self._make_interaction(stage_type=f"STG-{i+1}"))
 
 		original_sql = frappe.db.sql
 

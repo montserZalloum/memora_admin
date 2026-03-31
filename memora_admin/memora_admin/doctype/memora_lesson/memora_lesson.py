@@ -6,6 +6,11 @@ from frappe.model.document import Document
 
 
 class MemoraLesson(Document):
+	def autoname(self):
+		from frappe.model.naming import make_autoname
+
+		self.name = make_autoname("LES-.#####.")
+
 	def before_insert(self):
 		"""Auto-assign bit_index on lesson creation (PRD-1 section 6.3)."""
 		self._assign_bit_index()
