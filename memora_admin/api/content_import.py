@@ -631,11 +631,57 @@ def execute_import(
 				filters={"topic": topic_name},
 				pluck="name",
 			)
+
+			# Synchronous cleanup: delete Review Items + Memory State + Practice Log
+			# BEFORE deleting lessons.  The on_lesson_trash hook enqueues this as a
+			# background job which can silently fail, leaving orphaned Memory State
+			# rows.  Doing it inline guarantees cleanup within this request.
+			#
+			# NOTE: we use raw SQL without intermediate commits so the deletes stay
+			# inside the "content_import" savepoint.  If the subsequent lesson
+			# creation fails, the rollback restores everything.
+			if existing_lessons:
+				all_item_ids = frappe.get_all(
+					"Memora Review Item",
+					filters={"lesson": ["in", existing_lessons]},
+					pluck="name",
+				)
+				if all_item_ids:
+					placeholders = ", ".join(["%s"] * len(all_item_ids))
+					# Practice Log (raw SQL table)
+					frappe.db.sql(
+						f"DELETE FROM `tabMemora Practice Log` WHERE item_id IN ({placeholders})",
+						tuple(all_item_ids),
+					)
+					# Memory State (partitioned — include season_seq for pruning)
+					season_seqs = frappe.db.sql(
+						"SELECT DISTINCT season_seq FROM `tabMemora Season`",
+						pluck="season_seq",
+					)
+					for seq in season_seqs:
+						if not seq:
+							continue
+						params = {"season_seq": seq}
+						in_parts = []
+						for j, iid in enumerate(all_item_ids):
+							key = f"id_{j}"
+							params[key] = iid
+							in_parts.append(f"UUID_TO_BIN(%({key})s)")
+						frappe.db.sql(
+							f"""DELETE FROM `tabMemora Memory State`
+							    WHERE item_id IN ({", ".join(in_parts)})
+							      AND season_seq = %(season_seq)s""",
+							params,
+						)
+					# Review Items
+					for item_id in all_item_ids:
+						frappe.delete_doc("Memora Review Item", item_id, force=True, ignore_permissions=True)
+
 			for lesson_name in existing_lessons:
-				# frappe.delete_doc fires on_trash hooks:
+				# on_lesson_trash will be a no-op (Review Items already deleted above).
+				# Other on_trash hooks still fire:
 				#   - build_trigger.on_content_updated (cache invalidation)
 				#   - dimension_sync.on_lesson_changed (analytics dimension refresh)
-				#   - lesson_cleanup.on_lesson_trash (Review Item + Memory State + Practice Log cleanup)
 				frappe.delete_doc("Memora Lesson", lesson_name, force=True, ignore_permissions=True)
 
 		lessons_created = 0

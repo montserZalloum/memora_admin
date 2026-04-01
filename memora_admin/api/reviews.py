@@ -40,7 +40,8 @@ def get_review_overview(player_id: str) -> list[dict]:
 	"""Get count of due reviews per subject for a player.
 
 	Counts items (each Memory State row = 1 item) with season_seq for partition pruning.
-	Orphan filtering is skipped for counts (fsrs_processor validates stage existence on insert).
+	INNER JOIN filters orphaned Memory State rows whose Review Item was deleted
+	(e.g., after lesson replacement via content import).
 
 	Returns: [{"subject": "SUBJ-00001", "due_count": 15}, ...]
 	"""
@@ -50,6 +51,8 @@ def get_review_overview(player_id: str) -> list[dict]:
 		"""
 		SELECT ms.subject, COUNT(*) as due_count
 		FROM `tabMemora Memory State` ms
+		INNER JOIN `tabMemora Review Item` ri
+			ON ri.name = BIN_TO_UUID(ms.item_id)
 		WHERE ms.player = %(player)s
 		  AND ms.next_review <= %(today)s
 		  AND ms.season_seq = %(season_seq)s
@@ -92,7 +95,7 @@ def get_due_items(player_id: str, subject_id: str, limit: int = 0) -> dict:
 		       ri.choice_4,
 		       ri.correct_choice
 		FROM `tabMemora Memory State` ms
-		LEFT JOIN `tabMemora Review Item` ri
+		INNER JOIN `tabMemora Review Item` ri
 			ON ri.name = BIN_TO_UUID(ms.item_id)
 		WHERE ms.player = %(player)s
 		  AND ms.subject = %(subject)s

@@ -26,12 +26,7 @@ def on_lesson_trash(doc, method):
 	if not item_ids:
 		return
 
-	frappe.enqueue(
-		_delete_review_items_and_memory_state,
-		item_ids=item_ids,
-		queue="default",
-		job_name=f"lesson_cleanup_trash_{doc.name}",
-	)
+	_delete_review_items_and_memory_state(item_ids)
 
 
 def on_lesson_stages_updated(doc, method):
@@ -60,12 +55,7 @@ def on_lesson_stages_updated(doc, method):
 	if review_items:
 		orphaned = [ri["name"] for ri in review_items if ri["item_id"] not in current_item_ids]
 		if orphaned:
-			frappe.enqueue(
-				_delete_review_items_and_memory_state,
-				item_ids=orphaned,
-				queue="default",
-				job_name=f"lesson_cleanup_stages_{doc.name}",
-			)
+			_delete_review_items_and_memory_state(orphaned)
 
 	# --- Sync QUESTION stage content to Review Items ---
 	_sync_question_review_items(old_doc, doc)
