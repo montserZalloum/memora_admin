@@ -27,6 +27,7 @@ from fastapi_app.core.redis_keys import (
     PRACTICE_SESSION_TTL,
     PRACTICE_SUMMARY_TTL,
     PRACTICE_WRITE_QUEUE_KEY,
+    hierarchy_key,
     practice_rate_key,
     practice_summary_key,
     practice_session_key,
@@ -299,6 +300,55 @@ async def create_session(
 
 
 # ---------------------------------------------------------------------------
+# Free-content scope helpers
+# ---------------------------------------------------------------------------
+
+
+async def load_free_content_scope(
+    redis_client: aioredis.Redis,
+    subject_id: str,
+) -> tuple[set[str], set[str]]:
+    """Load free_topics and free_units from the hierarchy cache.
+
+    Returns ``(free_topics_set, free_units_set)``.  Both are empty when the
+    hierarchy is not cached or contains no free content markers.
+    One Redis GET (~0.5 ms).
+    """
+    raw = await redis_client.get(hierarchy_key(subject_id))
+    if not raw:
+        return set(), set()
+    data = json.loads(raw)
+    return set(data.get("free_topics", [])), set(data.get("free_units", []))
+
+
+def resolve_allowed_free_topics(
+    map_data: dict,
+    track_ids: list[str],
+    free_topics: set[str],
+    free_units: set[str],
+) -> set[str]:
+    """Return topic IDs that are free within the requested tracks.
+
+    A topic is free if its ID is in *free_topics* **or** its parent unit
+    ID is in *free_units*.  Pure in-memory set lookups — O(topics in scope).
+    """
+    result: set[str] = set()
+    tracks = map_data.get("tracks", {})
+    for track_id in track_ids:
+        track = tracks.get(track_id)
+        if not track:
+            continue
+        for uid, unit in track.get("units", {}).items():
+            if uid in free_units:
+                result.update(unit.get("topics", {}).keys())
+            else:
+                for tid in unit.get("topics", {}).keys():
+                    if tid in free_topics:
+                        result.add(tid)
+    return result
+
+
+# ---------------------------------------------------------------------------
 # Scope validation helpers (used by endpoints)
 # ---------------------------------------------------------------------------
 
@@ -347,7 +397,7 @@ def validate_scope(
 # T021 — Rate limiting for session creation
 # ---------------------------------------------------------------------------
 
-PRACTICE_RATE_LIMIT_MAX = 5
+PRACTICE_RATE_LIMIT_MAX = 30
 """Maximum number of session starts per player per hour (FR-010)."""
 
 

@@ -60,6 +60,8 @@ async def start_session(
     player_id = user.sub
 
     # --- Access control check ---
+    free_content_scope: tuple[set[str], set[str]] | None = None
+
     has_subject = await access_service.check_access_with_plan(
         player_id=player_id,
         content_key=f"SUB-{body.subject_id}",
@@ -79,7 +81,16 @@ async def start_session(
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail="No access to this content",
                     )
-                break  # Free content — allow all tracks
+                # Load free topic/unit sets for scope restriction
+                free_content_scope = await practice.load_free_content_scope(
+                    redis_client, body.subject_id,
+                )
+                if not free_content_scope[0] and not free_content_scope[1]:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="No access to this content",
+                    )
+                break
 
     # --- Rate limit check (FR-010, T021) ---
     try:
@@ -87,7 +98,7 @@ async def start_session(
     except RateLimitExceeded as exc:
         return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            content={"detail": "Maximum 5 sessions per hour exceeded"},
+            content={"detail": "Maximum 30 sessions per hour exceeded"},
             headers={"Retry-After": str(exc.retry_after)},
         )
 
@@ -111,6 +122,26 @@ async def start_session(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
+    # --- Restrict scope to free content when on the free-content path ---
+    topic_ids = body.topic_ids
+    if free_content_scope is not None:
+        allowed = practice.resolve_allowed_free_topics(
+            map_data, body.track_ids, free_content_scope[0], free_content_scope[1],
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No access to this content",
+            )
+        if topic_ids:
+            if not set(topic_ids).issubset(allowed):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="No access to this content",
+                )
+        else:
+            topic_ids = sorted(allowed)
+
     # --- Load player summary per track ---
     frappe_client = await get_frappe_client()
     combined_history: dict = {}
@@ -126,7 +157,7 @@ async def start_session(
             map_data,
             body.track_ids,
             body.unit_ids,
-            body.topic_ids,
+            topic_ids,
             combined_history,
             set(),  # No served_ids on first batch
             settings.practice_session_size,
@@ -141,7 +172,7 @@ async def start_session(
 
     # --- Create session ---
     scope_hash = practice.compute_scope_hash(
-        body.subject_id, body.track_ids, body.unit_ids, body.topic_ids,
+        body.subject_id, body.track_ids, body.unit_ids, topic_ids,
     )
     await practice.create_session(
         redis_client,
@@ -152,7 +183,7 @@ async def start_session(
         question_ids,
         chunk_refs,
         unit_ids=body.unit_ids,
-        topic_ids=body.topic_ids,
+        topic_ids=topic_ids,
         question_track_map=question_track_map,
     )
 
