@@ -45,18 +45,6 @@ async def start_session(
     access_service: AccessServiceDep,
 ) -> BatchResponse:
     """Start a new practice session."""
-    # --- Scope validation (FR-035, FR-036) ---
-    if len(body.track_ids) > 1 and (body.unit_ids or body.topic_ids):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot filter by units or topics when multiple tracks are selected",
-        )
-    if body.unit_ids and len(body.unit_ids) > 1 and body.topic_ids:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot filter by topics when multiple units are selected",
-        )
-
     player_id = user.sub
 
     # --- Access control check ---
