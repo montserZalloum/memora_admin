@@ -690,9 +690,11 @@ def execute_import(
 		lesson_names: list[str] = []
 		used_uuids: set[str] = set()
 
+		# Pre-build ALL per-lesson UUID maps first so cross-lesson references
+		# (e.g. a MATCHING stage that references a question that moved to a
+		# sibling lesson during split) can be resolved via a group fallback.
+		all_lesson_uuid_maps: list[dict[str, str]] = []
 		for lesson_data in lessons:
-			# Build per-lesson UUID map — question IDs (1, 2, 3...) repeat across
-			# lessons, so each lesson needs its own ID→UUID mapping.
 			lesson_uuid_map: dict[str, str] = {}
 			for q in lesson_data.get("questions", []):
 				q_id = str(q["id"])
@@ -704,6 +706,27 @@ def execute_import(
 					new_uuid = str(_uuid.uuid4())
 					lesson_uuid_map[q_id] = new_uuid
 					used_uuids.add(new_uuid)
+			all_lesson_uuid_maps.append(lesson_uuid_map)
+
+		# Group lessons by split origin: lessons split from the same original
+		# sub_lesson share a base title (e.g. "Foo" and "Foo (2)").  Merge
+		# their UUID maps so cross-references within a split group resolve
+		# correctly without leaking IDs across unrelated sub_lessons.
+		split_groups: dict[str, list[int]] = {}
+		for i, ld in enumerate(lessons):
+			base = re.sub(r"\s*\(\d+\)$", "", ld.get("title", ""))
+			split_groups.setdefault(base, []).append(i)
+
+		group_fallback: dict[int, dict[str, str]] = {}
+		for _base, indices in split_groups.items():
+			merged: dict[str, str] = {}
+			for idx in indices:
+				merged.update(all_lesson_uuid_maps[idx])
+			for idx in indices:
+				group_fallback[idx] = merged
+
+		for lesson_idx, lesson_data in enumerate(lessons):
+			lesson_uuid_map = all_lesson_uuid_maps[lesson_idx]
 
 			# Create lesson doc
 			lesson_doc = frappe.new_doc("Memora Lesson")
@@ -724,8 +747,9 @@ def execute_import(
 					except (json.JSONDecodeError, TypeError):
 						pass
 
-				# Rewrite integer item_id references to UUIDs
-				config = _rewrite_item_ids(config, lesson_uuid_map)
+				# Rewrite integer item_id references to UUIDs.
+				# Pass group fallback for cross-lesson refs after splits.
+				config = _rewrite_item_ids(config, lesson_uuid_map, group_fallback.get(lesson_idx))
 
 				lesson_doc.append(
 					"stages",
@@ -798,17 +822,29 @@ def execute_import(
 	}
 
 
-def _rewrite_item_ids(obj: object, id_to_uuid: dict[str, str]) -> object:
+def _rewrite_item_ids(
+	obj: object,
+	id_to_uuid: dict[str, str],
+	fallback_map: dict[str, str] | None = None,
+) -> object:
 	"""Recursively replace integer item_id values with UUIDs in stage configs.
 
 	Only rewrites values whose dict key is literally ``item_id``.  Other integer
 	fields (``from``, ``to``, ``correct_answer``, …) are left untouched.
+
+	Lookup order: ``id_to_uuid`` (per-lesson) → ``fallback_map`` (global, all
+	lessons) → original value unchanged.  The fallback handles cross-lesson
+	references created when a lesson is split in the import wizard.
 	"""
 	if isinstance(obj, dict):
-		return {
-			k: (id_to_uuid.get(str(v), v) if k == "item_id" else _rewrite_item_ids(v, id_to_uuid))
-			for k, v in obj.items()
-		}
+		result = {}
+		for k, v in obj.items():
+			if k == "item_id":
+				str_v = str(v)
+				result[k] = id_to_uuid.get(str_v) or (fallback_map or {}).get(str_v, v)
+			else:
+				result[k] = _rewrite_item_ids(v, id_to_uuid, fallback_map)
+		return result
 	if isinstance(obj, list):
-		return [_rewrite_item_ids(item, id_to_uuid) for item in obj]
+		return [_rewrite_item_ids(item, id_to_uuid, fallback_map) for item in obj]
 	return obj
