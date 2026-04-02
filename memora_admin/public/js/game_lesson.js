@@ -65,11 +65,104 @@ async function isEffectivelySkippable(row) {
 
 frappe.ui.form.on("Memora Lesson", {
 	refresh: function (frm) {
+		frm.add_custom_button(__("إضافة سؤال"), () => open_add_question_dialog(frm));
 		if (frm.doc.stages && frm.doc.stages.length > 0) {
 			frm.add_custom_button(__("Lesson Map"), () => open_lesson_map_dialog(frm), __("View"));
 		}
 	},
 });
+
+// =================================================
+// Add Question — quick-add a QUESTION stage
+// =================================================
+
+function open_add_question_dialog(frm) {
+	let d = new frappe.ui.Dialog({
+		title: "إضافة سؤال جديد",
+		fields: [
+			{
+				label: "التعليمات",
+				fieldname: "instruction",
+				fieldtype: "Data",
+				default: "اختر الإجابة الصحيحة",
+			},
+			{
+				label: "نص السؤال",
+				fieldname: "question",
+				fieldtype: "Small Text",
+				reqd: 1,
+			},
+			{
+				fieldtype: "Section Break",
+				label: "الإجابات",
+			},
+			{
+				label: "",
+				fieldname: "answers_table",
+				fieldtype: "Table",
+				cannot_add_rows: false,
+				description: "أضف إجابتين على الأقل وحدد الإجابة الصحيحة",
+				fields: [
+					{
+						label: "نص الإجابة",
+						fieldname: "answer_text",
+						fieldtype: "Data",
+						in_list_view: 1,
+						reqd: 1,
+						columns: 7,
+					},
+					{
+						label: "صحيحة؟",
+						fieldname: "is_correct",
+						fieldtype: "Check",
+						in_list_view: 1,
+						columns: 2,
+					},
+				],
+				data: [],
+			},
+		],
+		size: "large",
+		primary_action_label: "إضافة",
+		primary_action: function (values) {
+			if (!values.answers_table || values.answers_table.length < 2) {
+				frappe.msgprint("يجب إضافة إجابتين على الأقل.");
+				return;
+			}
+
+			let correct_count = values.answers_table.filter((a) => a.is_correct).length;
+			if (correct_count === 0) {
+				frappe.msgprint("يجب تحديد إجابة صحيحة واحدة على الأقل.");
+				return;
+			}
+			if (correct_count > 1) {
+				frappe.msgprint("يجب تحديد إجابة صحيحة واحدة فقط.");
+				return;
+			}
+
+			let config_payload = {
+				item_id: generateItemUUID(),
+				instruction: values.instruction,
+				question: values.question,
+				answers: values.answers_table.map((a) => ({
+					text: a.answer_text,
+					is_correct: !!a.is_correct,
+					item_id: generateItemUUID(),
+				})),
+			};
+
+			let row = frm.add_child("stages");
+			row.stage_type = "QUESTION";
+			row.config_json = JSON.stringify(config_payload, null, 2);
+			frm.refresh_field("stages");
+			frm.dirty();
+			d.hide();
+			frappe.show_alert({ message: "تمت إضافة السؤال — اضغط حفظ لتأكيد", indicator: "blue" });
+		},
+	});
+
+	d.show();
+}
 
 // =================================================
 // Lesson Map — grouped item view with drag-to-reorder
@@ -113,11 +206,11 @@ function _groupStagesByItem(stages) {
 	let nullCounter = 0;
 
 	for (let stage of stages) {
-		// MATCHING is always a standalone checkpoint — never merged into an item group
-		if (stage.stage_type === "MATCHING") {
+		// MATCHING, MINDMAP, STORY are standalone checkpoints — never merged into an item group
+		if (stage.stage_type === "MATCHING" || stage.stage_type === "MINDMAP" || stage.stage_type === "STORY") {
 			groups.push({
 				item_id: _extractItemId(stage),
-				key: `__matching_${nullCounter++}`,
+				key: `__standalone_${nullCounter++}`,
 				stages: [stage],
 				isCheckpoint: true,
 			});
@@ -171,31 +264,37 @@ function _renderBadge(stageType, stageIdx) {
 
 function _renderCheckpointCard(group, index, allGroups) {
 	let s = group.stages[0];
+	let c = STAGE_TYPE_COLORS[s.stage_type] || { bg: "#f5f5f5", border: "#999", text: "#666", label: s.stage_type };
 
-	// Resolve which items are referenced in this MATCHING's pairs
-	let refLabels = "";
-	try {
-		let config = typeof s.config_json === "string" ? JSON.parse(s.config_json) : s.config_json;
-		if (config && config.pairs) {
-			let pairIds = [...new Set(config.pairs.map((p) => p.item_id).filter(Boolean))];
-			let nums = [];
-			for (let pid of pairIds) {
-				let gi = allGroups.findIndex((g) => !g.isCheckpoint && g.item_id === pid);
-				if (gi !== -1) nums.push(`#${gi + 1}`);
+	// Resolve subtitle: MATCHING shows referenced item numbers, others show preview text
+	let subtitle = "";
+	if (s.stage_type === "MATCHING") {
+		try {
+			let config = typeof s.config_json === "string" ? JSON.parse(s.config_json) : s.config_json;
+			if (config && config.pairs) {
+				let pairIds = [...new Set(config.pairs.map((p) => p.item_id).filter(Boolean))];
+				let nums = [];
+				for (let pid of pairIds) {
+					let gi = allGroups.findIndex((g) => !g.isCheckpoint && g.item_id === pid);
+					if (gi !== -1) nums.push(`#${gi + 1}`);
+				}
+				if (nums.length) subtitle = nums.join("، ");
 			}
-			if (nums.length) refLabels = nums.join("، ");
-		}
-	} catch {}
+		} catch {}
+	} else {
+		subtitle = _escapeHtmlMap(_extractPreviewText(s));
+		if (subtitle.length > 70) subtitle = subtitle.slice(0, 70) + "…";
+	}
 
 	return `<div class="lm-item-card lm-checkpoint-card" data-item-key="${group.key}" data-index="${index}"
-		style="background:#fce4ec;border:1px solid #d1d8dd;border-radius:6px;margin-bottom:8px;
+		style="background:${c.bg};border:1px solid ${c.border};border-radius:6px;margin-bottom:8px;
 		overflow:hidden;cursor:grab;">
 		<div class="lm-item-header" data-item-key="${group.key}"
 			style="display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;">
 			<span class="lm-drag-handle" style="cursor:grab;color:#aaa;font-size:16px;">⠿</span>
-			<span style="font-weight:600;color:#b71c1c;min-width:50px;font-size:12px;">توصيل</span>
-			<span style="flex:1;direction:rtl;font-size:12px;color:#b71c1c;overflow:hidden;
-				text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${refLabels || "توصيل"}</span>
+			<span style="font-weight:600;color:${c.text};min-width:50px;font-size:12px;">${c.label}</span>
+			<span style="flex:1;direction:rtl;font-size:12px;color:${c.text};overflow:hidden;
+				text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${subtitle || c.label}</span>
 			<button class="btn btn-xs btn-default lm-edit-stage-btn" data-stage-name="${s.name}"
 				title="تعديل">✏️</button>
 			<button class="btn btn-xs btn-danger-light lm-delete-item-btn" data-item-key="${group.key}"
@@ -233,6 +332,8 @@ function _renderItemCard(group, index, expanded, allGroups) {
 					style="color:#c0392b;border-color:#e6b0aa;" title="حذف المرحلة">✕</button>
 			</div>`;
 		}
+		stagesHtml += `<button class="btn btn-xs btn-default lm-add-stage-btn" data-item-key="${group.key}"
+			style="width:100%;margin-top:6px;margin-bottom:4px;color:#888;border-style:dashed;">+ إضافة مرحلة</button>`;
 		stagesHtml += "</div>";
 	}
 
@@ -297,7 +398,9 @@ function open_lesson_map_dialog(frm) {
 		html += "</div></div>";
 
 		let $wrapper = d.fields_dict.map_html.$wrapper;
+		let scrollTop = $wrapper.find(".lm-container").scrollTop() || 0;
 		$wrapper.html(html);
+		$wrapper.find(".lm-container").scrollTop(scrollTop);
 
 		// Expand/collapse on header click
 		$wrapper.find(".lm-item-header").on("click", function (e) {
@@ -375,6 +478,88 @@ function open_lesson_map_dialog(frm) {
 			);
 		});
 
+		// Add stage to existing item group
+		$wrapper.find(".lm-add-stage-btn").on("click", function (e) {
+			e.stopPropagation();
+			let itemKey = $(this).data("item-key");
+			let group = groups.find((g) => g.key === itemKey);
+			if (!group || !group.item_id) return;
+
+			let existingTypes = new Set(group.stages.map((s) => s.stage_type));
+			let allowedTypes = [
+				{ value: "INFORMATION", label: STAGE_TYPE_COLORS.INFORMATION.label },
+				{ value: "FILL_BLANK", label: STAGE_TYPE_COLORS.FILL_BLANK.label },
+				{ value: "REVEAL", label: STAGE_TYPE_COLORS.REVEAL.label },
+				{ value: "QUESTION", label: STAGE_TYPE_COLORS.QUESTION.label },
+				{ value: "SENTENCE_BUILDER", label: STAGE_TYPE_COLORS.SENTENCE_BUILDER.label },
+			].filter((t) => !existingTypes.has(t.value));
+
+			if (allowedTypes.length === 0) {
+				frappe.msgprint("هذا العنصر يحتوي على جميع أنواع المراحل المتاحة.");
+				return;
+			}
+			let typeOptions = allowedTypes.map((t) => `${t.value} — ${t.label}`).join("\n");
+
+			frappe.prompt(
+				{
+					label: "نوع المرحلة",
+					fieldname: "stage_type",
+					fieldtype: "Select",
+					options: typeOptions,
+					reqd: 1,
+				},
+				function (values) {
+					let stageType = values.stage_type.split(" — ")[0];
+
+					function _addStageRow(configJson) {
+						let row = frm.add_child("stages");
+						row.stage_type = stageType;
+						row.config_json = JSON.stringify(configJson, null, 2);
+						frm.refresh_field("stages");
+						frm.dirty();
+
+						group.stages.push(row);
+						_updateDialogTitle();
+						render();
+
+						frm.script_manager.trigger("edit_content_btn", row.doctype, row.name);
+					}
+
+					if (stageType === "QUESTION") {
+						// Fetch existing Review Item data for this item_id
+						frappe.call({
+							method: "frappe.client.get",
+							args: { doctype: "Memora Review Item", name: group.item_id },
+							async: true,
+							callback: function (r) {
+								let config = { item_id: group.item_id };
+								if (r && r.message) {
+									let ri = r.message;
+									config.question = ri.question_text || "";
+									config.instruction = "اختر الإجابة الصحيحة";
+									let choices = [ri.choice_1, ri.choice_2, ri.choice_3, ri.choice_4].filter(Boolean);
+									config.answers = choices.map((text, i) => ({
+										text: text,
+										is_correct: i + 1 === ri.correct_choice,
+										item_id: generateItemUUID(),
+									}));
+								}
+								_addStageRow(config);
+							},
+							error: function () {
+								// Review Item not found — open with empty config
+								_addStageRow({ item_id: group.item_id });
+							},
+						});
+					} else {
+						_addStageRow({ item_id: group.item_id });
+					}
+				},
+				"إضافة مرحلة",
+				"إضافة"
+			);
+		});
+
 		// Init Sortable.js for drag-to-reorder
 		let listEl = $wrapper.find(".lm-items-list")[0];
 		if (listEl && window.Sortable) {
@@ -408,6 +593,55 @@ function open_lesson_map_dialog(frm) {
 
 	d.show();
 	d.$wrapper.find(".modal-dialog").css("max-width", "800px");
+
+	// Add standalone button to dialog footer (left side)
+	let $footer = d.$wrapper.find(".modal-footer");
+	$footer.css({ display: "flex", "justify-content": "space-between", "align-items": "center" });
+	let $standaloneBtn = $(`<button class="btn btn-xs btn-default"
+		style="color:#888;border-style:dashed;">+ إضافة مرحلة مستقلة (توصيل / خريطة / قصة)</button>`);
+	$footer.prepend($standaloneBtn);
+
+	$standaloneBtn.on("click", function () {
+		let standaloneTypes = [
+			{ value: "MATCHING", label: STAGE_TYPE_COLORS.MATCHING.label },
+			{ value: "MINDMAP", label: STAGE_TYPE_COLORS.MINDMAP.label },
+			{ value: "STORY", label: STAGE_TYPE_COLORS.STORY.label },
+		];
+		let typeOptions = standaloneTypes.map((t) => `${t.value} — ${t.label}`).join("\n");
+
+		frappe.prompt(
+			{
+				label: "نوع المرحلة",
+				fieldname: "stage_type",
+				fieldtype: "Select",
+				options: typeOptions,
+				reqd: 1,
+			},
+			function (values) {
+				let stageType = values.stage_type.split(" — ")[0];
+				let row = frm.add_child("stages");
+				row.stage_type = stageType;
+				row.config_json = "{}";
+				frm.refresh_field("stages");
+				frm.dirty();
+
+				let newGroup = {
+					item_id: null,
+					key: `__standalone_${Date.now()}`,
+					stages: [row],
+					isCheckpoint: true,
+				};
+				groups.push(newGroup);
+				_updateDialogTitle();
+				render();
+
+				frm.script_manager.trigger("edit_content_btn", row.doctype, row.name);
+			},
+			"إضافة مرحلة مستقلة",
+			"إضافة"
+		);
+	});
+
 	render();
 }
 
@@ -498,12 +732,43 @@ frappe.ui.form.on("Memora Lesson Stage", {
 // 🧩 1. نافذة إعدادات التوصيل (Matching)
 // =================================================
 function open_matching_dialog(frm, cdt, cdn, row, data, skipItemIds) {
-	let _originalItemId = _getItemIdFromConfig(data, "MATCHING");
-	let existing_data = (data.pairs || []).map((p) => ({
-		item_1: p.right,
-		item_2: p.left,
-		item_id: p.item_id || null,
-	}));
+	// Build item groups from lesson stages (non-checkpoint groups with item_id)
+	let stages = (frm.doc.stages || []).map((s) => ({ ...s }));
+	let itemGroups = [];
+	let seenIds = new Set();
+	for (let s of stages) {
+		if (s.stage_type === "MATCHING" || s.stage_type === "MINDMAP" || s.stage_type === "STORY") continue;
+		let itemId = _extractItemId(s);
+		if (!itemId || seenIds.has(itemId)) continue;
+		seenIds.add(itemId);
+		// Find all stages for this item to get best preview
+		let groupStages = stages.filter((st) => {
+			if (st.stage_type === "MATCHING" || st.stage_type === "MINDMAP" || st.stage_type === "STORY") return false;
+			return _extractItemId(st) === itemId;
+		});
+		let infoStage = groupStages.find((st) => st.stage_type === "INFORMATION");
+		let preview = _extractPreviewText(infoStage || groupStages[0]);
+		itemGroups.push({ item_id: itemId, preview: preview, stages: groupStages });
+	}
+
+	// Build existing pairs map for pre-filling
+	let existingPairs = {};
+	for (let p of data.pairs || []) {
+		if (p.item_id) {
+			existingPairs[p.item_id] = { right: p.right || "", left: p.left || "" };
+		}
+	}
+
+	// State: which items are checked + their right/left values
+	let pairState = {};
+	for (let g of itemGroups) {
+		let existing = existingPairs[g.item_id];
+		pairState[g.item_id] = {
+			checked: !!existing,
+			right: existing ? existing.right : "",
+			left: existing ? existing.left : "",
+		};
+	}
 
 	let d = new frappe.ui.Dialog({
 		title: "إعدادات التوصيل (Matching)",
@@ -515,67 +780,144 @@ function open_matching_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 				default: data.instruction || "طابق العناصر",
 			},
 			{
-				label: "الأزواج",
-				fieldname: "pairs_table",
-				fieldtype: "Table",
-				cannot_add_rows: false,
-				fields: [
-					{
-						label: "اليمين (Right)",
-						fieldname: "item_1",
-						fieldtype: "Data",
-						in_list_view: 1,
-						reqd: 1,
-					},
-					{
-						label: "اليسار (Left)",
-						fieldname: "item_2",
-						fieldtype: "Data",
-						in_list_view: 1,
-						reqd: 1,
-					},
-					{
-						fieldname: "item_id",
-						fieldtype: "Data",
-						hidden: 1,
-					},
-				],
-				data: existing_data,
-				get_data: () => existing_data,
+				fieldtype: "Section Break",
+				label: "اختر العناصر وأدخل نص التوصيل لكل عنصر",
+			},
+			{
+				fieldname: "items_html",
+				fieldtype: "HTML",
 			},
 		],
-		size: "large",
+		size: "extra-large",
 		primary_action_label: "حفظ (Save)",
 		primary_action: function (values) {
+			// Sync inputs before saving
+			_syncInputs();
+
+			let selectedPairs = itemGroups
+				.filter((g) => pairState[g.item_id].checked)
+				.map((g) => pairState[g.item_id]);
+
+			if (selectedPairs.length < 2) {
+				frappe.msgprint("يجب اختيار عنصرين على الأقل للتوصيل.");
+				return;
+			}
+
+			let emptyFields = selectedPairs.some((p) => !p.right.trim() || !p.left.trim());
+			if (emptyFields) {
+				frappe.msgprint("يجب تعبئة حقلي اليمين واليسار لكل عنصر محدد.");
+				return;
+			}
+
 			let config_payload = {
 				instruction: values.instruction,
-				pairs: values.pairs_table.map((p, index) => {
-					let pair = {
+				pairs: itemGroups
+					.filter((g) => pairState[g.item_id].checked)
+					.map((g, index) => ({
 						id: String(index + 1),
-						right: p.item_1,
-						left: p.item_2,
-					};
-					if (!skipItemIds) {
-						pair.item_id = p.item_id || generateItemUUID();
-					}
-					return pair;
-				}),
+						right: pairState[g.item_id].right.trim(),
+						left: pairState[g.item_id].left.trim(),
+						item_id: g.item_id,
+					})),
 			};
-			if (!skipItemIds && _originalItemId) {
-				config_payload.item_id = _originalItemId;
-			}
-			frappe.model.set_value(
-				cdt,
-				cdn,
-				"config_json",
-				JSON.stringify(config_payload, null, 2)
-			);
+
+			frappe.model.set_value(cdt, cdn, "config_json", JSON.stringify(config_payload, null, 2));
 			d.hide();
 			frappe.show_alert({ message: "تم الحفظ", indicator: "green" });
 		},
 	});
 
+	function _escapeHtml(str) {
+		return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+	}
+
+	function _syncInputs() {
+		let $w = d.fields_dict.items_html.$wrapper;
+		$w.find(".matching-item-row").each(function () {
+			let id = $(this).data("item-id");
+			if (!pairState[id]) return;
+			pairState[id].checked = $(this).find(".matching-check").is(":checked");
+			pairState[id].right = $(this).find(".matching-right").val() || "";
+			pairState[id].left = $(this).find(".matching-left").val() || "";
+		});
+	}
+
+	function _renderItems() {
+		if (itemGroups.length === 0) {
+			d.fields_dict.items_html.$wrapper.html(
+				'<div style="padding:20px;text-align:center;color:#8d99a6;">لا توجد عناصر في هذا الدرس. أضف عناصر أولاً ثم أعد فتح التوصيل.</div>'
+			);
+			return;
+		}
+
+		_syncInputs();
+
+		let html = "";
+		itemGroups.forEach((g, i) => {
+			let s = pairState[g.item_id];
+			let preview = _escapeHtml(g.preview);
+			if (preview.length > 80) preview = preview.slice(0, 80) + "…";
+			let disabled = s.checked ? "" : "disabled";
+			let opacity = s.checked ? "1" : "0.5";
+
+			html += `<div class="matching-item-row" data-item-id="${g.item_id}"
+				style="border:1px solid ${s.checked ? "#c62828" : "#e0e0e0"};border-radius:6px;
+				padding:12px 14px;margin-bottom:8px;background:${s.checked ? "#fff5f5" : "#fafafa"};
+				transition:all 0.15s;">
+				<div style="display:flex;align-items:center;gap:10px;margin-bottom:${s.checked ? "10px" : "0"};">
+					<input type="checkbox" class="matching-check" ${s.checked ? "checked" : ""}
+						style="width:18px;height:18px;cursor:pointer;flex-shrink:0;">
+					<span style="font-weight:600;color:#333;min-width:28px;">#${i + 1}</span>
+					<span style="flex:1;direction:rtl;font-size:13px;color:#555;overflow:hidden;
+						text-overflow:ellipsis;white-space:nowrap;">${preview || '<em style="color:#bbb;">بدون محتوى</em>'}</span>
+				</div>
+				${s.checked ? `<div style="display:flex;gap:10px;padding-right:36px;opacity:${opacity};">
+					<div style="flex:1;">
+						<div class="d-flex justify-content-between align-items-center mb-1">
+							<label style="font-size:11px;font-weight:600;color:#000;display:block;">اليمين</label>
+							<button type="button" class="btn btn-xs btn btn-primary matching-dir-toggle" data-target="right" data-item-id="${g.item_id}"
+								style="font-size:10px;line-height:1;color:#fff;"
+								title="تبديل اتجاه الكتابة">⇄</button>
+						</div>
+						<input type="text" class="matching-right form-control input-sm bg-white"
+							value="${_escapeHtml(s.right)}" ${disabled}
+							placeholder="المصطلح / الكلمة" style="direction:rtl;">
+					</div>
+					<div style="flex:1;">
+						<div class="d-flex justify-content-between align-items-center mb-1">
+							<label style="font-size:11px;font-weight:600;color:#000;display:block;">اليسار</label>
+							<button type="button" class="btn btn-xs btn btn-primary matching-dir-toggle" data-target="left" data-item-id="${g.item_id}"
+								style="font-size:10px;line-height:1;color:#fff;"
+								title="تبديل اتجاه الكتابة">⇄</button>
+						</div>
+						<input type="text" class="matching-left form-control input-sm bg-white"
+							value="${_escapeHtml(s.left)}" ${disabled}
+							placeholder="التعريف / الشرح" style="direction:rtl;">
+					</div>
+				</div>` : ""}
+			</div>`;
+		});
+
+		let $w = d.fields_dict.items_html.$wrapper;
+		$w.html(html);
+
+		// Toggle check → re-render to show/hide inputs
+		$w.find(".matching-check").on("change", function () {
+			_syncInputs();
+			_renderItems();
+		});
+
+		// Toggle input direction RTL ↔ LTR
+		$w.find(".matching-dir-toggle").on("click", function () {
+			let target = $(this).data("target");
+			let $input = $(this).closest(".matching-item-row").find(`.matching-${target}`);
+			let current = $input.css("direction");
+			$input.css("direction", current === "rtl" ? "ltr" : "rtl");
+		});
+	}
+
 	d.show();
+	_renderItems();
 }
 
 // =================================================
@@ -1961,8 +2303,8 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 			  'color:#8d99a6;min-height:90px;transition:border-color .15s,background .15s;">' +
 			  '<span style="font-size:30px;margin-bottom:6px;">🖼️</span>' +
 			  '<span style="font-size:13px;font-weight:500;">اضغط لاختيار صورة</span>' +
-			  '<span style="font-size:11px;margin-top:3px;color:#b0bec5;">PNG، JPG، GIF — اختياري</span>' +
-			  '<input class="story-file-input" type="file" accept="image/*" style="display:none;">' +
+			  '<span style="font-size:11px;margin-top:3px;color:#b0bec5;">PNG، JPG، GIF، WebP — حد أقصى 2MB</span>' +
+			  '<input class="story-file-input" type="file" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none;">' +
 			  "</label>";
 
 		$w.html(
@@ -2081,6 +2423,17 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 		$w.find(".story-file-input").on("change", function (e) {
 			let file = e.target.files && e.target.files[0];
 			if (!file) return;
+			let allowedTypes = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+			if (!allowedTypes.includes(file.type)) {
+				frappe.msgprint("نوع الملف غير مدعوم. الأنواع المسموحة: PNG، JPG، GIF، WebP");
+				e.target.value = "";
+				return;
+			}
+			if (file.size > 2 * 1024 * 1024) {
+				frappe.msgprint("حجم الصورة يتجاوز 2MB. يرجى اختيار صورة أصغر.");
+				e.target.value = "";
+				return;
+			}
 			let s = steps[activeIdx];
 			// if replacing an existing server file, queue it for deletion
 			if (s.image_name) filesToDelete.push(s.image_name);

@@ -57,36 +57,58 @@ def on_lesson_stages_updated(doc, method):
 		if orphaned:
 			_delete_review_items_and_memory_state(orphaned)
 
+	# --- Clean stale references from MATCHING stages ---
+	_clean_matching_refs(doc, current_item_ids)
+
 	# --- Sync QUESTION stage content to Review Items ---
 	_sync_question_review_items(old_doc, doc)
 
 
-def _extract_stage_item_ids(doc) -> set[str]:
-	"""Extract all item_ids from a lesson's stage configs."""
-	item_ids = set()
+def _clean_matching_refs(doc, current_item_ids: set[str]):
+	"""Remove pairs from MATCHING stages whose item_id no longer exists."""
 	for stage in doc.stages or []:
+		if stage.stage_type != "MATCHING":
+			continue
 		try:
 			config = json.loads(stage.config_json) if isinstance(stage.config_json, str) else (stage.config_json or {})
 		except (json.JSONDecodeError, TypeError):
 			continue
-		# Single-item stages: item_id embedded in config arrays
-		for key in ("highlights", "blanks", "answers", "words", "steps", "items", "pairs", "children"):
-			entries = config.get(key)
-			if isinstance(entries, list):
-				for entry in entries:
-					if isinstance(entry, dict) and entry.get("item_id"):
-						item_ids.add(entry["item_id"])
-		# Top-level item_id
+
+		pairs = config.get("pairs")
+		if not isinstance(pairs, list):
+			continue
+
+		cleaned = [p for p in pairs if isinstance(p, dict) and p.get("item_id") in current_item_ids]
+		if len(cleaned) == len(pairs):
+			continue
+
+		config["pairs"] = cleaned
+		stage.config_json = json.dumps(config, ensure_ascii=False)
+		stage.db_update()
+
+
+_STANDALONE_STAGE_TYPES = frozenset(("MATCHING", "MINDMAP", "STORY"))
+
+
+def _extract_stage_item_ids(doc) -> set[str]:
+	"""Extract item_ids from item-group stages only.
+
+	Standalone stage types (MATCHING, MINDMAP, STORY) are skipped — their
+	item_id references are cross-references, not content ownership.  A Review
+	Item should only survive if an actual content stage still carries its
+	item_id.
+	"""
+	item_ids = set()
+	for stage in doc.stages or []:
+		if stage.stage_type in _STANDALONE_STAGE_TYPES:
+			continue
+		try:
+			config = json.loads(stage.config_json) if isinstance(stage.config_json, str) else (stage.config_json or {})
+		except (json.JSONDecodeError, TypeError):
+			continue
+		# Top-level item_id (the group identifier)
 		if config.get("item_id"):
 			item_ids.add(config["item_id"])
-		# Multi-item stages (MATCHING): item_ids in pairs
-		if stage.stage_type == "MATCHING":
-			for pair in config.get("pairs", []):
-				if isinstance(pair, dict):
-					for side in ("left", "right"):
-						obj = pair.get(side)
-						if isinstance(obj, dict) and obj.get("item_id"):
-							item_ids.add(obj["item_id"])
 	return item_ids
 
 
@@ -111,13 +133,18 @@ def _sync_question_review_items(old_doc, doc):
 		except (json.JSONDecodeError, TypeError):
 			continue
 
+		# Use the group's top-level item_id — this is shared across all stages
+		# in the item group, so the Review Item survives even if the QUESTION
+		# stage is removed (as long as any stage with this item_id remains).
+		item_id = config.get("item_id")
+		if not item_id:
+			continue
+
 		question_text = config.get("question", "")
 		answers = config.get("answers", [])
 		if not answers:
 			continue
 
-		# Build choices and find the correct answer's item_id
-		item_id = None
 		choices = []
 		correct_choice = 0
 		for i, answer in enumerate(answers):
@@ -126,33 +153,41 @@ def _sync_question_review_items(old_doc, doc):
 			choices.append(answer.get("text", ""))
 			if answer.get("is_correct"):
 				correct_choice = i + 1  # 1-based
-				if answer.get("item_id"):
-					item_id = answer["item_id"]
-
-		if not item_id:
-			continue
 
 		# Pad to 4 choices
 		while len(choices) < 4:
 			choices.append("")
 
 		review_name = frappe.db.exists("Memora Review Item", {"item_id": item_id, "lesson": doc.name})
-		if not review_name:
-			continue
-
-		frappe.db.set_value(
-			"Memora Review Item",
-			review_name,
-			{
-				"question_text": question_text,
-				"choice_1": choices[0],
-				"choice_2": choices[1],
-				"choice_3": choices[2],
-				"choice_4": choices[3],
-				"correct_choice": correct_choice,
-			},
-			update_modified=True,
-		)
+		if review_name:
+			frappe.db.set_value(
+				"Memora Review Item",
+				review_name,
+				{
+					"question_text": question_text,
+					"choice_1": choices[0],
+					"choice_2": choices[1],
+					"choice_3": choices[2],
+					"choice_4": choices[3],
+					"correct_choice": correct_choice,
+				},
+				update_modified=True,
+			)
+		else:
+			ri = frappe.new_doc("Memora Review Item")
+			ri.item_id = item_id
+			ri.lesson = doc.name
+			ri.subject = doc.subject
+			ri.track = doc.track
+			ri.unit = doc.unit
+			ri.topic = doc.topic
+			ri.question_text = question_text
+			ri.choice_1 = choices[0]
+			ri.choice_2 = choices[1]
+			ri.choice_3 = choices[2]
+			ri.choice_4 = choices[3]
+			ri.correct_choice = correct_choice
+			ri.insert(ignore_permissions=True)
 
 
 _BATCH_SIZE = 10_000
