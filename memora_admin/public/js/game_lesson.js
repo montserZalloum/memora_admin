@@ -9,6 +9,43 @@ function generateItemUUID() {
 	});
 }
 
+/**
+ * Extract item_id from parsed config_json object, checking top-level first
+ * then falling back to type-specific paths.
+ */
+function _getItemIdFromConfig(config, stageType) {
+	if (!config) return null;
+	// Top-level item_id (stable location, always checked first)
+	if (config.item_id) return config.item_id;
+
+	if (stageType === "INFORMATION" || stageType === "REVEAL") {
+		for (let h of config.highlights || []) {
+			if (h.item_id) return h.item_id;
+		}
+	}
+	if (stageType === "FILL_BLANK") {
+		for (let b of config.blanks || []) {
+			if (b.item_id) return b.item_id;
+		}
+	}
+	if (stageType === "QUESTION") {
+		for (let a of config.answers || []) {
+			if (a.item_id) return a.item_id;
+		}
+	}
+	if (stageType === "MATCHING") {
+		for (let p of config.pairs || []) {
+			if (p.item_id) return p.item_id;
+		}
+	}
+	if (stageType === "SENTENCE_BUILDER") {
+		for (let w of config.words || []) {
+			if (typeof w === "object" && w.item_id) return w.item_id;
+		}
+	}
+	return null;
+}
+
 async function isEffectivelySkippable(row) {
 	// Per-stage override takes priority
 	if (row.is_skippable) {
@@ -28,9 +65,391 @@ async function isEffectivelySkippable(row) {
 
 frappe.ui.form.on("Memora Lesson", {
 	refresh: function (frm) {
-		//
+		if (frm.doc.stages && frm.doc.stages.length > 0) {
+			frm.add_custom_button(__("Lesson Map"), () => open_lesson_map_dialog(frm), __("View"));
+		}
 	},
 });
+
+// =================================================
+// Lesson Map — grouped item view with drag-to-reorder
+// =================================================
+
+const STAGE_TYPE_COLORS = {
+	INFORMATION: { bg: "#e3f2fd", border: "#1976d2", text: "#1565c0", label: "معلومة" },
+	FILL_BLANK: { bg: "#fff3e0", border: "#f57c00", text: "#e65100", label: "أكمل" },
+	REVEAL: { bg: "#e8f5e9", border: "#388e3c", text: "#2e7d32", label: "كشف" },
+	QUESTION: { bg: "#f3e5f5", border: "#7b1fa2", text: "#6a1b9a", label: "سؤال" },
+	MATCHING: { bg: "#fce4ec", border: "#c62828", text: "#b71c1c", label: "توصيل" },
+	STORY: { bg: "#e0f7fa", border: "#00838f", text: "#006064", label: "قصة" },
+	MINDMAP: { bg: "#f1f8e9", border: "#558b2f", text: "#33691e", label: "خريطة" },
+	SENTENCE_BUILDER: { bg: "#ede7f6", border: "#4527a0", text: "#311b92", label: "بناء جملة" },
+};
+
+function _extractItemId(stage) {
+	let config;
+	try {
+		config = typeof stage.config_json === "string" ? JSON.parse(stage.config_json) : stage.config_json;
+	} catch {
+		return null;
+	}
+	return _getItemIdFromConfig(config, stage.stage_type);
+}
+
+function _extractPreviewText(stage) {
+	let config;
+	try {
+		config = typeof stage.config_json === "string" ? JSON.parse(stage.config_json) : stage.config_json;
+	} catch {
+		return "";
+	}
+	if (!config) return "";
+	return config.text || config.sentence || config.question || config.instruction || "";
+}
+
+function _groupStagesByItem(stages) {
+	let groups = [];
+	let groupMap = {};
+	let nullCounter = 0;
+
+	for (let stage of stages) {
+		// MATCHING is always a standalone checkpoint — never merged into an item group
+		if (stage.stage_type === "MATCHING") {
+			groups.push({
+				item_id: _extractItemId(stage),
+				key: `__matching_${nullCounter++}`,
+				stages: [stage],
+				isCheckpoint: true,
+			});
+			continue;
+		}
+
+		let itemId = _extractItemId(stage);
+		let key = itemId || `__null_${nullCounter++}`;
+
+		if (itemId && groupMap[itemId] !== undefined) {
+			groups[groupMap[itemId]].stages.push(stage);
+		} else {
+			groupMap[key] = groups.length;
+			if (itemId) groupMap[itemId] = groups.length;
+			groups.push({
+				item_id: itemId,
+				key: key,
+				stages: [stage],
+			});
+		}
+	}
+
+	// Set preview from the best available stage (prefer INFORMATION)
+	for (let g of groups) {
+		if (g.isCheckpoint) {
+			g.preview = _extractPreviewText(g.stages[0]);
+			continue;
+		}
+		let infoStage = g.stages.find((s) => s.stage_type === "INFORMATION");
+		let previewStage = infoStage || g.stages[0];
+		g.preview = _extractPreviewText(previewStage);
+	}
+
+	return groups;
+}
+
+function _escapeHtmlMap(str) {
+	return (str || "")
+		.replace(/&/g, "&amp;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;")
+		.replace(/"/g, "&quot;");
+}
+
+function _renderBadge(stageType, stageIdx) {
+	let c = STAGE_TYPE_COLORS[stageType] || { bg: "#f5f5f5", border: "#999", text: "#666", label: stageType };
+	let idxLabel = stageIdx != null ? `<span style="opacity:0.7;margin-right:3px;font-size:10px;">${stageIdx}</span>` : "";
+	return `<span style="display:inline-flex;align-items:center;padding:2px 8px;border-radius:10px;font-size:11px;
+		background:${c.bg};color:${c.text};border:1px solid ${c.border};margin-left:4px;">${idxLabel}${c.label}</span>`;
+}
+
+function _renderCheckpointCard(group, index, allGroups) {
+	let s = group.stages[0];
+
+	// Resolve which items are referenced in this MATCHING's pairs
+	let refLabels = "";
+	try {
+		let config = typeof s.config_json === "string" ? JSON.parse(s.config_json) : s.config_json;
+		if (config && config.pairs) {
+			let pairIds = [...new Set(config.pairs.map((p) => p.item_id).filter(Boolean))];
+			let nums = [];
+			for (let pid of pairIds) {
+				let gi = allGroups.findIndex((g) => !g.isCheckpoint && g.item_id === pid);
+				if (gi !== -1) nums.push(`#${gi + 1}`);
+			}
+			if (nums.length) refLabels = nums.join("، ");
+		}
+	} catch {}
+
+	return `<div class="lm-item-card lm-checkpoint-card" data-item-key="${group.key}" data-index="${index}"
+		style="background:#fce4ec;border:1px solid #d1d8dd;border-radius:6px;margin-bottom:8px;
+		overflow:hidden;cursor:grab;">
+		<div class="lm-item-header" data-item-key="${group.key}"
+			style="display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;">
+			<span class="lm-drag-handle" style="cursor:grab;color:#aaa;font-size:16px;">⠿</span>
+			<span style="font-weight:600;color:#b71c1c;min-width:50px;font-size:12px;">توصيل</span>
+			<span style="flex:1;direction:rtl;font-size:12px;color:#b71c1c;overflow:hidden;
+				text-overflow:ellipsis;white-space:nowrap;font-weight:500;">${refLabels || "توصيل"}</span>
+			<button class="btn btn-xs btn-default lm-edit-stage-btn" data-stage-name="${s.name}"
+				title="تعديل">✏️</button>
+			<button class="btn btn-xs btn-danger-light lm-delete-item-btn" data-item-key="${group.key}"
+				style="color:#c0392b;border-color:#e6b0aa;" title="حذف">✕</button>
+		</div>
+	</div>`;
+}
+
+function _renderItemCard(group, index, expanded, allGroups) {
+	if (group.isCheckpoint) {
+		return _renderCheckpointCard(group, index, allGroups);
+	}
+
+	let badges = group.stages.map((s) => _renderBadge(s.stage_type)).join("");
+	let preview = _escapeHtmlMap(group.preview);
+	if (preview.length > 90) preview = preview.slice(0, 90) + "…";
+
+	let stagesHtml = "";
+	if (expanded) {
+		stagesHtml = '<div class="lm-item-stages" style="padding:10px 14px 6px;border-top:1px solid #eee;">';
+		for (let s of group.stages) {
+			let c = STAGE_TYPE_COLORS[s.stage_type] || { bg: "#f5f5f5", text: "#666", label: s.stage_type };
+			let stagePreview = _escapeHtmlMap(_extractPreviewText(s));
+			if (stagePreview.length > 100) stagePreview = stagePreview.slice(0, 100) + "…";
+			stagesHtml += `<div class="lm-stage-row" data-stage-name="${s.name}"
+				style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin-bottom:4px;
+				border-radius:4px;background:${c.bg}22;cursor:default;">
+				<span style="min-width:24px;font-size:10px;color:#999;text-align:center;">${s.idx}</span>
+				<span style="min-width:70px;font-size:11px;font-weight:600;color:${c.text};">${c.label}</span>
+				<span style="flex:1;font-size:12px;color:#555;direction:rtl;overflow:hidden;
+					text-overflow:ellipsis;white-space:nowrap;">${stagePreview || '<em style="color:#bbb;">—</em>'}</span>
+				<button class="btn btn-xs btn-default lm-edit-stage-btn" data-stage-name="${s.name}"
+					title="تعديل">✏️</button>
+				<button class="btn btn-xs btn-danger-light lm-delete-stage-btn" data-stage-name="${s.name}"
+					style="color:#c0392b;border-color:#e6b0aa;" title="حذف المرحلة">✕</button>
+			</div>`;
+		}
+		stagesHtml += "</div>";
+	}
+
+	return `<div class="lm-item-card" data-item-key="${group.key}" data-index="${index}"
+		style="background:#fff;border:1px solid #d1d8dd;border-radius:6px;margin-bottom:8px;
+		overflow:hidden;transition:box-shadow 0.15s;cursor:grab;">
+		<div class="lm-item-header" data-item-key="${group.key}"
+			style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;">
+			<span class="lm-drag-handle" style="cursor:grab;color:#aaa;font-size:16px;">⠿</span>
+			<span style="font-weight:600;color:#333;min-width:32px;">#${index + 1}</span>
+			<span style="flex:1;direction:rtl;font-size:13px;color:#444;overflow:hidden;
+				text-overflow:ellipsis;white-space:nowrap;">${preview || '<em style="color:#bbb;">بدون محتوى</em>'}</span>
+			<span style="display:flex;gap:2px;flex-shrink:0;">${badges}</span>
+			<button class="btn btn-xs btn-danger-light lm-delete-item-btn" data-item-key="${group.key}"
+				style="color:#c0392b;border-color:#e6b0aa;margin-left:4px;" title="حذف العنصر بالكامل">🗑</button>
+			<span class="lm-chevron" style="font-size:14px;color:#888;transition:transform 0.2s;
+				transform:rotate(${expanded ? "90deg" : "0deg"});">▶</span>
+		</div>
+		${stagesHtml}
+	</div>`;
+}
+
+function open_lesson_map_dialog(frm) {
+	let stages = (frm.doc.stages || []).map((s) => ({ ...s }));
+	let groups = _groupStagesByItem(stages);
+	let expandedKeys = new Set();
+	let deletedStageNames = new Set();
+
+	let d = new frappe.ui.Dialog({
+		title: `خريطة الدرس — ${frm.doc.lesson_title || frm.doc.name} (${stages.length} مرحلة، ${groups.length} عنصر)`,
+		fields: [
+			{
+				fieldname: "map_html",
+				fieldtype: "HTML",
+			},
+		],
+		size: "extra-large",
+		primary_action_label: "حفظ التغييرات",
+		primary_action: function () {
+			_applyChanges(frm, groups, deletedStageNames);
+			d.hide();
+		},
+		secondary_action_label: "إلغاء",
+		secondary_action: function () {
+			d.hide();
+		},
+	});
+
+	function _updateDialogTitle() {
+		let totalStages = groups.reduce((sum, g) => sum + g.stages.length, 0);
+		let delCount = deletedStageNames.size;
+		let delSuffix = delCount > 0 ? ` — ${delCount} محذوف` : "";
+		d.set_title(`خريطة الدرس — ${frm.doc.lesson_title || frm.doc.name} (${totalStages} مرحلة، ${groups.length} عنصر${delSuffix})`);
+	}
+
+	function render() {
+		let html = `<div class="lm-container" style="max-height:65vh;overflow-y:auto;padding:4px;">
+			<div class="lm-items-list">`;
+		groups.forEach((g, i) => {
+			html += _renderItemCard(g, i, expandedKeys.has(g.key), groups);
+		});
+		html += "</div></div>";
+
+		let $wrapper = d.fields_dict.map_html.$wrapper;
+		$wrapper.html(html);
+
+		// Expand/collapse on header click
+		$wrapper.find(".lm-item-header").on("click", function (e) {
+			if ($(e.target).closest(".lm-edit-stage-btn, .lm-delete-stage-btn, .lm-delete-item-btn").length) return;
+			let key = $(this).data("item-key");
+			if (expandedKeys.has(key)) {
+				expandedKeys.delete(key);
+			} else {
+				expandedKeys.add(key);
+			}
+			render();
+		});
+
+		// Edit stage button
+		$wrapper.find(".lm-edit-stage-btn").on("click", function (e) {
+			e.stopPropagation();
+			let stageName = $(this).data("stage-name");
+			let row = (frm.doc.stages || []).find((s) => s.name === stageName);
+			if (!row) return;
+			frm.script_manager.trigger("edit_content_btn", row.doctype, row.name);
+		});
+
+		// Delete single stage
+		$wrapper.find(".lm-delete-stage-btn").on("click", function (e) {
+			e.stopPropagation();
+			let stageName = $(this).data("stage-name");
+			frappe.confirm(
+				"هل تريد حذف هذه المرحلة؟",
+				() => {
+					for (let g of groups) {
+						let idx = g.stages.findIndex((s) => s.name === stageName);
+						if (idx !== -1) {
+							g.stages.splice(idx, 1);
+							deletedStageNames.add(stageName);
+							// Remove empty groups
+							if (g.stages.length === 0) {
+								let gi = groups.indexOf(g);
+								if (gi !== -1) {
+									expandedKeys.delete(g.key);
+									groups.splice(gi, 1);
+								}
+							} else {
+								// Refresh preview from remaining stages
+								let infoStage = g.stages.find((s) => s.stage_type === "INFORMATION");
+								g.preview = _extractPreviewText(infoStage || g.stages[0]);
+							}
+							break;
+						}
+					}
+					_updateDialogTitle();
+					render();
+				}
+			);
+		});
+
+		// Delete entire item (all stages in group)
+		$wrapper.find(".lm-delete-item-btn").on("click", function (e) {
+			e.stopPropagation();
+			let itemKey = $(this).data("item-key");
+			let group = groups.find((g) => g.key === itemKey);
+			if (!group) return;
+			let count = group.stages.length;
+			frappe.confirm(
+				`هل تريد حذف هذا العنصر بالكامل؟ (${count} مرحلة)`,
+				() => {
+					for (let s of group.stages) {
+						deletedStageNames.add(s.name);
+					}
+					expandedKeys.delete(itemKey);
+					let gi = groups.indexOf(group);
+					if (gi !== -1) groups.splice(gi, 1);
+					_updateDialogTitle();
+					render();
+				}
+			);
+		});
+
+		// Init Sortable.js for drag-to-reorder
+		let listEl = $wrapper.find(".lm-items-list")[0];
+		if (listEl && window.Sortable) {
+			new Sortable(listEl, {
+				animation: 150,
+				handle: ".lm-drag-handle",
+				ghostClass: "lm-sortable-ghost",
+				onEnd: function (evt) {
+					let moved = groups.splice(evt.oldIndex, 1)[0];
+					groups.splice(evt.newIndex, 0, moved);
+					render();
+				},
+			});
+		}
+	}
+
+	// Add ghost class styling
+	let styleEl = document.createElement("style");
+	styleEl.textContent = `
+		.lm-sortable-ghost {
+			opacity: 0.4;
+			background: #e3f2fd !important;
+			border: 2px dashed #1976d2 !important;
+		}
+		.lm-item-card:hover {
+			box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+		}
+	`;
+	document.head.appendChild(styleEl);
+	d.onhide = () => styleEl.remove();
+
+	d.show();
+	d.$wrapper.find(".modal-dialog").css("max-width", "800px");
+	render();
+}
+
+function _applyChanges(frm, groups, deletedStageNames) {
+	let changed = false;
+
+	// Remove deleted stages from the child table
+	if (deletedStageNames.size > 0) {
+		let toRemove = frm.doc.stages.filter((s) => deletedStageNames.has(s.name));
+		for (let row of toRemove) {
+			frm.doc.stages = frm.doc.stages.filter((s) => s.name !== row.name);
+		}
+		changed = true;
+	}
+
+	// Flatten groups back to ordered stage names
+	let newOrder = [];
+	for (let g of groups) {
+		for (let s of g.stages) {
+			newOrder.push(s.name);
+		}
+	}
+
+	// Update idx on each remaining child row
+	for (let i = 0; i < newOrder.length; i++) {
+		let row = frm.doc.stages.find((s) => s.name === newOrder[i]);
+		if (row && row.idx !== i + 1) {
+			row.idx = i + 1;
+			changed = true;
+		}
+	}
+
+	if (changed) {
+		frm.doc.stages.sort((a, b) => a.idx - b.idx);
+		frm.dirty();
+		frm.refresh_field("stages");
+		let msg = deletedStageNames.size > 0
+			? `تم حذف ${deletedStageNames.size} مرحلة وتحديث الترتيب — اضغط حفظ لتأكيد`
+			: "تم تحديث الترتيب — اضغط حفظ لتأكيد التغييرات";
+		frappe.show_alert({ message: msg, indicator: "blue" });
+	}
+}
 
 frappe.ui.form.on("Memora Lesson Stage", {
 	edit_content_btn: async function (frm, cdt, cdn) {
@@ -79,6 +498,7 @@ frappe.ui.form.on("Memora Lesson Stage", {
 // 🧩 1. نافذة إعدادات التوصيل (Matching)
 // =================================================
 function open_matching_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let _originalItemId = _getItemIdFromConfig(data, "MATCHING");
 	let existing_data = (data.pairs || []).map((p) => ({
 		item_1: p.right,
 		item_2: p.left,
@@ -141,6 +561,9 @@ function open_matching_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 					return pair;
 				}),
 			};
+			if (!skipItemIds && _originalItemId) {
+				config_payload.item_id = _originalItemId;
+			}
 			frappe.model.set_value(
 				cdt,
 				cdn,
@@ -159,6 +582,7 @@ function open_matching_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 // 🔍 2. نافذة إعدادات الكشف (Reveal)
 // =================================================
 function open_reveal_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let _originalItemId = _getItemIdFromConfig(data, "REVEAL");
 	let sentence = data.sentence || "";
 
 	// Convert old word-based format → from/to by locating each word in the sentence
@@ -232,6 +656,9 @@ function open_reveal_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 					return hl;
 				}),
 			};
+			if (!skipItemIds && _originalItemId) {
+				config_payload.item_id = _originalItemId;
+			}
 			frappe.model.set_value(cdt, cdn, "config_json", JSON.stringify(config_payload, null, 2));
 			d.hide();
 			frappe.show_alert({ message: "تم الحفظ", indicator: "green" });
@@ -471,6 +898,7 @@ function open_reveal_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 // 🏗️ 3. نافذة بناء الجملة (Sentence Builder)
 // =================================================
 function open_sentence_builder_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let _originalItemId = _getItemIdFromConfig(data, "SENTENCE_BUILDER");
 	// Backward compat: old format is ["word1", "word2"] (string array)
 	// New format is [{item_id: "uuid", text: "word1"}, ...] (object array)
 	let existing_data = (data.words || []).map((w) => {
@@ -539,6 +967,9 @@ function open_sentence_builder_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 					return word;
 				}),
 			};
+			if (!skipItemIds && _originalItemId) {
+				config_payload.item_id = _originalItemId;
+			}
 
 			frappe.model.set_value(
 				cdt,
@@ -559,6 +990,7 @@ function open_sentence_builder_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 // 🧠 4. نافذة الخريطة الذهنية (Mind Map)
 // =================================================
 function open_mindmap_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let _originalItemId = _getItemIdFromConfig(data, "MINDMAP");
 	let root_label = data.label || "";
 	let root_description = data.description || "";
 
@@ -705,6 +1137,9 @@ function open_mindmap_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 			if (values.root_description) {
 				config_payload.description = values.root_description;
 			}
+			if (!skipItemIds && _originalItemId) {
+				config_payload.item_id = _originalItemId;
+			}
 
 			frappe.model.set_value(
 				cdt,
@@ -736,6 +1171,7 @@ function _generate_mindmap_id(used_ids) {
 // ❓ 5. نافذة السؤال متعدد الخيارات (Question)
 // =================================================
 function open_question_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let _originalItemId = _getItemIdFromConfig(data, "QUESTION");
 	let existing_answers = (data.answers || []).map((a) => ({
 		answer_text: a.text,
 		is_correct: a.is_correct ? 1 : 0,
@@ -825,6 +1261,9 @@ function open_question_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 					return answer;
 				}),
 			};
+			if (!skipItemIds && _originalItemId) {
+				config_payload.item_id = _originalItemId;
+			}
 
 			frappe.model.set_value(
 				cdt,
@@ -844,6 +1283,7 @@ function open_question_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 // ℹ️ 6. نافذة المعلومات (Information)
 // =================================================
 function open_information_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let _originalItemId = _getItemIdFromConfig(data, "INFORMATION");
 	let highlights = (data.highlights || []).map((h) => ({
 		from: h.from,
 		to: h.to,
@@ -899,6 +1339,9 @@ function open_information_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 					return hl;
 				}),
 			};
+			if (!skipItemIds && _originalItemId) {
+				config_payload.item_id = _originalItemId;
+			}
 
 			frappe.model.set_value(
 				cdt,
@@ -1075,6 +1518,7 @@ function open_information_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 // ✏️ 7. نافذة أكمل الفراغات (Fill in the Blank)
 // =================================================
 function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let _originalItemId = _getItemIdFromConfig(data, "FILL_BLANK");
 	let blanks = (data.blanks || []).map((b) => ({
 		from: b.from,
 		to: b.to,
@@ -1163,6 +1607,9 @@ function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 				}),
 				distractors: distractors,
 			};
+			if (!skipItemIds && _originalItemId) {
+				config_payload.item_id = _originalItemId;
+			}
 
 			frappe.model.set_value(
 				cdt,
@@ -1340,6 +1787,7 @@ function open_fill_blank_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 // 📖 8. نافذة القصة متعددة الخطوات (Story)
 // =================================================
 function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	let _originalItemId = _getItemIdFromConfig(data, "STORY");
 	// --- helpers ---
 
 	function _esc(str) {
@@ -1732,6 +2180,9 @@ function open_story_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 						return step;
 					}),
 			};
+			if (!skipItemIds && _originalItemId) {
+				config_payload.item_id = _originalItemId;
+			}
 
 			frappe.model.set_value(
 				cdt,
