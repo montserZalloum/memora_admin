@@ -66,8 +66,10 @@ async function isEffectivelySkippable(row) {
 frappe.ui.form.on("Memora Lesson", {
 	refresh: function (frm) {
 		frm.add_custom_button(__("إضافة سؤال"), () => open_add_question_dialog(frm));
+		frm.custom_buttons[__("إضافة سؤال")]?.removeClass("btn-default").addClass("btn-warning");
 		if (frm.doc.stages && frm.doc.stages.length > 0) {
-			frm.add_custom_button(__("Lesson Map"), () => open_lesson_map_dialog(frm), __("View"));
+			frm.add_custom_button(__("Lesson Map"), () => open_lesson_map_dialog(frm));
+			frm.custom_buttons[__("Lesson Map")]?.removeClass("btn-default").addClass("btn-danger");
 		}
 	},
 });
@@ -1333,31 +1335,34 @@ function open_sentence_builder_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 // =================================================
 function open_mindmap_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 	let _originalItemId = _getItemIdFromConfig(data, "MINDMAP");
-	let root_label = data.label || "";
-	let root_description = data.description || "";
 
-	// Convert saved tree to flat ordered list, preserving item_id
-	let existing_data = [];
+	// Build tree state from saved data
+	let branches = [];
 	if (data.children && Array.isArray(data.children)) {
-		data.children.forEach((branch) => {
-			existing_data.push({
-				node_type: "فرع",
-				label: branch.label,
-				description: branch.description || "",
-				item_id: branch.item_id || null,
-			});
+		for (let branch of data.children) {
+			let items = [];
 			if (branch.children && Array.isArray(branch.children)) {
-				branch.children.forEach((item) => {
-					existing_data.push({
-						node_type: "عنصر",
-						label: item.label,
+				for (let item of branch.children) {
+					items.push({
+						_key: `item_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+						label: item.label || "",
 						description: item.description || "",
 						item_id: item.item_id || null,
 					});
-				});
+				}
 			}
-		});
+			branches.push({
+				_key: `br_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+				label: branch.label || "",
+				description: branch.description || "",
+				item_id: branch.item_id || null,
+				expanded: true,
+				items: items,
+			});
+		}
 	}
+
+	let editingNode = null; // { branchIdx, itemIdx? } — tracks which node's inline form is open
 
 	let d = new frappe.ui.Dialog({
 		title: "إعدادات الخريطة الذهنية (Mind Map)",
@@ -1367,134 +1372,404 @@ function open_mindmap_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 				fieldname: "root_label",
 				fieldtype: "Data",
 				reqd: 1,
-				default: root_label,
+				default: data.label || "",
 			},
 			{
 				label: "وصف الخريطة",
 				fieldname: "root_description",
 				fieldtype: "Small Text",
-				default: root_description,
+				default: data.description || "",
 			},
 			{
 				fieldtype: "Section Break",
 				label: "محتوى الخريطة",
 			},
 			{
-				label: "",
-				fieldname: "nodes_table",
-				fieldtype: "Table",
-				cannot_add_rows: false,
-				description:
-					'أضف "فرع" للفروع الرئيسية، و"عنصر" للتفاصيل تحت كل فرع. كل عنصر ينتمي للفرع الذي يسبقه في القائمة.',
-				fields: [
-					{
-						label: "النوع",
-						fieldname: "node_type",
-						fieldtype: "Select",
-						options: "فرع\nعنصر",
-						in_list_view: 1,
-						reqd: 1,
-						columns: 2,
-					},
-					{
-						label: "العنوان",
-						fieldname: "label",
-						fieldtype: "Data",
-						in_list_view: 1,
-						reqd: 1,
-						columns: 4,
-					},
-					{
-						label: "الوصف",
-						fieldname: "description",
-						fieldtype: "Data",
-						in_list_view: 1,
-						columns: 4,
-					},
-					{
-						fieldname: "item_id",
-						fieldtype: "Data",
-						hidden: 1,
-					},
-				],
-				data: existing_data,
-				get_data: () => existing_data,
+				fieldname: "tree_html",
+				fieldtype: "HTML",
 			},
 		],
 		size: "extra-large",
 		primary_action_label: "حفظ (Save)",
 		primary_action: function (values) {
-			let children = [];
-			let current_branch = null;
-			let used_ids = new Set();
-
-			if (values.nodes_table.length > 0 && values.nodes_table[0].node_type !== "فرع") {
-				frappe.msgprint(
-					'يجب أن يكون الصف الأول من نوع "فرع". لا يمكن إضافة عنصر بدون فرع يسبقه.'
-				);
-				return;
-			}
-
-			for (let node of values.nodes_table) {
-				let id = _generate_mindmap_id(used_ids);
-				used_ids.add(id);
-
-				if (node.node_type === "فرع") {
-					current_branch = {
-						id: id,
-						label: node.label,
-						children: [],
-					};
-					if (!skipItemIds) {
-						current_branch.item_id = node.item_id || generateItemUUID();
-					}
-					if (node.description) current_branch.description = node.description;
-					children.push(current_branch);
-				} else {
-					if (!current_branch) {
-						frappe.msgprint("لا يمكن إضافة عنصر بدون فرع يسبقه.");
-						return;
-					}
-					let item = {
-						id: id,
-						label: node.label,
-					};
-					if (!skipItemIds) {
-						item.item_id = node.item_id || generateItemUUID();
-					}
-					if (node.description) item.description = node.description;
-					current_branch.children.push(item);
-				}
-			}
-
-			if (children.length === 0) {
+			if (branches.length === 0) {
 				frappe.msgprint("يجب إضافة فرع واحد على الأقل.");
 				return;
 			}
-
-			let config_payload = {
-				label: values.root_label,
-				children: children,
-			};
-			if (values.root_description) {
-				config_payload.description = values.root_description;
+			for (let br of branches) {
+				if (!br.label.trim()) {
+					frappe.msgprint("يوجد فرع بدون عنوان. يرجى تعبئة جميع العناوين.");
+					return;
+				}
+				for (let it of br.items) {
+					if (!it.label.trim()) {
+						frappe.msgprint(`يوجد عنصر بدون عنوان تحت الفرع "${br.label}". يرجى تعبئة جميع العناوين.`);
+						return;
+					}
+				}
 			}
-			if (!skipItemIds && _originalItemId) {
-				config_payload.item_id = _originalItemId;
-			}
 
-			frappe.model.set_value(
-				cdt,
-				cdn,
-				"config_json",
-				JSON.stringify(config_payload, null, 2)
-			);
+			let used_ids = new Set();
+			let children = branches.map((br) => {
+				let id = _generate_mindmap_id(used_ids);
+				used_ids.add(id);
+				let branchObj = { id: id, label: br.label, children: [] };
+				if (!skipItemIds) branchObj.item_id = br.item_id || generateItemUUID();
+				if (br.description) branchObj.description = br.description;
+				for (let it of br.items) {
+					let iid = _generate_mindmap_id(used_ids);
+					used_ids.add(iid);
+					let itemObj = { id: iid, label: it.label };
+					if (!skipItemIds) itemObj.item_id = it.item_id || generateItemUUID();
+					if (it.description) itemObj.description = it.description;
+					branchObj.children.push(itemObj);
+				}
+				return branchObj;
+			});
+
+			let config_payload = { label: values.root_label, children: children };
+			if (values.root_description) config_payload.description = values.root_description;
+			if (!skipItemIds && _originalItemId) config_payload.item_id = _originalItemId;
+
+			frappe.model.set_value(cdt, cdn, "config_json", JSON.stringify(config_payload, null, 2));
 			d.hide();
 			frappe.show_alert({ message: "تم حفظ الخريطة الذهنية", indicator: "green" });
 		},
 	});
 
+	function _esc(str) {
+		return (str || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+	}
+
+	function _renderTree() {
+		let $w = d.fields_dict.tree_html.$wrapper;
+		let scrollTop = $w.find(".mm-container").scrollTop() || 0;
+
+		let html = '<div class="mm-container" style="max-height:55vh;overflow-y:auto;padding:4px;">';
+
+		if (branches.length === 0) {
+			html += `<div style="text-align:center;padding:40px 20px;color:#8d99a6;">
+				<div style="font-size:40px;margin-bottom:12px;">🗺️</div>
+				<div style="font-size:14px;margin-bottom:16px;">لا توجد فروع بعد. أضف فرعاً لبدء بناء الخريطة الذهنية.</div>
+			</div>`;
+		}
+
+		html += '<div class="mm-branches-list">';
+		branches.forEach((br, bi) => {
+			let chevron = br.expanded ? "▼" : "▶";
+			let itemCount = br.items.length;
+			let countBadge = itemCount > 0
+				? `<span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:1px 7px;border-radius:10px;margin-right:6px;">${itemCount} عنصر</span>`
+				: "";
+
+			html += `<div class="mm-branch-card" data-branch-idx="${bi}" style="background:#fff;border:1.5px solid #558b2f;
+				border-radius:8px;margin-bottom:10px;overflow:hidden;">
+				<div class="mm-branch-header" data-branch-idx="${bi}" style="display:flex;align-items:center;gap:8px;
+					padding:10px 14px;background:#f1f8e9;cursor:pointer;user-select:none;">
+					<span class="mm-branch-drag" style="cursor:grab;color:#8bc34a;font-size:18px;flex-shrink:0;">⠿</span>
+					<span style="font-size:13px;color:#558b2f;flex-shrink:0;width:18px;text-align:center;">${chevron}</span>
+					<span style="font-weight:700;color:#33691e;font-size:14px;flex:1;direction:rtl;overflow:hidden;
+						text-overflow:ellipsis;white-space:nowrap;">${_esc(br.label) || '<em style="color:#aaa;">فرع بدون عنوان</em>'}</span>
+					${countBadge}
+					<button class="btn btn-xs btn-default mm-edit-branch-btn" data-branch-idx="${bi}"
+						title="تعديل الفرع" style="flex-shrink:0;">✏️</button>
+					<button class="btn btn-xs mm-delete-branch-btn" data-branch-idx="${bi}"
+						title="حذف الفرع" style="color:#c0392b;border-color:#e6b0aa;flex-shrink:0;">✕</button>
+				</div>`;
+
+			// Inline edit form for branch
+			if (editingNode && editingNode.branchIdx === bi && editingNode.itemIdx === undefined) {
+				html += `<div class="mm-edit-form" style="padding:12px 14px;background:#f9fbe7;border-top:1px solid #dce775;">
+					<div style="margin-bottom:8px;">
+						<label style="font-size:11px;font-weight:600;color:#33691e;display:block;margin-bottom:3px;">العنوان</label>
+						<input type="text" class="form-control input-sm bg-white mm-edit-label" value="${_esc(br.label)}"
+							style="direction:rtl;" placeholder="عنوان الفرع">
+					</div>
+					<div style="margin-bottom:10px;">
+						<label style="font-size:11px;font-weight:600;color:#33691e;display:block;margin-bottom:3px;">الوصف (اختياري)</label>
+						<textarea class="form-control input-sm bg-white mm-edit-desc" rows="2"
+							style="direction:rtl;resize:vertical;height:80px;" placeholder="وصف الفرع">${_esc(br.description)}</textarea>
+					</div>
+					<div style="display:flex;gap:6px;justify-content:flex-end;">
+						<button class="btn btn-xs btn-default mm-edit-cancel">إلغاء</button>
+						<button class="btn btn-xs btn-primary mm-edit-save" data-branch-idx="${bi}">تأكيد</button>
+					</div>
+				</div>`;
+			}
+
+			if (br.expanded) {
+				html += `<div class="mm-items-list" data-branch-idx="${bi}" style="padding:6px 14px 6px 14px;
+					border-top:1px solid #c5e1a5;min-height:32px;">`;
+
+				if (br.items.length === 0) {
+					html += `<div class="mm-empty-items" style="text-align:center;padding:12px;color:#aaa;font-size:12px;">
+						لا توجد عناصر — اسحب عنصراً هنا أو اضغط الزر أدناه
+					</div>`;
+				}
+
+				br.items.forEach((item, ii) => {
+					html += `<div class="mm-item-row" data-branch-idx="${bi}" data-item-idx="${ii}"
+						style="display:flex;align-items:center;gap:8px;padding:7px 10px;margin-bottom:4px;
+						background:#fff;border:1px solid #e0e0e0;border-radius:5px;border-right:3px solid #8bc34a;">
+						<span class="mm-item-drag" style="cursor:grab;color:#bbb;font-size:14px;flex-shrink:0;">⠿</span>
+						<span style="flex:1;font-size:13px;color:#333;direction:rtl;overflow:hidden;
+							text-overflow:ellipsis;white-space:nowrap;">${_esc(item.label) || '<em style="color:#ccc;">عنصر بدون عنوان</em>'}</span>`;
+
+					if (item.description) {
+						html += `<span style="font-size:11px;color:#999;max-width:200px;overflow:hidden;
+							text-overflow:ellipsis;white-space:nowrap;direction:rtl;" title="${_esc(item.description)}">${_esc(item.description)}</span>`;
+					}
+
+					html += `<button class="btn btn-xs btn-default mm-edit-item-btn" data-branch-idx="${bi}" data-item-idx="${ii}"
+							title="تعديل" style="flex-shrink:0;">✏️</button>
+						<button class="btn btn-xs mm-delete-item-btn" data-branch-idx="${bi}" data-item-idx="${ii}"
+							title="حذف" style="color:#c0392b;border-color:#e6b0aa;flex-shrink:0;">✕</button>
+					</div>`;
+
+					// Inline edit form for item
+					if (editingNode && editingNode.branchIdx === bi && editingNode.itemIdx === ii) {
+						html += `<div class="mm-edit-form" style="padding:10px 12px;margin-bottom:4px;background:#f5f5f5;
+							border:1px solid #e0e0e0;border-radius:5px;">
+							<div style="margin-bottom:8px;">
+								<label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px;">العنوان</label>
+								<input type="text" class="form-control input-sm bg-white mm-edit-label" value="${_esc(item.label)}"
+									style="direction:rtl;" placeholder="عنوان العنصر">
+							</div>
+							<div style="margin-bottom:10px;">
+								<label style="font-size:11px;font-weight:600;color:#555;display:block;margin-bottom:3px;">الوصف (اختياري)</label>
+								<textarea class="form-control input-sm bg-white mm-edit-desc" rows="2"
+									style="direction:rtl;resize:vertical;height:80px;" placeholder="وصف العنصر">${_esc(item.description)}</textarea>
+							</div>
+							<div style="display:flex;gap:6px;justify-content:flex-end;">
+								<button class="btn btn-xs btn-default mm-edit-cancel">إلغاء</button>
+								<button class="btn btn-xs btn-primary mm-edit-save" data-branch-idx="${bi}" data-item-idx="${ii}">تأكيد</button>
+							</div>
+						</div>`;
+					}
+				});
+
+				html += `<button class="btn btn-xs btn-default mm-add-item-btn" data-branch-idx="${bi}"
+					style="width:100%;margin-top:4px;color:#8bc34a;border-style:dashed;border-color:#c5e1a5;">
+					+ إضافة عنصر</button>`;
+				html += "</div>";
+			}
+
+			html += "</div>";
+		});
+		html += "</div>";
+
+		// Add branch button
+		html += `<button class="btn btn-sm btn-default mm-add-branch-btn"
+			style="width:100%;margin-top:6px;color:#558b2f;border:2px dashed #a5d6a7;border-radius:8px;
+			padding:10px;font-weight:600;font-size:13px;">
+			+ إضافة فرع جديد</button>`;
+
+		html += "</div>";
+
+		$w.html(html);
+		$w.find(".mm-container").scrollTop(scrollTop);
+
+		// --- Event bindings ---
+
+		// Toggle expand/collapse
+		$w.find(".mm-branch-header").on("click", function (e) {
+			if ($(e.target).closest(".mm-edit-branch-btn, .mm-delete-branch-btn").length) return;
+			let bi = $(this).data("branch-idx");
+			branches[bi].expanded = !branches[bi].expanded;
+			editingNode = null;
+			_renderTree();
+		});
+
+		// Edit branch
+		$w.find(".mm-edit-branch-btn").on("click", function (e) {
+			e.stopPropagation();
+			let bi = $(this).data("branch-idx");
+			editingNode = { branchIdx: bi };
+			branches[bi].expanded = true;
+			_renderTree();
+			$w.find(".mm-edit-form .mm-edit-label").first().focus();
+		});
+
+		// Edit item
+		$w.find(".mm-edit-item-btn").on("click", function (e) {
+			e.stopPropagation();
+			let bi = $(this).data("branch-idx");
+			let ii = $(this).data("item-idx");
+			editingNode = { branchIdx: bi, itemIdx: ii };
+			_renderTree();
+			$w.find(".mm-edit-form .mm-edit-label").first().focus();
+		});
+
+		// Save edit
+		$w.find(".mm-edit-save").on("click", function () {
+			let bi = $(this).data("branch-idx");
+			let ii = $(this).data("item-idx");
+			let $form = $(this).closest(".mm-edit-form");
+			let newLabel = $form.find(".mm-edit-label").val().trim();
+			let newDesc = $form.find(".mm-edit-desc").val().trim();
+			if (ii !== undefined && ii !== "") {
+				branches[bi].items[ii].label = newLabel;
+				branches[bi].items[ii].description = newDesc;
+			} else {
+				branches[bi].label = newLabel;
+				branches[bi].description = newDesc;
+			}
+			editingNode = null;
+			_renderTree();
+		});
+
+		// Cancel edit
+		$w.find(".mm-edit-cancel").on("click", function () {
+			editingNode = null;
+			_renderTree();
+		});
+
+		// Delete branch
+		$w.find(".mm-delete-branch-btn").on("click", function (e) {
+			e.stopPropagation();
+			let bi = $(this).data("branch-idx");
+			let br = branches[bi];
+			let msg = br.items.length > 0
+				? `هل تريد حذف الفرع "${br.label}" وجميع عناصره (${br.items.length})؟`
+				: `هل تريد حذف الفرع "${br.label}"؟`;
+			frappe.confirm(msg, () => {
+				branches.splice(bi, 1);
+				editingNode = null;
+				_renderTree();
+			});
+		});
+
+		// Delete item
+		$w.find(".mm-delete-item-btn").on("click", function (e) {
+			e.stopPropagation();
+			let bi = $(this).data("branch-idx");
+			let ii = $(this).data("item-idx");
+			branches[bi].items.splice(ii, 1);
+			editingNode = null;
+			_renderTree();
+		});
+
+		// Add item (opens inline form for new item)
+		$w.find(".mm-add-item-btn").on("click", function () {
+			let bi = $(this).data("branch-idx");
+			branches[bi].items.push({
+				_key: `item_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+				label: "",
+				description: "",
+				item_id: null,
+			});
+			editingNode = { branchIdx: bi, itemIdx: branches[bi].items.length - 1 };
+			_renderTree();
+			$w.find(".mm-edit-form .mm-edit-label").last().focus();
+		});
+
+		// Add branch
+		$w.find(".mm-add-branch-btn").on("click", function () {
+			branches.push({
+				_key: `br_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+				label: "",
+				description: "",
+				item_id: null,
+				expanded: true,
+				items: [],
+			});
+			editingNode = { branchIdx: branches.length - 1 };
+			_renderTree();
+			$w.find(".mm-edit-form .mm-edit-label").last().focus();
+		});
+
+		// Keyboard: Enter to save, Escape to cancel in edit forms
+		$w.find(".mm-edit-form").on("keydown", function (e) {
+			if (e.key === "Enter" && !e.shiftKey) {
+				e.preventDefault();
+				$(this).find(".mm-edit-save").click();
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				// If newly added with empty label, remove it
+				if (editingNode) {
+					let bi = editingNode.branchIdx;
+					let ii = editingNode.itemIdx;
+					if (ii !== undefined) {
+						if (!branches[bi].items[ii].label.trim()) branches[bi].items.splice(ii, 1);
+					} else {
+						if (!branches[bi].label.trim()) branches.splice(bi, 1);
+					}
+				}
+				editingNode = null;
+				_renderTree();
+			}
+		});
+
+		// Init Sortable on branches list
+		let branchListEl = $w.find(".mm-branches-list")[0];
+		if (branchListEl && window.Sortable) {
+			new Sortable(branchListEl, {
+				animation: 150,
+				handle: ".mm-branch-drag",
+				ghostClass: "mm-sortable-ghost",
+				onEnd: function (evt) {
+					let moved = branches.splice(evt.oldIndex, 1)[0];
+					branches.splice(evt.newIndex, 0, moved);
+					editingNode = null;
+					_renderTree();
+				},
+			});
+		}
+
+		// Init Sortable on each branch's items list
+		$w.find(".mm-items-list").each(function () {
+			let bi = $(this).data("branch-idx");
+			let el = this;
+			if (window.Sortable) {
+				new Sortable(el, {
+					animation: 150,
+					handle: ".mm-item-drag",
+					ghostClass: "mm-sortable-ghost",
+					group: "mm-items",
+					draggable: ".mm-item-row",
+					onEnd: function (evt) {
+						let fromBi = parseInt(evt.from.dataset.branchIdx);
+						let toBi = parseInt(evt.to.dataset.branchIdx);
+						let item = branches[fromBi].items.splice(evt.oldIndex, 1)[0];
+						branches[toBi].items.splice(evt.newIndex, 0, item);
+						editingNode = null;
+						_renderTree();
+					},
+				});
+			}
+		});
+	}
+
+	// Add styles for the mindmap editor
+	let mmStyleEl = document.createElement("style");
+	mmStyleEl.textContent = `
+		.mm-sortable-ghost {
+			opacity: 0.4;
+			background: #e8f5e9 !important;
+			border: 2px dashed #4caf50 !important;
+		}
+		.mm-branch-card:hover {
+			box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+		}
+		.mm-item-row:hover {
+			background: #fafffe !important;
+			border-color: #a5d6a7 !important;
+		}
+		.mm-edit-form input:focus, .mm-edit-form textarea:focus {
+			border-color: #8bc34a;
+			box-shadow: 0 0 0 2px rgba(139,195,74,0.2);
+		}
+		[data-fieldname="root_description"] textarea {
+			height: 80px !important;
+			min-height: 80px !important;
+		}
+	`;
+	document.head.appendChild(mmStyleEl);
+	d.onhide = () => mmStyleEl.remove();
+
 	d.show();
+	d.$wrapper.find(".modal-dialog").css("max-width", "700px");
+	_renderTree();
 }
 
 function _generate_mindmap_id(used_ids) {
