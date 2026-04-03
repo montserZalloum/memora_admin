@@ -1,0 +1,46 @@
+# Fact: Challenge Progress — per-player topic mastery state
+# Mode: full_snapshot
+# Source: tabMemora Challenge Progress
+# Note: Deleted on season end (reset_challenge_data). Must be exported BEFORE
+#       the 07:30 expiry job runs. Analytics export runs at 06:45.
+
+dataset: fact_challenge_progress
+output_file: fact_challenge_progress.parquet
+mode: full_snapshot
+multi_file_group: fact_challenge
+primary_key:
+  - player_id
+  - topic_id
+  - season_id
+
+sql_full: >-
+  SELECT
+    `player` AS player_id,
+    `topic` AS topic_id,
+    `subject` AS subject_id,
+    `season` AS season_id,
+    `stamped`,
+    `best_correct`,
+    `best_score_pct`,
+    `best_passing_pct`,
+    `total_xp_earned`,
+    `attempt_count`
+  FROM `tabMemora Challenge Progress`
+  ORDER BY `player`, `topic`
+
+columns:
+  - {name: player_id,        type: VARCHAR}
+  - {name: topic_id,         type: VARCHAR}
+  - {name: subject_id,       type: VARCHAR}
+  - {name: season_id,        type: VARCHAR}
+  - {name: stamped,          type: INT}
+  - {name: best_correct,     type: INT}
+  - {name: best_score_pct,   type: DECIMAL}
+  - {name: best_passing_pct, type: DECIMAL}
+  - {name: total_xp_earned,  type: INT}
+  - {name: attempt_count,    type: INT}
+
+dq_rules:
+  - {id: DQ-CP-01, type: not_null, column: player_id}
+  - {id: DQ-CP-02, type: not_null, column: topic_id}
+  - {id: DQ-CP-03, type: not_null, column: season_id}

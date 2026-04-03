@@ -4,7 +4,7 @@ Generated from `memora_admin/memora_admin/doctype/*/*.json`.
 
 - Top-level DocTypes: 45
 - Child Table DocTypes: 15
-- Declared fields: 667
+- Declared fields: 661
 
 ```text
 Memora Admin DocTypes
@@ -177,14 +177,14 @@ Memora Admin DocTypes
 |-- Memora Interaction Log [DocType, 9 fields]
 |   |-- player [Link] -> Memora Player Profile
 |   |-- lesson [Link] -> Memora Lesson
-|   |-- stage_id [Data]
+|   |-- stage_type [Data]
 |   |-- item_id [Data]
 |   |-- event_type [Select]
 |   |-- time_spent [Int]
 |   |-- errors_count [Int]
 |   |-- timestamp [Datetime]
 |   `-- client_metadata [Code]
-|-- Memora Lesson [DocType, 16 fields]
+|-- Memora Lesson [DocType, 15 fields]
 |   |-- filter_section [Section Break]
 |   |-- admin_filter_html [HTML]
 |   |-- main_section [Section Break]
@@ -193,7 +193,6 @@ Memora Admin DocTypes
 |   |-- base_xp [Int]
 |   |-- max_hearts [Int]
 |   |-- is_published [Check]
-|   |-- content_hash [Data]
 |   |-- stages [Table] -> Memora Lesson Stage
 |   |   `-- Memora Lesson Stage [Child DocType, 5 fields]
 |   |       |-- stage_type [Link] -> Memora Lesson Stage Settings
@@ -367,12 +366,11 @@ Memora Admin DocTypes
 |   `-- job_meta [JSON]
 |-- Memora Major [DocType, 1 fields]
 |   `-- major_title [Data]
-|-- Memora Memory State [DocType, 12 fields]
+|-- Memora Memory State [DocType, 11 fields]
 |   |-- season_seq [Int]
 |   |-- subject [Link] -> Memora Subject
 |   |-- player [Link] -> Memora Player Profile
 |   |-- item_id [Data]
-|   |-- stage_id [Data]
 |   |-- stability [Float]
 |   |-- difficulty [Float]
 |   |-- next_review [Date]
@@ -492,7 +490,7 @@ Memora Admin DocTypes
 |       `-- Memora Grant Component [Child DocType, 2 fields]
 |           |-- target_doctype [Select]
 |           `-- target_name [Dynamic Link] -> target_doctype
-|-- Memora Review Item [DocType, 18 fields]
+|-- Memora Review Item [DocType, 14 fields]
 |   |-- item_id [Data]
 |   |-- hierarchy_section [Section Break]
 |   |-- subject [Link] -> Memora Subject
@@ -500,17 +498,13 @@ Memora Admin DocTypes
 |   |-- unit [Link] -> Memora Unit
 |   |-- topic [Link] -> Memora Topic
 |   |-- lesson [Link] -> Memora Lesson
-|   |-- stage_section [Section Break]
-|   |-- stage_id [Data]
-|   |-- stage_type [Link] -> Memora Lesson Stage Settings
 |   |-- question_section [Section Break]
 |   |-- question_text [Small Text]
 |   |-- choice_1 [Small Text]
 |   |-- choice_2 [Small Text]
 |   |-- choice_3 [Small Text]
 |   |-- choice_4 [Small Text]
-|   |-- correct_choice [Int]
-|   `-- content_json [Code]
+|   `-- correct_choice [Int]
 |-- Memora Season [DocType, 5 fields]
 |   |-- season_title [Data]
 |   |-- season_seq [Int]

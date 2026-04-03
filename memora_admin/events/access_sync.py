@@ -101,7 +101,8 @@ def check_expired_seasons_challenge_reset():
 	2. Global progress wipe: reset_challenge_data is only called once via the hook,
 	   not on every daily run for every expired season.
 
-	Runs daily at 01:10 (registered in hooks.py scheduler_events).
+	Runs daily at 07:30 (registered in hooks.py scheduler_events),
+	after the 06:45 analytics export to ensure all data is exported before deletion.
 	"""
 	today = frappe.utils.today()
 
@@ -152,6 +153,8 @@ def reset_challenge_data(season_id: str) -> dict:
 	3. Dirty set entries (memora:dirty:ch_progress) — flush first to avoid data loss
 	4. Attempt buffer (memora:ch:attempt_buffer) — flush first to avoid data loss
 	5. tabMemora Challenge Progress rows for this season (MariaDB)
+	6. tabMemora Challenge Attempt + child Detail rows for this season (MariaDB)
+	   Already exported daily to analytics server via fact_challenge_attempt/detail.
 
 	Args:
 		season_id: The season identifier to reset.
@@ -199,27 +202,81 @@ def reset_challenge_data(season_id: str) -> dict:
 		if cursor == 0:
 			break
 
-	# Step 5: Delete MariaDB Challenge Progress rows for this season.
-	# Records are not exported to the analytics server so there is no reason
-	# to keep them after the season ends — they would just accumulate forever.
-	deleted_db_rows = frappe.db.count(
-		"Memora Challenge Progress", filters={"season": season_id}
+	# Step 5: Delete MariaDB Challenge Progress rows for this season (batched).
+	deleted_progress_rows = _batched_delete("tabMemora Challenge Progress", "season", season_id)
+
+	# Step 6: Delete MariaDB Challenge Attempt + child Detail rows for this season.
+	# These are already exported daily to the analytics server (fact_challenge_attempt
+	# + fact_challenge_detail). No production code reads them after write.
+	# Delete Details first (child table), then Attempts (parent).
+	deleted_detail_rows = _batched_delete(
+		"tabMemora Challenge Attempt Detail", "parent", season_id, parent_filter=True
 	)
-	if deleted_db_rows:
-		frappe.db.delete("Memora Challenge Progress", {"season": season_id})
+	deleted_attempt_rows = _batched_delete("tabMemora Challenge Attempt", "season", season_id)
 
 	frappe.logger().info(
 		f"Challenge Hub reset for season {season_id}: "
 		f"{deleted_progress} progress keys, {deleted_leaderboard} leaderboard keys, "
-		f"{deleted_db_rows} DB rows deleted"
+		f"{deleted_progress_rows} progress rows, "
+		f"{deleted_attempt_rows} attempt rows, {deleted_detail_rows} detail rows deleted"
 	)
 
 	return {
 		"season_id": season_id,
 		"deleted_progress": deleted_progress,
 		"deleted_leaderboard": deleted_leaderboard,
-		"deleted_db_rows": deleted_db_rows,
+		"deleted_progress_rows": deleted_progress_rows,
+		"deleted_attempt_rows": deleted_attempt_rows,
+		"deleted_detail_rows": deleted_detail_rows,
 	}
+
+
+_DELETE_BATCH_SIZE = 5_000
+_DELETE_SLEEP_SEC = 1
+
+
+def _batched_delete(table: str, column: str, value: str, *, parent_filter: bool = False) -> int:
+	"""Delete rows in bounded sub-batches to avoid long table locks.
+
+	Args:
+		table: Fully-qualified table name (e.g. "tabMemora Challenge Attempt").
+		column: Column to filter on (e.g. "season").
+		value: Value to match.
+		parent_filter: If True, join through ``tabMemora Challenge Attempt``
+			to match child rows by the parent's column (Challenge Attempt-specific).
+
+	Returns:
+		Total rows deleted.
+	"""
+	import time
+
+	total = 0
+	if parent_filter:
+		# Child table: join through parent to find matching rows
+		select_sql = (
+			f"SELECT cd.name FROM `{table}` cd "
+			f"INNER JOIN `tabMemora Challenge Attempt` ca ON cd.parent = ca.name "
+			f"WHERE ca.`{column}` = %s LIMIT {_DELETE_BATCH_SIZE}"
+		)
+	else:
+		select_sql = (
+			f"SELECT name FROM `{table}` WHERE `{column}` = %s LIMIT {_DELETE_BATCH_SIZE}"
+		)
+
+	while True:
+		rows = frappe.db.sql(select_sql, (value,))
+		if not rows:
+			break
+		names = [r[0] for r in rows]
+		placeholders = ", ".join(["%s"] * len(names))
+		frappe.db.sql(f"DELETE FROM `{table}` WHERE name IN ({placeholders})", names)
+		frappe.db.commit()
+		total += len(names)
+		if len(names) < _DELETE_BATCH_SIZE:
+			break
+		time.sleep(_DELETE_SLEEP_SEC)
+
+	return total
 
 
 def _flush_dirty_challenge_data_before_reset():

@@ -355,8 +355,10 @@ scheduler_events = {
 		],
 		# Daily at 01:05: Expire cards linked to ended/unpublished seasons
 		"5 1 * * *": ["memora_admin.tasks.season_expiration.expire_season_cards"],
-		# Daily at 01:10: Reset Challenge Hub data for seasons past end_date
-		"10 1 * * *": ["memora_admin.events.access_sync.check_expired_seasons_challenge_reset"],
+		# Daily at 07:30: Reset Challenge Hub data for seasons past end_date.
+		# Runs AFTER the analytics export (06:45) to ensure all challenge attempts
+		# and progress are exported before deletion.
+		"30 7 * * *": ["memora_admin.events.access_sync.check_expired_seasons_challenge_reset"],
 		# Daily at 02:30: Delete encrypted voucher exports older than 30 days
 		"30 2 * * *": ["memora_admin.tasks.voucher_cleanup.cleanup_expired_exports"],
 		# Monthly on 1st at 02:00: Generate consignment invoices for previous month
