@@ -7,19 +7,39 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "title",
   "grade",
+  "grade_title",
   "major",
+  "major_title",
   "plan",
+  "plan_name",
   "item_code",
   "is_published",
   "grant_components"
  ],
  "fields": [
   {
+   "fieldname": "title",
+   "fieldtype": "Data",
+   "label": "Title",
+   "reqd": 1,
+   "in_list_view": 1,
+   "in_global_search": 1
+  },
+  {
    "fieldname": "grade",
    "fieldtype": "Link",
    "label": "Grade",
    "options": "Memora Grade"
+  },
+  {
+   "fetch_from": "grade.grade_title",
+   "fieldname": "grade_title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Grade Title",
+   "read_only": 1
   },
   {
    "depends_on": "grade",
@@ -29,6 +49,14 @@
    "options": "Memora Major"
   },
   {
+   "fetch_from": "major.major_title",
+   "fieldname": "major_title",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Major Title",
+   "read_only": 1
+  },
+  {
    "fieldname": "plan",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -36,6 +64,14 @@
    "label": "Plan",
    "options": "Memora Academic Plan",
    "reqd": 1
+  },
+  {
+   "fetch_from": "plan.plan_name",
+   "fieldname": "plan_name",
+   "fieldtype": "Data",
+   "hidden": 1,
+   "label": "Plan Name",
+   "read_only": 1
   },
   {
    "fieldname": "item_code",
@@ -96,8 +132,11 @@
  ],
  "row_format": "Dynamic",
  "rows_threshold_for_grid_search": 20,
+ "search_fields": "title,plan_name,grade_title,major_title",
  "show_name_in_global_search": 1,
+ "show_title_field_in_link": 1,
  "sort_field": "modified",
+ "title_field": "title",
  "sort_order": "DESC",
  "states": [],
  "workspace": "Memora"
