@@ -13,6 +13,7 @@ from fastapi_app.core.redis_keys import (
 	build_debounce_key,
 	cache_invalidation_channel,
 	catalog_key,
+	ch_question_lookup_key,
 	hierarchy_key,
 	plan_free_subjects_key,
 	plan_manifest_key,
@@ -35,6 +36,7 @@ def on_content_updated(doc, method):
 	1. Immediately invalidates hierarchy cache (direct DEL + pubsub)
 	2. Queues plan builds for all plans containing the subject (with debounce)
 	3. On lesson trash: also deletes the shared lesson JSON file from storage + CDN
+	4. On topic trash: also deletes the challenge question JSON file from storage + CDN
 
 	Handles: Memora Subject, Track, Unit, Topic, Lesson
 	"""
@@ -61,6 +63,13 @@ def on_content_updated(doc, method):
 	# since no plan will reference it anymore. Delete it directly from storage + CDN.
 	if doc.doctype == "Memora Lesson" and method == "on_trash":
 		_delete_lesson_json(doc.name)
+
+	# When a topic is deleted, its challenge question JSON (challenges/{topic_id}.json)
+	# is orphaned. Individual lesson trashes trigger Review Item cleanup which can
+	# rebuild/delete the file, but direct topic trash skips that path.
+	if doc.doctype == "Memora Topic" and method == "on_trash":
+		_delete_topic_challenge_json(doc.name)
+		_evict_topic_challenge_cache(doc.name)
 
 	# GAP 2: When a subject is deleted directly, remove it from all plan free_subjects sets.
 	# on_plan_subject_changed handles child row deletion but not direct Subject DocType deletion.
@@ -511,43 +520,67 @@ def _schedule_post_commit_hierarchy_invalidation(subject_id: str):
 
 
 def _delete_lesson_json(lesson_id: str):
-	"""Delete the shared lesson JSON file from storage and purge from CDN.
+	"""Delete orphaned lesson JSON from storage + CDN when lesson is trashed."""
+	_delete_and_purge(f"lessons/{lesson_id}.json", "lesson")
 
-	Called when a lesson is trashed. The file lessons/{lesson_id}.json is shared
-	across plans but becomes truly orphaned when the lesson is deleted.
 
-	Best-effort: errors are logged but never fail the deletion.
+def _delete_topic_challenge_json(topic_id: str):
+	"""Delete orphaned challenge JSON from storage + CDN when topic is trashed."""
+	_delete_and_purge(f"challenges/{topic_id}.json", "challenge")
+
+
+def _delete_and_purge(file_key: str, label: str):
+	"""Delete a file from storage and purge from CDN edge cache.
+
+	Best-effort: errors are logged but never fail the caller.
 	"""
-	lesson_key = f"lessons/{lesson_id}.json"
-
 	try:
 		from memora_admin.memora_admin.services.build.storage import get_storage_backend
 
 		storage = get_storage_backend()
-		deleted = storage.delete(lesson_key)
+		deleted = storage.delete(file_key)
 
 		if deleted:
-			frappe.logger().info(f"Deleted orphaned lesson JSON: {lesson_key}")
+			frappe.logger().info(f"Deleted orphaned {label} JSON: {file_key}")
 		else:
-			frappe.logger().debug(f"Lesson JSON not found (already clean): {lesson_key}")
+			frappe.logger().debug(f"{label.capitalize()} JSON not found (already clean): {file_key}")
 	except Exception as e:
 		frappe.log_error(
-			f"Failed to delete lesson JSON {lesson_key}: {e}",
-			"Lesson JSON Cleanup Error",
+			f"Failed to delete {label} JSON {file_key}: {e}",
+			f"{label.capitalize()} JSON Cleanup Error",
 		)
 
-	# Also purge from CDN edge cache
 	try:
 		from memora_admin.memora_admin.services.cdn.utils import get_purge_service
 
 		purge_service = get_purge_service()
 		if purge_service is not None:
-			purge_service.purge_files([lesson_key])
-			frappe.logger().info(f"CDN cache purged for deleted lesson: {lesson_key}")
+			purge_service.purge_files([file_key])
+			frappe.logger().info(f"CDN cache purged for deleted {label}: {file_key}")
 	except Exception as e:
 		frappe.log_error(
-			f"Failed to purge CDN for lesson {lesson_key}: {e}",
-			"Lesson CDN Purge Error",
+			f"Failed to purge CDN for {label} {file_key}: {e}",
+			f"{label.capitalize()} CDN Purge Error",
+		)
+
+
+def _evict_topic_challenge_cache(topic_id: str):
+	"""Evict the question lookup cache so in-flight grading can't use stale data.
+
+	The key has a 300s TTL and would self-expire, but explicit eviction closes
+	the window where a student could submit a challenge against a deleted topic.
+
+	Best-effort: errors are logged but never fail the deletion.
+	"""
+	try:
+		from memora_admin.utils.redis_connection import get_memora_redis
+
+		r = get_memora_redis()
+		r.delete(ch_question_lookup_key(topic_id))
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to evict challenge cache for topic {topic_id}: {e}",
+			"Challenge Cache Eviction Error",
 		)
 
 
