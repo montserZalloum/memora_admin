@@ -1680,7 +1680,7 @@ class LiveChallengeService:
 					"rank": int(r.get("rank", 0)),
 					"reward_type": r.get("reward_type", "XP"),
 					"xp_amount": int(r.get("xp_amount") or 0),
-					"prize_description": r.get("prize_description", ""),
+					"prize_description": r.get("prize_description") or "",
 				}
 				for r in (event.get("rewards") or [])
 			],
