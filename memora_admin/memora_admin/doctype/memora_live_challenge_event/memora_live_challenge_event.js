@@ -51,43 +51,6 @@ frappe.ui.form.on("Memora Live Challenge Event", {
 			});
 		}
 
-		// Import Review Items button (only in Draft)
-		if (frm.doc.status === "Draft" && !frm.is_new()) {
-			frm.add_custom_button(__("Import Review Items"), function () {
-				frappe.prompt(
-					{
-						label: "Review Item IDs",
-						fieldname: "review_item_ids",
-						fieldtype: "Small Text",
-						description: "Enter Review Item IDs (one per line)",
-						reqd: 1,
-					},
-					function (values) {
-						let ids = values.review_item_ids
-							.split("\n")
-							.map((s) => s.trim())
-							.filter((s) => s);
-						frappe.call({
-							method: "memora_admin.memora_admin.api.live_challenge.import_review_items",
-							args: {
-								event_id: frm.doc.name,
-								review_item_ids: ids,
-							},
-							callback: function (r) {
-								if (r.message) {
-									frappe.msgprint(
-										__("Imported {0} questions.", [r.message.imported_count])
-									);
-									frm.reload_doc();
-								}
-							},
-						});
-					},
-					__("Import Review Items"),
-					__("Import")
-				);
-			});
-		}
 	},
 
 	scheduled_start(frm) {

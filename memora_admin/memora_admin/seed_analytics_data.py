@@ -840,7 +840,6 @@ def wave_08_live_challenges(ctx: Ctx, rng):
                 "option_a": "أ", "option_b": "ب",
                 "option_c": "ج", "option_d": "د",
                 "correct_answer": rng.choice(["A", "B", "C", "D"]),
-                "source_review_item": ri.item_id if ri else None,
             })
         for pn in rng.sample(plan_names, min(3, len(plan_names))):
             doc.append("eligible_plans", {"plan": pn})

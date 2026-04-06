@@ -11,8 +11,7 @@
 		"option_b",
 		"option_c",
 		"option_d",
-		"correct_answer",
-		"source_review_item"
+		"correct_answer"
 	],
 	"fields": [
 		{
@@ -55,12 +54,6 @@
 			"label": "Correct Answer",
 			"options": "A\nB\nC\nD",
 			"reqd": 1
-		},
-		{
-			"fieldname": "source_review_item",
-			"fieldtype": "Link",
-			"label": "Source Review Item",
-			"options": "Memora Review Item"
 		}
 	],
 	"grid_page_length": 50,

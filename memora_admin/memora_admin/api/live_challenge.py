@@ -7,8 +7,6 @@ from frappe.utils import now_datetime
 
 from fastapi_app.models.live_challenge import _fmt_score
 
-# Mapping correct_choice (1-4) to letter (A-D)
-_CHOICE_MAP = {1: "A", 2: "B", 3: "C", 4: "D"}
 
 
 @frappe.whitelist(allow_guest=False)
@@ -289,72 +287,3 @@ def reconcile_event_status(
 	return {"ok": True, "event_id": event_id, "status": status}
 
 
-@frappe.whitelist(allow_guest=False)
-def import_review_items(event_id: str, review_item_ids: str | list) -> dict:
-	"""Import questions from Memora Review Items into an event's child table.
-
-	Args:
-		event_id: Live Challenge Event name (e.g., LC-00001)
-		review_item_ids: List of Review Item names or JSON string
-
-	Returns:
-		dict with imported_count and questions list
-	"""
-	if isinstance(review_item_ids, str):
-		try:
-			review_item_ids = json.loads(review_item_ids)
-		except (json.JSONDecodeError, TypeError):
-			frappe.throw("review_item_ids must be a list or JSON array.")
-
-	if not review_item_ids:
-		frappe.throw("No Review Item IDs provided.")
-
-	event = frappe.get_doc("Memora Live Challenge Event", event_id)
-
-	if event.status != "Draft":
-		frappe.throw("Questions can only be imported when the event is in Draft status.")
-
-	items = frappe.get_all(
-		"Memora Review Item",
-		filters={"name": ["in", review_item_ids]},
-		fields=["name", "question_text", "choice_1", "choice_2", "choice_3", "choice_4", "correct_choice"],
-	)
-
-	if not items:
-		frappe.throw("No valid Review Items found for the given IDs.")
-
-	imported = []
-	for item in items:
-		correct_choice = int(item.correct_choice or 0)
-		correct_answer = _CHOICE_MAP.get(correct_choice, "A")
-
-		event.append(
-			"questions",
-			{
-				"question_text": item.question_text,
-				"option_a": item.choice_1,
-				"option_b": item.choice_2,
-				"option_c": item.choice_3,
-				"option_d": item.choice_4,
-				"correct_answer": correct_answer,
-				"source_review_item": item.name,
-			},
-		)
-		imported.append(item.name)
-
-	event.save(ignore_permissions=True)
-
-	return {
-		"imported_count": len(imported),
-		"questions": [
-			{
-				"question_text": q.question_text,
-				"option_a": q.option_a,
-				"option_b": q.option_b,
-				"option_c": q.option_c,
-				"option_d": q.option_d,
-				"correct_answer": q.correct_answer,
-			}
-			for q in event.questions[-len(imported) :]
-		],
-	}
