@@ -9,6 +9,8 @@ import frappe
 from frappe.model.document import Document
 from frappe.utils import get_datetime
 
+from memora_admin.memora_admin.doctype.memora_challenge_reward.memora_challenge_reward import rewards_to_dicts
+
 VALID_TRANSITIONS = {
 	"Draft": {"Waiting"},
 	"Waiting": {"Active"},
@@ -29,15 +31,6 @@ _MUTABLE_AFTER_DRAFT = {
 # 5-minute buffer between events (seconds)
 OVERLAP_BUFFER = 300
 
-# XP fields that must be non-negative
-_XP_FIELDS = (
-	"participation_xp",
-	"first_place_xp",
-	"second_place_xp",
-	"third_place_xp",
-	"default_xp",
-)
-
 
 class MemoraLiveChallengeEvent(Document):
 	def before_save(self):
@@ -45,7 +38,7 @@ class MemoraLiveChallengeEvent(Document):
 		if not self.is_new() and self.has_value_changed("mode"):
 			frappe.throw("Mode cannot be changed after creation")
 
-	def after_save(self):
+	def on_update(self):
 		"""Populate Redis with event data when saved as Draft.
 
 		This makes the event available to the FastAPI status endpoint immediately,
@@ -60,6 +53,7 @@ class MemoraLiveChallengeEvent(Document):
 			LC_KEY_TTL,
 			lc_count_key,
 			lc_meta_key,
+			lc_mode_key,
 			lc_questions_key,
 			lc_status_key,
 		)
@@ -84,15 +78,17 @@ class MemoraLiveChallengeEvent(Document):
 		# Questions JSON
 		questions = []
 		for q in self.questions:
-			questions.append({
-				"idx": q.idx - 1,
-				"question_text": q.question_text,
-				"option_a": q.option_a,
-				"option_b": q.option_b,
-				"option_c": q.option_c,
-				"option_d": q.option_d,
-				"correct_answer": q.correct_answer,
-			})
+			questions.append(
+				{
+					"idx": q.idx - 1,
+					"question_text": q.question_text,
+					"option_a": q.option_a,
+					"option_b": q.option_b,
+					"option_c": q.option_c,
+					"option_d": q.option_d,
+					"correct_answer": q.correct_answer,
+				}
+			)
 		pipe.set(lc_questions_key(self.name), json.dumps(questions), ex=LC_KEY_TTL)
 
 		# Meta hash — includes ALL fields needed by get_event_detail (Redis-only reads)
@@ -112,11 +108,7 @@ class MemoraLiveChallengeEvent(Document):
 			"is_paid": str(int(self.is_paid)),
 			"price": str(self.price or 0),
 			"currency": self.currency or "JOD",
-			"participation_xp": str(self.participation_xp or 0),
-			"first_place_xp": str(self.first_place_xp or 0),
-			"second_place_xp": str(self.second_place_xp or 0),
-			"third_place_xp": str(self.third_place_xp or 0),
-			"default_xp": str(self.default_xp or 0),
+			"rewards_json": json.dumps(rewards_to_dicts(self.rewards)),
 			"mode": self.mode or "exam",
 			"starting_hearts": str(self.starting_hearts or 3),
 			"result_window_duration": str(self.result_window_duration or 3),
@@ -126,6 +118,9 @@ class MemoraLiveChallengeEvent(Document):
 		pipe.hset(meta_key, mapping=meta)
 		pipe.expire(meta_key, LC_KEY_TTL)
 
+		# Mode key (needed by join/grade to distinguish exam vs last_stand)
+		pipe.set(lc_mode_key(self.name), self.mode or "exam", ex=LC_KEY_TTL)
+
 		# Count key (preserve existing count if already set, else init to 0)
 		pipe.setnx(lc_count_key(self.name), "0")
 		pipe.expire(lc_count_key(self.name), LC_KEY_TTL)
@@ -133,11 +128,11 @@ class MemoraLiveChallengeEvent(Document):
 		pipe.execute()
 
 	def validate(self):
-		# self._validate_last_stand_fields()
+		self._validate_last_stand_fields()
 		self._auto_calc_exam_duration()
 		self._compute_timestamps()
 		self._validate_ranges()
-		self._validate_xp_non_negative()
+		self._validate_rewards()
 		self._validate_paid_event_fields()
 		self._validate_status_transition()
 		self._validate_questions_before_leaving_draft()
@@ -197,13 +192,27 @@ class MemoraLiveChallengeEvent(Document):
 		if cap < 0 or cap > 10000:
 			frappe.throw("Capacity must be between 0 and 10,000 (0 = unlimited).")
 
-	def _validate_xp_non_negative(self):
-		"""All XP reward fields must be >= 0."""
-		for field in _XP_FIELDS:
-			val = int(self.get(field) or 0)
-			if val < 0:
-				label = self.meta.get_label(field) or field
-				frappe.throw(f"{label} must be non-negative (got {val}).")
+	def _validate_rewards(self):
+		"""Validate reward child table rows."""
+		has_fallback = False
+		for row in self.rewards or []:
+			if int(row.rank or 0) < 0:
+				frappe.throw(f"Reward row {row.idx}: Rank must be non-negative (got {row.rank}).")
+			if row.reward_type == "XP":
+				xp = int(row.xp_amount or 0)
+				if xp < 0:
+					frappe.throw(f"Reward row {row.idx}: XP amount must be non-negative (got {xp}).")
+			elif row.reward_type == "Prize":
+				if not (row.prize_description or "").strip():
+					frappe.throw(
+						f"Reward row {row.idx}: Prize description is required when reward type is Prize."
+					)
+			if row.rank == 0:
+				has_fallback = True
+		if (self.rewards or []) and not has_fallback:
+			frappe.msgprint(
+				"No fallback reward (rank 0) defined. Players with unmatched ranks will receive nothing."
+			)
 
 	def _validate_paid_event_fields(self):
 		"""When is_paid is checked, price is required."""

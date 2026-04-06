@@ -279,40 +279,20 @@ class TestLiveChallengeEventValidations(FrappeTestCase):
 		# This should fail — either MandatoryError or our ValidationError
 		self.assertRaises(Exception, event.save, ignore_permissions=True)
 
-	def test_xp_fields_non_negative(self):
-		"""All XP fields must be >= 0."""
+	def test_reward_xp_non_negative(self):
+		"""XP amount in reward rows must be >= 0."""
 		self.assertRaises(
 			frappe.ValidationError,
 			_make_event,
-			participation_xp=-10,
+			rewards=[{"rank": 1, "reward_type": "XP", "xp_amount": -10}],
 		)
 
-	def test_xp_first_place_non_negative(self):
+	def test_reward_prize_requires_description(self):
+		"""Prize reward type requires a non-empty description."""
 		self.assertRaises(
 			frappe.ValidationError,
 			_make_event,
-			first_place_xp=-5,
-		)
-
-	def test_xp_second_place_non_negative(self):
-		self.assertRaises(
-			frappe.ValidationError,
-			_make_event,
-			second_place_xp=-1,
-		)
-
-	def test_xp_third_place_non_negative(self):
-		self.assertRaises(
-			frappe.ValidationError,
-			_make_event,
-			third_place_xp=-1,
-		)
-
-	def test_xp_default_non_negative(self):
-		self.assertRaises(
-			frappe.ValidationError,
-			_make_event,
-			default_xp=-1,
+			rewards=[{"rank": 1, "reward_type": "Prize", "prize_description": ""}],
 		)
 
 	def test_waiting_room_duration_min(self):
@@ -347,12 +327,17 @@ class TestLiveChallengeEventValidations(FrappeTestCase):
 			exam_duration=200,
 		)
 
-	def test_capacity_min(self):
-		"""Capacity must be >= 1."""
+	def test_capacity_zero_unlimited(self):
+		"""Capacity 0 means unlimited and should be accepted."""
+		doc = _make_event(capacity=0)
+		self.assertEqual(doc.capacity, 0)
+
+	def test_capacity_negative(self):
+		"""Capacity must not be negative."""
 		self.assertRaises(
 			frappe.ValidationError,
 			_make_event,
-			capacity=0,
+			capacity=-1,
 		)
 
 	def test_capacity_max(self):

@@ -58,11 +58,14 @@ def _make_meta() -> dict[str, str]:
 		"description": "",
 		"exam_duration": "10",
 		"is_paid": "0",
-		"participation_xp": "50",
-		"first_place_xp": "500",
-		"second_place_xp": "300",
-		"third_place_xp": "100",
-		"default_xp": "25",
+		"rewards_json": json.dumps(
+			[
+				{"rank": 0, "reward_type": "XP", "xp_amount": 50, "prize_description": ""},
+				{"rank": 1, "reward_type": "XP", "xp_amount": 500, "prize_description": ""},
+				{"rank": 2, "reward_type": "XP", "xp_amount": 300, "prize_description": ""},
+				{"rank": 3, "reward_type": "XP", "xp_amount": 100, "prize_description": ""},
+			]
+		),
 	}
 
 
@@ -93,12 +96,23 @@ def _make_frappe_event_doc(event_id: str = EVENT_ID) -> dict:
 		"question_time_limit": 30,
 		"capacity": 100,
 		"is_paid": 0,
-		"participation_xp": 50,
-		"first_place_xp": 500,
-		"second_place_xp": 300,
-		"third_place_xp": 100,
-		"default_xp": 25,
-		"questions": [{"idx": 1, "question_text": "Q1", "option_a": "A", "option_b": "B", "option_c": "C", "option_d": "D", "correct_answer": "B"}],
+		"rewards": [
+			{"rank": 0, "reward_type": "XP", "xp_amount": 50, "prize_description": ""},
+			{"rank": 1, "reward_type": "XP", "xp_amount": 500, "prize_description": ""},
+			{"rank": 2, "reward_type": "XP", "xp_amount": 300, "prize_description": ""},
+			{"rank": 3, "reward_type": "XP", "xp_amount": 100, "prize_description": ""},
+		],
+		"questions": [
+			{
+				"idx": 1,
+				"question_text": "Q1",
+				"option_a": "A",
+				"option_b": "B",
+				"option_c": "C",
+				"option_d": "D",
+				"correct_answer": "B",
+			}
+		],
 		"eligible_plans": [],
 		"participant_count": 10,
 	}
@@ -372,6 +386,7 @@ class TestHydrationStampedeGuard:
 
 		# Wait for guard to expire
 		import asyncio
+
 		await asyncio.sleep(1.1)
 
 		source = await service._resolve_event_source(EVENT_ID)

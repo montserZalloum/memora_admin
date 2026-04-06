@@ -12,11 +12,12 @@ On Active -> Ended: triggers reconciliation + post-event processing.
 """
 
 import json
-
 from datetime import datetime
 
 import frappe
 from frappe.utils import now_datetime
+
+from memora_admin.memora_admin.doctype.memora_challenge_reward.memora_challenge_reward import rewards_to_dicts
 
 from fastapi_app.core.redis_keys import (
 	LC_KEY_TTL,
@@ -169,11 +170,7 @@ def _transition_to_waiting(event_name: str):
 		"enable_question_timer": str(int(event.enable_question_timer)),
 		"question_time_limit": str(event.question_time_limit or 30),
 		"waiting_room_duration": str(event.waiting_room_duration),
-		"participation_xp": str(event.participation_xp or 0),
-		"first_place_xp": str(event.first_place_xp or 0),
-		"second_place_xp": str(event.second_place_xp or 0),
-		"third_place_xp": str(event.third_place_xp or 0),
-		"default_xp": str(event.default_xp or 0),
+		"rewards_json": json.dumps(rewards_to_dicts(event.rewards)),
 		"eligible_plans": json.dumps(eligible_plans),
 		"mode": mode,
 		"starting_hearts": str(event.starting_hearts or 3),
@@ -348,8 +345,13 @@ def _cron_reconcile_event(event_name: str) -> bool:
 
 		if mode == "last_stand":
 			return _reconcile_last_stand(
-				r, event_name, player_ids_raw, count, join_times,
-				default_joined_at, meta,
+				r,
+				event_name,
+				player_ids_raw,
+				count,
+				join_times,
+				default_joined_at,
+				meta,
 			)
 
 		# ── Exam mode reconciliation (original path) ──
@@ -392,11 +394,21 @@ def _cron_reconcile_event(event_name: str) -> bool:
 					update_values.append((score, submitted_at, answers_json, event_name, pid))
 			else:
 				name = frappe.generate_hash(length=10)
-				insert_values.append((
-					name, event_name, pid, joined_at,
-					score, submitted_at, answers_json,
-					now_str, now_str, "Administrator", "Administrator",
-				))
+				insert_values.append(
+					(
+						name,
+						event_name,
+						pid,
+						joined_at,
+						score,
+						submitted_at,
+						answers_json,
+						now_str,
+						now_str,
+						"Administrator",
+						"Administrator",
+					)
+				)
 
 		# Bulk INSERT new participation records
 		batch_size = 500
@@ -425,7 +437,9 @@ def _cron_reconcile_event(event_name: str) -> bool:
 			for score, submitted_at, answers_json, ev, pid in batch:
 				escaped_pid = frappe.db.escape(pid)
 				players.append(escaped_pid)
-				score_cases.append(f"WHEN player = {escaped_pid} THEN {float(score) if score is not None else 'NULL'}")
+				score_cases.append(
+					f"WHEN player = {escaped_pid} THEN {float(score) if score is not None else 'NULL'}"
+				)
 				sub_val = frappe.db.escape(submitted_at) if submitted_at else "NULL"
 				submitted_cases.append(f"WHEN player = {escaped_pid} THEN {sub_val}")
 				ans_val = frappe.db.escape(answers_json) if answers_json else "NULL"
@@ -442,7 +456,8 @@ def _cron_reconcile_event(event_name: str) -> bool:
 		# Sync counters to event
 		submitted_count = len(results)
 		frappe.db.set_value(
-			"Memora Live Challenge Event", event_name,
+			"Memora Live Challenge Event",
+			event_name,
 			{"participant_count": count, "submitted_count": submitted_count},
 			update_modified=False,
 		)
@@ -465,8 +480,13 @@ def _cron_reconcile_event(event_name: str) -> bool:
 
 
 def _reconcile_last_stand(
-	r, event_name: str, player_ids_raw, count: int,
-	join_times: dict, default_joined_at: str, meta: dict,
+	r,
+	event_name: str,
+	player_ids_raw,
+	count: int,
+	join_times: dict,
+	default_joined_at: str,
+	meta: dict,
 ) -> bool:
 	"""Reconcile a Last Stand event: Redis runtime state → MariaDB Participation.
 
@@ -546,29 +566,44 @@ def _reconcile_last_stand(
 			avg_rt_ms = 0
 
 		if pid in existing:
-			update_values.append((
-				score, player_hearts, player_is_eliminated,
-				player_eliminated_at if player_eliminated_at is not None else 0,
-				avg_rt_ms, now_str, event_name, pid,
-			))
+			update_values.append(
+				(
+					score,
+					player_hearts,
+					player_is_eliminated,
+					player_eliminated_at if player_eliminated_at is not None else 0,
+					avg_rt_ms,
+					now_str,
+					event_name,
+					pid,
+				)
+			)
 		else:
 			name = frappe.generate_hash(length=10)
-			insert_values.append((
-				name, event_name, pid, joined_at,
-				score, now_str,  # submitted_at = now (all LS players are "submitted")
-				player_hearts, player_is_eliminated,
-				player_eliminated_at if player_eliminated_at is not None else 0,
-				avg_rt_ms,
-				now_str, now_str, "Administrator", "Administrator",
-			))
+			insert_values.append(
+				(
+					name,
+					event_name,
+					pid,
+					joined_at,
+					score,
+					now_str,  # submitted_at = now (all LS players are "submitted")
+					player_hearts,
+					player_is_eliminated,
+					player_eliminated_at if player_eliminated_at is not None else 0,
+					avg_rt_ms,
+					now_str,
+					now_str,
+					"Administrator",
+					"Administrator",
+				)
+			)
 
 	# Bulk INSERT new participation records
 	batch_size = 500
 	for i in range(0, len(insert_values), batch_size):
 		batch = insert_values[i : i + batch_size]
-		placeholders = ", ".join(
-			["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(batch)
-		)
+		placeholders = ", ".join(["(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"] * len(batch))
 		flat = [v for row in batch for v in row]
 		frappe.db.sql(
 			f"""INSERT INTO `tabMemora Live Challenge Participation`
@@ -616,7 +651,8 @@ def _reconcile_last_stand(
 	# Sync counters — for Last Stand, all joined players count as submitted
 	submitted_count = len(player_ids_raw)
 	frappe.db.set_value(
-		"Memora Live Challenge Event", event_name,
+		"Memora Live Challenge Event",
+		event_name,
 		{"participant_count": count, "submitted_count": submitted_count},
 		update_modified=False,
 	)
@@ -742,26 +778,34 @@ def compute_ranking(
 	return ranked, top_20
 
 
+def group_rewards_by_rank(rewards: list[dict]) -> dict[int, list[dict]]:
+	"""Group reward rows by rank number. Used by compute_xp_awards and leaderboard enrichment."""
+	by_rank: dict[int, list[dict]] = {}
+	for r in rewards:
+		by_rank.setdefault(int(r.get("rank", 0)), []).append(r)
+	return by_rank
+
+
+def resolve_rewards_for_rank(rank: int, rewards_by_rank: dict[int, list[dict]]) -> list[dict]:
+	"""Return reward rows for a specific rank, falling back to rank 0."""
+	return rewards_by_rank.get(rank) or rewards_by_rank.get(0) or []
+
+
 def compute_xp_awards(
 	ranked: list[dict],
-	xp_config: dict,
+	rewards: list[dict],
 ) -> list[dict]:
 	"""Compute XP awards for ranked participants (pure function).
 
-	Each participant receives:
-	- participation_xp (flat amount for all submitters)
-	- rank bonus: first_place_xp (rank 1), second_place_xp (rank 2),
-	  third_place_xp (rank 3), default_xp (rank 4+)
-	- total_xp = participation_xp + rank_bonus
-
-	Tied ranks all receive the same rank's XP (e.g., two rank-1 players
-	both get first_place_xp).
+	Each participant's XP is determined by looking up reward rows for their rank.
+	If no rows exist for their exact rank, falls back to rank 0 rows.
+	No stacking — explicit rank rows fully replace fallback.
 
 	Args:
 		ranked: List of dicts with 'name', 'player', 'rank' keys
 			(output of compute_ranking).
-		xp_config: Dict with participation_xp, first_place_xp,
-			second_place_xp, third_place_xp, default_xp.
+		rewards: List of reward dicts with 'rank', 'reward_type',
+			'xp_amount', 'prize_description'.
 
 	Returns:
 		List of dicts with 'name', 'player', 'total_xp' for each participant.
@@ -769,23 +813,19 @@ def compute_xp_awards(
 	if not ranked:
 		return []
 
-	participation_xp = xp_config.get("participation_xp", 0)
-	rank_bonus_map = {
-		1: xp_config.get("first_place_xp", 0),
-		2: xp_config.get("second_place_xp", 0),
-		3: xp_config.get("third_place_xp", 0),
-	}
-	default_bonus = xp_config.get("default_xp", 0)
+	rewards_by_rank = group_rewards_by_rank(rewards)
 
 	awards = []
 	for entry in ranked:
-		rank_bonus = rank_bonus_map.get(entry["rank"], default_bonus)
-		total_xp = participation_xp + rank_bonus
-		awards.append({
-			"name": entry["name"],
-			"player": entry["player"],
-			"total_xp": total_xp,
-		})
+		rows = resolve_rewards_for_rank(entry["rank"], rewards_by_rank)
+		total_xp = sum(int(r.get("xp_amount") or 0) for r in rows if r.get("reward_type") == "XP")
+		awards.append(
+			{
+				"name": entry["name"],
+				"player": entry["player"],
+				"total_xp": total_xp,
+			}
+		)
 
 	return awards
 
@@ -803,7 +843,19 @@ def _post_event_processing(event_name: str):
 		return
 
 	top_20, participant_count, submitted_count = _compute_and_store_rankings(event_name)
-	_distribute_xp(event_name)
+	rewards = rewards_to_dicts(event.rewards)
+	_distribute_xp(event_name, rewards=rewards)
+
+	# Enrich leaderboard entries with reward info
+	rewards_by_rank = group_rewards_by_rank(rewards)
+	for entry in top_20:
+		rows = resolve_rewards_for_rank(entry["rank"], rewards_by_rank)
+		entry["xp_awarded"] = sum(int(r.get("xp_amount") or 0) for r in rows if r.get("reward_type") == "XP")
+		entry["prizes"] = [
+			r["prize_description"]
+			for r in rows
+			if r.get("reward_type") == "Prize" and r.get("prize_description")
+		]
 
 	# Mark complete: save leaderboard_json LAST as completion marker
 	event.reload()
@@ -902,7 +954,7 @@ def _batch_update_field(entries: list[dict], field: str, batch_size: int = 500) 
 		frappe.db.sql(sql)
 
 
-def _distribute_xp(event_name: str):
+def _distribute_xp(event_name: str, rewards: list[dict] | None = None):
 	"""Distribute XP to all ranked participants via Redis wallet + dirty set.
 
 	Idempotency: skips if any Participation record already has xp_awarded > 0.
@@ -916,18 +968,13 @@ def _distribute_xp(event_name: str):
 	if already_awarded:
 		return
 
-	# Load event XP config
-	event = frappe.get_doc("Memora Live Challenge Event", event_name)
-	xp_config = {
-		"participation_xp": event.participation_xp or 0,
-		"first_place_xp": event.first_place_xp or 0,
-		"second_place_xp": event.second_place_xp or 0,
-		"third_place_xp": event.third_place_xp or 0,
-		"default_xp": event.default_xp or 0,
-	}
+	# Load event rewards (reuse caller's list when available)
+	if rewards is None:
+		event = frappe.get_doc("Memora Live Challenge Event", event_name)
+		rewards = rewards_to_dicts(event.rewards)
 
-	# Skip if all XP values are 0
-	if not any(xp_config.values()):
+	# Skip if no XP rewards defined
+	if not any(r.get("xp_amount", 0) > 0 for r in rewards if r.get("reward_type") == "XP"):
 		return
 
 	# Query all ranked participations (submitted + ranked)
@@ -942,12 +989,9 @@ def _distribute_xp(event_name: str):
 		return
 
 	# Build ranked list for compute_xp_awards
-	ranked = [
-		{"name": p["name"], "player": p["player"], "rank": p["rank"]}
-		for p in participations
-	]
+	ranked = [{"name": p["name"], "player": p["player"], "rank": p["rank"]} for p in participations]
 
-	awards = compute_xp_awards(ranked, xp_config)
+	awards = compute_xp_awards(ranked, rewards)
 
 	# Award XP via Redis wallet HINCRBY + dirty set SADD
 	r = get_memora_redis()

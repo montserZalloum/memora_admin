@@ -197,7 +197,8 @@ async def submit_answers(
 		correct_count=result["correct_count"],
 		total_questions=result["total_questions"],
 		submitted_at=result["submitted_at"],
-		corrections=result["corrections"],
+		# corrections may be absent when the feature is disabled for the event
+		corrections=result.get("corrections"),
 	)
 
 

@@ -26,7 +26,6 @@ sys.modules.setdefault("frappe.model.document", MagicMock())
 from fastapi_app.services.live_challenge import grade_answers
 from memora_admin.tasks.live_challenge_transitions import compute_ranking, compute_xp_awards
 
-
 # =============================================================================
 # grade_answers
 # =============================================================================
@@ -162,10 +161,7 @@ class TestComputeRanking:
 
 	def test_all_same_score(self):
 		"""All participants same score -> all rank 1."""
-		participants = [
-			{"name": f"P{i}", "player": f"PL-{i}", "score": 50.0}
-			for i in range(5)
-		]
+		participants = [{"name": f"P{i}", "player": f"PL-{i}", "score": 50.0} for i in range(5)]
 		ranked, _ = compute_ranking(participants, {})
 		assert all(r["rank"] == 1 for r in ranked)
 
@@ -183,10 +179,7 @@ class TestComputeRanking:
 
 	def test_top_20_limit(self):
 		"""Leaderboard limited to 20 entries."""
-		participants = [
-			{"name": f"P{i}", "player": f"PL-{i}", "score": float(100 - i)}
-			for i in range(30)
-		]
+		participants = [{"name": f"P{i}", "player": f"PL-{i}", "score": float(100 - i)} for i in range(30)]
 		ranked, top_20 = compute_ranking(participants, {})
 		assert len(ranked) == 30
 		assert len(top_20) == 20
@@ -207,9 +200,7 @@ class TestComputeRanking:
 
 	def test_display_name_fallback(self):
 		"""Missing display_name falls back to player ID."""
-		ranked, _ = compute_ranking(
-			[{"name": "P1", "player": "PL-1", "score": 75.0}], {}
-		)
+		ranked, _ = compute_ranking([{"name": "P1", "player": "PL-1", "score": 75.0}], {})
 		assert ranked[0]["display_name"] == "PL-1"
 
 	def test_unsorted_input_sorts_correctly(self):
@@ -239,13 +230,12 @@ class TestComputeRanking:
 class TestComputeXpAwards:
 	"""Tests for the compute_xp_awards pure function."""
 
-	XP = {
-		"participation_xp": 50,
-		"first_place_xp": 500,
-		"second_place_xp": 300,
-		"third_place_xp": 100,
-		"default_xp": 25,
-	}
+	XP = [
+		{"rank": 0, "reward_type": "XP", "xp_amount": 50, "prize_description": ""},
+		{"rank": 1, "reward_type": "XP", "xp_amount": 500, "prize_description": ""},
+		{"rank": 2, "reward_type": "XP", "xp_amount": 300, "prize_description": ""},
+		{"rank": 3, "reward_type": "XP", "xp_amount": 100, "prize_description": ""},
+	]
 
 	def test_standard_distribution(self):
 		"""1st, 2nd, 3rd, 4th get correct XP."""
@@ -256,10 +246,10 @@ class TestComputeXpAwards:
 			{"name": "P4", "player": "PL-4", "rank": 4},
 		]
 		awards = compute_xp_awards(ranked, self.XP)
-		assert awards[0]["total_xp"] == 550  # 50 + 500
-		assert awards[1]["total_xp"] == 350  # 50 + 300
-		assert awards[2]["total_xp"] == 150  # 50 + 100
-		assert awards[3]["total_xp"] == 75   # 50 + 25
+		assert awards[0]["total_xp"] == 500  # rank 1
+		assert awards[1]["total_xp"] == 300  # rank 2
+		assert awards[2]["total_xp"] == 100  # rank 3
+		assert awards[3]["total_xp"] == 50  # rank 0 fallback
 
 	def test_tied_first_place_both_get_first_xp(self):
 		ranked = [
@@ -268,16 +258,18 @@ class TestComputeXpAwards:
 			{"name": "P3", "player": "PL-3", "rank": 3},
 		]
 		awards = compute_xp_awards(ranked, self.XP)
-		assert awards[0]["total_xp"] == 550
-		assert awards[1]["total_xp"] == 550
-		assert awards[2]["total_xp"] == 150
+		assert awards[0]["total_xp"] == 500
+		assert awards[1]["total_xp"] == 500
+		assert awards[2]["total_xp"] == 100
 
 	def test_zero_xp_config(self):
 		ranked = [{"name": "P1", "player": "PL-1", "rank": 1}]
-		awards = compute_xp_awards(ranked, {
-			"participation_xp": 0, "first_place_xp": 0,
-			"second_place_xp": 0, "third_place_xp": 0, "default_xp": 0,
-		})
+		awards = compute_xp_awards(
+			ranked,
+			[
+				{"rank": 0, "reward_type": "XP", "xp_amount": 0, "prize_description": ""},
+			],
+		)
 		assert awards[0]["total_xp"] == 0
 
 	def test_participation_only_no_rank_bonus(self):
@@ -285,10 +277,12 @@ class TestComputeXpAwards:
 			{"name": "P1", "player": "PL-1", "rank": 1},
 			{"name": "P2", "player": "PL-2", "rank": 2},
 		]
-		awards = compute_xp_awards(ranked, {
-			"participation_xp": 100, "first_place_xp": 0,
-			"second_place_xp": 0, "third_place_xp": 0, "default_xp": 0,
-		})
+		awards = compute_xp_awards(
+			ranked,
+			[
+				{"rank": 0, "reward_type": "XP", "xp_amount": 100, "prize_description": ""},
+			],
+		)
 		assert awards[0]["total_xp"] == 100
 		assert awards[1]["total_xp"] == 100
 
@@ -299,4 +293,4 @@ class TestComputeXpAwards:
 		ranked = [{"name": f"P{i}", "player": f"PL-{i}", "rank": i} for i in range(4, 8)]
 		awards = compute_xp_awards(ranked, self.XP)
 		for a in awards:
-			assert a["total_xp"] == 75  # 50 + 25
+			assert a["total_xp"] == 50  # rank 0 fallback

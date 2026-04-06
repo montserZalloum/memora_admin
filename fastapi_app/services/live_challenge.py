@@ -6,9 +6,8 @@ import asyncio
 import json
 import time
 from datetime import datetime, timedelta
-from zoneinfo import ZoneInfo
-
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import redis.asyncio as redis
 import structlog
@@ -23,18 +22,18 @@ from fastapi_app.core.redis_keys import (
 	lc_count_key,
 	lc_eliminated_at_key,
 	lc_eliminated_key,
+	lc_engine_lock_key,
 	lc_hearts_key,
 	lc_join_times_key,
 	lc_joined_key,
 	lc_meta_key,
 	lc_mode_key,
 	lc_questions_key,
-	lc_engine_lock_key,
 	lc_reconcile_lock_key,
-	lc_round_broadcast_channel,
 	lc_reconciled_key,
 	lc_response_times_key,
 	lc_results_key,
+	lc_round_broadcast_channel,
 	lc_round_key,
 	lc_status_key,
 	lc_submitted_key,
@@ -259,19 +258,23 @@ class LiveChallengeService:
 		questions = []
 		for q in event.get("questions") or []:
 			raw_idx = q.get("idx")
-			questions.append({
-				"idx": (int(raw_idx) - 1) if raw_idx is not None else 0,
-				"question_text": q.get("question_text", ""),
-				"option_a": q.get("option_a", ""),
-				"option_b": q.get("option_b", ""),
-				"option_c": q.get("option_c", ""),
-				"option_d": q.get("option_d", ""),
-				"correct_answer": q.get("correct_answer", ""),
-			})
+			questions.append(
+				{
+					"idx": (int(raw_idx) - 1) if raw_idx is not None else 0,
+					"question_text": q.get("question_text", ""),
+					"option_a": q.get("option_a", ""),
+					"option_b": q.get("option_b", ""),
+					"option_c": q.get("option_c", ""),
+					"option_d": q.get("option_d", ""),
+					"correct_answer": q.get("correct_answer", ""),
+				}
+			)
 		pipe.set(lc_questions_key(event_id), json.dumps(questions), ex=LC_KEY_TTL)
 
 		# Meta hash — includes ALL fields needed by get_event_detail (Redis-only reads)
-		eligible_plans = [ep.get("plan", "") for ep in (event.get("eligible_plans") or []) if isinstance(ep, dict)]
+		eligible_plans = [
+			ep.get("plan", "") for ep in (event.get("eligible_plans") or []) if isinstance(ep, dict)
+		]
 		mode = event.get("mode") or "exam"
 		meta = {
 			"scheduled_start": str(event.get("scheduled_start", "")),
@@ -286,11 +289,17 @@ class LiveChallengeService:
 			"description": event.get("description") or "",
 			"exam_duration": str(event.get("exam_duration", 10)),
 			"is_paid": str(int(event.get("is_paid", 0))),
-			"participation_xp": str(event.get("participation_xp", 0)),
-			"first_place_xp": str(event.get("first_place_xp", 0)),
-			"second_place_xp": str(event.get("second_place_xp", 0)),
-			"third_place_xp": str(event.get("third_place_xp", 0)),
-			"default_xp": str(event.get("default_xp", 0)),
+			"rewards_json": json.dumps(
+				[
+					{
+						"rank": r.get("rank", 0),
+						"reward_type": r.get("reward_type", "XP"),
+						"xp_amount": r.get("xp_amount") or 0,
+						"prize_description": r.get("prize_description") or "",
+					}
+					for r in (event.get("rewards") or [])
+				]
+			),
 			"mode": mode,
 			"starting_hearts": str(event.get("starting_hearts", 3)),
 			"result_window_duration": str(event.get("result_window_duration", 3)),
@@ -368,8 +377,12 @@ class LiveChallengeService:
 			exam_start_ts = datetime.fromisoformat(exam_start_raw)
 			exam_end_ts = datetime.fromisoformat(exam_end_raw)
 		except ValueError:
-			logger.warning("lc_status_bad_timestamps", event_id=event_id,
-				exam_start_ts=exam_start_raw, exam_end_ts=exam_end_raw)
+			logger.warning(
+				"lc_status_bad_timestamps",
+				event_id=event_id,
+				exam_start_ts=exam_start_raw,
+				exam_end_ts=exam_end_raw,
+			)
 			return {"status": current_status, "participant_count": participant_count}
 
 		# Determine what the status SHOULD be based on server time
@@ -492,7 +505,8 @@ class LiveChallengeService:
 			while True:
 				try:
 					message = await self._round_pubsub.get_message(
-						ignore_subscribe_messages=True, timeout=0.1,
+						ignore_subscribe_messages=True,
+						timeout=0.1,
 					)
 				except asyncio.CancelledError:
 					raise
@@ -518,7 +532,9 @@ class LiveChallengeService:
 						await self._broadcast_json(event_id, envelope["message"])
 					elif btype == "personalized":
 						await self._broadcast_personalized(
-							event_id, envelope["base_msg"], envelope["player_states"],
+							event_id,
+							envelope["base_msg"],
+							envelope["player_states"],
 						)
 				except Exception:
 					logger.warning("round_subscriber_message_error", exc_info=True)
@@ -603,7 +619,10 @@ class LiveChallengeService:
 		return await self._broadcast_json(event_id, message)
 
 	async def _engine_broadcast_personalized(
-		self, event_id: str, base_msg: dict, player_states: dict[str, dict],
+		self,
+		event_id: str,
+		base_msg: dict,
+		player_states: dict[str, dict],
 	) -> int:
 		"""Pub/sub wrapper for _broadcast_personalized — used by LastStandEngine.
 
@@ -725,7 +744,10 @@ class LiveChallengeService:
 		"""
 		# Guard: only one worker runs the engine (multi-worker safety)
 		acquired = await self.redis.set(
-			lc_engine_lock_key(event_id), "1", nx=True, ex=LC_KEY_TTL,
+			lc_engine_lock_key(event_id),
+			"1",
+			nx=True,
+			ex=LC_KEY_TTL,
 		)
 		if not acquired:
 			logger.info(
@@ -799,7 +821,10 @@ class LiveChallengeService:
 			raise
 
 	async def _fast_forward_missed_round(
-		self, event_id: str, round_data: dict, questions: list[dict],
+		self,
+		event_id: str,
+		round_data: dict,
+		questions: list[dict],
 	) -> None:
 		"""Fast-forward a round that expired during downtime (crash recovery).
 
@@ -841,10 +866,7 @@ class LiveChallengeService:
 		new_hearts_list = await pipe.execute()
 
 		# Eliminate players with hearts <= 0
-		to_eliminate = [
-			pid for pid, nh in zip(unanswered, new_hearts_list)
-			if int(nh) <= 0
-		]
+		to_eliminate = [pid for pid, nh in zip(unanswered, new_hearts_list) if int(nh) <= 0]
 		if to_eliminate:
 			elim_pipe = self.redis.pipeline()
 			for pid in to_eliminate:
@@ -854,7 +876,9 @@ class LiveChallengeService:
 					pid,
 				)
 				elim_pipe.hset(
-					lc_eliminated_at_key(event_id), pid, str(question_idx),
+					lc_eliminated_at_key(event_id),
+					pid,
+					str(question_idx),
 				)
 			elim_pipe.expire(lc_eliminated_key(event_id), LC_KEY_TTL)
 			elim_pipe.expire(lc_eliminated_at_key(event_id), LC_KEY_TTL)
@@ -869,18 +893,25 @@ class LiveChallengeService:
 		)
 
 	async def _on_last_stand_ended(
-		self, event_id: str, reason: str, alive_count: int, rounds_played: int,
+		self,
+		event_id: str,
+		reason: str,
+		alive_count: int,
+		rounds_played: int,
 	) -> None:
 		"""Callback from LastStandEngine when the event ends."""
 		# Release engine lock so another worker can start on crash-recovery
 		await self.redis.delete(lc_engine_lock_key(event_id))
 		# Broadcast event_ended with Last Stand fields (via pub/sub for cross-worker)
-		await self._engine_broadcast_json(event_id, {
-			"type": "event_ended",
-			"reason": reason,
-			"final_alive_count": alive_count,
-			"total_rounds_played": rounds_played,
-		})
+		await self._engine_broadcast_json(
+			event_id,
+			{
+				"type": "event_ended",
+				"reason": reason,
+				"final_alive_count": alive_count,
+				"total_rounds_played": rounds_played,
+			},
+		)
 		# Trigger reconciliation
 		await self._reconcile_event(event_id)
 		# Defer engine cleanup so the safety ceiling can still find and await
@@ -893,7 +924,11 @@ class LiveChallengeService:
 		self._engine_tasks.pop(event_id, None)
 
 	async def submit_last_stand_answer(
-		self, event_id: str, player_id: str, round_id: str, selected: str,
+		self,
+		event_id: str,
+		player_id: str,
+		round_id: str,
+		selected: str,
 	) -> int:
 		"""Submit an answer for a Last Stand round.  Returns Lua result code.
 
@@ -1091,7 +1126,10 @@ class LiveChallengeService:
 
 			if mode == "last_stand":
 				docs = await self._build_last_stand_docs(
-					event_id, player_ids, join_times, default_joined_at,
+					event_id,
+					player_ids,
+					join_times,
+					default_joined_at,
 				)
 				submitted_count = len(player_ids)
 			else:
@@ -1142,10 +1180,12 @@ class LiveChallengeService:
 											"frappe.client.get_list",
 											{
 												"doctype": "Memora Live Challenge Participation",
-												"filters": json.dumps([
-													["event", "=", event_id],
-													["player", "=", doc["player"]],
-												]),
+												"filters": json.dumps(
+													[
+														["event", "=", event_id],
+														["player", "=", doc["player"]],
+													]
+												),
 												"fields": json.dumps(["name"]),
 												"limit_page_length": "1",
 											},
@@ -1216,7 +1256,10 @@ class LiveChallengeService:
 			logger.exception("lc_reconciliation_error", event_id=event_id)
 
 	async def _build_last_stand_docs(
-		self, event_id: str, player_ids: set, join_times: dict,
+		self,
+		event_id: str,
+		player_ids: set,
+		join_times: dict,
 		default_joined_at: str,
 	) -> list[dict[str, Any]]:
 		"""Build Participation docs for a Last Stand event from Redis state."""
@@ -1259,18 +1302,20 @@ class LiveChallengeService:
 			else:
 				avg_rt_ms = 0
 
-			docs.append({
-				"doctype": "Memora Live Challenge Participation",
-				"event": event_id,
-				"player": pid,
-				"joined_at": join_times.get(pid, default_joined_at),
-				"score": score,
-				"submitted_at": now_str,
-				"final_hearts": player_hearts,
-				"is_eliminated": is_eliminated,
-				"eliminated_at_question": elim_at_q,
-				"avg_response_time_ms": avg_rt_ms,
-			})
+			docs.append(
+				{
+					"doctype": "Memora Live Challenge Participation",
+					"event": event_id,
+					"player": pid,
+					"joined_at": join_times.get(pid, default_joined_at),
+					"score": score,
+					"submitted_at": now_str,
+					"final_hearts": player_hearts,
+					"is_eliminated": is_eliminated,
+					"eliminated_at_question": elim_at_q,
+					"avg_response_time_ms": avg_rt_ms,
+				}
+			)
 		return docs
 
 	@staticmethod
@@ -1458,7 +1503,10 @@ class LiveChallengeService:
 		# 30s TTL = natural backoff if Frappe is down.
 		if status is None:
 			guard = await self.redis.set(
-				f"memora:lc:{event_id}:hydrate_guard", "1", nx=True, ex=30,
+				f"memora:lc:{event_id}:hydrate_guard",
+				"1",
+				nx=True,
+				ex=30,
 			)
 			if not guard:
 				return None
@@ -1472,7 +1520,9 @@ class LiveChallengeService:
 			return "redis"
 		return None
 
-	async def get_event_detail(self, event_id: str, player_id: str, player_plan: str | None = None) -> dict[str, Any] | None:
+	async def get_event_detail(
+		self, event_id: str, player_id: str, player_plan: str | None = None
+	) -> dict[str, Any] | None:
 		"""Get public event details with player-specific flags.
 
 		Explicit source selection: ended events read from DB,
@@ -1485,7 +1535,9 @@ class LiveChallengeService:
 			return await self._get_event_detail_from_db(event_id, player_id, player_plan)
 		return await self._get_event_detail_from_redis(event_id, player_id, player_plan)
 
-	async def _get_event_detail_from_redis(self, event_id: str, player_id: str, player_plan: str | None = None) -> dict[str, Any] | None:
+	async def _get_event_detail_from_redis(
+		self, event_id: str, player_id: str, player_plan: str | None = None
+	) -> dict[str, Any] | None:
 		"""Read event detail exclusively from Redis. MUST NOT fall back to DB.
 
 		Single pipeline read — zero Frappe calls. Returns None if Redis data
@@ -1532,11 +1584,7 @@ class LiveChallengeService:
 			"capacity": int(meta.get("capacity", "0")),
 			"current_count": int(count_raw or "0"),
 			"is_paid": bool(int(meta.get("is_paid", "0"))),
-			"participation_xp": int(meta.get("participation_xp", "0")),
-			"first_place_xp": int(meta.get("first_place_xp", "0")),
-			"second_place_xp": int(meta.get("second_place_xp", "0")),
-			"third_place_xp": int(meta.get("third_place_xp", "0")),
-			"default_xp": int(meta.get("default_xp", "0")),
+			"rewards": json.loads(meta.get("rewards_json", "[]")) if meta.get("rewards_json") else [],
 			"question_count": question_count,
 			"eligible_plans": eligible_plans,
 			"is_plan_eligible": (not eligible_plans) or (player_plan in eligible_plans),
@@ -1560,7 +1608,9 @@ class LiveChallengeService:
 
 		return detail
 
-	async def _get_event_detail_from_db(self, event_id: str, player_id: str, player_plan: str | None = None) -> dict[str, Any] | None:
+	async def _get_event_detail_from_db(
+		self, event_id: str, player_id: str, player_plan: str | None = None
+	) -> dict[str, Any] | None:
 		"""Read event detail exclusively from Frappe DB. Used ONLY for ended events."""
 		try:
 			event = await self.frappe.call(
@@ -1580,10 +1630,12 @@ class LiveChallengeService:
 				"frappe.client.get_list",
 				{
 					"doctype": "Memora Live Challenge Participation",
-					"filters": json.dumps([
-						["event", "=", event_id],
-						["player", "=", player_id],
-					]),
+					"filters": json.dumps(
+						[
+							["event", "=", event_id],
+							["player", "=", player_id],
+						]
+					),
 					"fields": json.dumps(["name", "submitted_at"]),
 					"limit_page_length": "1",
 				},
@@ -1623,14 +1675,19 @@ class LiveChallengeService:
 			"capacity": int(event.get("capacity", 0)),
 			"current_count": int(event.get("participant_count", 0)),
 			"is_paid": bool(event.get("is_paid")),
-			"participation_xp": int(event.get("participation_xp", 0)),
-			"first_place_xp": int(event.get("first_place_xp", 0)),
-			"second_place_xp": int(event.get("second_place_xp", 0)),
-			"third_place_xp": int(event.get("third_place_xp", 0)),
-			"default_xp": int(event.get("default_xp", 0)),
+			"rewards": [
+				{
+					"rank": int(r.get("rank", 0)),
+					"reward_type": r.get("reward_type", "XP"),
+					"xp_amount": int(r.get("xp_amount") or 0),
+					"prize_description": r.get("prize_description", ""),
+				}
+				for r in (event.get("rewards") or [])
+			],
 			"question_count": len(event.get("questions", [])),
 			"eligible_plans": [ep.get("plan") for ep in event.get("eligible_plans", [])],
-			"is_plan_eligible": (not event.get("eligible_plans")) or (player_plan in [ep.get("plan") for ep in event.get("eligible_plans", [])]),
+			"is_plan_eligible": (not event.get("eligible_plans"))
+			or (player_plan in [ep.get("plan") for ep in event.get("eligible_plans", [])]),
 			"has_joined": joined,
 			"has_submitted": submitted,
 			"top_players": top_players,
@@ -1694,12 +1751,20 @@ class LiveChallengeService:
 				{
 					"doctype": "Memora Live Challenge Participation",
 					"filters": json.dumps([["event", "=", event_id], ["player", "=", player_id]]),
-					"fields": json.dumps([
-						"name", "score", "rank", "xp_awarded",
-						"submitted_at", "answers_json",
-						"final_hearts", "is_eliminated",
-						"eliminated_at_question", "avg_response_time_ms",
-					]),
+					"fields": json.dumps(
+						[
+							"name",
+							"score",
+							"rank",
+							"xp_awarded",
+							"submitted_at",
+							"answers_json",
+							"final_hearts",
+							"is_eliminated",
+							"eliminated_at_question",
+							"avg_response_time_ms",
+						]
+					),
 					"limit_page_length": "1",
 				},
 			)
@@ -1751,7 +1816,11 @@ class LiveChallengeService:
 			answers_json_raw = part.get("answers_json")
 			if answers_json_raw:
 				try:
-					answers_data = json.loads(answers_json_raw) if isinstance(answers_json_raw, str) else answers_json_raw
+					answers_data = (
+						json.loads(answers_json_raw)
+						if isinstance(answers_json_raw, str)
+						else answers_json_raw
+					)
 					answers_list = answers_data.get("answers", [])
 					total_questions = len(answers_list)
 					correct_count = sum(1 for a in answers_list if a.get("correct", False))
@@ -1877,16 +1946,27 @@ class LiveChallengeService:
 				return
 			reaction = msg.get("reaction", "")
 			accepted = await self._reaction_engine.accept_tap(event_id, player_id, reaction)
-			logger.debug("reaction_tap_result", event_id=event_id, player_id=player_id, accepted=accepted, reaction=reaction)
+			logger.debug(
+				"reaction_tap_result",
+				event_id=event_id,
+				player_id=player_id,
+				accepted=accepted,
+				reaction=reaction,
+			)
 		except Exception:
-			logger.warning("reaction_tap_handler_error", event_id=event_id, player_id=player_id, exc_info=True)
+			logger.warning(
+				"reaction_tap_handler_error", event_id=event_id, player_id=player_id, exc_info=True
+			)
 
 	# -------------------------------------------------------------------------
 	# WebSocket Connection Tracking (T029)
 	# -------------------------------------------------------------------------
 
 	def register_connection(
-		self, event_id: str, ws: WebSocket, player_id: str | None = None,
+		self,
+		event_id: str,
+		ws: WebSocket,
+		player_id: str | None = None,
 	) -> None:
 		"""Register a WebSocket connection for an event.
 
@@ -2202,7 +2282,10 @@ class LiveChallengeService:
 			logger.debug("lc_send_exam_start_failed", event_id=event_id)
 
 	async def send_player_state_to_client(
-		self, event_id: str, ws: WebSocket, player_id: str,
+		self,
+		event_id: str,
+		ws: WebSocket,
+		player_id: str,
 	) -> None:
 		"""Send player_state to a single client on WS reconnect during Active Last Stand.
 
@@ -2217,9 +2300,7 @@ class LiveChallengeService:
 		pipe.hgetall(lc_round_key(event_id))
 		pipe.hget(lc_eliminated_at_key(event_id), player_id)
 		pipe.scard(lc_alive_key(event_id))
-		is_alive, is_eliminated, hearts_raw, round_state, elim_at_raw, alive_count = (
-			await pipe.execute()
-		)
+		is_alive, is_eliminated, hearts_raw, round_state, elim_at_raw, alive_count = await pipe.execute()
 
 		# Determine player liveness
 		player_alive = bool(is_alive)

@@ -33,14 +33,8 @@
   "price",
   "currency",
   "column_break_settings",
-  "section_break_xp",
-  "participation_xp",
-  "first_place_xp",
-  "column_break_xp",
-  "second_place_xp",
-  "third_place_xp",
-  "column_break_xp2",
-  "default_xp",
+  "section_break_rewards",
+  "rewards",
   "section_break_questions",
   "questions",
   "section_break_plans",
@@ -216,47 +210,15 @@
    "fieldtype": "Column Break"
   },
   {
-   "fieldname": "section_break_xp",
+   "fieldname": "section_break_rewards",
    "fieldtype": "Section Break",
-   "label": "XP Rewards"
+   "label": "Rewards"
   },
   {
-   "default": "0",
-   "fieldname": "participation_xp",
-   "fieldtype": "Int",
-   "label": "Participation XP"
-  },
-  {
-   "default": "0",
-   "fieldname": "first_place_xp",
-   "fieldtype": "Int",
-   "label": "1st Place XP"
-  },
-  {
-   "fieldname": "column_break_xp",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "fieldname": "second_place_xp",
-   "fieldtype": "Int",
-   "label": "2nd Place XP"
-  },
-  {
-   "default": "0",
-   "fieldname": "third_place_xp",
-   "fieldtype": "Int",
-   "label": "3rd Place XP"
-  },
-  {
-   "fieldname": "column_break_xp2",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "fieldname": "default_xp",
-   "fieldtype": "Int",
-   "label": "Default XP"
+   "fieldname": "rewards",
+   "fieldtype": "Table",
+   "label": "Rewards",
+   "options": "Memora Challenge Reward"
   },
   {
    "fieldname": "section_break_questions",

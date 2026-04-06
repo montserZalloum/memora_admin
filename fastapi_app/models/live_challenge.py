@@ -31,10 +31,17 @@ class CorrectionItem(BaseModel):
 	"""A single incorrect answer with the correct one."""
 
 	question_idx: int = Field(..., description="0-based question index")
-	selected: Literal["A", "B", "C", "D"] | None = Field(
-		..., description="What the student selected"
-	)
+	selected: Literal["A", "B", "C", "D"] | None = Field(..., description="What the student selected")
 	correct_answer: Literal["A", "B", "C", "D"] = Field(..., description="The correct option")
+
+
+class RewardItem(BaseModel):
+	"""A single reward configuration row."""
+
+	rank: int = Field(..., description="Target rank (0 = fallback)")
+	reward_type: str = Field(..., description="XP or Prize")
+	xp_amount: int = Field(0, description="XP amount (when type=XP)")
+	prize_description: str = Field("", description="Prize text (when type=Prize)")
 
 
 class LeaderboardEntryItem(BaseModel):
@@ -47,6 +54,8 @@ class LeaderboardEntryItem(BaseModel):
 	# Last Stand additions (0/false for exam)
 	final_hearts: int = Field(0, description="Hearts remaining")
 	is_eliminated: bool = Field(False, description="Whether eliminated")
+	xp_awarded: int | None = Field(None, description="XP awarded to this player")
+	prizes: list[str] = Field(default_factory=list, description="Prize descriptions awarded")
 
 	@field_serializer("score")
 	@classmethod
@@ -68,7 +77,9 @@ class StatusResponse(BaseModel):
 	mode: str | None = Field(None, description="Event mode: exam or last_stand")
 	alive_count: int | None = Field(None, description="Alive players (Last Stand Active only)")
 	eliminated_count: int | None = Field(None, description="Eliminated players (Last Stand Active only)")
-	current_round: int | None = Field(None, description="Current question index 0-based (Last Stand Active only)")
+	current_round: int | None = Field(
+		None, description="Current question index 0-based (Last Stand Active only)"
+	)
 	total_rounds: int | None = Field(None, description="Total questions in event")
 
 
@@ -89,11 +100,7 @@ class EventDetailResponse(BaseModel):
 	capacity: int = Field(..., description="Max participants (0 = unlimited)")
 	current_count: int = Field(0, description="Current participant count")
 	is_paid: bool = Field(False, description="Whether event is paid")
-	participation_xp: int = Field(0, description="XP for all submitters")
-	first_place_xp: int = Field(0, description="Bonus for rank 1")
-	second_place_xp: int = Field(0, description="Bonus for rank 2")
-	third_place_xp: int = Field(0, description="Bonus for rank 3")
-	default_xp: int = Field(0, description="Bonus for rank 4+")
+	rewards: list[RewardItem] = Field(default_factory=list, description="Reward configuration")
 	question_count: int = Field(0, description="Number of questions")
 	eligible_plans: list[str] = Field(default_factory=list, description="Eligible plan IDs")
 	is_plan_eligible: bool = Field(True, description="Whether requesting player's plan is eligible")
@@ -106,7 +113,9 @@ class EventDetailResponse(BaseModel):
 	mode: str | None = Field(None, description="Event mode: exam or last_stand")
 	alive_count: int | None = Field(None, description="Alive players (Last Stand Active only)")
 	eliminated_count: int | None = Field(None, description="Eliminated players (Last Stand Active only)")
-	current_round: int | None = Field(None, description="Current question index 0-based (Last Stand Active only)")
+	current_round: int | None = Field(
+		None, description="Current question index 0-based (Last Stand Active only)"
+	)
 	total_rounds: int | None = Field(None, description="Total questions in event")
 
 
@@ -158,9 +167,7 @@ class ResultResponse(BaseModel):
 	total_participants: int = Field(0, description="Total participants")
 	xp_awarded: int | None = Field(None, description="XP awarded (null if not distributed)")
 	submitted_at: str | None = Field(None, description="Submission timestamp")
-	corrections: list[CorrectionItem] | None = Field(
-		None, description="Corrections (null if disabled)"
-	)
+	corrections: list[CorrectionItem] | None = Field(None, description="Corrections (null if disabled)")
 	# Last Stand fields (0/false for exam)
 	final_hearts: int = Field(0, description="Hearts remaining at event end")
 	is_eliminated: bool = Field(False, description="Whether player was eliminated")
@@ -179,9 +186,7 @@ class LeaderboardResponse(BaseModel):
 	event_id: str = Field(..., description="Event ID")
 	event_name: str = Field(..., description="Event display name")
 	status: str = Field(..., description="Event status")
-	leaderboard: list[LeaderboardEntryItem] = Field(
-		default_factory=list, description="Top 20 entries"
-	)
+	leaderboard: list[LeaderboardEntryItem] = Field(default_factory=list, description="Top 20 entries")
 	my_rank: int | None = Field(None, description="Current player's rank")
 	my_score: float | None = Field(None, description="Current player's score")
 	total_participants: int = Field(0, description="Total participants")
@@ -246,12 +251,8 @@ class WSEventEndedMessage(BaseModel):
 	reason: Literal["all_finished", "all_eliminated", "time_ceiling"] | None = Field(
 		None, description="Last Stand end reason (null for exam)"
 	)
-	final_alive_count: int | None = Field(
-		None, description="Alive players at event end (Last Stand only)"
-	)
-	total_rounds_played: int | None = Field(
-		None, description="Number of rounds played (Last Stand only)"
-	)
+	final_alive_count: int | None = Field(None, description="Alive players at event end (Last Stand only)")
+	total_rounds_played: int | None = Field(None, description="Number of rounds played (Last Stand only)")
 
 
 # =============================================================================
