@@ -27,6 +27,13 @@ frappe.ui.form.on("Memora Live Challenge Event", {
 		// Apply question timer logic on refresh
 		_apply_question_timer(frm);
 
+		// Import Questions button (only in Draft)
+		if (frm.doc.status === "Draft") {
+			frm.add_custom_button(__("Import Questions"), function () {
+				_open_import_questions_dialog(frm);
+			});
+		}
+
 		// Live Participants button (only during Active)
 		if (frm.doc.status === "Active") {
 			frm.add_custom_button(__("Live Participants"), function () {
@@ -130,6 +137,67 @@ function _show_leaderboard_dialog(data) {
 		size: "large",
 	});
 	d.$body.html(html);
+	d.show();
+}
+
+function _open_import_questions_dialog(frm) {
+	let d = new frappe.ui.Dialog({
+		title: __("Import Questions from Excel"),
+		fields: [
+			{
+				fieldtype: "HTML",
+				fieldname: "instructions",
+				options: `<div class="alert alert-info" style="margin-bottom:12px">
+					<strong>${__("Required columns (header row):")}</strong><br>
+					<code>question_text</code>, <code>option_a</code>, <code>option_b</code>,
+					<code>option_c</code>, <code>option_d</code>, <code>correct_answer</code>
+					<br><small>${__("correct_answer must be A, B, C, or D")}</small>
+				</div>`,
+			},
+			{
+				fieldname: "excel_file",
+				fieldtype: "Attach",
+				label: __("Excel File (.xlsx)"),
+				reqd: 1,
+			},
+		],
+		primary_action_label: __("Import"),
+		primary_action(values) {
+			if (!values.excel_file) {
+				frappe.msgprint(__("Please attach an Excel file."));
+				return;
+			}
+			frappe.call({
+				method: "memora_admin.memora_admin.doctype.memora_live_challenge_event.memora_live_challenge_event.import_questions_from_excel",
+				args: { file_url: values.excel_file },
+				btn: d.get_primary_btn(),
+				callback(r) {
+					if (r.exc) return;
+					let rows = r.message || [];
+					if (!rows.length) {
+						frappe.msgprint(__("No questions found in the file."));
+						return;
+					}
+					rows.forEach(function (row) {
+						let child = frm.add_child("questions");
+						child.question_text = row.question_text;
+						child.option_a = row.option_a;
+						child.option_b = row.option_b;
+						child.option_c = row.option_c;
+						child.option_d = row.option_d;
+						child.correct_answer = row.correct_answer;
+					});
+					frm.fields_dict["questions"].grid.refresh();
+					frm.dirty();
+					d.hide();
+					frappe.show_alert({
+						message: __("{0} question(s) imported. Save the form to persist.", [rows.length]),
+						indicator: "green",
+					});
+				},
+			});
+		},
+	});
 	d.show();
 }
 

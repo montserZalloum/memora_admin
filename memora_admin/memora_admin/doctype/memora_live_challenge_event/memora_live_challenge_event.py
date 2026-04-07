@@ -11,6 +11,65 @@ from frappe.utils import get_datetime
 
 from memora_admin.memora_admin.doctype.memora_challenge_reward.memora_challenge_reward import rewards_to_dicts
 
+_EXCEL_REQUIRED_COLUMNS = {"question_text", "option_a", "option_b", "option_c", "option_d", "correct_answer"}
+_VALID_ANSWERS = {"A", "B", "C", "D"}
+
+
+@frappe.whitelist()
+def import_questions_from_excel(file_url):
+	"""Parse an .xlsx file and return a list of question dicts for the child table.
+
+	Expected header row: question_text, option_a, option_b, option_c, option_d, correct_answer
+	"""
+	import io
+
+	import openpyxl
+	from frappe.utils.file_manager import get_file
+
+	_fname, fcontent = get_file(file_url)
+	if isinstance(fcontent, str):
+		fcontent = fcontent.encode("utf-8")
+
+	try:
+		wb = openpyxl.load_workbook(io.BytesIO(fcontent), read_only=True, data_only=True)
+	except Exception as e:
+		frappe.throw(f"Could not open Excel file: {e}")
+
+	ws = wb.active
+	all_rows = list(ws.iter_rows(values_only=True))
+	if not all_rows:
+		frappe.throw("The Excel file is empty.")
+
+	headers = [str(h).strip().lower() if h is not None else "" for h in all_rows[0]]
+	missing = _EXCEL_REQUIRED_COLUMNS - set(headers)
+	if missing:
+		frappe.throw(f"Missing required column(s): {', '.join(sorted(missing))}")
+
+	col = {h: i for i, h in enumerate(headers)}
+	questions = []
+	for row_num, row in enumerate(all_rows[1:], start=2):
+		q_text = str(row[col["question_text"]] or "").strip()
+		if not q_text:
+			continue  # skip blank rows
+
+		answer = str(row[col["correct_answer"]] or "").strip().upper()
+		if answer not in _VALID_ANSWERS:
+			frappe.throw(f"Row {row_num}: correct_answer must be A, B, C, or D (got '{answer}')")
+
+		questions.append(
+			{
+				"question_text": q_text,
+				"option_a": str(row[col["option_a"]] or "").strip(),
+				"option_b": str(row[col["option_b"]] or "").strip(),
+				"option_c": str(row[col["option_c"]] or "").strip(),
+				"option_d": str(row[col["option_d"]] or "").strip(),
+				"correct_answer": answer,
+			}
+		)
+
+	return questions
+
+
 VALID_TRANSITIONS = {
 	"Draft": {"Waiting"},
 	"Waiting": {"Active"},
