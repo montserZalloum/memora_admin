@@ -17,12 +17,24 @@ class MemoraPushNotification(Document):
 			frappe.throw("Push Notifications cannot be modified after sending")
 
 		self._validate_title_length()
+		self._validate_body_length()
+		self._validate_url()
 		self._validate_target_plans()
 
 	def _validate_title_length(self):
 		value = self.title or ""
-		if len(value) > 40:
-			frappe.throw("Title must not exceed 40 characters")
+		if len(value) > 50:
+			frappe.throw("Title must not exceed 50 characters")
+
+	def _validate_body_length(self):
+		value = self.body or ""
+		if len(value) > 120:
+			frappe.throw("Body must not exceed 120 characters")
+
+	def _validate_url(self):
+		url = self.url or ""
+		if url and not url.startswith("/"):
+			frappe.throw("URL must be a relative path starting with /")
 
 	def _validate_target_plans(self):
 		if self.target_audience == "Specific Plans" and len(self.target_plans or []) == 0:
@@ -46,8 +58,8 @@ class MemoraPushNotification(Document):
 		frappe.enqueue(
 			"memora_admin.memora_admin.services.push_service.send_push_notification",
 			title=self.title,
-			body=self.body[:100],
-			url=f"/push/{self.name}",
+			body=self.body[:120],
+			url=self.url,
 			target_plans=target_plans,
 			push_notification_name=self.name,
 			queue="long",

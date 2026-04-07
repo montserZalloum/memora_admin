@@ -47,6 +47,10 @@ frappe.ui.form.on("Memora Push Notification", {
 	body(frm) {
 		render_push_preview(frm);
 	},
+
+	url(frm) {
+		render_push_preview(frm);
+	},
 });
 
 function toggle_fields(frm) {
@@ -57,7 +61,8 @@ function toggle_fields(frm) {
 function render_push_preview(frm) {
 	const title = frm.doc.title || "Title";
 	const body = frm.doc.body || "Body";
-	const body_truncated = body.length > 100 ? body.substring(0, 100) + "\u2026" : body;
+	const body_truncated = body.length > 120 ? body.substring(0, 120) + "\u2026" : body;
+	const url = frm.doc.url || "";
 	const now = frappe.datetime.now_datetime().split(" ");
 	const time = now[1] ? now[1].substring(0, 5) : "12:00";
 
@@ -102,6 +107,16 @@ function render_push_preview(frm) {
 					color: var(--text-muted);
 					line-height: 1.4;
 				">${frappe.utils.escape_html(body_truncated)}</div>
+				${url ? `<div style="
+					font-size: 11px;
+					color: #007AFF;
+					margin-top: 6px;
+					direction: ltr;
+					text-align: left;
+					overflow: hidden;
+					text-overflow: ellipsis;
+					white-space: nowrap;
+				">${frappe.utils.escape_html(url)}</div>` : ''}
 			</div>
 		</div>
 	`;

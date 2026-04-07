@@ -125,8 +125,10 @@ def send_push_notification(
 		{
 			"title": title,
 			"body": body,
-			"url": url,
 			"icon": icon or f"{frappe.utils.get_url()}/assets/memora_admin/images/memora-logo.png",
+			"data": {
+				"url": url,
+			},
 		}
 	)
 
