@@ -101,11 +101,15 @@ function render_push_preview(frm) {
 					color: var(--text-color);
 					margin-bottom: 4px;
 					line-height: 1.3;
+					direction: rtl;
+					text-align: right;
 				">${frappe.utils.escape_html(title)}</div>
 				<div style="
 					font-size: 13px;
 					color: var(--text-muted);
 					line-height: 1.4;
+					direction: rtl;
+					text-align: right;
 				">${frappe.utils.escape_html(body_truncated)}</div>
 				${url ? `<div style="
 					font-size: 11px;
