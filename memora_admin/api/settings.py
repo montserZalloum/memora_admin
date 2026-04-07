@@ -1,6 +1,19 @@
-"""Frappe API for gamification settings."""
+"""Frappe API for gamification and push settings."""
 
 import frappe
+
+
+@frappe.whitelist(allow_guest=True)
+def get_vapid_public_key() -> dict:
+	"""Get VAPID public key for Web Push subscription.
+
+	Public endpoint — the VAPID public key is not secret.
+	Returns empty string if keys are not yet configured.
+
+	Callable via: frappe.call("memora_admin.api.settings.get_vapid_public_key")
+	"""
+	settings = frappe.get_single("Memora Settings")
+	return {"public_key": settings.vapid_public_key or ""}
 
 
 @frappe.whitelist(allow_guest=False)

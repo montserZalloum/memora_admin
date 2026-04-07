@@ -22,6 +22,7 @@ from fastapi_app.api.v1.endpoints import (
 	profile,
 	progress,
 	purchase,
+	push,
 	reports,
 	reviews,
 	sessions,
@@ -59,5 +60,6 @@ router.include_router(plan_change.router)
 router.include_router(live_challenge.router)
 router.include_router(challenge.router)
 router.include_router(premium.router)
+router.include_router(push.router)
 router.include_router(event_access.router)
 router.include_router(monetized_webhooks.router)

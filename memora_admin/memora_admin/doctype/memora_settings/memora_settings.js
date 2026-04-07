@@ -12,5 +12,16 @@ frappe.ui.form.on("Memora Settings", {
 				});
 			});
 		}
+
+		if (!frm.doc.vapid_public_key) {
+			frm.add_custom_button("Generate VAPID Keys", () => {
+				frappe.call({
+					method: "memora_admin.memora_admin.doctype.memora_settings.memora_settings.generate_vapid_keys",
+					freeze: true,
+					freeze_message: "Generating VAPID keys...",
+					callback: () => frm.reload_doc(),
+				});
+			});
+		}
 	},
 });

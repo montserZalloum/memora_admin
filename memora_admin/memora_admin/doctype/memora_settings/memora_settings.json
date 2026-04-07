@@ -27,7 +27,12 @@
   "review_session_size",
   "challenge_section",
   "challenge_xp_per_question",
-  "challenge_pass_threshold"
+  "challenge_pass_threshold",
+  "push_section",
+  "vapid_public_key",
+  "vapid_contact_email",
+  "column_break_push",
+  "vapid_private_key"
  ],
  "fields": [
   {
@@ -156,6 +161,35 @@
    "fieldname": "challenge_pass_threshold",
    "fieldtype": "Int",
    "label": "Challenge Pass Threshold (%)"
+  },
+  {
+   "fieldname": "push_section",
+   "fieldtype": "Section Break",
+   "label": "Web Push Notifications"
+  },
+  {
+   "description": "Base64url-encoded public key (shared with frontend)",
+   "fieldname": "vapid_public_key",
+   "fieldtype": "Small Text",
+   "label": "VAPID Public Key",
+   "read_only": 1
+  },
+  {
+   "description": "Required by VAPID spec (e.g., admin@conanacademy.com)",
+   "fieldname": "vapid_contact_email",
+   "fieldtype": "Data",
+   "label": "VAPID Contact Email",
+   "options": "Email"
+  },
+  {
+   "fieldname": "column_break_push",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Base64url-encoded private key (encrypted at rest)",
+   "fieldname": "vapid_private_key",
+   "fieldtype": "Password",
+   "label": "VAPID Private Key"
   }
  ],
  "grid_page_length": 50,

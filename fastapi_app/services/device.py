@@ -67,7 +67,8 @@ if matched_device then
         'device:' .. matched_device .. ':platform',
         'device:' .. matched_device .. ':last_login',
         'device:' .. matched_device .. ':fingerprint',
-        'device:' .. matched_device .. ':push_token')
+        'device:' .. matched_device .. ':push_token',
+        'device:' .. matched_device .. ':push_sub')
     -- Add with new UUID (reuses same slot)
     redis.call('HSET', key,
         'device:' .. device_id .. ':name', device_name,
@@ -357,6 +358,7 @@ class DeviceService:
 			f"device:{device_id}:last_login",
 			f"device:{device_id}:fingerprint",
 			f"device:{device_id}:push_token",
+			f"device:{device_id}:push_sub",
 		]
 		deleted = await self.redis.hdel(key, *fields)
 

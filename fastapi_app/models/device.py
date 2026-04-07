@@ -19,6 +19,7 @@ class DeviceInfo(BaseModel):
 	last_login: str | None = None  # ISO timestamp
 	fingerprint: str | None = None
 	push_token: str | None = None
+	push_sub: str | None = None  # JSON-serialized Web Push subscription
 
 
 class DeviceRegistrationResult(BaseModel):

@@ -251,6 +251,15 @@ def devices_key(user_id: str) -> str:
 	Producers: DeviceService.register_device() (Lua script)
 	Consumers: DeviceService.get_devices(), DeviceService.validate_device()
 	TTL: None (persistent until admin removal)
+
+	Web Push subscription field (added by push feature):
+	  Field: device:{device_id}:push_sub
+	  Value: JSON-serialized PushSubscription (~300 bytes)
+	         {"endpoint": "https://...", "keys": {"p256dh": "...", "auth": "..."}}
+	  Producers: FastAPI push.py subscribe endpoint
+	  Consumers: Frappe push_service.py (bulk send), FastAPI push.py unsubscribe
+	  Cleanup: Removed when device is removed (DeviceService.remove_device,
+	           device_sync.py, Lua registration script fingerprint_match branch)
 	"""
 	return f"memora:devices:{user_id}"
 

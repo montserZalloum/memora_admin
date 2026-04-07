@@ -264,6 +264,12 @@ def after_migrate():
 	# Nginx WebSocket proxy locations (notifications + live challenge)
 	_setup_nginx_websocket_proxies()
 
+	# Web Push VAPID keys (generate once on first migrate)
+	try:
+		_ensure_vapid_keys()
+	except Exception as e:
+		print(f"[after_migrate] VAPID key generation failed: {e}")
+
 
 def _setup_nginx_websocket_proxies():
 	"""Ensure nginx has WebSocket proxy locations for FastAPI endpoints.
@@ -277,6 +283,27 @@ def _setup_nginx_websocket_proxies():
 	except Exception as e:
 		print(f"[setup_nginx] WARNING: Nginx WebSocket setup failed: {e}. "
 		      "Add WebSocket proxy locations manually.")
+
+
+def _ensure_vapid_keys():
+	"""Generate VAPID key pair for Web Push if not already present.
+
+	Runs on every migrate but only generates keys once. Idempotent.
+	"""
+	settings = frappe.get_single("Memora Settings")
+	if settings.vapid_public_key:
+		return
+
+	from memora_admin.utils.vapid import generate_vapid_keypair
+
+	public_key_b64, private_key_b64 = generate_vapid_keypair()
+
+	settings.vapid_public_key = public_key_b64
+	settings.vapid_private_key = private_key_b64
+	settings.save(ignore_permissions=True)
+	frappe.db.commit()
+
+	print("[after_migrate] VAPID keys generated for Web Push")
 
 
 def _ensure_player_practice_summary_table():

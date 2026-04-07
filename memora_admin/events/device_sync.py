@@ -60,6 +60,7 @@ def on_player_profile_update(doc, method):
 				f"device:{device_id}:last_login",
 				f"device:{device_id}:fingerprint",
 				f"device:{device_id}:push_token",
+				f"device:{device_id}:push_sub",
 			]
 			r.hdel(dk, *fields_to_delete)
 

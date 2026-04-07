@@ -10,6 +10,29 @@ class MemoraSettings(Document):
 
 
 @frappe.whitelist()
+def generate_vapid_keys():
+	"""Generate VAPID key pair and save to Memora Settings.
+
+	Uses py_vapid (bundled with pywebpush) to generate an ECDSA P-256 key pair.
+	Keys are base64url-encoded per the Web Push standard.
+	"""
+	settings = frappe.get_single("Memora Settings")
+	if settings.vapid_public_key:
+		frappe.throw("VAPID keys already exist. Delete them manually before regenerating.")
+
+	from memora_admin.utils.vapid import generate_vapid_keypair
+
+	public_key_b64, private_key_b64 = generate_vapid_keypair()
+
+	settings.vapid_public_key = public_key_b64
+	settings.vapid_private_key = private_key_b64
+	settings.save(ignore_permissions=True)
+	frappe.db.commit()
+
+	frappe.msgprint("VAPID keys generated successfully.", indicator="green", alert=True)
+
+
+@frappe.whitelist()
 def purge_all_cdn_cache():
 	from memora_admin.memora_admin.services.cdn.utils import get_purge_service
 
