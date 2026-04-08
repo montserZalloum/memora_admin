@@ -1,7 +1,7 @@
 """Notification task for permanently failed archive jobs.
 
 Scans for Failed archive jobs that haven't been notified yet
-(notified_at not set), sends email to System Manager users
+(notified_at not set), sends email to Memora Email Receiver users
 and publishes Desk realtime alert.
 
 Schedule: Daily at 06:00 via hooks.py
@@ -33,10 +33,10 @@ def notify_failed_archive_jobs():
 	if not unnotified:
 		return
 
-	# Get System Manager recipients (single query instead of N+1)
+	# Get Memora Email Receiver recipients (single query instead of N+1)
 	admin_users = frappe.get_all(
 		"Has Role",
-		filters={"role": "System Manager", "parenttype": "User"},
+		filters={"role": "Memora Email Receiver", "parenttype": "User"},
 		fields=["parent"],
 	)
 	admin_names = list({u.parent for u in admin_users})

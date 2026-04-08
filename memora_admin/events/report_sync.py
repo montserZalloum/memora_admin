@@ -11,11 +11,19 @@ def on_content_report_created(doc, method):
 	"""Send notification to admins when a new content report is created.
 
 	Triggered by after_insert doc_event on Memora Content Report.
+	Wrapped in try/except so notification failures never surface to the player.
 
 	Args:
 		doc: Memora Content Report document
 		method: Frappe hook method name (after_insert)
 	"""
+	try:
+		_notify_content_report(doc)
+	except Exception:
+		frappe.log_error(title=f"Content report notification failed for {doc.name}")
+
+
+def _notify_content_report(doc):
 	# Get player display name
 	player_name = frappe.get_value("Memora Player Profile", doc.player, "display_name") or doc.player
 
@@ -30,10 +38,10 @@ def on_content_report_created(doc, method):
 		user="Administrator",
 	)
 
-	# 2. Email to all System Manager users
+	# 2. Email to all Memora Email Receiver users
 	admin_users = frappe.get_all(
 		"Has Role",
-		filters={"role": "System Manager", "parenttype": "User"},
+		filters={"role": "Memora Email Receiver", "parenttype": "User"},
 		fields=["parent"],
 	)
 	recipients = []
@@ -49,15 +57,36 @@ def on_content_report_created(doc, method):
 
 		frappe.sendmail(
 			recipients=recipients,
-			subject=f"Content Report: {doc.report_type} - {player_name}",
+			subject=f"بلاغ محتوى: {doc.report_type} - {player_name}",
 			message=f"""
-			<h3>New Content Report</h3>
-			<p><strong>Player:</strong> {player_name}</p>
-			<p><strong>Type:</strong> {doc.report_type}</p>
-			<p><strong>Subject:</strong> {subject_name or "N/A"}</p>
-			<p><strong>Lesson:</strong> {doc.lesson or "N/A"}</p>
-			<p><strong>Description:</strong> {doc.description}</p>
-			<p><a href="{report_link}">View Report in Frappe Desk</a></p>
+			<div dir="rtl" style="font-family: 'Segoe UI', Tahoma, Arial, sans-serif; text-align: right; max-width: 560px; margin: 0 auto; padding: 24px; background: #ffffff; border-radius: 8px; border: 1px solid #e5e7eb;">
+				<h3 style="color: #1f2937; margin: 0 0 20px 0; font-size: 20px;">بلاغ محتوى جديد</h3>
+				<table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+					<tr>
+						<td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; color: #6b7280; width: 120px;">اللاعب</td>
+						<td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: 600;">{player_name}</td>
+					</tr>
+					<tr>
+						<td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; color: #6b7280;">النوع</td>
+						<td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: 600;">{doc.report_type}</td>
+					</tr>
+					<tr>
+						<td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; color: #6b7280;">المادة</td>
+						<td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: 600;">{subject_name or "غير محدد"}</td>
+					</tr>
+					<tr>
+						<td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; color: #6b7280;">الدرس</td>
+						<td style="padding: 10px 0; border-bottom: 1px solid #f3f4f6; color: #1f2937; font-weight: 600;">{doc.lesson or "غير محدد"}</td>
+					</tr>
+					<tr>
+						<td style="padding: 10px 0; color: #6b7280;">الوصف</td>
+						<td style="padding: 10px 0; color: #1f2937;">{doc.description}</td>
+					</tr>
+				</table>
+				<div style="text-align: center;">
+					<a href="{report_link}" style="display: inline-block; padding: 12px 32px; background-color: #4f46e5; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 15px;">عرض البلاغ</a>
+				</div>
+			</div>
 			""",
 			now=True,
 		)

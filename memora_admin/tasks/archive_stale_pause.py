@@ -27,10 +27,10 @@ def check_stale_archive_pauses():
 	if not stale_jobs:
 		return
 
-	# Get System Manager recipients (single query instead of N+1)
+	# Get Memora Email Receiver recipients (single query instead of N+1)
 	admin_users = frappe.get_all(
 		"Has Role",
-		filters={"role": "System Manager", "parenttype": "User"},
+		filters={"role": "Memora Email Receiver", "parenttype": "User"},
 		fields=["parent"],
 	)
 	admin_names = list({u.parent for u in admin_users})

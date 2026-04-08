@@ -63,5 +63,9 @@ frappe.ui.form.on("Memora Product Grant", {
 frappe.ui.form.on("Memora Grant Component", {
 	target_doctype(frm, cdt, cdn) {
 		frappe.model.set_value(cdt, cdn, "target_name", "");
+		const row = locals[cdt][cdn];
+		if (row.target_doctype === "Memora Track") {
+			frappe.model.set_value(cdt, cdn, "key_type", "full");
+		}
 	},
 });

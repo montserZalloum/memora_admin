@@ -7,6 +7,7 @@
  "engine": "InnoDB",
  "field_order": [
   "target_doctype",
+  "key_type",
   "target_name"
  ],
  "fields": [
@@ -16,6 +17,16 @@
    "in_list_view": 1,
    "label": "Target Doctype",
    "options": "Memora Subject\nMemora Track",
+   "reqd": 1
+  },
+  {
+   "default": "full",
+   "depends_on": "eval:doc.target_doctype=='Memora Subject'",
+   "fieldname": "key_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Key Type",
+   "options": "full\npractice",
    "reqd": 1
   },
   {

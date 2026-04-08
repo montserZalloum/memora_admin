@@ -11,6 +11,7 @@ def on_purchase_request_created(doc, method):
 	"""Send notification to admins when a new purchase request is created.
 
 	Triggered by after_insert doc_event on Memora Subscription Transaction.
+	Wrapped in try/except so notification failures never surface to the player.
 
 	Args:
 		doc: Memora Subscription Transaction document
@@ -23,6 +24,13 @@ def on_purchase_request_created(doc, method):
 	if doc.payment_method == "Voucher":
 		return
 
+	try:
+		_notify_purchase_request(doc)
+	except Exception:
+		frappe.log_error(title=f"Purchase request notification failed for {doc.name}")
+
+
+def _notify_purchase_request(doc):
 	# Get player display name
 	player_name = frappe.get_value("Memora Player Profile", doc.player, "display_name") or doc.player
 
@@ -44,10 +52,10 @@ def on_purchase_request_created(doc, method):
 		user="Administrator",
 	)
 
-	# 2. Email to all System Manager users
+	# 2. Email to all Memora Email Receiver users
 	admin_users = frappe.get_all(
 		"Has Role",
-		filters={"role": "System Manager", "parenttype": "User"},
+		filters={"role": "Memora Email Receiver", "parenttype": "User"},
 		fields=["parent"],
 	)
 	recipients = []

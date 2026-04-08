@@ -194,19 +194,18 @@ def has_run_today(task_name: str) -> bool:
 
 
 def notify_admins(task_name: str, error_message: str) -> None:
-	"""Send notification to Task Admin role users on critical failure.
+	"""Send notification to Memora Email Receiver role users on critical failure.
 
 	Per CONTEXT.md: Fail fast + Frappe notification to admin users.
-	Falls back to System Manager if no Task Admin role exists.
 
 	Args:
 		task_name: Name of the failed task
 		error_message: Error description to include in notification
 	"""
-	# Get users with Task Admin role
+	# Get users with Memora Email Receiver role
 	admin_users = frappe.get_all(
 		"Has Role",
-		filters={"role": "Task Admin", "parenttype": "User"},
+		filters={"role": "Memora Email Receiver", "parenttype": "User"},
 		fields=["parent"],
 	)
 
@@ -215,18 +214,6 @@ def notify_admins(task_name: str, error_message: str) -> None:
 		user = frappe.get_doc("User", u.parent)
 		if user.enabled and user.email:
 			recipients.append(user.email)
-
-	# Fallback to System Manager if no Task Admin
-	if not recipients:
-		admin_users = frappe.get_all(
-			"Has Role",
-			filters={"role": "System Manager", "parenttype": "User"},
-			fields=["parent"],
-		)
-		for u in admin_users:
-			user = frappe.get_doc("User", u.parent)
-			if user.enabled and user.email:
-				recipients.append(user.email)
 
 	if recipients:
 		frappe.sendmail(

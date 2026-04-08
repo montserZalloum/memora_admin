@@ -20,7 +20,6 @@ from fastapi_app.core.redis_keys import (
 	subjects_with_free_content_key,
 )
 
-
 # === Test map data ===
 
 SUBJECT_ID = "SUBJ-TEST-001"
@@ -103,14 +102,17 @@ def _mock_access(mock_frappe):
 
 	deps_module._frappe_client = mock_frappe
 
-	with patch(
-		"fastapi_app.services.access.AccessService.check_access_with_plan",
-		new_callable=AsyncMock,
-		return_value=True,
-	), patch(
-		"fastapi_app.services.access.AccessService.check_access",
-		new_callable=AsyncMock,
-		return_value=True,
+	with (
+		patch(
+			"fastapi_app.services.access.AccessService.check_access_with_plan",
+			new_callable=AsyncMock,
+			return_value=True,
+		),
+		patch(
+			"fastapi_app.services.access.AccessService.check_access",
+			new_callable=AsyncMock,
+			return_value=True,
+		),
 	):
 		yield
 
@@ -176,10 +178,7 @@ async def _continue(client, batch_seq):
 
 def _make_results(question_ids, all_correct=True):
 	"""Build results payload from question IDs."""
-	return [
-		{"item_id": qid, "is_correct": all_correct}
-		for qid in question_ids
-	]
+	return [{"item_id": qid, "is_correct": all_correct} for qid in question_ids]
 
 
 # =========================================================================
@@ -248,7 +247,9 @@ class TestStartSession:
 		"""Cannot filter by units when multiple tracks are selected."""
 		client, _, _, _ = authed_client
 		resp = await _start_session(
-			client, track_ids=[TRACK_A, TRACK_B], unit_ids=[UNIT_A],
+			client,
+			track_ids=[TRACK_A, TRACK_B],
+			unit_ids=[UNIT_A],
 		)
 		assert resp.status_code == 400
 		assert "Cannot filter" in resp.json()["detail"]
@@ -323,10 +324,14 @@ class TestSubmitResults:
 		client, _, _, _ = authed_client
 		start = await _start_session(client)
 		qid = start.json()["question_ids"][0]
-		resp = await _submit(client, 0, [
-			{"item_id": qid, "is_correct": True},
-			{"item_id": qid, "is_correct": False},
-		])
+		resp = await _submit(
+			client,
+			0,
+			[
+				{"item_id": qid, "is_correct": True},
+				{"item_id": qid, "is_correct": False},
+			],
+		)
 		assert resp.status_code == 400
 		assert "Duplicate" in resp.json()["detail"]
 
@@ -385,7 +390,10 @@ class TestMultiTrack:
 
 	@pytest.mark.asyncio
 	async def test_multi_track_no_cross_contamination(
-		self, authed_client, redis_client, mock_map_multi,
+		self,
+		authed_client,
+		redis_client,
+		mock_map_multi,
 	):
 		"""Each track's summary should only contain its own questions."""
 		client, _, player_id, _ = authed_client
@@ -396,12 +404,8 @@ class TestMultiTrack:
 		# Submit all
 		await _submit(client, 0, _make_results(qids))
 
-		summary_a = json.loads(
-			await redis_client.get(practice_summary_key(player_id, TRACK_A)) or "{}"
-		)
-		summary_b = json.loads(
-			await redis_client.get(practice_summary_key(player_id, TRACK_B)) or "{}"
-		)
+		summary_a = json.loads(await redis_client.get(practice_summary_key(player_id, TRACK_A)) or "{}")
+		summary_b = json.loads(await redis_client.get(practice_summary_key(player_id, TRACK_B)) or "{}")
 
 		# Track A questions should NOT appear in Track B summary
 		track_a_qids = {"Q-001", "Q-002", "Q-003"}
@@ -502,14 +506,17 @@ class TestAccessControl:
 	@pytest.mark.asyncio
 	async def test_no_access_returns_403(self, authed_client, mock_map):
 		client, _, _, _ = authed_client
-		with patch(
-			"fastapi_app.services.access.AccessService.check_access_with_plan",
-			new_callable=AsyncMock,
-			return_value=False,
-		), patch(
-			"fastapi_app.services.access.AccessService.check_access",
-			new_callable=AsyncMock,
-			return_value=False,
+		with (
+			patch(
+				"fastapi_app.services.access.AccessService.check_access_with_plan",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
+			patch(
+				"fastapi_app.services.access.AccessService.check_access",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
 		):
 			resp = await _start_session(client)
 		assert resp.status_code == 403
@@ -520,14 +527,17 @@ class TestAccessControl:
 		client, _, _, _ = authed_client
 		# Mark subject as having free content
 		await redis_client.sadd(subjects_with_free_content_key(), SUBJECT_ID)
-		with patch(
-			"fastapi_app.services.access.AccessService.check_access_with_plan",
-			new_callable=AsyncMock,
-			return_value=False,
-		), patch(
-			"fastapi_app.services.access.AccessService.check_access",
-			new_callable=AsyncMock,
-			return_value=False,
+		with (
+			patch(
+				"fastapi_app.services.access.AccessService.check_access_with_plan",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
+			patch(
+				"fastapi_app.services.access.AccessService.check_access",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
 		):
 			resp = await _start_session(client)
 		assert resp.status_code == 200
@@ -542,13 +552,76 @@ class TestAccessControl:
 			ck = content_key_or_ck if content_key_or_ck is not None else self_or_pid
 			return ck.startswith("TRK-")
 
-		with patch(
-			"fastapi_app.services.access.AccessService.check_access_with_plan",
-			new_callable=AsyncMock,
-			return_value=False,
-		), patch(
-			"fastapi_app.services.access.AccessService.check_access",
-			side_effect=lambda pid, ck: True,
+		with (
+			patch(
+				"fastapi_app.services.access.AccessService.check_access_with_plan",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
+			patch(
+				"fastapi_app.services.access.AccessService.check_access",
+				side_effect=lambda pid, ck: True,
+			),
 		):
 			resp = await _start_session(client)
 		assert resp.status_code == 200
+
+	@pytest.mark.asyncio
+	async def test_practice_only_grant_allows_start(self, authed_client, mock_map):
+		"""No SUB/TRK access but PRAC-SUB grant → allowed with full scope."""
+		client, _, _, _ = authed_client
+		with (
+			patch(
+				"fastapi_app.services.access.AccessService.check_access_with_plan",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
+			patch(
+				"fastapi_app.services.access.AccessService.check_access",
+				side_effect=lambda pid, ck: ck.startswith("PRAC-SUB-"),
+			),
+		):
+			resp = await _start_session(client)
+		assert resp.status_code == 200
+		# Full scope: all 3 questions available (no free content restriction)
+		assert resp.json()["total_available"] == 3
+
+	@pytest.mark.asyncio
+	async def test_practice_only_grant_no_free_scope_restriction(self, authed_client, redis_client, mock_map):
+		"""PRAC-SUB grant does not apply free content scope restriction."""
+		client, _, _, _ = authed_client
+		# Even if subject has free content markers, PRAC-SUB gives full scope
+		await redis_client.sadd(subjects_with_free_content_key(), SUBJECT_ID)
+		with (
+			patch(
+				"fastapi_app.services.access.AccessService.check_access_with_plan",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
+			patch(
+				"fastapi_app.services.access.AccessService.check_access",
+				side_effect=lambda pid, ck: ck.startswith("PRAC-SUB-"),
+			),
+		):
+			resp = await _start_session(client)
+		assert resp.status_code == 200
+		assert resp.json()["total_available"] == 3
+
+	@pytest.mark.asyncio
+	async def test_no_grant_no_prac_sub_returns_403(self, authed_client, mock_map):
+		"""No SUB, TRK, or PRAC-SUB grant and no free content → 403."""
+		client, _, _, _ = authed_client
+		with (
+			patch(
+				"fastapi_app.services.access.AccessService.check_access_with_plan",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
+			patch(
+				"fastapi_app.services.access.AccessService.check_access",
+				new_callable=AsyncMock,
+				return_value=False,
+			),
+		):
+			resp = await _start_session(client)
+		assert resp.status_code == 403

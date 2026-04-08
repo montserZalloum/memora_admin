@@ -15,6 +15,7 @@ def after_install():
 	"""Create custom roles, voucher schema extensions, and nginx WS proxies after app installation."""
 	create_memora_admin_role()
 	create_task_admin_role()
+	create_memora_email_receiver_role()
 	_setup_voucher_schema()
 	_setup_nginx_websocket_proxies()
 	_remove_backup_crontab()
@@ -76,6 +77,24 @@ def create_task_admin_role():
 	role.insert(ignore_permissions=True)
 	frappe.db.commit()
 	print("Created Task Admin role")
+
+
+def create_memora_email_receiver_role():
+	"""Create Memora Email Receiver role for inbound email processing access."""
+	if frappe.db.exists("Role", "Memora Email Receiver"):
+		return  # Already exists
+
+	role = frappe.get_doc(
+		{
+			"doctype": "Role",
+			"role_name": "Memora Email Receiver",
+			"desk_access": 0,
+			"is_custom": 1,
+		}
+	)
+	role.insert(ignore_permissions=True)
+	frappe.db.commit()
+	print("Created Memora Email Receiver role")
 
 
 def before_migrate():

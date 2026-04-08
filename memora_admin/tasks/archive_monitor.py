@@ -194,11 +194,11 @@ def _check_stuck_state() -> list[dict]:
 
 
 def _send_alerts(alerts: list[dict]):
-	"""Send email + Desk realtime alerts to System Manager users."""
-	# Get System Manager recipients
+	"""Send email + Desk realtime alerts to Memora Email Receiver users."""
+	# Get Memora Email Receiver recipients
 	admin_users = frappe.get_all(
 		"Has Role",
-		filters={"role": "System Manager", "parenttype": "User"},
+		filters={"role": "Memora Email Receiver", "parenttype": "User"},
 		fields=["parent"],
 	)
 	admin_names = list({u.parent for u in admin_users})
