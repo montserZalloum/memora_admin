@@ -1154,3 +1154,5 @@ def _ensure_task_log_archive_batch_cleanup_index():
 		ADD INDEX IF NOT EXISTS `idx_tlbatch_cleanup` (`status`, `purged_at`, `name`)
 	""")
 	print("[after_migrate] Ensured idx_tlbatch_cleanup on tabMemora Task Log Archive Batch")
+
+

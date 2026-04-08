@@ -8,7 +8,7 @@ from frappe.model.document import Document
 class MemoraGrantComponent(Document):
 	def validate(self):
 		if not self.key_type:
-			self.key_type = "full"
+			self.key_type = "normal content"
 
 		if self.key_type == "practice" and self.target_doctype != "Memora Subject":
 			frappe.throw(

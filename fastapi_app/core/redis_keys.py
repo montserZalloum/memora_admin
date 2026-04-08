@@ -63,7 +63,7 @@ def access_key(player_id: str) -> str:
 
 	Type: SET of content keys
 	Key conventions:
-	    - "SUB-{subject_id}"      — full content + practice access for a subject
+	    - "SUB-{subject_id}"      — normal content access for a subject (no practice)
 	    - "TRK-{track_id}"        — full content + practice access for a track
 	    - "PRAC-SUB-{subject_id}" — practice-only access (no lesson content)
 	Producers: access_sync.py (Frappe hook), AccessService.ensure_hydrated()

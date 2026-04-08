@@ -22,7 +22,7 @@ def get_grant_keys(product_grant_id: str) -> list[str]:
 	grant_keys = []
 	for component in doc.grant_components:
 		if component.target_doctype == "Memora Subject":
-			key_type = getattr(component, "key_type", None) or "full"
+			key_type = getattr(component, "key_type", None) or "normal content"
 			if key_type == "practice":
 				grant_keys.append(f"PRAC-SUB-{component.target_name}")
 			else:

@@ -53,8 +53,8 @@ class TestMemoraProductGrant(FrappeTestCase):
 		self._created_grants.append(name)
 		return name
 
-	def test_full_subject_emits_sub_key(self):
-		"""key_type=full + Memora Subject → SUB-{name}."""
+	def test_normal_content_subject_emits_sub_key(self):
+		"""key_type='normal content' + Memora Subject → SUB-{name}."""
 		subjects = frappe.get_all("Memora Subject", limit=1, pluck="name")
 		if not subjects:
 			self.skipTest("No Memora Subject found")
@@ -65,7 +65,7 @@ class TestMemoraProductGrant(FrappeTestCase):
 					"doctype": "Memora Grant Component",
 					"target_doctype": "Memora Subject",
 					"target_name": subjects[0],
-					"key_type": "full",
+					"key_type": "normal content",
 				}
 			]
 		)
@@ -103,14 +103,14 @@ class TestMemoraProductGrant(FrappeTestCase):
 					"doctype": "Memora Grant Component",
 					"target_doctype": "Memora Track",
 					"target_name": tracks[0],
-					"key_type": "full",
+					"key_type": "normal content",
 				}
 			]
 		)
 		keys = get_grant_keys(name)
 		self.assertEqual(keys, [f"TRK-{tracks[0]}"])
 
-	def test_missing_key_type_defaults_to_full(self):
+	def test_missing_key_type_defaults_to_normal_content(self):
 		"""No key_type on component → defaults to SUB-{name}."""
 		subjects = frappe.get_all("Memora Subject", limit=1, pluck="name")
 		if not subjects:
@@ -147,7 +147,7 @@ class TestMemoraProductGrant(FrappeTestCase):
 			)
 
 	def test_mixed_components(self):
-		"""Grant with both full subject and practice subject emits correct keys."""
+		"""Grant with both normal content subject and practice subject emits correct keys."""
 		subjects = frappe.get_all("Memora Subject", limit=2, pluck="name")
 		if len(subjects) < 2:
 			self.skipTest("Need at least 2 Memora Subjects")
@@ -158,7 +158,7 @@ class TestMemoraProductGrant(FrappeTestCase):
 					"doctype": "Memora Grant Component",
 					"target_doctype": "Memora Subject",
 					"target_name": subjects[0],
-					"key_type": "full",
+					"key_type": "normal content",
 				},
 				{
 					"doctype": "Memora Grant Component",
