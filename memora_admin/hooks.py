@@ -285,6 +285,11 @@ doc_events = {
 		"after_insert": "memora_admin.memora_admin.events.event_access_sync.on_event_access_created",
 		"on_update": "memora_admin.memora_admin.events.event_access_sync.on_event_access_updated",
 	},
+	# Official Exam JSON build pipeline
+	"Memora Official Exam": {
+		"on_update": "memora_admin.events.exam_build.on_exam_updated",
+		"on_trash": "memora_admin.events.exam_build.on_exam_deleted",
+	},
 	# Announcement cache invalidation
 	"Memora Announcement": {
 		"after_insert": "memora_admin.events.announcement_sync.on_announcement_changed",

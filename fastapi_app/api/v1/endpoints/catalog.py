@@ -60,7 +60,6 @@ async def get_event_catalog(
 	"""Get purchasable paid events for the authenticated player.
 
 	Returns upcoming paid events the player can purchase:
-	- Premium users get an empty list (they join paid events for free)
 	- Events the player already has access to are excluded
 	- Only upcoming events (scheduled_start > now) are shown
 	- Only paid events eligible for the player's plan are shown
@@ -136,7 +135,6 @@ async def get_premium_voucher_catalog(
 	to show a "Redeem Voucher for Premium" option in the store.
 
 	- Players with no plan get available=False
-	- Players who already have premium get available=False
 	- No active batches with allocated cards → available=False
 	"""
 	if not user.plan:

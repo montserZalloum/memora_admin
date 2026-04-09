@@ -40,6 +40,7 @@ from fastapi_app.services.stats import StatsService
 from fastapi_app.services.voucher import VoucherService
 from fastapi_app.services.event_access import EventAccessService
 from fastapi_app.services.event_catalog import EventCatalogService
+from fastapi_app.services.exam import ExamService
 from fastapi_app.services.premium import PremiumService
 from fastapi_app.services.premium_catalog import PremiumCatalogService
 from fastapi_app.services.wallet import WalletService
@@ -433,9 +434,8 @@ EventAccessServiceDep = Annotated[EventAccessService, Depends(get_event_access_s
 async def get_event_catalog_service(redis_client: RedisClient) -> EventCatalogService:
 	"""Get EventCatalogService with Redis, FrappeClient, and sub-services."""
 	frappe_client = await get_frappe_client()
-	premium_svc = PremiumService(redis_client, frappe_client)
 	event_access_svc = EventAccessService(redis_client, frappe_client)
-	return EventCatalogService(redis_client, frappe_client, premium_svc, event_access_svc)
+	return EventCatalogService(redis_client, frappe_client, event_access_svc)
 
 
 EventCatalogServiceDep = Annotated[EventCatalogService, Depends(get_event_catalog_service)]
@@ -460,6 +460,21 @@ async def get_voucher_service(redis_client: RedisClient, settings: SettingsDep) 
 VoucherServiceDep = Annotated[VoucherService, Depends(get_voucher_service)]
 
 
+async def get_exam_service(redis_client: RedisClient, settings: SettingsDep) -> ExamService:
+	"""Get ExamService with Redis, FrappeClient, CDN path, and CDN base URL."""
+	from pathlib import Path
+
+	frappe_client = await get_frappe_client()
+	access_service = AccessService(redis_client, frappe_client=frappe_client)
+	# deps.py is at apps/memora_admin/fastapi_app/api/deps.py — 5 parents to bench root
+	bench_path = Path(__file__).resolve().parent.parent.parent.parent.parent
+	cdn_base = str(bench_path / "sites" / settings.frappe_site / "public" / "files" / "cdn")
+	return ExamService(redis_client, frappe_client, cdn_base, settings.cdn_base_url, access_service)
+
+
+ExamServiceDep = Annotated[ExamService, Depends(get_exam_service)]
+
+
 # --- Per-Player Rate Limit Dependency ---
 
 _SCOPE_SETTINGS = {
@@ -473,6 +488,7 @@ _SCOPE_SETTINGS = {
 	"ch_hierarchy": "ch_hierarchy_rate_limit",
 	"ch_attempt": "ch_attempt_rate_limit",
 	"ch_leaderboard": "ch_leaderboard_rate_limit",
+	"exam_submit": "exam_submit_rate_limit",
 }
 
 

@@ -9,8 +9,7 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 	Build catalog payload for a plan. Called by FastAPI CatalogService on cache miss.
 
 	Queries Product Grants (published) for the plan, enriches each with:
-	- Item name (bundle_name) from ERPNext Item
-	- Price from Item Price (Standard Selling price list)
+	- Title (bundle_name) from the Product Grant itself
 	- Subject metadata from Grant Components + Plan Subject overrides
 
 	Args:
@@ -22,17 +21,13 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 	grants = frappe.get_all(
 		"Memora Product Grant",
 		filters={"plan": plan_id, "is_published": 1},
-		fields=["name", "item_code"],
+		fields=["name", "title", "item_code"],
 	)
 	if not grants:
 		return []
 
 	grant_names = [g.name for g in grants]
-	item_codes = list({g.item_code for g in grants})
-
-	# Batch: Item names
-	items = frappe.get_all("Item", filters={"name": ["in", item_codes]}, fields=["name", "item_name"])
-	item_map = {i.name: i.item_name for i in items}
+	item_codes = list({g.item_code for g in grants if g.item_code})
 
 	# Batch: Item prices (Standard Selling)
 	prices = frappe.get_all(
@@ -46,7 +41,7 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 	all_components = frappe.get_all(
 		"Memora Grant Component",
 		filters={"parent": ["in", grant_names]},
-		fields=["parent", "target_doctype", "target_name"],
+		fields=["parent", "target_doctype", "target_name", "key_type"],
 	)
 	# Group components by grant
 	comp_by_grant = {}
@@ -91,14 +86,6 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 	# Assemble products
 	products = []
 	for grant in grants:
-		item_name = item_map.get(grant.item_code)
-		if not item_name:
-			frappe.logger().warning(
-				f"Item not found for item_code={grant.item_code}, skipping grant {grant.name}"
-			)
-			continue
-
-		price = price_map.get(grant.item_code)
 		components = comp_by_grant.get(grant.name, [])
 
 		subjects = []
@@ -118,6 +105,7 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 						"subject_id": comp.target_name,
 						"alias_title": alias_title,
 						"notes": notes,
+						"key_type": comp.key_type,
 					}
 				)
 
@@ -131,6 +119,7 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 							"subject_id": track.subject,
 							"description": track.description or None,
 							"image": track.image or None,
+							"key_type": comp.key_type,
 						}
 					)
 				else:
@@ -141,8 +130,8 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 		products.append(
 			{
 				"product_grant_id": grant.name,
-				"bundle_name": item_name,
-				"price": float(price) if price else 0.0,
+				"bundle_name": grant.title,
+				"price": float(price_map.get(grant.item_code, 0.0)),
 				"subjects": subjects,
 				"tracks": tracks,
 			}

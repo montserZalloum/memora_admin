@@ -22,14 +22,14 @@ class MemoraPushNotification(Document):
 		self._validate_target_plans()
 
 	def _validate_title_length(self):
-		value = self.title or ""
+		value = (self.title or "").replace("{player_name}", "")
 		if len(value) > 50:
-			frappe.throw("Title must not exceed 50 characters")
+			frappe.throw("Title must not exceed 50 characters (excluding {player_name} placeholder)")
 
 	def _validate_body_length(self):
-		value = self.body or ""
+		value = (self.body or "").replace("{player_name}", "")
 		if len(value) > 120:
-			frappe.throw("Body must not exceed 120 characters")
+			frappe.throw("Body must not exceed 120 characters (excluding {player_name} placeholder)")
 
 	def _validate_url(self):
 		url = self.url or ""

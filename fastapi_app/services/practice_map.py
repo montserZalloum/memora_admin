@@ -88,7 +88,10 @@ def get_map(subject_id: str, *, maps_dir: str | Path) -> dict:
         _map_cache.pop(subject_id, None)
 
     # Cache miss — load from disk
-    map_path = Path(maps_dir) / f"{subject_id}.json"
+    base = Path(maps_dir).resolve()
+    map_path = (base / f"{subject_id}.json").resolve()
+    if not map_path.is_relative_to(base):
+        raise ValueError(f"Path traversal blocked: {subject_id!r}")
     raw = map_path.read_text(encoding="utf-8")
     data = json.loads(raw)
 

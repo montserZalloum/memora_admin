@@ -16,19 +16,20 @@ _VALID_ANSWERS = {"A", "B", "C", "D"}
 
 
 @frappe.whitelist()
-def import_questions_from_excel(file_url):
-	"""Parse an .xlsx file and return a list of question dicts for the child table.
+def import_questions_from_excel(file_content):
+	"""Parse an .xlsx file sent as base64 and return a list of question dicts for the child table.
 
 	Expected header row: question_text, option_a, option_b, option_c, option_d, correct_answer
 	"""
+	import base64
 	import io
 
 	import openpyxl
-	from frappe.utils.file_manager import get_file
 
-	_fname, fcontent = get_file(file_url)
-	if isinstance(fcontent, str):
-		fcontent = fcontent.encode("utf-8")
+	try:
+		fcontent = base64.b64decode(file_content)
+	except Exception as e:
+		frappe.throw(f"Invalid file content: {e}")
 
 	try:
 		wb = openpyxl.load_workbook(io.BytesIO(fcontent), read_only=True, data_only=True)
@@ -340,13 +341,13 @@ class MemoraLiveChallengeEvent(Document):
 			fields=["name", "event_name", "scheduled_start", "exam_end_ts"],
 		)
 
-		# for ev in existing:
-		# 	ev_start = get_datetime(ev.scheduled_start)
-		# 	ev_end = get_datetime(ev.exam_end_ts) + timedelta(seconds=OVERLAP_BUFFER)
+		for ev in existing:
+			ev_start = get_datetime(ev.scheduled_start)
+			ev_end = get_datetime(ev.exam_end_ts) + timedelta(seconds=OVERLAP_BUFFER)
 
-		# 	# Check overlap: my event's [start, end+buffer] overlaps with existing [start, end+buffer]
-		# 	if my_start < ev_end and my_end > ev_start:
-		# 		frappe.throw(
-		# 			f"Schedule conflicts with '{ev.event_name}' ({ev.name}). "
-		# 			f"There must be at least a 5-minute gap between events."
-		# 		)
+			# Check overlap: my event's [start, end+buffer] overlaps with existing [start, end+buffer]
+			if my_start < ev_end and my_end > ev_start:
+				frappe.throw(
+					f"Schedule conflicts with '{ev.event_name}' ({ev.name}). "
+					f"There must be at least a 5-minute gap between events."
+				)

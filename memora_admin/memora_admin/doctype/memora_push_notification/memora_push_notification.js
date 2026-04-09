@@ -59,9 +59,10 @@ function toggle_fields(frm) {
 }
 
 function render_push_preview(frm) {
-	const title = frm.doc.title || "Title";
-	const body = frm.doc.body || "Body";
-	const body_truncated = body.length > 120 ? body.substring(0, 120) + "\u2026" : body;
+	const sample_name = "\u0623\u062d\u0645\u062f";  // "أحمد" as sample player name
+	const title = (frm.doc.title || "Title").replace(/\{player_name\}/g, sample_name);
+	const body_raw = (frm.doc.body || "Body").replace(/\{player_name\}/g, sample_name);
+	const body_truncated = body_raw.length > 120 ? body_raw.substring(0, 120) + "\u2026" : body_raw;
 	const url = frm.doc.url || "";
 	const now = frappe.datetime.now_datetime().split(" ");
 	const time = now[1] ? now[1].substring(0, 5) : "12:00";

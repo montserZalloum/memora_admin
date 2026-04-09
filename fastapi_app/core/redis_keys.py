@@ -66,8 +66,9 @@ def access_key(player_id: str) -> str:
 	    - "SUB-{subject_id}"      — normal content access for a subject (no practice)
 	    - "TRK-{track_id}"        — full content + practice access for a track
 	    - "PRAC-SUB-{subject_id}" — practice-only access (no lesson content)
+	    - "EXAM-PLAN-{plan_id}"   — official exam access for the entire plan (all subjects)
 	Producers: access_sync.py (Frappe hook), AccessService.ensure_hydrated()
-	Consumers: AccessService.check_access(), CatalogService.get_player_catalog()
+	Consumers: AccessService.check_access(), CatalogService.get_player_catalog(), ExamService
 	TTL: None (persistent, explicit SREM to revoke)
 	"""
 	return f"memora:access:{player_id}"

@@ -12,7 +12,7 @@ def get_grant_keys(product_grant_id: str) -> list[str]:
 	    product_grant_id: Name of Memora Product Grant document
 
 	Returns:
-	    List of access keys (e.g., ["SUB-MATH", "TRK-MATH-01"])
+	    List of access keys (e.g., ["SUB-MATH", "TRK-MATH-01", "EXAM-PLAN-PLAN-001"])
 
 	Raises:
 	    frappe.DoesNotExistError: If product_grant_id not found
@@ -22,9 +22,15 @@ def get_grant_keys(product_grant_id: str) -> list[str]:
 	grant_keys = []
 	for component in doc.grant_components:
 		if component.target_doctype == "Memora Subject":
-			grant_keys.append(f"SUB-{component.target_name}")
+			key_type = component.key_type or "normal content"
+			if key_type == "practice":
+				grant_keys.append(f"PRAC-SUB-{component.target_name}")
+			else:
+				grant_keys.append(f"SUB-{component.target_name}")
 		elif component.target_doctype == "Memora Track":
 			grant_keys.append(f"TRK-{component.target_name}")
+		elif component.target_doctype == "Memora Academic Plan" and component.key_type == "exam":
+			grant_keys.append(f"EXAM-PLAN-{component.target_name}")
 		else:
 			# Log warning for unknown doctype but continue
 			frappe.logger().warning(f"Unknown grant component doctype: {component.target_doctype}")

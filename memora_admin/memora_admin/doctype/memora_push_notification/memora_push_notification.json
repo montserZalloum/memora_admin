@@ -27,6 +27,7 @@
  ],
  "fields": [
   {
+   "description": "Use <b>{player_name}</b> to include the player's name. Example: Welcome {player_name}!",
    "fieldname": "title",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -52,6 +53,7 @@
    "label": "Content"
   },
   {
+   "description": "Use <b>{player_name}</b> to personalize. Max 120 characters after substitution.",
    "fieldname": "body",
    "fieldtype": "Small Text",
    "label": "Body",

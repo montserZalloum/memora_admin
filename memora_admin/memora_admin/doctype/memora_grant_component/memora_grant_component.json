@@ -16,17 +16,17 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Target Doctype",
-   "options": "Memora Subject\nMemora Track",
+   "options": "Memora Subject\nMemora Track\nMemora Academic Plan",
    "reqd": 1
   },
   {
    "default": "normal content",
-   "depends_on": "eval:doc.target_doctype=='Memora Subject'",
+   "depends_on": "eval:doc.target_doctype=='Memora Subject'||doc.target_doctype=='Memora Academic Plan'",
    "fieldname": "key_type",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Key Type",
-   "options": "normal content\npractice",
+   "options": "normal content\npractice\nexam",
    "reqd": 1
   },
   {

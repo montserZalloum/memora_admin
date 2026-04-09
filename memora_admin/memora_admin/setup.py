@@ -283,6 +283,12 @@ def after_migrate():
 	# Nginx WebSocket proxy locations (notifications + live challenge)
 	_setup_nginx_websocket_proxies()
 
+	# Official Exam raw SQL tables
+	try:
+		_ensure_exam_attempt_tables()
+	except Exception as e:
+		print(f"[after_migrate] Exam attempt tables setup failed: {e}")
+
 	# Web Push VAPID keys (generate once on first migrate)
 	try:
 		_ensure_vapid_keys()
@@ -825,6 +831,50 @@ def _ensure_practice_log_table():
 			KEY `idx_player_seen_item` (`player_id`, `last_seen_at`, `item_id`)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 	""")
+
+
+def _ensure_exam_attempt_tables():
+	"""Create raw SQL tables for Official Exam attempt tracking.
+
+	Two tables following the Practice Log precedent:
+	- tabMemora Exam Attempt: one row per (player, exam) with aggregate stats
+	- tabMemora Exam Attempt Detail: per-question results for the last attempt
+
+	Idempotent: uses CREATE TABLE IF NOT EXISTS.
+	"""
+	frappe.db.sql_ddl("""
+		CREATE TABLE IF NOT EXISTS `tabMemora Exam Attempt` (
+			`player_id`       VARCHAR(140) NOT NULL,
+			`exam_id`         VARCHAR(140) NOT NULL,
+			`attempt_count`   INT UNSIGNED NOT NULL DEFAULT 1,
+			`best_score`      INT UNSIGNED NOT NULL DEFAULT 0,
+			`best_total`      INT UNSIGNED NOT NULL DEFAULT 0,
+			`last_attempt_at` DATETIME NOT NULL,
+			PRIMARY KEY (`player_id`, `exam_id`),
+			KEY `idx_exam_id` (`exam_id`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+	""")
+
+	frappe.db.sql_ddl("""
+		CREATE TABLE IF NOT EXISTS `tabMemora Exam Attempt Detail` (
+			`player_id`     VARCHAR(140) NOT NULL,
+			`exam_id`       VARCHAR(140) NOT NULL,
+			`question_idx`  SMALLINT UNSIGNED NOT NULL,
+			`is_correct`    TINYINT(1) NOT NULL DEFAULT 0,
+			`created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (`player_id`, `exam_id`, `question_idx`),
+			KEY `idx_exam_id` (`exam_id`)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+	""")
+
+	# Add created_at to existing tables that lack it
+	try:
+		frappe.db.sql_ddl("""
+			ALTER TABLE `tabMemora Exam Attempt Detail`
+			ADD COLUMN `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		""")
+	except Exception:
+		pass  # Column already exists
 
 
 def _ensure_hot_table_indexes():

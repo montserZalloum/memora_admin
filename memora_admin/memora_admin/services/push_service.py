@@ -57,8 +57,8 @@ def send_push_notification(
 	"""Send web push notification to targeted players.
 
 	Args:
-		title: Notification title.
-		body: Notification body text.
+		title: Notification title. May contain {player_name} placeholder.
+		body: Notification body text. May contain {player_name} placeholder.
 		url: URL to open when notification is clicked.
 		icon: Icon URL for the notification.
 		target_players: Specific player IDs. None = use target_plans or all.
@@ -81,21 +81,50 @@ def send_push_notification(
 
 	vapid_claims = {"sub": f"mailto:{vapid_email}"}
 
-	# 2. Build player list
+	personalize = "{player_name}" in title or "{player_name}" in body
+
+	# 2. Build player list (with names if personalized)
 	if target_players:
 		players = target_players
+		if personalize:
+			player_names = {
+				r.name: r.display_name
+				for r in frappe.get_all(
+					"Memora Player Profile",
+					filters={"name": ["in", target_players]},
+					fields=["name", "display_name"],
+				)
+			}
 	elif target_plans:
-		players = frappe.get_all(
-			"Memora Player Profile",
-			filters={"plan": ["in", target_plans], "notifications": 1},
-			pluck="name",
-		)
+		if personalize:
+			rows = frappe.get_all(
+				"Memora Player Profile",
+				filters={"plan": ["in", target_plans], "notifications": 1},
+				fields=["name", "display_name"],
+			)
+			players = [r.name for r in rows]
+			player_names = {r.name: r.display_name for r in rows}
+		else:
+			players = frappe.get_all(
+				"Memora Player Profile",
+				filters={"plan": ["in", target_plans], "notifications": 1},
+				pluck="name",
+			)
 	else:
-		players = frappe.get_all(
-			"Memora Player Profile",
-			filters={"notifications": 1},
-			pluck="name",
-		)
+		if personalize:
+			rows = frappe.get_all(
+				"Memora Player Profile",
+				filters={"notifications": 1},
+				fields=["name", "display_name"],
+			)
+			players = [r.name for r in rows]
+			player_names = {r.name: r.display_name for r in rows}
+		else:
+			players = frappe.get_all(
+				"Memora Player Profile",
+				filters={"notifications": 1},
+				pluck="name",
+			)
 
 	if not players:
 		return {"sent": 0, "failed": 0, "stale_removed": 0}
@@ -120,17 +149,26 @@ def send_push_notification(
 	if not subscriptions:
 		return {"sent": 0, "failed": 0, "stale_removed": 0}
 
-	# 4. Build payload
-	payload = json.dumps(
-		{
-			"title": title,
-			"body": body,
-			"icon": icon or f"{frappe.utils.get_url()}/assets/memora_admin/images/memora-logo.png",
-			"data": {
-				"url": url,
-			},
-		}
-	)
+	# 4. Build payload(s)
+	icon_url = icon or f"{frappe.utils.get_url()}/assets/memora_admin/images/memora-logo.png"
+
+	if not personalize:
+		static_payload = json.dumps(
+			{"title": title, "body": body, "icon": icon_url, "data": {"url": url}}
+		)
+
+	def _build_payload(player_id: str) -> str:
+		if not personalize:
+			return static_payload
+		name = player_names.get(player_id, "")
+		return json.dumps(
+			{
+				"title": title.replace("{player_name}", name),
+				"body": body.replace("{player_name}", name),
+				"icon": icon_url,
+				"data": {"url": url},
+			}
+		)
 
 	# 5. Batch send with ThreadPoolExecutor
 	sent = 0
@@ -140,7 +178,7 @@ def send_push_notification(
 	with ThreadPoolExecutor(max_workers=10) as pool:
 		for batch in _chunks(subscriptions, 500):
 			futures = {
-				pool.submit(_send_one, sub_json, payload, private_key, vapid_claims): (uid, field)
+				pool.submit(_send_one, sub_json, _build_payload(uid), private_key, vapid_claims): (uid, field)
 				for uid, field, sub_json in batch
 			}
 			for future in as_completed(futures):

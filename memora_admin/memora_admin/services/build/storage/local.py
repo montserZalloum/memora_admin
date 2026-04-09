@@ -32,11 +32,22 @@ class LocalStorageBackend(StorageBackend):
 		    base_path: Absolute path to storage directory
 		    base_url: URL prefix for generated public URLs
 		"""
-		self.base_path = Path(base_path)
+		self.base_path = Path(base_path).resolve()
 		self.base_url = base_url.rstrip("/")
 
 		# Create base directory if not exists
 		self.base_path.mkdir(parents=True, exist_ok=True)
+
+	def _safe_resolve(self, key: str) -> Path:
+		"""Resolve *key* to an absolute path and verify it stays within base_path.
+
+		Raises ValueError if the resolved path escapes the storage root
+		(e.g. via ``../`` traversal sequences).
+		"""
+		target = (self.base_path / key).resolve()
+		if not target.is_relative_to(self.base_path.resolve()):
+			raise ValueError(f"Path traversal blocked: {key!r}")
+		return target
 
 	def upload(self, key: str, content: bytes, content_type: str = "application/json") -> str:
 		"""
@@ -52,7 +63,7 @@ class LocalStorageBackend(StorageBackend):
 		Returns:
 		    Public URL of the uploaded file
 		"""
-		target_path = self.base_path / key
+		target_path = self._safe_resolve(key)
 
 		# Create parent directories if needed with proper permissions
 		self._ensure_directory(target_path.parent)
@@ -109,7 +120,7 @@ class LocalStorageBackend(StorageBackend):
 		Returns:
 		    True if deleted, False if not found or error
 		"""
-		target_path = self.base_path / key
+		target_path = self._safe_resolve(key)
 
 		try:
 			if target_path.exists():
@@ -131,7 +142,7 @@ class LocalStorageBackend(StorageBackend):
 		Returns:
 		    True if file exists
 		"""
-		return (self.base_path / key).exists()
+		return self._safe_resolve(key).exists()
 
 	def read(self, key: str) -> bytes | None:
 		"""
@@ -143,7 +154,7 @@ class LocalStorageBackend(StorageBackend):
 		Returns:
 		    File content as bytes, or None if not found
 		"""
-		target_path = self.base_path / key
+		target_path = self._safe_resolve(key)
 
 		try:
 			if target_path.exists():
@@ -163,7 +174,7 @@ class LocalStorageBackend(StorageBackend):
 		Returns:
 		    List of file keys relative to base_path
 		"""
-		target_path = self.base_path / prefix
+		target_path = self._safe_resolve(prefix)
 		if not target_path.exists() or not target_path.is_dir():
 			return []
 
@@ -184,7 +195,7 @@ class LocalStorageBackend(StorageBackend):
 		Returns:
 		    True if deleted, False if not found or error
 		"""
-		target_path = self.base_path / key
+		target_path = self._safe_resolve(key)
 
 		try:
 			if target_path.exists() and target_path.is_dir():
@@ -230,6 +241,9 @@ class LocalStorageBackend(StorageBackend):
 		# Fix permissions and group on all created directories (walk up to base_path)
 		current = path
 		while current != self.base_path and current.exists():
+			if current == current.parent:
+				logger.warning("_ensure_directory: reached filesystem root before base_path, breaking")
+				break
 			try:
 				# Set to setgid + rwxrwxr-x (group writable + inherit group for web server)
 				os.chmod(current, 0o2775)

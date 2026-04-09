@@ -10,6 +10,7 @@ from fastapi_app.api.v1.endpoints import (
 	catalog,
 	challenge,
 	event_access,
+	exam,
 	health,
 	leaderboard,
 	live_challenge,
@@ -62,4 +63,5 @@ router.include_router(challenge.router)
 router.include_router(premium.router)
 router.include_router(push.router)
 router.include_router(event_access.router)
+router.include_router(exam.router)
 router.include_router(monetized_webhooks.router)

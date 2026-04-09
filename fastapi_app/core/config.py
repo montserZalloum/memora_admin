@@ -71,12 +71,18 @@ class Settings(BaseSettings):
 	ch_attempt_rate_limit: int = 30
 	ch_leaderboard_rate_limit: int = 10
 
+	# Exam Rate Limits
+	exam_submit_rate_limit: int = 10  # Max exam submissions per player per window
+
 	# Practice Arena Session Settings
 	practice_session_size: int = 20
 	practice_session_ttl: int = 3600
 
 	# Practice Arena — Map file location
 	practice_maps_dir: str = ""  # Path to practice/maps/ directory
+
+	# CDN Configuration
+	cdn_base_url: str = ""  # Base URL for CDN-hosted exam files, e.g. https://cdn.example.com
 
 	# Scaling: Redis Connection Pool
 	redis_max_connections: int = 20  # Pool size per uvicorn worker

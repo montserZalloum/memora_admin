@@ -156,46 +156,60 @@ function _open_import_questions_dialog(frm) {
 			},
 			{
 				fieldname: "excel_file",
-				fieldtype: "Attach",
-				label: __("Excel File (.xlsx)"),
-				reqd: 1,
+				fieldtype: "HTML",
+				options: `<div style="margin: 8px 0;">
+					<a href="/assets/memora_admin/files/live_challenge_questions_template.xlsx"
+					   download style="font-size: 12px;">
+						&#11015; Download Template
+					</a>
+					<br><br>
+					<input type="file" accept=".xlsx" class="excel-file-input">
+				</div>`,
 			},
 		],
 		primary_action_label: __("Import"),
 		primary_action(values) {
-			if (!values.excel_file) {
-				frappe.msgprint(__("Please attach an Excel file."));
+			let fileInput = d.$wrapper.find(".excel-file-input")[0];
+			let file = fileInput && fileInput.files[0];
+			if (!file) {
+				frappe.msgprint(__("Please select an Excel file."));
 				return;
 			}
-			frappe.call({
-				method: "memora_admin.memora_admin.doctype.memora_live_challenge_event.memora_live_challenge_event.import_questions_from_excel",
-				args: { file_url: values.excel_file },
-				btn: d.get_primary_btn(),
-				callback(r) {
-					if (r.exc) return;
-					let rows = r.message || [];
-					if (!rows.length) {
-						frappe.msgprint(__("No questions found in the file."));
-						return;
-					}
-					rows.forEach(function (row) {
-						let child = frm.add_child("questions");
-						child.question_text = row.question_text;
-						child.option_a = row.option_a;
-						child.option_b = row.option_b;
-						child.option_c = row.option_c;
-						child.option_d = row.option_d;
-						child.correct_answer = row.correct_answer;
-					});
-					frm.fields_dict["questions"].grid.refresh();
-					frm.dirty();
-					d.hide();
-					frappe.show_alert({
-						message: __("{0} question(s) imported. Save the form to persist.", [rows.length]),
-						indicator: "green",
-					});
-				},
-			});
+
+			let reader = new FileReader();
+			reader.onload = function (e) {
+				let base64 = e.target.result.split(",")[1];
+				frappe.call({
+					method: "memora_admin.memora_admin.doctype.memora_live_challenge_event.memora_live_challenge_event.import_questions_from_excel",
+						args: { file_content: base64 },
+					btn: d.get_primary_btn(),
+					callback(r) {
+						if (r.exc) return;
+						let rows = r.message || [];
+						if (!rows.length) {
+							frappe.msgprint(__("No questions found in the file."));
+							return;
+						}
+						rows.forEach(function (row) {
+							let child = frm.add_child("questions");
+							child.question_text = row.question_text;
+							child.option_a = row.option_a;
+							child.option_b = row.option_b;
+							child.option_c = row.option_c;
+							child.option_d = row.option_d;
+							child.correct_answer = row.correct_answer;
+						});
+						frm.fields_dict["questions"].grid.refresh();
+						frm.dirty();
+						d.hide();
+						frappe.show_alert({
+							message: __("{0} question(s) imported. Save the form to persist.", [rows.length]),
+							indicator: "green",
+						});
+					},
+				});
+			};
+			reader.readAsDataURL(file);
 		},
 	});
 	d.show();

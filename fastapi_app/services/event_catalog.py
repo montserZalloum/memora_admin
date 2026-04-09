@@ -9,7 +9,6 @@ import structlog
 from fastapi_app.models.event_catalog import CatalogEvent
 from fastapi_app.services.event_access import EventAccessService
 from fastapi_app.services.frappe_client import FrappeClient
-from fastapi_app.services.premium import PremiumService
 
 logger = structlog.get_logger(__name__)
 
@@ -27,12 +26,10 @@ class EventCatalogService:
 		self,
 		redis_client: redis.Redis,
 		frappe_client: FrappeClient,
-		premium_service: PremiumService,
 		event_access_service: EventAccessService,
 	):
 		self.redis = redis_client
 		self.frappe = frappe_client
-		self.premium = premium_service
 		self.event_access = event_access_service
 
 	async def get_player_event_catalog(
@@ -42,22 +39,15 @@ class EventCatalogService:
 	) -> list[CatalogEvent]:
 		"""Get purchasable paid events for a player.
 
-		1. Premium users get empty list (they join paid events for free)
-		2. Fetch paid upcoming events for this plan (cached 60s)
-		3. Exclude events where player already has access
+		1. Fetch paid upcoming events for this plan (cached 60s)
+		2. Exclude events where player already has access
 		"""
-		# Step 1: Premium check
-		premium_state = await self.premium.is_plan_premium_usable(player_id, plan_id)
-		if premium_state.usable:
-			logger.debug("event_catalog_premium_skip", player_id=player_id, plan_id=plan_id)
-			return []
-
-		# Step 2: Fetch events (process-local cache)
+		# Step 1: Fetch events (process-local cache)
 		events = await self._get_plan_events(plan_id)
 		if not events:
 			return []
 
-		# Step 3: Filter out events player already has access to
+		# Step 2: Filter out events player already has access to
 		access_checks = await asyncio.gather(
 			*(self.event_access.has_active_access(player_id, ev.event_id) for ev in events)
 		)
