@@ -1,6 +1,14 @@
 """Frappe API for building paid event catalog payload."""
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 import frappe
+
+# Frappe stores Datetime fields in system timezone (Asia/Amman).
+# MariaDB server runs in UTC, so NOW()/UTC_TIMESTAMP() won't match.
+# Compute current Amman time in Python — same approach as FastAPI's _now_naive().
+_SYSTEM_TZ = ZoneInfo("Asia/Amman")
 
 
 @frappe.whitelist(allow_guest=False)
@@ -9,7 +17,7 @@ def get_paid_events_for_plan(plan_id: str) -> list[dict]:
 
 	Returns events where:
 	- is_paid = 1
-	- scheduled_start > NOW() (upcoming only)
+	- scheduled_start > current Amman time (upcoming only)
 	- plan is in the event's eligible plans child table
 
 	Args:
@@ -19,6 +27,8 @@ def get_paid_events_for_plan(plan_id: str) -> list[dict]:
 		List of event dicts with name, event_name, description,
 		scheduled_start, price, currency
 	"""
+	now_local = datetime.now(_SYSTEM_TZ).replace(tzinfo=None)
+
 	events = frappe.db.sql(
 		"""
 		SELECT DISTINCT
@@ -33,11 +43,12 @@ def get_paid_events_for_plan(plan_id: str) -> list[dict]:
 			ON ep.parent = e.name AND ep.parenttype = 'Memora Live Challenge Event'
 		WHERE
 			e.is_paid = 1
-			AND e.scheduled_start > UTC_TIMESTAMP()
+			AND e.status = 'Draft'
+			AND e.scheduled_start > %(now_local)s
 			AND ep.plan = %(plan_id)s
 		ORDER BY e.scheduled_start ASC
 		""",
-		{"plan_id": plan_id},
+		{"plan_id": plan_id, "now_local": now_local},
 		as_dict=True,
 	)
 
