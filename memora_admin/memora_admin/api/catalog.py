@@ -48,9 +48,10 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 	for comp in all_components:
 		comp_by_grant.setdefault(comp.parent, []).append(comp)
 
-	# Collect all subject and track IDs from components
+	# Collect all subject, track, and plan IDs from components
 	subject_ids = list({c.target_name for c in all_components if c.target_doctype == "Memora Subject"})
 	track_ids = list({c.target_name for c in all_components if c.target_doctype == "Memora Track"})
+	plan_ids = list({c.target_name for c in all_components if c.target_doctype == "Memora Academic Plan"})
 
 	# Batch: Plan Subject overrides for this plan
 	ps_map = {}
@@ -83,6 +84,16 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 		)
 		track_map = {t.name: t for t in track_rows}
 
+	# Batch: Plan metadata
+	plan_map = {}
+	if plan_ids:
+		plan_rows = frappe.get_all(
+			"Memora Academic Plan",
+			filters={"name": ["in", plan_ids]},
+			fields=["name", "plan_name"],
+		)
+		plan_map = {p.name: p for p in plan_rows}
+
 	# Assemble products
 	products = []
 	for grant in grants:
@@ -90,6 +101,7 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 
 		subjects = []
 		tracks = []
+		plans = []
 		for comp in components:
 			if comp.target_doctype == "Memora Subject":
 				ps = ps_map.get(comp.target_name)
@@ -127,6 +139,21 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 						f"Track not found: {comp.target_name}, skipping component in grant {grant.name}"
 					)
 
+			elif comp.target_doctype == "Memora Academic Plan":
+				plan = plan_map.get(comp.target_name)
+				if plan:
+					plans.append(
+						{
+							"plan_id": comp.target_name,
+							"plan_name": plan.plan_name,
+							"key_type": comp.key_type,
+						}
+					)
+				else:
+					frappe.logger().warning(
+						f"Plan not found: {comp.target_name}, skipping component in grant {grant.name}"
+					)
+
 		products.append(
 			{
 				"product_grant_id": grant.name,
@@ -134,6 +161,7 @@ def get_plan_catalog(plan_id: str) -> list[dict]:
 				"price": float(price_map.get(grant.item_code, 0.0)),
 				"subjects": subjects,
 				"tracks": tracks,
+				"plans": plans,
 			}
 		)
 

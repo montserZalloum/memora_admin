@@ -23,6 +23,14 @@ class CatalogTrack(BaseModel):
 	key_type: str | None = None
 
 
+class CatalogPlan(BaseModel):
+	"""Academic plan within a product bundle (e.g. exam access for entire plan)."""
+
+	plan_id: str
+	plan_name: str
+	key_type: str
+
+
 class CatalogProduct(BaseModel):
 	"""A purchasable product in the catalog."""
 
@@ -31,6 +39,7 @@ class CatalogProduct(BaseModel):
 	price: float = Field(..., description="Raw price_list_rate number")
 	subjects: list[CatalogSubject] = Field(default_factory=list)
 	tracks: list[CatalogTrack] = Field(default_factory=list)
+	plans: list[CatalogPlan] = Field(default_factory=list)
 
 
 class CatalogResponse(BaseModel):

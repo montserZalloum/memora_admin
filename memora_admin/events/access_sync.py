@@ -8,15 +8,12 @@ which reads redis_memora from Frappe site_config (dedicated Memora instance on p
 """
 # Player identity is PLAYER-##### docname (not email). See Phase 32.
 
-import json
-
 import frappe
 
 from fastapi_app.core.redis_keys import (
 	ACCESS_KEY_TTL,
 	CH_PROGRESS_SCAN_PATTERN,
 	PLAN_FREE_SUBJECTS_TTL,
-	cache_invalidation_channel,
 	ch_lbmeta_scan_pattern,
 	ch_leaderboard_scan_pattern,
 	plan_free_subjects_key,
@@ -327,17 +324,6 @@ def on_subscription_change(doc, method):
 			r.expire(redis_key, ACCESS_KEY_TTL)
 		frappe.logger().info(f"Revoked {access_key} from {user_id}")
 
-	# Notify the player to re-fetch subscriptions
-	r.publish(
-		cache_invalidation_channel(),
-		json.dumps(
-			{
-				"type": "subscription_changed",
-				"player_id": user_id,
-			}
-		),
-	)
-
 
 def on_subscription_deleted(doc, method):
 	"""Remove grant when subscription is deleted."""
@@ -348,17 +334,6 @@ def on_subscription_deleted(doc, method):
 	redis_key = _access_key(user_id)
 	r.srem(redis_key, doc.access_key)
 	frappe.logger().info(f"Deleted grant {doc.access_key} from {user_id}")
-
-	# Notify the player to re-fetch subscriptions
-	r.publish(
-		cache_invalidation_channel(),
-		json.dumps(
-			{
-				"type": "subscription_changed",
-				"player_id": user_id,
-			}
-		),
-	)
 
 
 # =============================================================================
@@ -391,17 +366,6 @@ def on_plan_subject_changed(doc, method):
 		# Remove from free set (is_premium=1 means paid)
 		r.srem(redis_key, subject_id)
 		frappe.logger().info(f"Plan subject {subject_id} marked premium in plan {plan_id}")
-
-	# Notify connected clients on this plan to re-fetch subscriptions
-	r.publish(
-		cache_invalidation_channel(),
-		json.dumps(
-			{
-				"type": "plan_subjects",
-				"plan_id": plan_id,
-			}
-		),
-	)
 
 
 def rebuild_plan_free_subjects(plan_id: str):

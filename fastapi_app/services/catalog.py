@@ -123,10 +123,12 @@ class CatalogService:
 			if product.product_grant_id in pending_set:
 				continue
 
-			# Check purchased: hide if player has access to ALL subjects and tracks in grant
-			access_keys = {f"SUB-{s.subject_id}" for s in product.subjects} | {
-				f"TRK-{t.track_id}" for t in product.tracks
-			}
+			# Check purchased: hide if player has access to ALL components in grant
+			access_keys = (
+				{f"SUB-{s.subject_id}" for s in product.subjects}
+				| {f"TRK-{t.track_id}" for t in product.tracks}
+				| {f"EXAM-PLAN-{p.plan_id}" for p in product.plans}
+			)
 			if access_keys and access_keys.issubset(access_set):
 				continue  # All components accessible = already purchased
 

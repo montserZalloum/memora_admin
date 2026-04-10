@@ -6,6 +6,17 @@ const KEY_TYPE_OPTIONS = {
 	"Memora Academic Plan": "exam",
 };
 
+// Set filtered options on a rendered Select control.
+// field.refresh() only updates visibility — it does NOT rebuild <option> elements.
+// set_options() reads df.options and rebuilds the dropdown if the options changed.
+function _apply_select_options(field, options) {
+	if (!field) return;
+	field.df.options = options;
+	if (typeof field.set_options === "function") {
+		field.set_options();
+	}
+}
+
 function _sync_key_type(frm, cdt, cdn) {
 	const row = locals[cdt][cdn];
 	const options = KEY_TYPE_OPTIONS[row.target_doctype];
@@ -15,16 +26,18 @@ function _sync_key_type(frm, cdt, cdn) {
 		return;
 	}
 
-	// Update the rendered field instance inside the expanded grid row form
-	const grid_row = frm.fields_dict["grant_components"]?.grid?.get_row(cdn);
-	const key_type_field = grid_row?.grid_form?.fields_dict?.["key_type"];
+	const grid = frm.fields_dict["grant_components"]?.grid;
+	const grid_row = grid?.get_row(cdn);
 
-	if (key_type_field) {
-		key_type_field.df.options = options;
-		key_type_field.refresh();
+	if (grid_row) {
+		// Expanded row: grid.open_grid_row is the GridRowForm set in grid_row_form.js
+		_apply_select_options(grid_row.grid_form?.fields_dict?.["key_type"], options);
+
+		// Inline list-view: on_grid_fields_dict is populated after first inline edit
+		_apply_select_options(grid_row.on_grid_fields_dict?.["key_type"], options);
 	}
 
-	// Auto-correct value if it is no longer valid for the selected target
+	// Auto-correct stored value if it is no longer valid for this target
 	const allowed = options.split("\n");
 	if (!allowed.includes(row.key_type)) {
 		frappe.model.set_value(cdt, cdn, "key_type", allowed[0]);
