@@ -245,6 +245,14 @@ def _transition_to_ended(event_name: str):
 	# Reconcile immediately — the authoritative path for Redis → DB flush.
 	_cron_reconcile_event(event_name)
 
+	# Finalize immediately so the leaderboard is available without waiting
+	# for the next cron cycle (avoids the Ended-but-no-leaderboard gap).
+	try:
+		_try_finalize_event(event_name, event.exam_end_ts)
+	except Exception:
+		# Non-fatal — the cron loop will retry finalization on the next cycle.
+		frappe.log_error(title=f"LC inline finalization failed: {event_name}")
+
 
 def _try_finalize_event(event_name: str, exam_end_ts=None):
 	"""Attempt post-event processing only if reconciliation is complete.
