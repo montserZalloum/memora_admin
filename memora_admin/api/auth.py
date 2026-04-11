@@ -81,6 +81,7 @@ def register_player(
 	display_name: str | None = None,
 	avatar: str | None = None,
 	gender: str | None = None,
+	governorate: str | None = None,
 ) -> dict:
 	"""Register a new player with PBKDF2-SHA256 hashed password.
 
@@ -125,6 +126,7 @@ def register_player(
 			"display_name": display_name,
 			"avatar": avatar,
 			"gender": gender,
+			"governorate": governorate or None,
 		}
 	)
 	doc.insert(ignore_permissions=True)
@@ -223,6 +225,13 @@ def get_registration_options() -> dict:
 		fields=["name", "plan_name", "grade", "major"],
 	)
 
+	# Get all governorates
+	governorates = frappe.get_all(
+		"Memora Governorate",
+		fields=["name", "governorate_title"],
+		order_by="governorate_title ASC",
+	)
+
 	return {
 		"grades": [
 			{
@@ -243,6 +252,7 @@ def get_registration_options() -> dict:
 			for p in plans
 		],
 		"seasons": [{"name": s["name"], "title": s["season_title"]} for s in seasons],
+		"governorates": [{"name": g["name"], "title": g["governorate_title"]} for g in governorates],
 	}
 
 

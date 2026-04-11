@@ -458,6 +458,7 @@ async def player_register(
 		major=body.major,
 		avatar=body.avatar,
 		ip_address=client_ip,
+		governorate=body.governorate,
 	)
 
 	return RegisterResponse(pending_id=pending_id, message="OTP sent")
@@ -529,6 +530,7 @@ async def player_register_verify(
 				"display_name": reg_data["display_name"],
 				"gender": reg_data["gender"],
 				"avatar": reg_data.get("avatar") or "",
+				"governorate": reg_data.get("governorate") or "",
 			},
 		)
 	except FrappeAPIError as e:
