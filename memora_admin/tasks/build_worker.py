@@ -80,6 +80,18 @@ def _process_single_build(build: dict):
 	build_doc.save(ignore_permissions=True)
 	frappe.db.commit()
 
+	# Clear the debounce key now that we are actively processing this build.
+	# If the plan is saved again while the build runs, on_plan_updated will be
+	# able to set a fresh debounce key and queue a new build — preventing the
+	# post-build blind window where changes made after build completion but
+	# before the 120s TTL expires were silently dropped.
+	try:
+		from fastapi_app.core.redis_keys import build_debounce_key
+
+		frappe.cache.delete_value(build_debounce_key(target_name))
+	except Exception:
+		pass  # Non-fatal — worst case is a redundant queued build, never a missed one
+
 	logger.info(f"Processing build {build_name} for {build_doc.target_type} {target_name}")
 
 	try:
@@ -175,15 +187,25 @@ def _finalize_build(build_doc):
 
 def _notify_cache_invalidation(target_id: str, target_type: str = "Memora Academic Plan"):
 	"""
-	Publish cache invalidation message to Redis pub/sub.
+	Invalidate Redis manifest cache and publish pub/sub notification.
 
-	FastAPI listens on this channel to invalidate caches.
+	Two-step approach for reliability:
+	1. Directly DELETE the manifest key from Memora Redis (port 13001) so the
+	   stale entry is gone immediately, even if the FastAPI sidecar misses the
+	   pub/sub message (e.g. during a restart).
+	2. Publish the invalidation message on Memora Redis so the FastAPI sidecar
+	   can also evict any in-process caches.
+
+	NOTE: Must use get_memora_redis() (port 13001), NOT frappe.cache (port 13000).
+	The FastAPI sidecar subscribes to Memora Redis — messages on Frappe Redis
+	are never received by it.
 
 	Args:
 		target_id: The plan_id
 		target_type: "Memora Academic Plan"
 	"""
-	channel = cache_invalidation_channel()
+	from fastapi_app.core.redis_keys import plan_manifest_key
+	from memora_admin.utils.redis_connection import get_memora_redis
 
 	message = json.dumps(
 		{
@@ -194,11 +216,15 @@ def _notify_cache_invalidation(target_id: str, target_type: str = "Memora Academ
 	)
 
 	try:
-		frappe.cache.publish(channel, message)
-		logger.info(f"Published cache invalidation for plan {target_id}")
+		r = get_memora_redis()
+		# Step 1: direct delete so the stale key is gone regardless of pub/sub delivery
+		r.delete(plan_manifest_key(target_id))
+		# Step 2: pub/sub for FastAPI in-process cache eviction
+		r.publish(cache_invalidation_channel(), message)
+		logger.info(f"Cache invalidated for plan {target_id} (key deleted + pub/sub published)")
 	except Exception as e:
 		# Log but don't fail the build
-		logger.error(f"Failed to publish cache invalidation: {e}")
+		logger.error(f"Failed to invalidate cache for plan {target_id}: {e}")
 
 
 def _send_notification(
