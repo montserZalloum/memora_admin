@@ -142,21 +142,21 @@ def get_subject_hierarchy(subject_id: str) -> dict | None:
 		"Memora Track",
 		filters={"subject": subject_id, "is_published": 1},
 		fields=["name", "track_title", "is_linear", "is_sold_separately"],
-		order_by="idx asc",
+		order_by="sort_order asc, creation asc",
 	)
 
 	all_units = frappe.get_all(
 		"Memora Unit",
 		filters={"subject": subject_id, "is_published": 1},
 		fields=["name", "track", "unit_title", "is_linear", "is_free"],
-		order_by="idx asc",
+		order_by="sort_order asc, creation asc",
 	)
 
 	all_topics = frappe.get_all(
 		"Memora Topic",
 		filters={"subject": subject_id, "is_published": 1},
 		fields=["name", "unit", "topic_title", "is_linear", "is_free"],
-		order_by="idx asc",
+		order_by="sort_order asc, creation asc",
 	)
 
 	# ALL lessons (published + unpublished) in one query — split in Python
