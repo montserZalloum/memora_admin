@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>«مِنْ» لابتداء الغاية المكانية</title>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Reem+Kufi:wght@400;500;600;700&family=Markazi+Text:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#1a1410;
+  --ink-soft:#3a2f26;
+  --paper:#f5ecd9;
+  --paper-warm:#ede0c4;
+  --paper-deep:#e4d4b0;
+  --gold:#b8860b;
+  --gold-soft:#d4a94a;
+  --crimson:#8b2b1f;
+  --crimson-soft:#b8463a;
+  --olive:#5c6d3e;
+  --olive-soft:#7a8c54;
+  --shadow:rgba(26,20,16,0.15);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh}
+body{
+  font-family:'Markazi Text','Amiri',serif;
+  background:var(--paper);
+  background-image:
+    radial-gradient(circle at 20% 10%, rgba(184,134,11,0.08) 0%, transparent 40%),
+    radial-gradient(circle at 80% 80%, rgba(139,43,31,0.06) 0%, transparent 45%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='80' height='80'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='0.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 0.2 0 0 0 0 0.15 0 0 0 0 0.1 0 0 0 0.04 0'/%3E%3C/filter%3E%3Crect width='80' height='80' filter='url(%23n)'/%3E%3C/svg%3E");
+  color:var(--ink);
+  font-size:21px;
+  line-height:1.7;
+  padding:24px 16px 80px;
+}
+.app{max-width:820px;margin:0 auto}
+
+/* Header progress */
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 22px;margin-bottom:28px;
+  border:1.5px solid var(--ink);
+  background:var(--paper-warm);
+  box-shadow:4px 4px 0 var(--ink);
+  font-family:'Reem Kufi',sans-serif;font-size:15px;
+}
+.topbar .trail{color:var(--ink-soft);letter-spacing:0.3px}
+.topbar .trail b{color:var(--crimson)}
+.dots{display:flex;gap:6px}
+.dot{width:11px;height:11px;border-radius:50%;border:1.5px solid var(--ink);background:var(--paper)}
+.dot.active{background:var(--crimson)}
+.dot.done{background:var(--gold)}
+
+/* Scenes */
+.scene{display:none;animation:fade .5s ease}
+.scene.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* Typography */
+h1.title{
+  font-family:'Reem Kufi',sans-serif;
+  font-size:54px;font-weight:700;line-height:1.1;
+  color:var(--ink);
+  margin-bottom:8px;
+  letter-spacing:-0.5px;
+}
+h1.title .accent{color:var(--crimson);font-family:'Amiri',serif;font-style:italic}
+h2.scene-title{
+  font-family:'Reem Kufi',sans-serif;font-size:32px;font-weight:600;
+  color:var(--ink);margin-bottom:18px;
+  border-bottom:2px solid var(--ink);padding-bottom:10px;
+  display:inline-block;
+}
+h3{font-family:'Reem Kufi',sans-serif;font-size:22px;color:var(--crimson);margin:18px 0 10px}
+p{margin-bottom:14px}
+.lead{font-size:24px;color:var(--ink-soft);line-height:1.6}
+.ornament{text-align:center;color:var(--gold);font-size:28px;margin:22px 0;letter-spacing:12px}
+.quran{
+  font-family:'Amiri',serif;font-size:28px;line-height:2;
+  background:var(--paper-warm);
+  border-right:4px double var(--gold);
+  border-left:4px double var(--gold);
+  padding:20px 28px;margin:18px 0;
+  text-align:center;
+  color:var(--ink);
+}
+.quran .ref{display:block;font-size:15px;font-family:'Reem Kufi',sans-serif;color:var(--olive);margin-top:8px}
+
+/* Scene 0 — splash */
+.splash{
+  border:2.5px solid var(--ink);
+  background:var(--paper-warm);
+  padding:46px 44px;
+  box-shadow:10px 10px 0 var(--ink),10px 10px 0 2px var(--gold);
+  position:relative;
+}
+.splash::before{
+  content:"درس ١ · حرف «مِنْ»";
+  position:absolute;top:-14px;right:30px;
+  background:var(--crimson);color:var(--paper);
+  padding:4px 16px;font-family:'Reem Kufi',sans-serif;font-size:14px;
+  letter-spacing:1px;
+}
+.hook-line{
+  font-family:'Amiri',serif;font-style:italic;
+  font-size:26px;color:var(--ink-soft);
+  margin:18px 0 28px;line-height:1.5;
+}
+.meta-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:12px;
+  margin:30px 0;padding:18px 0;
+  border-top:1px solid var(--ink);border-bottom:1px solid var(--ink);
+}
+.meta-grid div{text-align:center;font-family:'Reem Kufi',sans-serif}
+.meta-grid .k{font-size:12px;color:var(--ink-soft);letter-spacing:0.5px;margin-bottom:4px}
+.meta-grid .v{font-size:20px;font-weight:600;color:var(--crimson)}
+.recap{
+  background:var(--paper);border:1px dashed var(--ink-soft);
+  padding:18px 22px;margin:22px 0;
+}
+.recap h3{margin-top:0;font-size:18px;color:var(--olive)}
+.recap ol{padding-right:22px;font-size:19px}
+.recap li{margin-bottom:4px}
+
+/* Buttons */
+.btn{
+  font-family:'Reem Kufi',sans-serif;font-size:18px;font-weight:500;
+  padding:14px 32px;border:2px solid var(--ink);
+  background:var(--ink);color:var(--paper);
+  cursor:pointer;letter-spacing:0.5px;
+  box-shadow:5px 5px 0 var(--gold);
+  transition:transform .15s,box-shadow .15s;
+}
+.btn:hover{transform:translate(-2px,-2px);box-shadow:7px 7px 0 var(--gold)}
+.btn:active{transform:translate(2px,2px);box-shadow:2px 2px 0 var(--gold)}
+.btn.ghost{background:transparent;color:var(--ink);box-shadow:5px 5px 0 var(--ink-soft)}
+.btn.ghost:hover{box-shadow:7px 7px 0 var(--ink-soft)}
+.btn-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:26px;justify-content:flex-start}
+
+/* Question card */
+.qcard{
+  background:var(--paper-warm);
+  border:2px solid var(--ink);
+  padding:28px 30px;
+  margin:22px 0;
+  box-shadow:6px 6px 0 var(--ink);
+  position:relative;
+}
+.qcard .tag{
+  position:absolute;top:-13px;right:24px;
+  background:var(--paper);border:2px solid var(--ink);
+  padding:2px 14px;font-family:'Reem Kufi',sans-serif;font-size:13px;
+  letter-spacing:0.5px;
+}
+.qcard .tag.easy{color:var(--olive)}
+.qcard .tag.med{color:var(--gold)}
+.qcard .tag.hard{color:var(--crimson)}
+.sentence{
+  font-family:'Amiri',serif;font-size:26px;line-height:1.8;
+  margin:10px 0 20px;color:var(--ink);
+}
+.qtext{font-size:20px;color:var(--ink-soft);margin-bottom:16px}
+
+/* Options */
+.options{display:flex;flex-direction:column;gap:10px}
+.opt{
+  font-family:'Markazi Text',serif;font-size:20px;
+  text-align:right;padding:14px 20px;
+  background:var(--paper);border:1.5px solid var(--ink);
+  cursor:pointer;transition:all .2s;
+  position:relative;padding-right:48px;
+}
+.opt::before{
+  content:"";position:absolute;right:18px;top:50%;
+  width:14px;height:14px;border:1.5px solid var(--ink);border-radius:50%;
+  transform:translateY(-50%);background:var(--paper-warm);
+}
+.opt:hover{background:var(--paper-warm);transform:translateX(-4px)}
+.opt.correct{background:#d4e4c4;border-color:var(--olive);border-width:2px}
+.opt.correct::before{background:var(--olive);box-shadow:inset 0 0 0 2px var(--paper)}
+.opt.wrong{background:#e8cec8;border-color:var(--crimson)}
+.opt.wrong::before{background:var(--crimson);box-shadow:inset 0 0 0 2px var(--paper)}
+.opt.disabled{pointer-events:none;opacity:0.65}
+.opt.disabled.correct,.opt.disabled.wrong{opacity:1}
+
+/* Feedback */
+.feedback{
+  margin-top:18px;padding:18px 22px;
+  background:var(--paper);border-right:4px solid var(--gold);
+  font-size:20px;line-height:1.7;
+  display:none;animation:fade .4s ease;
+}
+.feedback.on{display:block}
+.feedback.good{border-right-color:var(--olive)}
+.feedback.bad{border-right-color:var(--crimson)}
+.feedback b{color:var(--crimson)}
+
+/* Rule box (golden) */
+.rule{
+  background:linear-gradient(135deg,var(--paper-warm),var(--paper-deep));
+  border:3px double var(--ink);
+  padding:32px 28px;margin:28px 0;
+  text-align:center;
+  position:relative;
+  box-shadow:0 0 0 6px var(--paper),0 0 0 8px var(--gold);
+}
+.rule::before,.rule::after{
+  content:"❧";position:absolute;font-size:24px;color:var(--gold);
+}
+.rule::before{top:8px;right:16px;transform:scaleX(-1)}
+.rule::after{bottom:8px;left:16px}
+.rule .label{
+  font-family:'Reem Kufi',sans-serif;font-size:13px;
+  color:var(--crimson);letter-spacing:3px;margin-bottom:14px;
+}
+.rule .formula{
+  font-family:'Amiri',serif;font-size:30px;line-height:1.5;
+  color:var(--ink);
+}
+.rule .formula .plus{color:var(--gold);font-weight:700;margin:0 10px}
+.rule .formula .eq{color:var(--crimson);font-weight:700;margin:0 10px}
+
+/* Visual diagram */
+.diagram{
+  margin:26px auto;max-width:500px;
+  padding:24px;background:var(--paper);
+  border:1px solid var(--ink-soft);
+  font-family:'Reem Kufi',sans-serif;
+}
+.diagram svg{width:100%;height:auto}
+.diagram .cap{text-align:center;font-size:14px;color:var(--ink-soft);margin-top:10px}
+
+/* Progress bar for scene 3b */
+.progress{
+  display:flex;gap:8px;margin:18px 0 24px;justify-content:center;
+}
+.pdot{
+  width:32px;height:8px;background:var(--paper-warm);
+  border:1px solid var(--ink);
+}
+.pdot.on{background:var(--olive)}
+.pcounter{
+  text-align:center;font-family:'Reem Kufi',sans-serif;
+  font-size:14px;color:var(--ink-soft);margin-bottom:14px;
+  letter-spacing:1px;
+}
+
+/* Clickable word question */
+.words{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:20px 0;direction:rtl}
+.word{
+  font-family:'Amiri',serif;font-size:28px;
+  padding:8px 16px;background:var(--paper);
+  border:1.5px solid var(--ink-soft);
+  cursor:pointer;transition:all .2s;
+}
+.word:hover{background:var(--paper-warm);border-color:var(--ink)}
+.word.right{background:#d4e4c4;border-color:var(--olive);border-width:2px}
+.word.bad{background:#e8cec8;border-color:var(--crimson)}
+
+/* Free-write */
+.freewrite textarea{
+  width:100%;min-height:90px;
+  font-family:'Amiri',serif;font-size:22px;
+  padding:14px 18px;
+  background:var(--paper);border:1.5px solid var(--ink);
+  resize:vertical;color:var(--ink);
+  direction:rtl;
+}
+.freewrite textarea:focus{outline:2px solid var(--gold);outline-offset:2px}
+
+/* Review card */
+.reviewcard{
+  background:var(--paper-warm);
+  border:2px solid var(--ink);
+  padding:30px 32px;margin:24px 0;
+  box-shadow:8px 8px 0 var(--ink);
+}
+.reviewcard h3{margin-top:20px;color:var(--olive);border-bottom:1px dashed var(--ink-soft);padding-bottom:4px}
+.reviewcard h3:first-of-type{margin-top:0}
+.reviewcard ul{list-style:none;padding-right:0}
+.reviewcard li{padding:6px 0;font-family:'Amiri',serif;font-size:22px}
+.reviewcard li::before{content:"◆";color:var(--gold);margin-left:10px;font-size:14px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:24px}
+.stat{
+  text-align:center;padding:16px 8px;
+  background:var(--paper);border:1.5px solid var(--ink);
+}
+.stat .n{font-family:'Reem Kufi',sans-serif;font-size:32px;color:var(--crimson);font-weight:700}
+.stat .l{font-size:14px;color:var(--ink-soft);font-family:'Reem Kufi',sans-serif}
+
+/* Closing */
+.closing .congrats{
+  font-family:'Reem Kufi',sans-serif;font-size:40px;font-weight:700;
+  color:var(--crimson);text-align:center;margin-bottom:8px;
+}
+.closing .sub{text-align:center;color:var(--ink-soft);font-size:22px;margin-bottom:30px}
+.next-box{
+  border:2px dashed var(--gold);
+  padding:20px 24px;background:var(--paper-warm);margin:22px 0;
+}
+.next-box .lbl{font-family:'Reem Kufi',sans-serif;font-size:13px;color:var(--crimson);letter-spacing:2px}
+.next-box .ttl{font-family:'Amiri',serif;font-size:26px;color:var(--ink);margin:6px 0 8px}
+
+/* From progress at end */
+.minprogress{display:flex;gap:10px;justify-content:center;margin:18px 0}
+.minprogress .p{width:22px;height:22px;border:2px solid var(--ink);border-radius:50%;background:var(--paper)}
+.minprogress .p.on{background:var(--crimson)}
+
+@media(max-width:620px){
+  body{font-size:19px;padding:14px 10px 60px}
+  h1.title{font-size:38px}
+  h2.scene-title{font-size:24px}
+  .splash{padding:30px 22px}
+  .qcard{padding:22px 18px}
+  .sentence,.quran{font-size:22px}
+  .rule .formula{font-size:22px}
+  .meta-grid{grid-template-columns:repeat(2,1fr)}
+  .stats{grid-template-columns:1fr}
+  .btn{font-size:16px;padding:12px 22px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="topbar">
+  <div class="trail">حروف الجر › المرحلة ٢ › حرف <b>«مِنْ»</b> › الدرس ١</div>
+  <div class="dots" id="sceneDots"></div>
+</div>
+
+<!-- ============ SCENE 0: SPLASH ============ -->
+<section class="scene on" data-scene="0">
+  <div class="splash">
+    <h1 class="title">«مِنْ» <span class="accent">لنقطة البداية</span></h1>
+    <p class="hook-line">كلّ حركةٍ لازم يكون إلها نقطة بداية… و«مِنْ» هي اللي بتدلّك عليها.</p>
+
+    <p class="lead">بعد ٦ دقائق، رح تعرف ليش بنقول <b>«خرجتُ مِن البيتِ»</b> ومش «خرجتُ في البيتِ»، ورح تمسك معنى كامل لحرف «مِنْ» بجملة واحدة بتتذكرها دائماً.</p>
+
+    <div class="meta-grid">
+      <div><div class="k">المدة</div><div class="v">٦ دقائق</div></div>
+      <div><div class="k">المفاهيم</div><div class="v">١</div></div>
+      <div><div class="k">الصعوبة</div><div class="v">سهل</div></div>
+      <div><div class="k">متبقّي</div><div class="v">٤ دروس</div></div>
+    </div>
+
+    <div class="recap">
+      <h3>تذكير سريع قبل ما نبدأ</h3>
+      <ol>
+        <li>حرف الجر: حرف بيجرّ الاسم اللي بعده ويكسره.</li>
+        <li>كلّ حرف جرّ إله معنى (أو كذا معنى) بيتغيّر حسب الجملة.</li>
+      </ol>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="go(1)">ابدأ الدرس ←</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCENE 1: HOOK ============ -->
+<section class="scene" data-scene="1">
+  <h2 class="scene-title">١ · الخطّاف</h2>
+  <p class="lead">اقرأ هالثلاث جمل، وقول لي: شو المشترك بينهم؟</p>
+
+  <div class="qcard">
+    <div class="sentence">١. طلعتُ <b style="color:var(--crimson)">مِنَ</b> البيتِ الساعةَ سبعة.</div>
+    <div class="sentence">٢. رجعتُ <b style="color:var(--crimson)">مِنَ</b> المدرسةِ تعبانَ.</div>
+    <div class="sentence">٣. الباصُ نازلٌ <b style="color:var(--crimson)">مِنْ</b> عمّانَ على إربد.</div>
+
+    <div class="qtext">في كلّ جملة، كلمة «مِنْ» قبل اسم مكان. شو بتحكيلك هاي الكلمة بالظبط؟</div>
+    <div class="options" data-q="s1">
+      <div class="opt" data-ok="0">بتحكيلي وين راح الشخص أو الباص</div>
+      <div class="opt" data-ok="1">بتحكيلي مِن وين بلشت الحركة</div>
+      <div class="opt" data-ok="0">بتحكيلي قدّ ايش المسافة</div>
+    </div>
+    <div class="feedback" data-fb="s1">
+      <b>بالظبط.</b> «مِنْ» ما بتقلّك عن النهاية، ولا عن المسافة — هي بتقلّك <b>مِن وين بلشت</b> الحركة. البيت، المدرسة، عمّان — كلّهم كانوا نقطة الصفر. الحلو بالموضوع إنك بتستخدم هالمعنى من وقت ما كنت صغير، إحنا اليوم بس رح نعطيه اسمه الصحيح.
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(2)">القاعدة الذهبية ←</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 2: CORE IDEA ============ -->
+<section class="scene" data-scene="2">
+  <h2 class="scene-title">٢ · القاعدة الذهبية</h2>
+  <p class="lead">خلّينا نحطّ هاد المعنى في جملة واحدة بتتذكرها للأبد.</p>
+
+  <div class="rule">
+    <div class="label">◆ القاعدة ◆</div>
+    <div class="formula">
+      «مِنْ» <span class="plus">+</span> اسم مكان <span class="eq">=</span> نقطة البداية للحركة
+    </div>
+  </div>
+
+  <div class="diagram">
+    <svg viewBox="0 0 500 160" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+          <path d="M0,0 L10,5 L0,10 Z" fill="#8b2b1f"/>
+        </marker>
+      </defs>
+      <rect x="40" y="45" width="130" height="80" fill="#ede0c4" stroke="#1a1410" stroke-width="2.5"/>
+      <text x="105" y="92" font-family="Amiri" font-size="26" fill="#1a1410" text-anchor="middle">البيتُ</text>
+      <line x1="175" y1="85" x2="450" y2="85" stroke="#8b2b1f" stroke-width="3" marker-end="url(#arr)"/>
+      <circle cx="175" cy="85" r="6" fill="#b8860b" stroke="#1a1410" stroke-width="1.5"/>
+      <text x="175" y="35" font-family="Reem Kufi" font-size="14" fill="#8b2b1f" text-anchor="middle">نقطة البداية</text>
+      <text x="310" y="110" font-family="Reem Kufi" font-size="14" fill="#5c6d3e" text-anchor="middle">← اتّجاه الحركة</text>
+    </svg>
+    <div class="cap">السهم بيطلع من جوّا المربع لبرّا. النقطة اللي عند ذيله هي اللي بيحكي عنها حرف «مِنْ».</div>
+  </div>
+
+  <p>يعني ببساطة: أيّ ما إجت «مِنْ» قبل مكان، اسأل حالك: <b>«هاد المكان، هلأ الشخص طالع منه أو جاي منه؟»</b> إذا الجواب آه، فهاي «مِنْ» لابتداء الغاية المكانية.</p>
+  <p>في كتب النحو بسمّوها <b>«ابتداء الغاية المكانية»</b>، بس بدماغك احفظها باسم <b>«مِن وين بلشت»</b>.</p>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(3)">التطبيق ←</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 3A: GRADUATED ============ -->
+<section class="scene" data-scene="3">
+  <h2 class="scene-title">٣ · التطبيق المتدرّج</h2>
+  <p class="lead">تذكّر القاعدة: «مِنْ» بتحكيلك مِن وين بلشت الحركة. خلّينا نطبّقها ثلاث مرات، كلّ مرة أصعب شوي.</p>
+
+  <!-- Q1 easy -->
+  <div class="qcard">
+    <div class="tag easy">🟢 سهل</div>
+    <div class="sentence">نزلَ الولدُ <b style="color:var(--crimson)">مِنَ</b> السيارةِ.</div>
+    <div class="qtext">هل «مِنْ» هون بتدلّك على نقطة بداية الحركة؟</div>
+    <div class="options" data-q="g1">
+      <div class="opt" data-ok="1">نعم</div>
+      <div class="opt" data-ok="0">لا</div>
+    </div>
+    <div class="feedback" data-fb="g1">
+      <b>ممتاز.</b> السيارة هي المكان اللي طلع منه الولد — نقطة البداية بالظبط. أول سؤال ومشي معك زيّ الماي.
+    </div>
+  </div>
+
+  <!-- Q2 medium -->
+  <div class="qcard">
+    <div class="tag med">🟡 متوسط</div>
+    <div class="sentence">يَرِفُّونَ كالفراشاتِ <b style="color:var(--crimson)">مِنْ</b> زهرةٍ إلى زهرةٍ.</div>
+    <div class="qtext">شو بتفيد «مِنْ» في هاي الجملة؟</div>
+    <div class="options" data-q="g2">
+      <div class="opt" data-ok="0">بتفيد إنّ الفراشات زيّ الزهور</div>
+      <div class="opt" data-ok="1">بتفيد إنّ الحركة بلشت من زهرة، وانتهت عند زهرة ثانية</div>
+      <div class="opt" data-ok="0">بتفيد إنّ الفراشات جزء من الزهرة</div>
+    </div>
+    <div class="feedback" data-fb="g2">
+      <b>بالظبط.</b> هون «مِنْ» و«إلى» اشتغلوا سوا زيّ فريق: «مِنْ» بتقلك البداية (الزهرة الأولى)، و«إلى» بتقلك النهاية (الزهرة الثانية). انتبه: الكاف في «كالفراشات» حرف جرّ ثاني بمعنى التشبيه، مش هو المقصود.
+    </div>
+  </div>
+
+  <!-- Q3 hard -->
+  <div class="qcard">
+    <div class="tag hard">🔴 صعب</div>
+    <div class="quran">
+      سُبْحَانَ الَّذِي أَسْرَىٰ بِعَبْدِهِ لَيْلًا مِّنَ الْمَسْجِدِ الْحَرَامِ إِلَى الْمَسْجِدِ الْأَقْصَى
+      <span class="ref">(الإسراء: ١)</span>
+    </div>
+    <div class="qtext">ليش استعمل ربّنا «مِنْ» قبل «المسجد الحرام»؟</div>
+    <div class="options" data-q="g3">
+      <div class="opt" data-ok="0">لأنّ المسجد الحرام أفضل من المسجد الأقصى</div>
+      <div class="opt" data-ok="1">لأنّ رحلة الإسراء بلشت من المسجد الحرام، وانتهت بالمسجد الأقصى</div>
+      <div class="opt" data-ok="0">لأنّ النبي ﷺ كان ساكن في المسجد الحرام</div>
+    </div>
+    <div class="feedback" data-fb="g3">
+      <b>أحسنت</b>، وهاد جواب بيستاهل الوقوف عنده. الآية بتحكي عن رحلة، وكلّ رحلة إلها نقطة بداية ونقطة نهاية. ربنا ما قال «أسرى بعبده <i>في</i> المسجد الحرام» — قال «<i>من</i> المسجد الحرام» عشان يأكّدلنا إنها رحلة طلعت من هناك وراحت لمكان ثاني.
+      <br><br>
+      لاحظ إنّ نفس الفريق رجع هون: <b>«مِنْ … إلى …»</b>. هاي بنية بتتكرّر كثير في القرآن، وإذا مسكتها مسكت نصف الباب.
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(4)">التثبيت المتنوّع ←</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 3B: VARIED ============ -->
+<section class="scene" data-scene="4">
+  <h2 class="scene-title">٣ب · التثبيت المتنوّع</h2>
+  <p class="lead">هلأ القاعدة صارت واضحة. خلّينا نثبّتها على ستّ جمل مختلفة المصادر. كلّ سؤال نوع جديد.</p>
+
+  <div class="pcounter" id="vcounter">٠ / ٦</div>
+  <div class="progress" id="vprogress">
+    <div class="pdot"></div><div class="pdot"></div><div class="pdot"></div>
+    <div class="pdot"></div><div class="pdot"></div><div class="pdot"></div>
+  </div>
+
+  <!-- V1 Quran click-word -->
+  <div class="qcard">
+    <div class="tag">📖 ١/٦ · قرآن — اضغط الكلمة</div>
+    <div class="quran">
+      وَجَاءَ رَجُلٌ مِّنْ أَقْصَى الْمَدِينَةِ يَسْعَىٰ
+      <span class="ref">(يس: ٢٠)</span>
+    </div>
+    <div class="qtext">اضغط على حرف الجرّ اللي بيدلّك على نقطة بداية حركة الرجل:</div>
+    <div class="words" data-q="v1">
+      <span class="word" data-ok="0">جاء</span>
+      <span class="word" data-ok="0">رجلٌ</span>
+      <span class="word" data-ok="1">مِنْ</span>
+      <span class="word" data-ok="0">أقصى</span>
+      <span class="word" data-ok="0">المدينةِ</span>
+      <span class="word" data-ok="0">يسعى</span>
+    </div>
+    <div class="feedback" data-fb="v1">
+      <b>ممتاز.</b> الرجل إجا — يعني حركة — وهاي الحركة بلشت من مكان معيّن. لاحظ شغلة حلوة: الآية ما قالت «مِنَ المدينة» بس، قالت «مِنْ <i>أقصى</i> المدينة» — يعني من آخرها، من أبعد نقطة فيها. وهاد بيعطيك إحساس إنّه جاي من بعيد ومستعجل. كلّ هالمعنى بسبب «مِنْ» واحدة.
+    </div>
+  </div>
+
+  <!-- V2 Textbook T/F -->
+  <div class="qcard">
+    <div class="tag">📚 ٢/٦ · كتاب مدرسي — صح/غلط</div>
+    <div class="sentence">يَخْرُجُونَ <b style="color:var(--crimson)">مِنْ</b> بُيُوتِهِمْ فرحينَ باهتمامِ أمّهاتِهم.</div>
+    <div class="qtext">هل «مِنْ» في هالجملة بتفيد ابتداء الغاية المكانية؟</div>
+    <div class="options" data-q="v2">
+      <div class="opt" data-ok="1">صح ✓</div>
+      <div class="opt" data-ok="0">غلط ✗</div>
+    </div>
+    <div class="feedback" data-fb="v2">
+      <b>بالظبط.</b> الفعل «يخرجون» حركة، والبيوت هي المكان اللي بلشت منه هالحركة. هاي من أوضح أمثلة «مِنْ» لابتداء الغاية المكانية — احفظها منيح، ممكن تجي في الامتحان.
+    </div>
+  </div>
+
+  <!-- V3 MC tricky -->
+  <div class="qcard">
+    <div class="tag">📚 ٣/٦ · كتاب مدرسي — اختيار</div>
+    <div class="sentence">شكرنا اللهَ على نِعَمِهِ التي لا تُعدّ ولا تُحصى.</div>
+    <div class="qtext">لو بدّلنا «على» بـ«مِنْ» وقلنا: «شكرنا اللهَ <b>مِنْ</b> نِعَمِه»، هل تصير «مِنْ» بتفيد ابتداء الغاية المكانية؟</div>
+    <div class="options" data-q="v3">
+      <div class="opt" data-ok="0">نعم، لأنّ «مِنْ» دائماً بتفيد ابتداء الغاية المكانية</div>
+      <div class="opt" data-ok="1">لا، لأنّ «نِعَم» مش مكان، فـ«مِنْ» هون رح تفيد معنى ثاني (التبعيض)</div>
+      <div class="opt" data-ok="0">لا، لأنّ «مِنْ» ما بتيجي بعد «شكرنا»</div>
+    </div>
+    <div class="feedback" data-fb="v3">
+      <b>أحسنت</b>، هاد سؤال بيميّز الطالب الفاهم. قاعدتنا بتحكي: «مِنْ» + <i>اسم مكان</i> = نقطة البداية. لمّا الاسم اللي بعدها ما بكون مكان، المعنى بيتغيّر. «النِّعَم» مش مكان حسّي، فـ«مِنْ» هون ما بتفيد ابتداء الغاية. القاعدة إلها شروط — مش كلّ «مِنْ» بتطلع بنفس المعنى.
+    </div>
+  </div>
+
+  <!-- V4 Free write -->
+  <div class="qcard">
+    <div class="tag">✍️ ٤/٦ · حياة يومية — كتابة حرّة</div>
+    <div class="qtext">اكتب جملة من عندك، من حياتك اليومية، تستعمل فيها «مِنْ» لابتداء الغاية المكانية. لازم يكون فيها <b>فعل حركة</b> (طلع، نزل، رجع، سافر، إجا) و<b>مكان</b> بعد «مِنْ».</div>
+    <div class="freewrite">
+      <textarea id="freetext" placeholder="مثال: رجعتُ مِن السوقِ ومعي كيسَين…"></textarea>
+    </div>
+    <div class="btn-row">
+      <button class="btn ghost" onclick="checkFree()">تأكّد من جملتي</button>
+    </div>
+    <div class="feedback" data-fb="v4">
+      إذا جملتك فيها <b>فعل حركة + «مِنْ» + مكان</b>، فأنت ضبطتها. هاي أعلى مستوى من التعلّم — إنّك تصنع جملتك الخاصة، مش بس تعرف الصح من الخطأ. خزّنها في دماغك كمثال شخصي، لأنّ الأمثلة اللي تطلع من راسك أنت بتنحفظ أسرع من أيّ شي ثاني.
+    </div>
+  </div>
+
+  <!-- V5 Hadith -->
+  <div class="qcard">
+    <div class="tag">📖 ٥/٦ · حديث شريف — اختيار</div>
+    <div class="quran" style="font-size:24px">
+      «مَنْ خَرَجَ مِنْ بَيْتِهِ إِلَى الْمَسْجِدِ فَالصَّلاةُ تَكْتُبُ لَهُ…»
+      <span class="ref">(من معنى حديث في فضل المشي إلى المسجد)</span>
+    </div>
+    <div class="qtext">شو اللي خلّى النبيّ ﷺ يستعمل «مِنْ» هون، ومش حرف جرّ ثاني؟</div>
+    <div class="options" data-q="v5">
+      <div class="opt" data-ok="0">لأنّ «مِنْ» أسهل في النطق</div>
+      <div class="opt" data-ok="1">لأنّ المشي إلى المسجد حركة، و«مِنْ» بتحدّد نقطة البداية (البيت) بدقّة</div>
+      <div class="opt" data-ok="0">لأنّ «مِنْ» بتفيد التبعيض هون</div>
+    </div>
+    <div class="feedback" data-fb="v5">
+      <b>ممتاز.</b> لاحظ مرة ثانية نفس النمط اللي شفناه بآية الإسراء: فعل حركة (خرج) + «مِنْ» + مكان البداية (بيته) + «إلى» + مكان النهاية (المسجد). لمّا تشوف هالتركيب، دماغك لازم يقول فوراً: <b>«رحلة، ونقطة بدايتها بعد مِنْ»</b>.
+    </div>
+  </div>
+
+  <!-- V6 Daily life -->
+  <div class="qcard">
+    <div class="tag">🏠 ٦/٦ · حياة يومية — علّل</div>
+    <div class="sentence">هاجرَ جدّي <b style="color:var(--crimson)">مِنْ</b> فلسطينَ سنةَ ١٩٤٨.</div>
+    <div class="qtext">ليش قلنا «مِنْ فلسطين» ومش «في فلسطين»؟</div>
+    <div class="options" data-q="v6">
+      <div class="opt" data-ok="0">لأنّ «مِنْ» أقوى من «في»</div>
+      <div class="opt" data-ok="1">لأنّ «هاجر» فعل حركة، وفلسطين هي نقطة البداية اللي طلع منها الجدّ</div>
+      <div class="opt" data-ok="0">لأنّ «مِنْ» بتفيد الزمان هون</div>
+    </div>
+    <div class="feedback" data-fb="v6">
+      <b>بالظبط.</b> هاي الجملة ثقيلة بالمعنى بس خفيفة بالقاعدة. «هاجر» حركة، وفلسطين نقطة البداية. لو قلنا «<i>في</i> فلسطين» المعنى بيصير الجدّ ضلّ في فلسطين — عكس المقصود تماماً. شوف كيف حرف جرّ واحد بيقلب المعنى كلّه؟
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(5)">المصيدة الذكية ←</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 4: TRAP ============ -->
+<section class="scene" data-scene="5">
+  <h2 class="scene-title">٤ · المصيدة الذكية</h2>
+  <p class="lead">⚠️ هون سؤال مخادع. اقرأه بتركيز، ما تستعجل.</p>
+
+  <div class="qcard">
+    <div class="sentence" style="text-align:center;font-size:30px">حفظتُ <b style="color:var(--crimson)">مِنْ</b> أبياتِ القصيدةِ.</div>
+    <div class="qtext">هل «مِنْ» هون هي نفسها اللي تعلّمناها اليوم (ابتداء الغاية المكانية)؟</div>
+    <div class="options" data-q="trap">
+      <div class="opt" data-ok="0">نعم، لأنّ «مِنْ» قبل اسم</div>
+      <div class="opt" data-ok="1">لا، لأنّ فعل «حفظ» مش حركة، و«أبيات القصيدة» مش مكان</div>
+    </div>
+    <div class="feedback" data-fb="trap">
+      <b>أحسنت.</b> قاعدتنا اشترطت شرطَين: (١) فعل حركة، (٢) اسم مكان بعد «مِنْ». هون الشرطَين مفقودَين. «حفظت» مش حركة، و«أبيات القصيدة» مش مكان.
+      <br><br>
+      فشو معنى «مِنْ» هون؟ معناها هون اسمه <b>«التبعيض»</b> — يعني إنّك حفظت <i>جزء</i> من القصيدة، مش كلّها. فكّر فيها هيك: القصيدة كلّها رغيف، وإنت أخذت منه شريحة.
+      <br><br>
+      وهاي بالظبط موضوع درسنا الجاي. الطالب اللي بيعرف متى القاعدة <i>ما</i> بتنطبق هو طالب قوي فعلاً.
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(6)">المراجعة السريعة ←</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 5: REVIEW ============ -->
+<section class="scene" data-scene="6">
+  <h2 class="scene-title">٥ · المراجعة السريعة</h2>
+  <p class="lead">قبل ما تخلّص، خذ ثانية تثبّت اللي تعلّمته.</p>
+
+  <div class="reviewcard">
+    <div class="rule" style="margin:0 0 22px;box-shadow:none">
+      <div class="label">◆ بطاقة القاعدة ◆</div>
+      <div class="formula">«مِنْ» <span class="plus">+</span> اسم مكان <span class="eq">=</span> نقطة البداية</div>
+    </div>
+
+    <h3>من الحياة</h3>
+    <ul>
+      <li>طلعتُ مِن البيتِ الساعةَ سبعة</li>
+      <li>هاجرَ جدّي مِن فلسطينَ</li>
+    </ul>
+
+    <h3>من القرآن والكتاب</h3>
+    <ul>
+      <li>﴿أَسْرَىٰ بِعَبْدِهِ … مِّنَ الْمَسْجِدِ الْحَرَامِ﴾</li>
+      <li>يخرجون مِن بيوتهم فرحين</li>
+    </ul>
+
+    <div class="stats">
+      <div class="stat"><div class="n">١٠</div><div class="l">أسئلة حلّيتها</div></div>
+      <div class="stat"><div class="n">٣</div><div class="l">مصادر مختلفة</div></div>
+      <div class="stat"><div class="n">١</div><div class="l">قاعدة أتقنتها</div></div>
+    </div>
+  </div>
+
+  <p style="text-align:center;color:var(--ink-soft);font-style:italic">هاي البطاقة رح تشوفها مرة ثانية بعد ٣ أيام، عشان نتأكّد إنّها ثبتت بدماغك.</p>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(7)">الخاتمة ←</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 6: CLOSING ============ -->
+<section class="scene closing" data-scene="7">
+  <div class="ornament">❋ ❋ ❋</div>
+  <div class="congrats">أحسنت 🌿</div>
+  <div class="sub">خلّصت درس «مِنْ» لابتداء الغاية المكانية</div>
+
+  <div class="rule">
+    <div class="label">◆ ما تعلّمته اليوم ◆</div>
+    <div class="formula" style="font-size:24px;line-height:1.7">
+      إذا شفت «مِنْ» قبل اسم مكان<br>وفي الجملة فعل حركة<br>فهي بتحكيلك <b style="color:var(--crimson)">مِن وين بلشت الحركة</b>.
+    </div>
+  </div>
+
+  <h3 style="text-align:center;font-family:'Reem Kufi'">تقدّمك في حرف «مِنْ»</h3>
+  <div class="minprogress">
+    <div class="p on"></div><div class="p"></div><div class="p"></div><div class="p"></div><div class="p"></div>
+  </div>
+  <p style="text-align:center;color:var(--ink-soft);font-family:'Reem Kufi',sans-serif;font-size:14px;letter-spacing:1px">١ من ٥</p>
+
+  <div class="next-box">
+    <div class="lbl">الدرس القادم ←</div>
+    <div class="ttl">«مِنْ» للتبعيض</div>
+    <p>رح تكتشف ليش نقول «حفظتُ <i>من</i> أبيات القصيدة» ومش «حفظتُ أبيات القصيدة»، وشو الفرق اللي بيصنعه حرف واحد في المعنى.</p>
+  </div>
+
+  <p style="text-align:center;color:var(--olive);font-style:italic">📬 رح أرجعلك بعد ٣ أيام بسؤال سريع، عشان نتأكّد إنّه ثابت بدماغك.</p>
+
+  <div class="btn-row" style="justify-content:center">
+    <button class="btn">الدرس التالي ←</button>
+    <button class="btn ghost" onclick="go(0)">↺ إعادة من البداية</button>
+  </div>
+  <div class="ornament">❋ ❋ ❋</div>
+</section>
+
+</div>
+
+<script>
+const TOTAL_SCENES = 8;
+let current = 0;
+
+// Build top dots
+const dotsWrap = document.getElementById('sceneDots');
+for(let i=0;i<TOTAL_SCENES;i++){
+  const d=document.createElement('div');
+  d.className='dot'+(i===0?' active':'');
+  dotsWrap.appendChild(d);
+}
+
+function go(n){
+  document.querySelectorAll('.scene').forEach(s=>s.classList.remove('on'));
+  const target=document.querySelector(`[data-scene="${n}"]`);
+  if(target)target.classList.add('on');
+  current=n;
+  // update dots
+  document.querySelectorAll('.dot').forEach((d,i)=>{
+    d.classList.remove('active','done');
+    if(i<n)d.classList.add('done');
+    if(i===n)d.classList.add('active');
+  });
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+// Answered question tracking (for progress bar in scene 3b)
+const answeredV = new Set();
+
+// Option click handler
+document.querySelectorAll('.options').forEach(group=>{
+  const q = group.dataset.q;
+  group.querySelectorAll('.opt').forEach(opt=>{
+    opt.addEventListener('click',()=>{
+      if(group.classList.contains('done'))return;
+      group.classList.add('done');
+      const ok = opt.dataset.ok==='1';
+      // mark all
+      group.querySelectorAll('.opt').forEach(o=>{
+        o.classList.add('disabled');
+        if(o.dataset.ok==='1')o.classList.add('correct');
+      });
+      if(!ok)opt.classList.add('wrong');
+      // feedback
+      const fb = document.querySelector(`[data-fb="${q}"]`);
+      if(fb){
+        fb.classList.add('on');
+        fb.classList.add(ok?'good':'bad');
+      }
+      // progress dot for v questions
+      if(q.startsWith('v')&&!answeredV.has(q)){
+        answeredV.add(q);
+        updateVProgress();
+      }
+    });
+  });
+});
+
+// Word click (v1)
+document.querySelectorAll('.words').forEach(group=>{
+  const q = group.dataset.q;
+  group.querySelectorAll('.word').forEach(w=>{
+    w.addEventListener('click',()=>{
+      if(group.classList.contains('done'))return;
+      group.classList.add('done');
+      const ok=w.dataset.ok==='1';
+      group.querySelectorAll('.word').forEach(x=>{
+        if(x.dataset.ok==='1')x.classList.add('right');
+      });
+      if(!ok)w.classList.add('bad');
+      const fb=document.querySelector(`[data-fb="${q}"]`);
+      if(fb){fb.classList.add('on');fb.classList.add(ok?'good':'bad')}
+      if(!answeredV.has(q)){answeredV.add(q);updateVProgress()}
+    });
+  });
+});
+
+function updateVProgress(){
+  const dots=document.querySelectorAll('#vprogress .pdot');
+  const n=answeredV.size;
+  dots.forEach((d,i)=>d.classList.toggle('on',i<n));
+  const nums=['٠','١','٢','٣','٤','٥','٦'];
+  document.getElementById('vcounter').textContent=`${nums[n]} / ٦`;
+}
+
+// Free text check
+function checkFree(){
+  const t=document.getElementById('freetext').value.trim();
+  const fb=document.querySelector('[data-fb="v4"]');
+  if(t.length<5){
+    fb.classList.add('on','bad');
+    fb.innerHTML='<b>اكتب جملة أولاً</b> ثم اضغط الزر. لازم تحتوي على فعل حركة وكلمة «مِنْ» ومكان.';
+    return;
+  }
+  fb.classList.add('on','good');
+  if(!answeredV.has('v4')){answeredV.add('v4');updateVProgress()}
+}
+</script>
+</body>
+</html>

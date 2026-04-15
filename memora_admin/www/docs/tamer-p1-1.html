@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حفنة تمر — المقطع الأول</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        cream: '#FFF8F0',
+        bark: '#3D2B1F',
+        teal: '#2B7A78',
+        'teal-dark': '#1F5F5D',
+        amber: '#FFF3CD',
+        'amber-dark': '#856404',
+        'correct-bg': '#D4EDDA',
+        'correct-text': '#155724',
+        'wrong-bg': '#F8D7DA',
+        'wrong-text': '#721C24',
+      },
+      fontFamily: {
+        naskh: ['"Noto Naskh Arabic"', '"Traditional Arabic"', 'Arial', 'sans-serif'],
+        amiri: ['Amiri', '"Noto Naskh Arabic"', '"Traditional Arabic"', 'serif'],
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    background-color: #FFF8F0;
+    color: #3D2B1F;
+    font-family: 'Noto Naskh Arabic', 'Traditional Arabic', Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    min-height: 100dvh;
+  }
+  .scene { display: none; opacity: 0; transition: opacity 300ms ease; }
+  .scene.active { display: flex; flex-direction: column; }
+  .scene.visible { opacity: 1; }
+  .progress-bar-fill { transition: width 400ms ease; }
+  .vocab-card { transition: opacity 250ms ease, transform 250ms ease; }
+  .event-item { opacity: 0; transform: translateY(12px); transition: opacity 300ms ease, transform 300ms ease; }
+  .event-item.revealed { opacity: 1; transform: translateY(0); }
+  .option-btn { transition: background-color 200ms ease, border-color 200ms ease, transform 100ms ease; }
+  .option-btn:active { transform: scale(0.98); }
+  .option-btn.correct { background-color: #D4EDDA !important; border-color: #155724 !important; color: #155724 !important; }
+  .option-btn.wrong { background-color: #F8D7DA !important; border-color: #721C24 !important; color: #721C24 !important; }
+  .shake { animation: shake 400ms ease; }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-4px); }
+    40%, 80% { transform: translateX(4px); }
+  }
+  .pulse-green { animation: pulseG 500ms ease; }
+  @keyframes pulseG {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(21,87,36,0.3); }
+    50% { box-shadow: 0 0 0 8px rgba(21,87,36,0); }
+  }
+  .highlight-word {
+    background-color: #FFF3CD;
+    padding: 0 4px;
+    border-radius: 4px;
+    border-bottom: 2px solid #856404;
+  }
+  input[type="text"]:focus, textarea:focus {
+    outline: none;
+    border-color: #2B7A78;
+    box-shadow: 0 0 0 3px rgba(43,122,120,0.15);
+  }
+  .sticky-bottom {
+    position: sticky;
+    bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 16px);
+    background: linear-gradient(to top, #FFF8F0 70%, transparent);
+    padding-top: 24px;
+  }
+  .card-shadow {
+    box-shadow: 0 2px 12px rgba(61,43,31,0.08);
+  }
+</style>
+</head>
+<body class="font-naskh">
+
+<!-- Progress Bar -->
+<div id="progressContainer" class="fixed top-0 left-0 right-0 z-50 h-2 bg-amber/40">
+  <div id="progressBar" class="progress-bar-fill h-full bg-teal rounded-l-full" style="width:0%"></div>
+</div>
+
+<!-- Main Container -->
+<div class="max-w-[640px] mx-auto px-4 pt-6 pb-8 min-h-screen">
+
+<!-- ========== SCENE 0: Opening ========== -->
+<div id="scene0" class="scene flex-col gap-6 min-h-[calc(100dvh-4rem)]">
+  <div class="text-center mt-8 mb-2">
+    <div class="text-3xl mb-1">🌴</div>
+    <h1 class="font-amiri text-2xl font-bold text-bark">حفنة تمر</h1>
+    <p class="text-sm text-bark/60 mt-1">الطبقة الأولى: الفهم</p>
+    <p class="text-sm text-bark/60">المقطع ١ من ٧</p>
+  </div>
+  <div class="bg-white rounded-xl card-shadow p-5 leading-[1.9] text-[17px]">
+    <p class="mb-3">اليوم رح نبدأ مع قصة اسمها "حفنة تمر" — كتبها أديب سوداني اسمه الطيب صالح.</p>
+    <p class="mb-3">القصة بتحكي عن طفل صغير عايش مع جده في قرية في السودان. رح نقرأها مقطع مقطع، وكل مرة رح نفهم أكثر.</p>
+    <p>المقطع الأول قصير — بس فيه معلومات مهمة عن حياة هالطفل. خلينا نشوف.</p>
+  </div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto">← التالي</button>
+  </div>
+</div>
+
+<!-- ========== SCENE 1: Text Display ========== -->
+<div id="scene1" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[17px] text-bark/70 mt-4">📖 اقرأ المقطع التالي:</p>
+  <div class="bg-white rounded-xl card-shadow p-5">
+    <p class="font-amiri text-[20px] leading-[2.1] text-bark" id="storyText"></p>
+  </div>
+  <p class="text-[15px] text-bark/60 leading-[1.8]">اقرأ المقطع بتركيز. الكلمات الملونة رح نشرحها بالمشهد الجاي.</p>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto">← قرأته، التالي</button>
+  </div>
+</div>
+
+<!-- ========== SCENE 2: Vocabulary Cards ========== -->
+<div id="scene2" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <div class="flex items-center justify-between mt-4">
+    <p class="text-[17px] font-semibold text-bark">📚 المفردات</p>
+    <p class="text-[14px] text-bark/60" id="vocabCounter">الكلمة ١ من ٦</p>
+  </div>
+  <div id="vocabCardArea" class="flex-1 relative">
+    <!-- Cards rendered by JS -->
+  </div>
+  <div class="sticky-bottom text-center flex gap-3 justify-center">
+    <button id="vocabPrev" onclick="prevVocab()" class="option-btn bg-white border-2 border-teal text-teal text-[16px] font-semibold px-6 py-3 rounded-lg min-h-[48px]" style="display:none">التالي →</button>
+    <button id="vocabNext" onclick="nextVocab()" class="option-btn bg-teal text-white text-[16px] font-semibold px-6 py-3 rounded-lg min-h-[48px] flex-1 max-w-xs">← الكلمة التالية</button>
+  </div>
+</div>
+
+<!-- ========== SCENE 3: Events Summary ========== -->
+<div id="scene3" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[17px] font-semibold text-bark mt-4">📋 الأحداث الرئيسية</p>
+  <p class="text-[15px] text-bark/60">اضغط لإظهار كل حدث:</p>
+  <div id="eventsList" class="flex flex-col gap-3">
+    <!-- Events rendered by JS -->
+  </div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="eventsNextBtn" onclick="revealNextEvent()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto">← اكشف الحدث التالي</button>
+  </div>
+</div>
+
+<!-- ========== SCENE 4: Characters ========== -->
+<div id="scene4" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[17px] font-semibold text-bark mt-4">👥 الشخصيات</p>
+  <div id="charsArea" class="flex flex-col gap-3">
+    <!-- Characters rendered by JS -->
+  </div>
+  <div class="bg-amber/50 border border-amber-dark/20 rounded-xl p-4 mt-2">
+    <p class="text-[16px] leading-[1.8]">💡 لاحظ: الطفل مرتبط بجده مش بأبوه. هاي نقطة مهمة رح نرجعلها لاحقاً.</p>
+  </div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto">← يلا نجرب!</button>
+  </div>
+</div>
+
+<!-- ========== SCENES 5-12: Questions ========== -->
+<!-- Q1: Multiple Choice (vocabulary) -->
+<div id="scene5" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[14px] text-bark/60 mt-4">سؤال ١ من ٨</p>
+  <p class="text-[18px] font-semibold leading-[1.8]">شو معنى "يُرَبِّتون على رأسي"؟</p>
+  <div class="flex flex-col gap-3" id="q1options">
+    <button onclick="answerMC(1,'a',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">أ) يضربونه بقوة على رأسه</button>
+    <button onclick="answerMC(1,'b',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ب) يضربون بأيديهم على رأسه خفيفاً بحنان</button>
+    <button onclick="answerMC(1,'c',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ج) يمسحون شعره</button>
+    <button onclick="answerMC(1,'d',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">د) يضعون قبعة على رأسه</button>
+  </div>
+  <div id="q1feedback" class="hidden bg-white rounded-xl card-shadow p-4 text-[16px] leading-[1.8]"></div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="q1next" onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto hidden">← التالي</button>
+  </div>
+</div>
+
+<!-- Q2: True/False -->
+<div id="scene6" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[14px] text-bark/60 mt-4">سؤال ٢ من ٨</p>
+  <p class="text-[18px] font-semibold leading-[1.8]">صح أو خطأ:</p>
+  <div class="bg-white rounded-xl card-shadow p-5 text-[17px] leading-[1.8]">الطفل كان يخرج مع أبيه وجده معاً.</div>
+  <div class="flex gap-3" id="q2options">
+    <button onclick="answerTF(2,true,this)" class="option-btn flex-1 bg-white border-2 border-bark/20 rounded-lg p-4 text-center text-[16px] font-semibold min-h-[48px]">صح ✓</button>
+    <button onclick="answerTF(2,false,this)" class="option-btn flex-1 bg-white border-2 border-bark/20 rounded-lg p-4 text-center text-[16px] font-semibold min-h-[48px]">خطأ ✗</button>
+  </div>
+  <div id="q2feedback" class="hidden bg-white rounded-xl card-shadow p-4 text-[16px] leading-[1.8]"></div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="q2next" onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto hidden">← التالي</button>
+  </div>
+</div>
+
+<!-- Q3: Multiple Choice (comprehension) -->
+<div id="scene7" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[14px] text-bark/60 mt-4">سؤال ٣ من ٨</p>
+  <p class="text-[18px] font-semibold leading-[1.8]">ليش الناس كانوا يربّتوا على رأس الطفل ويقرصوا خده؟</p>
+  <div class="flex flex-col gap-3" id="q3options">
+    <button onclick="answerMC(3,'a',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">أ) لأنه كان مشاغب</button>
+    <button onclick="answerMC(3,'b',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ب) لأنه كان طفل صغير وبيدلّلوه</button>
+    <button onclick="answerMC(3,'c',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ج) لأنهم كانوا يعاقبوه</button>
+    <button onclick="answerMC(3,'d',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">د) لأن جده طلب منهم ذلك</button>
+  </div>
+  <div id="q3feedback" class="hidden bg-white rounded-xl card-shadow p-4 text-[16px] leading-[1.8]"></div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="q3next" onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto hidden">← التالي</button>
+  </div>
+</div>
+
+<!-- Q4: Fill in the Blank -->
+<div id="scene8" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[14px] text-bark/60 mt-4">سؤال ٤ من ٨</p>
+  <p class="text-[18px] font-semibold leading-[1.8]">أكمل:</p>
+  <div class="bg-white rounded-xl card-shadow p-5 text-[17px] leading-[1.8] font-amiri">
+    "المسجدُ و<span class="inline-block border-b-2 border-bark/40 min-w-[80px] mx-1"></span> و<span class="inline-block border-b-2 border-bark/40 min-w-[80px] mx-1"></span>، هذه كانت مَعالِمَ حياتنا."
+  </div>
+  <div class="flex flex-col gap-3" id="q4inputs">
+    <div class="flex items-center gap-3">
+      <label class="text-[15px] text-bark/60 whitespace-nowrap">الكلمة الأولى:</label>
+      <input type="text" id="blank1" class="flex-1 bg-white border-2 border-bark/20 rounded-lg px-4 py-3 text-[16px] text-right min-h-[48px]" placeholder="...">
+    </div>
+    <div class="flex items-center gap-3">
+      <label class="text-[15px] text-bark/60 whitespace-nowrap">الكلمة الثانية:</label>
+      <input type="text" id="blank2" class="flex-1 bg-white border-2 border-bark/20 rounded-lg px-4 py-3 text-[16px] text-right min-h-[48px]" placeholder="...">
+    </div>
+    <button id="q4check" onclick="checkFillBlank()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px]">تأكد</button>
+  </div>
+  <div id="q4feedback" class="hidden bg-white rounded-xl card-shadow p-4 text-[16px] leading-[1.8]"></div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="q4next" onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto hidden">← التالي</button>
+  </div>
+</div>
+
+<!-- Q5: Multiple Choice (attention to detail) -->
+<div id="scene9" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[14px] text-bark/60 mt-4">سؤال ٥ من ٨</p>
+  <p class="text-[18px] font-semibold leading-[1.8]">متى كان الطفل ما بيكون مع جده؟</p>
+  <div class="flex flex-col gap-3" id="q5options">
+    <button onclick="answerMC(5,'a',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">أ) في المساء</button>
+    <button onclick="answerMC(5,'b',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ب) وقت الغداء</button>
+    <button onclick="answerMC(5,'c',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ج) في الصباح لما يروح يحفظ قرآن</button>
+    <button onclick="answerMC(5,'d',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">د) يوم الجمعة</button>
+  </div>
+  <div id="q5feedback" class="hidden bg-white rounded-xl card-shadow p-4 text-[16px] leading-[1.8]"></div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="q5next" onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto hidden">← التالي</button>
+  </div>
+</div>
+
+<!-- Q6: Free Text -->
+<div id="scene10" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[14px] text-bark/60 mt-4">سؤال ٦ من ٨</p>
+  <p class="text-[18px] font-semibold leading-[1.8]">النص بيقول "لم أخرج قطّ مع أبي". برأيك، شو بتفهم من هالجملة عن علاقة الطفل بأبوه؟</p>
+  <div id="q6inputs">
+    <textarea id="freeText" class="w-full bg-white border-2 border-bark/20 rounded-lg px-4 py-3 text-[16px] text-right min-h-[100px] leading-[1.8] resize-none" placeholder="اكتب إجابتك هنا..."></textarea>
+    <button id="q6submit" onclick="submitFreeText()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full mt-3">أرسل إجابتي</button>
+  </div>
+  <div id="q6feedback" class="hidden bg-white rounded-xl card-shadow p-4 text-[16px] leading-[1.8]"></div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="q6next" onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto hidden">← التالي</button>
+  </div>
+</div>
+
+<!-- Q7: Trap Question -->
+<div id="scene11" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[14px] text-bark/60 mt-4">سؤال ٧ من ٨</p>
+  <p class="text-[18px] font-semibold leading-[1.8]">هل الناس كانوا يربّتوا على رأس الجد كمان؟</p>
+  <div class="flex flex-col gap-3" id="q7options">
+    <button onclick="answerMC(7,'a',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">أ) نعم، كانوا يربتوا على الجد والطفل</button>
+    <button onclick="answerMC(7,'b',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ب) لا، كانوا يربتوا على الطفل بس</button>
+  </div>
+  <div id="q7feedback" class="hidden bg-white rounded-xl card-shadow p-4 text-[16px] leading-[1.8]"></div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="q7next" onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto hidden">← التالي</button>
+  </div>
+</div>
+
+<!-- Q8: Multiple Choice (vocabulary in context) -->
+<div id="scene12" class="scene flex-col gap-5 min-h-[calc(100dvh-4rem)]">
+  <p class="text-[14px] text-bark/60 mt-4">سؤال ٨ من ٨</p>
+  <p class="text-[18px] font-semibold leading-[1.8]">"لم أخرج <strong>قطّ</strong> مع أبي" — شو معنى "قطّ" هون؟</p>
+  <div class="flex flex-col gap-3" id="q8options">
+    <button onclick="answerMC(8,'a',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">أ) أحياناً</button>
+    <button onclick="answerMC(8,'b',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ب) كثيراً</button>
+    <button onclick="answerMC(8,'c',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">ج) أبداً</button>
+    <button onclick="answerMC(8,'d',this)" class="option-btn bg-white border-2 border-bark/20 rounded-lg p-4 text-right text-[16px] leading-[1.8] min-h-[48px]">د) قليلاً</button>
+  </div>
+  <div id="q8feedback" class="hidden bg-white rounded-xl card-shadow p-4 text-[16px] leading-[1.8]"></div>
+  <div class="flex-1"></div>
+  <div class="sticky-bottom text-center">
+    <button id="q8next" onclick="nextScene()" class="option-btn bg-teal text-white text-[16px] font-semibold px-8 py-3 rounded-lg min-h-[48px] w-full max-w-xs mx-auto hidden">← التالي</button>
+  </div>
+</div>
+
+<!-- ========== SCENE 13: Closing ========== -->
+<div id="scene13" class="scene flex-col gap-6 min-h-[calc(100dvh-4rem)]">
+  <div class="text-center mt-8">
+    <div class="text-4xl mb-2">🎉</div>
+    <h2 class="font-amiri text-2xl font-bold text-bark">أحسنت! خلّصت المقطع الأول.</h2>
+  </div>
+  <div class="bg-white rounded-xl card-shadow p-5 leading-[1.9] text-[17px]">
+    <p class="mb-3">تعرّفنا على الطفل اللي بيحكي القصة، وعرفنا إنه كان صغير وعايش مع جده. الأب غايب، والجد هو كل شي بالنسبة للطفل. وحياتهم بتدور حول ثلاث أماكن: المسجد والنهر والحقل.</p>
+    <p>المقطع الجاي رح نشوف ليش الطفل كان يحب المسجد، وشو كانت علاقته بالشيخ.</p>
+  </div>
+  <div class="bg-amber/50 border border-amber-dark/20 rounded-xl p-4 text-[15px] leading-[1.8] text-center">
+    <p>📊 أجبت على ٨ أسئلة | تعلمت ٦ كلمات جديدة | قرأت المقطع الأول من "حفنة تمر"</p>
+  </div>
+</div>
+
+</div><!-- end container -->
+
+<script>
+// ==================== STATE ====================
+const state = {
+  currentScene: 0,
+  correctAnswers: 0,
+  totalQuestions: 8,
+  currentVocabCard: 0,
+  currentEvent: 0,
+  totalScenes: 14,
+  answered: {}
+};
+
+// ==================== STORY TEXT WITH HIGHLIGHTS ====================
+const storyHTML = `لا بُدَّ أنَّني كنتُ صغيرًا جدًّا <span class="highlight-word">حينذاك</span>، لستُ أذكُرُ كم كانت سِنِّي تمامًا، ولكنَّني أذكُرُ أنَّ النَّاسَ حينَ كانوا يرَوْنَني مع جَدِّي كانوا <span class="highlight-word">يُرَبِّتونَ</span> على رأسي، و<span class="highlight-word">يَقْرِصونَني</span> في خَدِّي، ولم يكونوا يفعلونَ ذلكَ معَ جَدِّي. العجيبُ أنَّني لم أخرُجْ <span class="highlight-word">قَطُّ</span> مع أبي، ولكنَّ جَدِّي كانَ يأخُذُني معهُ حيثُما ذهب، إلَّا في الصَّباحِ حينَ كنتُ أذهبُ إلى المسجدِ لحفظِ القرآنِ. المسجدُ والنَّهرُ والحقلُ، هذهِ كانت <span class="highlight-word">مَعالِمَ</span> حياتِنا.`;
+
+// ==================== VOCABULARY DATA ====================
+const vocabData = [
+  {
+    word: 'حَفْنَة',
+    context: 'عنوان القصة "حفنة تمر"',
+    explanation: 'ملء الكف أو الكفين من شيء',
+    example: 'بتعرف لما تمد إيدك وتاخذ حفنة رز أو حفنة ملح؟ هاي هي الحفنة.'
+  },
+  {
+    word: 'يُرَبِّتونَ على رأسي',
+    context: 'كانوا يُرَبِّتونَ على رأسي',
+    explanation: 'يضربون بأيديهم على رأسه ضرب خفيف بحنان — مش ضرب أذية',
+    example: 'زي لما أمك تحط إيدها على راسك وتربّت عليك.'
+  },
+  {
+    word: 'يَقْرِصونَني في خَدِّي',
+    context: 'ويَقْرِصونَني في خَدِّي',
+    explanation: 'يمسكون خده ويضغطون عليه بلطف',
+    example: 'زي لما الجدّات يشوفوا طفل صغير ويشدّوا خده من الحب.'
+  },
+  {
+    word: 'حينذاك',
+    context: 'كنتُ صغيرًا جدًّا حينذاك',
+    explanation: 'في ذلك الوقت. كلمة مركبة من "حين" + "ذاك".',
+    example: ''
+  },
+  {
+    word: 'قَطُّ',
+    context: 'لم أخرُجْ قَطُّ مع أبي',
+    explanation: 'أبداً — بس انتبه، "قطّ" بنستخدمها مع النفي بس. يعني "لم أخرج قطّ" = ما خرجت أبداً.',
+    example: ''
+  },
+  {
+    word: 'مَعالِم حياتنا',
+    context: 'هذهِ كانت مَعالِمَ حياتِنا',
+    explanation: 'الأماكن والعلامات الرئيسية — الأشياء اللي بتحدد شكل حياتهم.',
+    example: 'زي لما تقول "المدرسة والبيت والملعب، هاي معالم حياتي".'
+  }
+];
+
+// ==================== EVENTS DATA ====================
+const eventsData = [
+  'الراوي كان طفل صغير جداً — ما بيتذكر كم كان عمره بالضبط',
+  'الناس بالقرية لما كانوا يشوفوه ماشي مع جده، كانوا يدلّلوه — يربّتوا على راسه ويقرصوا خده',
+  'تفصيلة مهمة: الناس كانوا يعملوا هيك معه هو بس، مش مع جده',
+  'ما طلع ولا مرة مع أبوه — أبداً (قطّ)',
+  'جده كان ياخذه معه لكل مكان — حيثما ذهب',
+  'الاستثناء الوحيد: الصبح لما كان يروح على المسجد يحفظ قرآن',
+  'معالم حياتهم ثلاث: المسجد، النهر، الحقل'
+];
+
+// ==================== CHARACTERS DATA ====================
+const charsData = [
+  { name: 'الطفل (الراوي)', role: 'شخصية رئيسية', detail: 'صغير جداً، ما بيتذكر عمره', icon: '👦' },
+  { name: 'الجد', role: 'شخصية رئيسية', detail: 'ياخذ الطفل معه لكل مكان', icon: '👴' },
+  { name: 'الأب', role: 'مذكور بغيابه فقط', detail: 'الطفل ما خرج معه ولا مرة', icon: '👤' },
+  { name: 'الناس (أهل القرية)', role: 'شخصيات ثانوية', detail: 'يدللون الطفل لما يشوفوه مع جده', icon: '👥' }
+];
+
+// ==================== ANSWERS ====================
+const answers = {
+  1: { correct: 'b', correctFeedback: 'أحسنت! يربّتون يعني ضرب خفيف بحنان — تدليل مش أذية.', wrongFeedback: 'قريب! يربّتون مش ضرب قوي ومش مسح — يعني يحطوا إيدهم على راسه ويضربوا خفيف بحنان، زي لما تدلّل طفل صغير.' },
+  2: { correct: false, correctFeedback: 'بالظبط! النص بيقول "لم أخرج قطّ مع أبي" — كان يخرج مع جده فقط.', wrongFeedback: 'انتبه! ارجع للنص — "لم أخرج قطّ مع أبي". كلمة "قطّ" يعني أبداً. ما خرج مع أبوه ولا مرة.' },
+  3: { correct: 'b', correctFeedback: 'ممتاز! التربيت والقرص هون تدليل — يعني حب مش عقاب.', wrongFeedback: 'فكّر مرة ثانية — التربيت على الراس والقرص بالخد عادةً شو بيدل؟ تخيل جدّة شافت طفل صغير حلو... شو بتعمل؟ بتدلّله!' },
+  5: { correct: 'c', correctFeedback: 'أحسنت! الاستثناء الوحيد — الصبح لما كان يروح المسجد يحفظ قرآن.', wrongFeedback: 'انتبه — النص بيقول "إلّا في الصباح حين كنت أذهب إلى المسجد لحفظ القرآن". كلمة "إلّا" يعني استثناء.' },
+  7: { correct: 'b', correctFeedback: 'ممتاز! انتبهت للتفصيلة — "ولم يكونوا يفعلون ذلك مع جدّي". التدليل كان للطفل فقط.', wrongFeedback: 'انتبه — النص بيقول بوضوح "ولم يكونوا يفعلون ذلك مع جدّي". يعني التربيت والقرص كان للطفل بس.' },
+  8: { correct: 'c', correctFeedback: 'بالظبط! "قطّ" مع النفي معناها أبداً — يعني ما خرج معه ولا مرة وحدة.', wrongFeedback: '"قطّ" كلمة بتيجي مع النفي وبتأكده — "لم أخرج قطّ" يعني مش إنه خرج قليل أو كثير، يعني ما خرج أبداً!' }
+};
+
+// ==================== INIT ====================
+function init() {
+  document.getElementById('storyText').innerHTML = storyHTML;
+  renderVocabCards();
+  renderEvents();
+  renderCharacters();
+  showScene(0);
+}
+
+// ==================== SCENE MANAGEMENT ====================
+function showScene(index) {
+  document.querySelectorAll('.scene').forEach(s => {
+    s.classList.remove('active', 'visible');
+  });
+  const scene = document.getElementById('scene' + index);
+  if (!scene) return;
+  scene.classList.add('active');
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      scene.classList.add('visible');
+    });
+  });
+  state.currentScene = index;
+  updateProgress();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function nextScene() {
+  if (state.currentScene < state.totalScenes - 1) {
+    showScene(state.currentScene + 1);
+  }
+}
+
+function updateProgress() {
+  const pct = ((state.currentScene) / (state.totalScenes - 1)) * 100;
+  document.getElementById('progressBar').style.width = pct + '%';
+}
+
+// ==================== VOCABULARY CARDS ====================
+function renderVocabCards() {
+  const area = document.getElementById('vocabCardArea');
+  vocabData.forEach((v, i) => {
+    const card = document.createElement('div');
+    card.id = 'vocab' + i;
+    card.className = 'vocab-card absolute inset-0';
+    card.style.display = i === 0 ? 'block' : 'none';
+    card.innerHTML = `
+      <div class="bg-white rounded-xl card-shadow p-5 h-full flex flex-col gap-4">
+        <div class="text-center">
+          <p class="font-amiri text-2xl font-bold text-teal mb-1">${v.word}</p>
+          <p class="text-[14px] text-bark/50">${v.context}</p>
+        </div>
+        <hr class="border-bark/10">
+        <div class="flex-1">
+          <p class="text-[17px] leading-[1.9] mb-3"><span class="font-semibold text-teal-dark">المعنى:</span> ${v.explanation}</p>
+          ${v.example ? `<p class="text-[15px] leading-[1.8] text-bark/70 bg-amber/30 rounded-lg p-3">💡 ${v.example}</p>` : ''}
+        </div>
+      </div>`;
+    area.appendChild(card);
+  });
+}
+
+function showVocabCard(index) {
+  vocabData.forEach((_, i) => {
+    const c = document.getElementById('vocab' + i);
+    c.style.display = i === index ? 'block' : 'none';
+  });
+  state.currentVocabCard = index;
+  document.getElementById('vocabCounter').textContent = `الكلمة ${index + 1} من ٦`;
+
+  const prevBtn = document.getElementById('vocabPrev');
+  const nextBtn = document.getElementById('vocabNext');
+
+  prevBtn.style.display = index > 0 ? 'block' : 'none';
+
+  if (index === vocabData.length - 1) {
+    nextBtn.textContent = '← التالي';
+    nextBtn.onclick = () => nextScene();
+  } else {
+    nextBtn.textContent = '← الكلمة التالية';
+    nextBtn.onclick = () => nextVocab();
+  }
+}
+
+function nextVocab() {
+  if (state.currentVocabCard < vocabData.length - 1) {
+    showVocabCard(state.currentVocabCard + 1);
+  }
+}
+
+function prevVocab() {
+  if (state.currentVocabCard > 0) {
+    showVocabCard(state.currentVocabCard - 1);
+  }
+}
+
+// ==================== EVENTS ====================
+function renderEvents() {
+  const list = document.getElementById('eventsList');
+  eventsData.forEach((e, i) => {
+    const item = document.createElement('div');
+    item.id = 'event' + i;
+    item.className = 'event-item bg-white rounded-xl card-shadow p-4 flex gap-3 items-start';
+    item.innerHTML = `
+      <span class="bg-teal text-white rounded-full w-7 h-7 flex items-center justify-center text-[14px] font-bold shrink-0 mt-1">${i + 1}</span>
+      <p class="text-[16px] leading-[1.8]">${e}</p>`;
+    list.appendChild(item);
+  });
+}
+
+function revealNextEvent() {
+  if (state.currentEvent < eventsData.length) {
+    const item = document.getElementById('event' + state.currentEvent);
+    item.classList.add('revealed');
+    state.currentEvent++;
+    if (state.currentEvent >= eventsData.length) {
+      const btn = document.getElementById('eventsNextBtn');
+      btn.textContent = '← التالي';
+      btn.onclick = () => nextScene();
+    }
+  }
+}
+
+// ==================== CHARACTERS ====================
+function renderCharacters() {
+  const area = document.getElementById('charsArea');
+  charsData.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'bg-white rounded-xl card-shadow p-4 flex gap-3 items-start';
+    card.innerHTML = `
+      <span class="text-2xl mt-1">${c.icon}</span>
+      <div>
+        <p class="font-semibold text-[16px] text-bark">${c.name}</p>
+        <p class="text-[14px] text-teal">${c.role}</p>
+        <p class="text-[15px] text-bark/70 mt-1">${c.detail}</p>
+      </div>`;
+    area.appendChild(card);
+  });
+}
+
+// ==================== QUESTION HANDLERS ====================
+function disableOptions(containerId) {
+  document.querySelectorAll('#' + containerId + ' button').forEach(b => {
+    b.disabled = true;
+    b.style.pointerEvents = 'none';
+  });
+}
+
+function answerMC(qNum, selected, btnEl) {
+  if (state.answered[qNum]) return;
+  state.answered[qNum] = true;
+
+  const a = answers[qNum];
+  const isCorrect = selected === a.correct;
+  if (isCorrect) state.correctAnswers++;
+
+  const container = document.getElementById('q' + qNum + 'options');
+  disableOptions('q' + qNum + 'options');
+
+  // Mark correct answer green
+  const buttons = container.querySelectorAll('button');
+  buttons.forEach(b => {
+    const letter = b.textContent.trim().charAt(0);
+    const optMap = { 'أ': 'a', 'ب': 'b', 'ج': 'c', 'د': 'd' };
+    if (optMap[letter] === a.correct) {
+      b.classList.add('correct', 'pulse-green');
+      b.innerHTML = '✅ ' + b.textContent;
+    }
+  });
+
+  if (!isCorrect) {
+    btnEl.classList.add('wrong', 'shake');
+    btnEl.innerHTML = '✗ ' + btnEl.textContent;
+  }
+
+  const fb = document.getElementById('q' + qNum + 'feedback');
+  fb.classList.remove('hidden');
+  if (isCorrect) {
+    fb.className = 'bg-correct-bg border border-correct-text/20 rounded-xl p-4 text-[16px] leading-[1.8] text-correct-text';
+    fb.textContent = '✅ ' + a.correctFeedback;
+  } else {
+    fb.className = 'bg-wrong-bg border border-wrong-text/20 rounded-xl p-4 text-[16px] leading-[1.8] text-wrong-text';
+    fb.textContent = a.wrongFeedback;
+  }
+
+  document.getElementById('q' + qNum + 'next').classList.remove('hidden');
+}
+
+function answerTF(qNum, selected, btnEl) {
+  if (state.answered[qNum]) return;
+  state.answered[qNum] = true;
+
+  const a = answers[qNum];
+  const isCorrect = selected === a.correct;
+  if (isCorrect) state.correctAnswers++;
+
+  disableOptions('q' + qNum + 'options');
+
+  const buttons = document.querySelectorAll('#q' + qNum + 'options button');
+  buttons.forEach(b => {
+    const isTrueBtn = b.textContent.includes('صح');
+    if ((a.correct && isTrueBtn) || (!a.correct && !isTrueBtn)) {
+      b.classList.add('correct', 'pulse-green');
+    }
+  });
+
+  if (!isCorrect) {
+    btnEl.classList.add('wrong', 'shake');
+  }
+
+  const fb = document.getElementById('q' + qNum + 'feedback');
+  fb.classList.remove('hidden');
+  if (isCorrect) {
+    fb.className = 'bg-correct-bg border border-correct-text/20 rounded-xl p-4 text-[16px] leading-[1.8] text-correct-text';
+    fb.textContent = '✅ ' + a.correctFeedback;
+  } else {
+    fb.className = 'bg-wrong-bg border border-wrong-text/20 rounded-xl p-4 text-[16px] leading-[1.8] text-wrong-text';
+    fb.textContent = a.wrongFeedback;
+  }
+
+  document.getElementById('q' + qNum + 'next').classList.remove('hidden');
+}
+
+// ==================== FILL IN BLANK ====================
+function stripTashkeel(str) {
+  return str.replace(/[\u0610-\u061A\u064B-\u065F\u0670\u06D6-\u06DC\u06DF-\u06E4\u06E7\u06E8\u06EA-\u06ED]/g, '').trim();
+}
+
+function checkFillBlank() {
+  if (state.answered[4]) return;
+
+  const val1 = stripTashkeel(document.getElementById('blank1').value);
+  const val2 = stripTashkeel(document.getElementById('blank2').value);
+
+  const correct1 = stripTashkeel('النهر');
+  const correct2 = stripTashkeel('الحقل');
+
+  // Accept either order
+  const isCorrect = (val1 === correct1 && val2 === correct2) || (val1 === correct2 && val2 === correct1);
+
+  // Also accept without ال
+  const alt1 = stripTashkeel('نهر');
+  const alt2 = stripTashkeel('حقل');
+  const isCorrectAlt = (val1 === alt1 && val2 === alt2) || (val1 === alt2 && val2 === alt1) ||
+    (val1 === correct1 && val2 === alt2) || (val1 === alt1 && val2 === correct2) ||
+    (val1 === correct2 && val2 === alt1) || (val1 === alt2 && val2 === correct1);
+
+  state.answered[4] = true;
+  if (isCorrect || isCorrectAlt) state.correctAnswers++;
+
+  document.getElementById('q4check').disabled = true;
+  document.getElementById('blank1').disabled = true;
+  document.getElementById('blank2').disabled = true;
+
+  const fb = document.getElementById('q4feedback');
+  fb.classList.remove('hidden');
+  if (isCorrect || isCorrectAlt) {
+    fb.className = 'bg-correct-bg border border-correct-text/20 rounded-xl p-4 text-[16px] leading-[1.8] text-correct-text';
+    fb.textContent = '✅ بالظبط! ثلاث أماكن كانت تشكّل حياتهم: المسجد والنهر والحقل.';
+    document.getElementById('blank1').classList.add('!border-correct-text');
+    document.getElementById('blank2').classList.add('!border-correct-text');
+  } else {
+    fb.className = 'bg-wrong-bg border border-wrong-text/20 rounded-xl p-4 text-[16px] leading-[1.8] text-wrong-text';
+    fb.textContent = 'ارجع للجملة الأخيرة من المقطع — الراوي ذكر ثلاث أماكن بالضبط: المسجد والنهر والحقل.';
+    document.getElementById('blank1').classList.add('!border-wrong-text');
+    document.getElementById('blank2').classList.add('!border-wrong-text');
+  }
+
+  document.getElementById('q4next').classList.remove('hidden');
+}
+
+// ==================== FREE TEXT ====================
+function submitFreeText() {
+  if (state.answered[6]) return;
+  state.answered[6] = true;
+  state.correctAnswers++; // Always mark correct
+
+  const text = document.getElementById('freeText').value.trim();
+  document.getElementById('q6submit').disabled = true;
+  document.getElementById('freeText').disabled = true;
+
+  const fb = document.getElementById('q6feedback');
+  fb.classList.remove('hidden');
+  fb.className = 'bg-correct-bg border border-correct-text/20 rounded-xl p-4 text-[16px] leading-[1.8] text-correct-text';
+
+  if (text.length > 5) {
+    fb.textContent = '✅ حلو! لاحظ إنه الراوي ما حكى ليش أبوه غايب — بس الشي الواضح إنه الجد هو اللي كان يربّيه ويرافقه.';
+  } else {
+    fb.textContent = '✅ خلينا نفكر فيها سوا — لما حدا يقول "ما خرجت أبداً مع أبوي"، شو بتحس؟ إنه أبوه قريب منه ولا بعيد؟ الطبيعي إنه الأب يأخذ ابنه معه، بس هون الجد هو اللي بيعمل هاد الدور.';
+  }
+
+  document.getElementById('q6next').classList.remove('hidden');
+}
+
+// ==================== BOOT ====================
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
