@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>كيف تفتتح يوميتك (المقدمة)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        cream: '#FFF8F0',
+        bark: '#3D2B1F',
+        teal: '#2B7A78',
+        'teal-light': '#3a9e9b',
+        'key-blue-bg': '#D4E8F0',
+        'key-blue': '#1B6B8A',
+        'key-green-bg': '#D4EDDA',
+        'key-green': '#155724',
+        'key-amber-bg': '#FFF3CD',
+        'key-amber': '#856404',
+        chip: '#F0F0F0',
+      },
+      fontFamily: {
+        cairo: ['Cairo', 'sans-serif'],
+      }
+    }
+  }
+}
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Cairo', sans-serif;
+    background: #FFF8F0;
+    color: #3D2B1F;
+    margin: 0;
+    padding: 0;
+    min-height: 100dvh;
+  }
+  .scene { display: none; opacity: 0; transition: opacity 0.4s ease; }
+  .scene.active { display: block; opacity: 1; }
+  .scene.fade-in { opacity: 1; }
+
+  .accordion-body { max-height: 0; overflow: hidden; transition: max-height 0.4s ease, padding 0.4s ease; padding: 0 1rem; }
+  .accordion-body.open { max-height: 800px; padding: 1rem; }
+  .accordion-chevron { transition: transform 0.3s ease; display: inline-block; }
+  .accordion-chevron.open { transform: rotate(180deg); }
+
+  .progress-fill { transition: width 0.5s ease; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(0,0,0,0.4);
+    display: none; opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .modal-overlay.open { display: flex; opacity: 1; }
+  .modal-panel {
+    position: fixed; bottom: 0; right: 0; left: 0; z-index: 51;
+    max-height: 80vh; border-radius: 1.5rem 1.5rem 0 0;
+    background: #FFF8F0;
+    transform: translateY(100%);
+    transition: transform 0.35s ease;
+    overflow-y: auto;
+  }
+  .modal-panel.open { transform: translateY(0); }
+
+  .hl-who { background: #D4E8F0; color: #1B6B8A; padding: 2px 6px; border-radius: 4px; }
+  .hl-when { background: #D4EDDA; color: #155724; padding: 2px 6px; border-radius: 4px; }
+  .hl-why { background: #FFF3CD; color: #856404; padding: 2px 6px; border-radius: 4px; }
+
+  .chip {
+    cursor: pointer; border: 1.5px solid #ccc; border-radius: 12px;
+    padding: 10px 16px; background: #F0F0F0; font-size: 15px;
+    transition: all 0.2s ease; text-align: right; line-height: 1.7;
+  }
+  .chip:hover { border-color: #2B7A78; }
+  .chip.selected { background: #2B7A78; color: white; border-color: #2B7A78; }
+
+  .check-item { cursor: pointer; display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; transition: background 0.2s; }
+  .check-item:hover { background: rgba(43,122,120,0.06); }
+  .check-box {
+    width: 44px; height: 44px; min-width: 44px; border-radius: 10px;
+    border: 2.5px solid #ccc; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s ease; font-size: 20px; color: transparent;
+  }
+  .check-box.checked { background: #2B7A78; border-color: #2B7A78; color: white; }
+
+  .mcq-option {
+    cursor: pointer; border: 2px solid #e0d6cc; border-radius: 14px;
+    padding: 14px 18px; transition: all 0.25s ease; font-size: 16px;
+    background: white;
+  }
+  .mcq-option:hover:not(.disabled) { border-color: #2B7A78; background: rgba(43,122,120,0.04); }
+  .mcq-option.correct { border-color: #155724; background: #D4EDDA; }
+  .mcq-option.wrong { border-color: #c0392b; background: #fde8e8; }
+  .mcq-option.disabled { cursor: default; opacity: 0.7; }
+  .mcq-option.reveal-correct { border-color: #155724; background: #D4EDDA; opacity: 1 !important; }
+
+  textarea { font-family: 'Cairo', sans-serif; resize: vertical; }
+
+  .model-answer { max-height: 0; overflow: hidden; transition: max-height 0.5s ease; }
+  .model-answer.open { max-height: 600px; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-up { animation: fadeUp 0.5s ease both; }
+  .fade-up-d1 { animation-delay: 0.1s; }
+  .fade-up-d2 { animation-delay: 0.2s; }
+  .fade-up-d3 { animation-delay: 0.3s; }
+  .fade-up-d4 { animation-delay: 0.4s; }
+
+  .confirm-dialog {
+    position: fixed; inset: 0; z-index: 60;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.35);
+  }
+  .confirm-dialog.open { display: flex; }
+</style>
+</head>
+<body class="flex justify-center">
+
+<div id="app" class="w-full max-w-[640px] min-h-screen px-5 pt-4 pb-8 relative">
+
+  <!-- Progress Bar -->
+  <div class="mb-6">
+    <div class="flex justify-between items-center mb-2">
+      <span class="text-xs font-semibold text-bark/50">الدرس ٢ من ٧</span>
+      <span id="progress-label" class="text-xs font-semibold text-teal">١ / ٨</span>
+    </div>
+    <div class="w-full h-2 bg-bark/10 rounded-full overflow-hidden">
+      <div id="progress-fill" class="progress-fill h-full bg-teal rounded-full" style="width:12.5%"></div>
+    </div>
+  </div>
+
+  <!-- ====== SCENE 1: Opening ====== -->
+  <div id="scene-0" class="scene active fade-in">
+    <div class="mb-4">
+      <span class="inline-block bg-teal/10 text-teal text-xs font-bold px-3 py-1 rounded-full mb-4">كيف تفتتح يوميتك</span>
+    </div>
+    <div class="space-y-5 text-lg leading-[2]">
+      <p class="fade-up">المقطع اللي فات تعرّفنا شو اليوميات وشو المذكرات. اليوم رح نبدأ نتعلم <strong class="text-teal">كيف نكتب</strong> يومية — بس مش كلها مرة وحدة.</p>
+      <p class="fade-up fade-up-d1">اليوم بس رح نتعلم <strong class="text-teal">كيف نبدأها</strong>. لأنه أصعب لحظة بالكتابة هي أول جملة — لما تكون قاعد قدام الورقة وما تعرف كيف تبدأ.</p>
+      <p class="fade-up fade-up-d2 font-bold text-teal">بعد هالدرس، هالمشكلة رح تنحل. 💪</p>
+    </div>
+    <button onclick="goNext()" class="mt-8 w-full bg-teal hover:bg-teal-light text-white font-bold py-4 px-6 rounded-2xl text-lg transition-colors fade-up fade-up-d3">
+      التالي ←
+    </button>
+  </div>
+
+  <!-- ====== SCENE 2: Three Keys ====== -->
+  <div id="scene-1" class="scene">
+    <h2 class="text-xl font-extrabold mb-2">🔑 ثلاث مفاتيح لفتح يوميتك</h2>
+    <p class="text-base leading-[1.9] mb-5 text-bark/70">كل يومية بتبدأ بثلاث أشياء — فكّر فيها كأنها ثلاث مفاتيح لازم تفتح فيها الباب قبل ما تدخل:</p>
+
+    <!-- Key 1 -->
+    <div class="mb-3 rounded-2xl border-2 border-key-blue/40 overflow-hidden" id="acc-0">
+      <button onclick="toggleAccordion(0)" class="w-full flex items-center justify-between p-4 bg-key-blue-bg text-key-blue font-bold text-base text-right">
+        <span>🔑 المفتاح الأول — مين بتحكي؟</span>
+        <span class="accordion-chevron text-xl" id="chev-0">⌄</span>
+      </button>
+      <div class="accordion-body bg-white/60 text-sm leading-[2]" id="body-0">
+        <p class="mb-3">بالحياة العادية، لما بدك تحكي قصة، بتحكيها لحدا. باليومية نفس الشي — إنت عم تحكي لحدا. عندك ثلاث خيارات:</p>
+        <div class="space-y-2 mb-3">
+          <div class="bg-key-blue-bg/50 p-3 rounded-xl"><strong>الدفتر نفسه</strong> (كأنه صاحبك): "يا دفتري..."، "يا أوراقي العزيزة..."</div>
+          <div class="bg-key-blue-bg/50 p-3 rounded-xl"><strong>نفسك</strong> (حوار داخلي): "قلت لنفسي..."، "أحدّث نفسي..."</div>
+          <div class="bg-key-blue-bg/50 p-3 rounded-xl"><strong>القارئ</strong> (تحكي للعالم): "لا أخفيكم..."</div>
+        </div>
+        <p class="mb-2">ممكن تخلط بينهم بنفس اليومية! المهم إنك عم <strong>تحكي لحدا</strong>، مش تكتب تقرير.</p>
+        <p class="text-xs text-bark/40 mt-3 border-t border-bark/10 pt-2">📌 ملاحظة أكاديمية: هاد اللي بسمّوه بالكتاب "صور المخاطَب" — الشخصية الحقيقية، الشخصية الوهمية، مدوّنة الكتابة.</p>
+      </div>
+    </div>
+
+    <!-- Key 2 -->
+    <div class="mb-3 rounded-2xl border-2 border-key-green/40 overflow-hidden" id="acc-1">
+      <button onclick="toggleAccordion(1)" class="w-full flex items-center justify-between p-4 bg-key-green-bg text-key-green font-bold text-base text-right">
+        <span>🔑 المفتاح الثاني — إمتى؟</span>
+        <span class="accordion-chevron text-xl" id="chev-1">⌄</span>
+      </button>
+      <div class="accordion-body bg-white/60 text-sm leading-[2]" id="body-1">
+        <p class="mb-3">حدد الزمان. مش لازم تاريخ بالضبط — ممكن يكون جو أو موقف:</p>
+        <div class="space-y-2 mb-3">
+          <div class="bg-key-green-bg/50 p-3 rounded-xl"><strong>محدد:</strong> "في منتصف شهر آب..."</div>
+          <div class="bg-key-green-bg/50 p-3 rounded-xl"><strong>جو:</strong> "بعد ظهر يوم ماطر..."، "في ليلة ما قدرت أنام فيها..."</div>
+          <div class="bg-key-green-bg/50 p-3 rounded-xl"><strong>نسبي:</strong> "بعد نصف ساعة..."، "اليوم..."</div>
+        </div>
+        <p>الزمان بيحط القارئ <strong>جوّا اللحظة</strong> معك.</p>
+      </div>
+    </div>
+
+    <!-- Key 3 -->
+    <div class="mb-3 rounded-2xl border-2 border-key-amber/40 overflow-hidden" id="acc-2">
+      <button onclick="toggleAccordion(2)" class="w-full flex items-center justify-between p-4 bg-key-amber-bg text-key-amber font-bold text-base text-right">
+        <span>🔑 المفتاح الثالث — ليش بتكتب؟</span>
+        <span class="accordion-chevron text-xl" id="chev-2">⌄</span>
+      </button>
+      <div class="accordion-body bg-white/60 text-sm leading-[2]" id="body-2">
+        <p class="mb-3">شو اللي صار أو شو حسيت اللي خلاك تمسك القلم؟ هاد اسمه <strong>الموقف الداعي للكتابة</strong>.</p>
+        <div class="space-y-2 mb-3">
+          <div class="bg-key-amber-bg/50 p-3 rounded-xl">صار شي مفرح أو محزن</div>
+          <div class="bg-key-amber-bg/50 p-3 rounded-xl">بدك تفضفض</div>
+          <div class="bg-key-amber-bg/50 p-3 rounded-xl">بدك توثّق لحظة</div>
+        </div>
+        <p>مش لازم تقوله مباشرة — ممكن <strong>تلمّح</strong> بالمشاعر. الكاتب بالنموذج لمّح بالحزن قبل ما يحكي شو صار.</p>
+      </div>
+    </div>
+
+    <p id="open-all-hint" class="text-center text-sm text-bark/40 mt-4">👆 افتح المفاتيح الثلاثة للمتابعة</p>
+
+    <button id="scene1-next" onclick="goNext()" class="mt-6 w-full bg-teal hover:bg-teal-light text-white font-bold py-4 px-6 rounded-2xl text-lg transition-colors hidden">
+      التالي ←
+    </button>
+  </div>
+
+  <!-- ====== SCENE 3: Model Text Analysis ====== -->
+  <div id="scene-2" class="scene">
+    <h2 class="text-xl font-extrabold mb-4">خلينا نشوف كيف عملها الكاتب 📖</h2>
+
+    <div class="bg-white rounded-2xl p-5 mb-5 border border-bark/10 shadow-sm text-base leading-[2.2]" style="font-size:17px">
+      <span class="hl-who">آه منكِ يا أوراقي العزيزة! ملاذي الذي به أحتمي وإليه ألتجئ</span>؛ <span class="hl-why">فكّرتُ كثيرًا وتردّدتُ في أن أنفثَ زفراتٍ حرّى وأطلقَ عبراتٍ غصَّ بها القلبُ على أوراقك البيضاء</span>. ما السبيلُ إلى الانفراج؟ <span class="hl-when">بعد نصف ساعةٍ</span>، كان عليَّ أن أعودَ لعالمِ الواقع وأخرُجَ من تلك اللحظاتِ السعيدةِ التي انتظرتُها سنواتٍ طوالًا مرّت أربعٌ منها عجافٌ من كلّ ما له علاقة باليُسر والسعادة.
+      <br><br>
+      <span class="hl-when">في حدود الساعة الخامسة في منتصف شهر آب</span>، عُدتُ إلى السكنِ الجامعيّ...
+    </div>
+
+    <div class="space-y-3 mb-5">
+      <div class="bg-key-blue-bg rounded-xl p-4 text-sm leading-[1.9]">
+        <div class="font-bold text-key-blue mb-1">✅ المفتاح الأول — مين بتحكي؟</div>
+        <p class="text-key-blue/80">أول شي عمله — خاطب الدفتر. ما قال "اليوم حصل معي موقف"، قال <strong>"يا أوراقي العزيزة"</strong>. حسسك إنه عم يحكي مع صاحب قريب عليه.</p>
+        <p class="text-key-blue/60 text-xs mt-2">وكمان بعدين بالنص قال "لا أُخفيكم" — صار يحكي للقارئ مباشرة! ممكن تخلط بين أكثر من مخاطَب.</p>
+      </div>
+      <div class="bg-key-green-bg rounded-xl p-4 text-sm leading-[1.9]">
+        <div class="font-bold text-key-green mb-1">✅ المفتاح الثاني — إمتى؟</div>
+        <p class="text-key-green/80">حدد الزمان بدقة — <strong>الساعة الخامسة، منتصف شهر آب</strong>. القارئ صار يحس إنه موجود بهاللحظة.</p>
+        <p class="text-key-green/60 text-xs mt-2">وحتى قبلها حدد زمن نسبي — "بعد نصف ساعة".</p>
+      </div>
+      <div class="bg-key-amber-bg rounded-xl p-4 text-sm leading-[1.9]">
+        <div class="font-bold text-key-amber mb-1">✅ المفتاح الثالث — ليش بتكتب؟</div>
+        <p class="text-key-amber/80">عم يحكي ليش قرر يكتب — عنده مشاعر كثيرة (<strong>زفرات، عبرات، غصّ بها القلب</strong>) وبيحتاج يطلّعها. ما قال "حصل معي موقف محزن" — لمّح بالمشاعر قبل ما يحكي شو صار.</p>
+      </div>
+    </div>
+
+    <div class="bg-bark/5 rounded-xl p-4 text-sm leading-[2] mb-6">
+      <p class="font-bold mb-1">خلاصة:</p>
+      <p>✅ خاطب الدفتر ("يا أوراقي العزيزة")</p>
+      <p>✅ حدد الزمان ("بعد نصف ساعة"، "في منتصف شهر آب")</p>
+      <p>✅ حكى الموقف الداعي (مشاعر ثقيلة + انتهاء الحياة الجامعية)</p>
+    </div>
+
+    <button onclick="goNext()" class="w-full bg-teal hover:bg-teal-light text-white font-bold py-4 px-6 rounded-2xl text-lg transition-colors">
+      التالي ←
+    </button>
+  </div>
+
+  <!-- ====== SCENE 4: Question 1 ====== -->
+  <div id="scene-3" class="scene">
+    <h2 class="text-xl font-extrabold mb-2">سؤال سريع 🤔</h2>
+    <p class="text-base leading-[1.9] mb-5">في نص "الأيام المرة وكسرة الخبز"، مين خاطب الكاتب بأول جملة؟</p>
+
+    <div class="space-y-3 mb-5" id="q1-options">
+      <div class="mcq-option" data-q="1" data-idx="0" onclick="answerQ(1,0)">أ) صديقه</div>
+      <div class="mcq-option" data-q="1" data-idx="1" onclick="answerQ(1,1)">ب) أمه</div>
+      <div class="mcq-option" data-q="1" data-idx="2" onclick="answerQ(1,2)">ج) أوراقه / دفتره</div>
+      <div class="mcq-option" data-q="1" data-idx="3" onclick="answerQ(1,3)">د) القارئ</div>
+    </div>
+
+    <div id="q1-feedback" class="hidden rounded-xl p-4 text-sm leading-[2] mb-5"></div>
+
+    <button id="q1-next" onclick="goNext()" class="hidden w-full bg-teal hover:bg-teal-light text-white font-bold py-4 px-6 rounded-2xl text-lg transition-colors">
+      التالي ←
+    </button>
+  </div>
+
+  <!-- ====== SCENE 5: Question 2 ====== -->
+  <div id="scene-4" class="scene">
+    <h2 class="text-xl font-extrabold mb-2">سؤال ثاني 🤔</h2>
+    <p class="text-base leading-[1.9] mb-5">شو الموقف اللي خلّى الكاتب يمسك القلم ويكتب؟</p>
+
+    <div class="space-y-3 mb-5" id="q2-options">
+      <div class="mcq-option" data-q="2" data-idx="0" onclick="answerQ(2,0)">أ) نجح بالامتحان</div>
+      <div class="mcq-option" data-q="2" data-idx="1" onclick="answerQ(2,1)">ب) انتهت حياته الجامعية وبيحس بمشاعر ثقيلة</div>
+      <div class="mcq-option" data-q="2" data-idx="2" onclick="answerQ(2,2)">ج) تعرّف على صديق جديد</div>
+      <div class="mcq-option" data-q="2" data-idx="3" onclick="answerQ(2,3)">د) سافر لبلد جديد</div>
+    </div>
+
+    <div id="q2-feedback" class="hidden rounded-xl p-4 text-sm leading-[2] mb-5"></div>
+
+    <button id="q2-next" onclick="goNext()" class="hidden w-full bg-teal hover:bg-teal-light text-white font-bold py-4 px-6 rounded-2xl text-lg transition-colors">
+      التالي ←
+    </button>
+  </div>
+
+  <!-- ====== SCENE 6: Writing Exercise ====== -->
+  <div id="scene-5" class="scene">
+    <h2 class="text-xl font-extrabold mb-2">📝 جرّب بنفسك</h2>
+
+    <div class="bg-white rounded-2xl p-4 mb-4 border border-bark/10">
+      <p class="text-sm text-bark/50 mb-1">تخيل هالموقف:</p>
+      <p class="text-base font-bold leading-[1.9]">رجعت من رحلة مدرسية لآثار جرش. كان يوم حلو وبدك تكتب عنه بيومياتك.</p>
+    </div>
+
+    <p class="text-sm leading-[1.9] mb-2">اكتب <strong>افتتاحية بس — ٢ لـ ٣ جمل</strong>. استخدم المفاتيح الثلاثة:</p>
+    <div class="text-sm leading-[2] text-bark/70 mb-4 mr-2">
+      <p>١. خاطب حدا (الدفتر أو نفسك أو القارئ)</p>
+      <p>٢. حدد الزمان</p>
+      <p>٣. احكِ شو الموقف اللي خلاك تكتب</p>
+    </div>
+
+    <p class="text-xs text-bark/40 mb-2">إذا محتاج مساعدة بأول جملة، اختار وحدة من هالبدايات وكمّل:</p>
+    <div class="flex flex-col gap-2 mb-4" id="chips-container">
+      <div class="chip" data-chip="0" onclick="selectChip(0)">يا دفتري، اليوم كان يوم ...</div>
+      <div class="chip" data-chip="1" onclick="selectChip(1)">ما كنت أتوقع إنه رحلة مدرسية بسيطة رح ...</div>
+      <div class="chip" data-chip="2" onclick="selectChip(2)">أكتب هالكلمات وأنا ...</div>
+    </div>
+
+    <textarea
+      id="student-textarea"
+      dir="rtl"
+      placeholder="اكتب هون..."
+      spellcheck="false"
+      autocorrect="off"
+      autocapitalize="off"
+      class="w-full border-2 border-bark/15 rounded-2xl p-4 text-lg leading-[2] focus:outline-none focus:border-teal transition-colors bg-white mb-4"
+      style="min-height:140px; max-height:200px; font-size:18px;"
+      oninput="onTextInput()"
+    ></textarea>
+
+    <div class="flex gap-3">
+      <button onclick="goNext()" class="flex-1 bg-teal hover:bg-teal-light text-white font-bold py-3.5 px-4 rounded-2xl text-base transition-colors">
+        خلصت، التالي ←
+      </button>
+      <button onclick="openInspireModal()" class="flex-1 border-2 border-teal text-teal font-bold py-3.5 px-4 rounded-2xl text-base transition-colors hover:bg-teal/5">
+        💡 ألهمني
+      </button>
+    </div>
+  </div>
+
+  <!-- ====== SCENE 7: Self-Assessment ====== -->
+  <div id="scene-6" class="scene">
+    <h2 class="text-xl font-extrabold mb-3">راجع حالك ✅</h2>
+    <p class="text-base leading-[1.9] mb-4 text-bark/70">راجع إجابتك — هل عندك الثلاث مفاتيح؟</p>
+
+    <div class="space-y-2 mb-4">
+      <div class="check-item" onclick="toggleCheck(0)">
+        <div class="check-box" id="chk-0">✓</div>
+        <span class="text-base">هل خاطبت حدا؟ (الدفتر أو نفسك أو القارئ)</span>
+      </div>
+      <div class="check-item" onclick="toggleCheck(1)">
+        <div class="check-box" id="chk-1">✓</div>
+        <span class="text-base">هل حددت الزمان؟</span>
+      </div>
+      <div class="check-item" onclick="toggleCheck(2)">
+        <div class="check-box" id="chk-2">✓</div>
+        <span class="text-base">هل حكيت ليش عم بتكتب؟ (الموقف الداعي)</span>
+      </div>
+    </div>
+
+    <div id="checklist-msg" class="rounded-xl p-4 text-sm leading-[2] mb-5 hidden"></div>
+
+    <button onclick="revealModelAnswer()" id="model-btn" class="w-full border-2 border-bark/15 text-bark/60 font-bold py-3 px-4 rounded-2xl text-base transition-colors hover:border-teal hover:text-teal mb-2">
+      شوف مثال على افتتاحية ممكنة
+    </button>
+
+    <div class="model-answer mb-5" id="model-answer-panel">
+      <div class="bg-white rounded-2xl p-4 border border-bark/10 mt-3">
+        <p class="text-base leading-[2.2] mb-3" style="font-size:17px">يا دفتري العزيز، أكتب إليك الليلة وابتسامة ما بدها تروح عن وجهي. اليوم رحنا رحلة مدرسية على آثار جرش — وما توقعت إنه مكان عمره أكثر من ألفين سنة ممكن يخليني أحس هيك إحساس.</p>
+        <div class="space-y-1 text-sm text-bark/70">
+          <p>خاطب الدفتر ✅ ("يا دفتري العزيز")</p>
+          <p>حدد الزمان ✅ ("الليلة"، "اليوم")</p>
+          <p>الموقف الداعي ✅ (الرحلة + إحساس غير متوقع)</p>
+        </div>
+        <p class="text-xs text-bark/40 mt-3 border-t border-bark/10 pt-2">☝️ هاد <strong>مثال واحد</strong> من أمثلة كثيرة ممكنة. ما في إجابة "صح وحدة" — المهم تكون المفاتيح الثلاثة موجودة.</p>
+      </div>
+    </div>
+
+    <button onclick="goNext()" class="w-full bg-teal hover:bg-teal-light text-white font-bold py-4 px-6 rounded-2xl text-lg transition-colors">
+      التالي ←
+    </button>
+  </div>
+
+  <!-- ====== SCENE 8: Closing ====== -->
+  <div id="scene-7" class="scene">
+    <div class="text-center mb-6">
+      <span class="text-5xl">🎉</span>
+    </div>
+    <div class="space-y-4 text-lg leading-[2]">
+      <p>أحسنت! اليوم تعلمت أهم شي — <strong class="text-teal">كيف تبدأ</strong>.</p>
+      <p>أول جملة دايماً هي الأصعب، بس هلأ عندك ثلاث مفاتيح: <strong>مين بتحكي</strong>، <strong>إمتى</strong>، و<strong>ليش</strong>.</p>
+      <p class="text-bark/60">المقطع الجاي رح نتعلم كيف <strong>نوصف اللي صار</strong> — يعني الجزء الوسط من اليومية. كيف تحكي عن الأحداث بطريقة تخلّي القارئ يحس إنه كان معك.</p>
+    </div>
+
+    <div class="bg-teal/10 rounded-2xl p-4 mt-6 text-sm leading-[2] text-teal">
+      <p class="font-bold mb-1">📊 ملخص الدرس:</p>
+      <p>تعلمت ٣ مفاتيح لافتتاح اليومية</p>
+      <p>أجبت على سؤالين</p>
+      <p>كتبت أول افتتاحية! ✍️</p>
+    </div>
+  </div>
+
+</div>
+
+<!-- ====== INSPIRE ME MODAL ====== -->
+<div class="modal-overlay" id="inspire-overlay" onclick="closeInspireModal(event)"></div>
+<div class="modal-panel" id="inspire-panel">
+  <div class="sticky top-0 bg-cream z-10 px-5 pt-4 pb-2 border-b border-bark/10 flex justify-between items-center" style="background:#FFF8F0">
+    <span class="font-bold text-lg">💡 أمثلة على افتتاحيات</span>
+    <button onclick="closeInspireModal()" class="text-bark/40 hover:text-bark text-sm font-bold">رجعت للكتابة ✕</button>
+  </div>
+  <div class="px-5 py-4" id="inspire-content"></div>
+  <div class="sticky bottom-0 px-5 pt-2 pb-4 border-t border-bark/10" style="background:#FFF8F0">
+    <p id="inspire-counter" class="text-center text-xs text-bark/40 mb-2"></p>
+    <button onclick="nextInspireExample()" class="w-full bg-teal hover:bg-teal-light text-white font-bold py-3 px-4 rounded-2xl text-base transition-colors">
+      مثال ثاني ←
+    </button>
+  </div>
+</div>
+
+<!-- ====== CONFIRM DIALOG ====== -->
+<div class="confirm-dialog" id="confirm-dialog">
+  <div class="bg-white rounded-2xl p-5 mx-6 max-w-sm shadow-xl text-center">
+    <p class="text-base mb-4 leading-[1.9]">هاد رح يبدل البداية اللي اخترتها — متأكد؟</p>
+    <div class="flex gap-3">
+      <button onclick="confirmChipChange(true)" class="flex-1 bg-teal text-white font-bold py-3 rounded-xl">أيوه</button>
+      <button onclick="confirmChipChange(false)" class="flex-1 border-2 border-bark/20 text-bark/60 font-bold py-3 rounded-xl">لا</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const state = {
+  currentScene: 0,
+  keysExpanded: [false, false, false],
+  allKeysOpened: false,
+  question1Answered: false,
+  question2Answered: false,
+  correctAnswers: 0,
+  selectedChip: null,
+  studentText: '',
+  inspireModalOpen: false,
+  currentInspireExample: 0,
+  checklist: [false, false, false],
+  modelAnswerRevealed: false,
+  pendingChip: null,
+};
+
+const TOTAL_SCENES = 8;
+
+const inspireExamples = [
+  {
+    title: 'رحلة مدرسية',
+    text: 'يا دفتري العزيز، أكتب إليك الليلة وابتسامة ما بدها تروح عن وجهي. اليوم رحنا رحلة مدرسية على آثار جرش — وما توقعت إنه مكان عمره أكثر من ألفين سنة ممكن يخليني أحس هيك إحساس.',
+    checks: ['خاطب الدفتر ("يا دفتري العزيز")', 'حدد الزمان ("الليلة"، "اليوم")', 'الموقف الداعي (رحلة لجرش + إحساس غير متوقع)']
+  },
+  {
+    title: 'وداع صديق',
+    text: 'لا أخفيكم... بكيت اليوم. مش عيب أقولها. أحمد — صاحبي من أول يوم بالمدرسة — سافر مع عائلته على الخليج. وقفت على باب بيتهم وأنا مش مصدق إنه هاد آخر يوم.',
+    checks: ['خاطب القارئ ("لا أخفيكم")', 'حدد الزمان ("اليوم"، "آخر يوم")', 'الموقف الداعي (سفر الصديق)']
+  },
+  {
+    title: 'يوم صعب بالمدرسة',
+    text: 'قلت لنفسي وأنا راجع من المدرسة: لازم أكتب عن هاليوم. من الصبح وكل شي غلط — بلّشت بامتحان ما درست عليه، وانتهيت بخناقة مع أقرب صاحب إلي.',
+    checks: ['خاطب نفسه ("قلت لنفسي")', 'حدد الزمان ("من الصبح"، "وأنا راجع من المدرسة")', 'الموقف الداعي (يوم سيء من البداية للنهاية)']
+  },
+  {
+    title: 'لحظة عائلية',
+    text: 'يا أوراقي، اليوم أبوي رجع من السفر بعد ثلاث شهور. ثلاث شهور وأنا أعدّ الأيام. لما شفته عالباب حسيت إنه كل التعب اللي مرّ عليّ راح بلحظة.',
+    checks: ['خاطب الدفتر ("يا أوراقي")', 'حدد الزمان ("اليوم"، "بعد ثلاث شهور")', 'الموقف الداعي (عودة الأب من السفر)']
+  },
+  {
+    title: 'إنجاز شخصي',
+    text: 'ما بصدّق إني عم بكتب هالكلمات — أنا، اللي كنت أكره العربي، جبت أعلى علامة بالصف بامتحان اليوم. حاسس إني بدي أوثّق هاللحظة قبل ما أصحى وأكتشف إنها حلم.',
+    checks: ['خاطب القارئ/نفسه (أسلوب تأمل ذاتي)', 'حدد الزمان ("اليوم")', 'الموقف الداعي (إنجاز غير متوقع)']
+  },
+  {
+    title: 'مكان جديد',
+    text: 'أكتب وأنا قاعد على شباك الفندق، تحتي أضواء عمّان بتلمع بالليل. أول مرة بحياتي أكون بعيد عن بيتنا بالليل — وما توقعت إنه الإحساس رح يكون خليط غريب بين حرية وخوف.',
+    checks: ['مخاطب غير مباشر (وصف الحالة)', 'حدد الزمان ("بالليل"، ضمني من "قاعد على شباك الفندق")', 'الموقف الداعي (أول ليلة بعيد عن البيت — إحساس جديد)']
+  },
+  {
+    title: 'موقف محرج',
+    text: 'يا دفتري، اليوم صار معي موقف ما بدي أحكيه لحدا — بس إلك إنت. بالحصة وقّفتني المعلمة أقرأ قدام الصف، ونسيت كل شي. وقفت ساكت والكل عم يطّلع فيّ.',
+    checks: ['خاطب الدفتر ("يا دفتري"، "إلك إنت")', 'حدد الزمان ("اليوم"، "بالحصة")', 'الموقف الداعي (موقف محرج بالصف)']
+  },
+  {
+    title: 'نهاية مرحلة',
+    text: 'اليوم آخر يوم بصف الحادي عشر. سنة كاملة — بحلوها ومرّها — انتهت. أكتب هالكلمات وأنا مش عارف هل أفرح ولا أخاف من اللي جاي.',
+    checks: ['مخاطب غير مباشر (تأمل)', 'حدد الزمان ("اليوم"، "آخر يوم")', 'الموقف الداعي (نهاية السنة الدراسية — مشاعر مختلطة)']
+  }
+];
+
+const chipTexts = [
+  'يا دفتري، اليوم كان يوم ',
+  'ما كنت أتوقع إنه رحلة مدرسية بسيطة رح ',
+  'أكتب هالكلمات وأنا '
+];
+
+// Navigation
+function goNext() {
+  if (state.currentScene >= TOTAL_SCENES - 1) return;
+  const current = document.getElementById('scene-' + state.currentScene);
+  current.style.opacity = '0';
+  setTimeout(() => {
+    current.classList.remove('active', 'fade-in');
+    state.currentScene++;
+    updateProgress();
+    const next = document.getElementById('scene-' + state.currentScene);
+    next.classList.add('active');
+    next.style.opacity = '0';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        next.style.opacity = '1';
+        next.classList.add('fade-in');
+      });
+    });
+  }, 350);
+}
+
+function updateProgress() {
+  const pct = ((state.currentScene + 1) / TOTAL_SCENES) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-label').textContent = toAr(state.currentScene + 1) + ' / ' + toAr(TOTAL_SCENES);
+}
+
+function toAr(n) {
+  return n.toString().replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+}
+
+// Accordion
+function toggleAccordion(idx) {
+  const body = document.getElementById('body-' + idx);
+  const chev = document.getElementById('chev-' + idx);
+  const isOpen = body.classList.contains('open');
+  if (isOpen) {
+    body.classList.remove('open');
+    chev.classList.remove('open');
+  } else {
+    body.classList.add('open');
+    chev.classList.add('open');
+    state.keysExpanded[idx] = true;
+  }
+  if (state.keysExpanded.every(v => v) && !state.allKeysOpened) {
+    state.allKeysOpened = true;
+    document.getElementById('scene1-next').classList.remove('hidden');
+    document.getElementById('open-all-hint').classList.add('hidden');
+  }
+}
+
+// MCQ
+function answerQ(qNum, idx) {
+  const correctIdx = qNum === 1 ? 2 : 1;
+  const stateKey = qNum === 1 ? 'question1Answered' : 'question2Answered';
+  if (state[stateKey]) return;
+  state[stateKey] = true;
+
+  const container = document.getElementById('q' + qNum + '-options');
+  const options = container.querySelectorAll('.mcq-option');
+  const feedbackEl = document.getElementById('q' + qNum + '-feedback');
+
+  options.forEach((opt, i) => {
+    opt.classList.add('disabled');
+    if (i === correctIdx) opt.classList.add('reveal-correct');
+    if (i === idx && i !== correctIdx) opt.classList.add('wrong');
+    if (i === idx && i === correctIdx) opt.classList.add('correct');
+  });
+
+  const isCorrect = idx === correctIdx;
+  if (isCorrect) state.correctAnswers++;
+
+  let fb = '';
+  if (qNum === 1) {
+    fb = isCorrect
+      ? 'بالظبط! قال "يا أوراقي العزيزة" — خاطب الدفتر كأنه صاحب قريب عليه. 🎉'
+      : 'ارجع لأول جملة بالنص — "آه منكِ يا أوراقي العزيزة!" — مين اللي بيحكي معه؟ أوراقه! يعني الدفتر.';
+  } else {
+    fb = isCorrect
+      ? 'أحسنت! الكاتب كان بيعيش لحظة نهاية مرحلة — الحياة الجامعية خلصت، وعنده مشاعر ثقيلة بيحتاج يطلّعها. 🎉'
+      : 'فكّر — الكاتب قال "زفرات حرّى" و"عبرات غصّ بها القلب" و"أخرج من تلك اللحظات السعيدة التي انتظرتها سنوات". شو المرحلة اللي خلصت وخلته يحس هيك؟';
+  }
+
+  feedbackEl.innerHTML = fb;
+  feedbackEl.className = 'rounded-xl p-4 text-sm leading-[2] mb-5 ' + (isCorrect ? 'bg-key-green-bg text-key-green' : 'bg-key-amber-bg text-key-amber');
+  feedbackEl.classList.remove('hidden');
+  document.getElementById('q' + qNum + '-next').classList.remove('hidden');
+}
+
+// Chips
+function selectChip(idx) {
+  const textarea = document.getElementById('student-textarea');
+  const currentText = textarea.value.trim();
+
+  if (state.selectedChip !== null && state.selectedChip !== idx) {
+    const prevChipText = chipTexts[state.selectedChip].trim();
+    if (currentText.length > prevChipText.length + 2) {
+      state.pendingChip = idx;
+      document.getElementById('confirm-dialog').classList.add('open');
+      return;
+    }
+  }
+  applyChip(idx);
+}
+
+function applyChip(idx) {
+  const textarea = document.getElementById('student-textarea');
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+  document.querySelector('.chip[data-chip="' + idx + '"]').classList.add('selected');
+  state.selectedChip = idx;
+  textarea.value = chipTexts[idx];
+  state.studentText = textarea.value;
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+}
+
+function confirmChipChange(yes) {
+  document.getElementById('confirm-dialog').classList.remove('open');
+  if (yes && state.pendingChip !== null) applyChip(state.pendingChip);
+  state.pendingChip = null;
+}
+
+function onTextInput() {
+  state.studentText = document.getElementById('student-textarea').value;
+}
+
+// Inspire Modal
+function openInspireModal() {
+  state.inspireModalOpen = true;
+  renderInspireExample();
+  document.getElementById('inspire-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('inspire-panel').classList.add('open'), 50);
+  document.body.style.overflow = 'hidden';
+}
+
+function closeInspireModal(event) {
+  if (event && event.target !== event.currentTarget) return;
+  document.getElementById('inspire-panel').classList.remove('open');
+  setTimeout(() => {
+    document.getElementById('inspire-overlay').classList.remove('open');
+    state.inspireModalOpen = false;
+    document.body.style.overflow = '';
+  }, 300);
+}
+
+function nextInspireExample() {
+  state.currentInspireExample = (state.currentInspireExample + 1) % inspireExamples.length;
+  renderInspireExample();
+}
+
+function renderInspireExample() {
+  const ex = inspireExamples[state.currentInspireExample];
+  document.getElementById('inspire-content').innerHTML = `
+    <div class="mb-2">
+      <span class="inline-block bg-teal/10 text-teal text-xs font-bold px-3 py-1 rounded-full">${ex.title}</span>
+    </div>
+    <div class="bg-white rounded-xl p-4 border border-bark/10 mb-4 text-base leading-[2.2]" style="font-size:17px">${ex.text}</div>
+    <div class="space-y-1 text-sm text-bark/70">${ex.checks.map(c => '<p>✅ ' + c + '</p>').join('')}</div>
+  `;
+  document.getElementById('inspire-counter').textContent = 'مثال ' + toAr(state.currentInspireExample + 1) + ' من ' + toAr(inspireExamples.length);
+}
+
+// Checklist
+function toggleCheck(idx) {
+  state.checklist[idx] = !state.checklist[idx];
+  const box = document.getElementById('chk-' + idx);
+  state.checklist[idx] ? box.classList.add('checked') : box.classList.remove('checked');
+  updateChecklistMsg();
+}
+
+function updateChecklistMsg() {
+  const count = state.checklist.filter(v => v).length;
+  const el = document.getElementById('checklist-msg');
+  if (count === 0) { el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  if (count === 3) {
+    el.className = 'rounded-xl p-4 text-sm leading-[2] mb-5 bg-key-green-bg text-key-green';
+    el.innerHTML = 'أحسنت! كتبت افتتاحية يومية ناجحة! 🎉';
+  } else {
+    el.className = 'rounded-xl p-4 text-sm leading-[2] mb-5 bg-key-amber-bg text-key-amber';
+    el.innerHTML = 'حلو! جرّب ضيف اللي ناقص — مش لازم تكون مثالية، المهم تتعلم.';
+  }
+}
+
+// Model Answer
+function revealModelAnswer() {
+  state.modelAnswerRevealed = !state.modelAnswerRevealed;
+  const panel = document.getElementById('model-answer-panel');
+  const btn = document.getElementById('model-btn');
+  if (state.modelAnswerRevealed) {
+    panel.classList.add('open');
+    btn.textContent = 'اخفِ المثال';
+    btn.classList.add('border-teal', 'text-teal');
+  } else {
+    panel.classList.remove('open');
+    btn.textContent = 'شوف مثال على افتتاحية ممكنة';
+    btn.classList.remove('border-teal', 'text-teal');
+  }
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', updateProgress);
+</script>
+
+</body>
+</html>
