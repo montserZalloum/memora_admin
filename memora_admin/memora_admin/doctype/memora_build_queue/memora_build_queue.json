@@ -43,7 +43,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Trigger Reason",
-   "options": "content_update\noverride_change\nmanual\nplan_update\nplan_subject_change\nplan_overrider_change"
+   "options": "content_update\noverride_change\nmanual\nplan_update\nplan_subject_change\nplan_overrider_change\npost_build_dirty_recheck"
   },
   {
    "fieldname": "triggered_by",

@@ -11,6 +11,7 @@ import frappe
 
 from fastapi_app.core.redis_keys import (
 	build_debounce_key,
+	build_dirty_key,
 	cache_invalidation_channel,
 	catalog_key,
 	ch_question_lookup_key,
@@ -22,6 +23,124 @@ from fastapi_app.core.redis_keys import (
 
 # Debounce configuration
 DEBOUNCE_SECONDS = 120  # 2 minutes per plan
+DIRTY_FLAG_TTL_SECONDS = 86400  # 24 hours — must outlive worst-case worker stall
+
+
+# =============================================================================
+# Post-Commit Build Queue Helper
+# =============================================================================
+#
+# Why post-commit?
+# ----------------
+# Frappe doc-event hooks (on_update, on_trash, ...) run INSIDE the doc's
+# transaction, BEFORE the row is committed. If we queued the build directly
+# from the hook body, two race windows opened:
+#
+#   1. The build worker could pick up the queued build and read the DB BEFORE
+#      our hook's commit landed — producing stale output.
+#   2. If our nx_set on the debounce key failed (because another build was
+#      already in-flight) and our commit then landed AFTER that worker's DB
+#      read, our change was silently dropped.
+#
+# Deferring the nx_set + Build Queue insert to `frappe.db.after_commit`
+# guarantees: (a) by the time the worker's next DB read happens, our row is
+# committed, and (b) if nx_set fails the dirty flag we set is observed by the
+# worker's post-build re-check. No content event can be lost.
+#
+# Why the dirty flag in addition to nx_set?
+# -----------------------------------------
+# nx_set succeeds in the common case (worker has cleared the debounce key by
+# the time our after_commit fires). When it fails — meaning a concurrent build
+# is already queued — we set `build_dirty_key(plan_id)`. The worker clears
+# this flag at build start and re-checks it after publishing; if it's set, the
+# worker queues a follow-up build to capture whatever change tripped it.
+# =============================================================================
+
+
+def _schedule_post_commit_build(plan_id: str, trigger_reason: str, doc_info: str | None = None) -> None:
+	"""Register an after-commit callback that queues a build for the plan.
+
+	The callback runs once the triggering transaction commits, so:
+	- The doc edit is visible to subsequent DB reads (incl. the build worker's).
+	- nx_set on the debounce key reflects the real "is a build in flight" state.
+
+	If nx_set fails (another build is already queued), we set the plan's dirty
+	flag instead of dropping the event. The worker re-checks this flag after
+	finishing its build and queues a follow-up rebuild if needed.
+
+	Idempotent per plan_id within a single request via `frappe.flags`.
+	"""
+	flag_key = f"_build_after_commit_{plan_id}"
+	if frappe.flags.get(flag_key):
+		return  # already scheduled in this request — coalesce
+	frappe.flags[flag_key] = True
+
+	def _queue_now():
+		_queue_plan_build_now(plan_id, trigger_reason, doc_info)
+
+	try:
+		frappe.db.after_commit.add(_queue_now)
+	except Exception as e:
+		frappe.log_error(
+			f"Failed to register after_commit build callback for {plan_id}: {e}",
+			"Build Trigger Error",
+		)
+
+
+def _queue_plan_build_now(plan_id: str, trigger_reason: str, doc_info: str | None = None) -> None:
+	"""Run the nx_set debounce + Build Queue insert. Call only after commit."""
+	cache = frappe.cache
+	debounce_key = build_debounce_key(plan_id)
+	timestamp = str(int(time.time()))
+
+	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
+
+	if not was_set:
+		# A build is already queued/processing for this plan. Mark the plan
+		# dirty so the worker re-checks at the end of its current build and
+		# queues a follow-up — guarantees no event is silently dropped.
+		try:
+			cache.set(build_dirty_key(plan_id), "1", ex=DIRTY_FLAG_TTL_SECONDS)
+			frappe.logger().debug(
+				f"Build already pending for plan {plan_id}; dirty flag set"
+				+ (f" (triggered by {doc_info})" if doc_info else "")
+			)
+		except Exception as e:
+			frappe.log_error(
+				f"Failed to set dirty flag for plan {plan_id}: {e}",
+				"Build Trigger Error",
+			)
+		return
+
+	try:
+		build_queue = frappe.get_doc(
+			{
+				"doctype": "Memora Build Queue",
+				"target_type": "Memora Academic Plan",
+				"target_name": plan_id,
+				"trigger_reason": trigger_reason,
+				"triggered_by": frappe.session.user,
+				"status": "Pending",
+			}
+		)
+		build_queue.insert(ignore_permissions=True)
+		frappe.db.commit()  # ensure the queue record is durable for the worker
+		frappe.logger().info(
+			f"Build queued: {build_queue.name} for plan {plan_id}"
+			+ (f" (triggered by {doc_info})" if doc_info else "")
+		)
+	except Exception as e:
+		# Use raw `delete` (not delete_value) so the namespace matches the raw
+		# `cache.set(..., nx=True)` above — `delete_value` applies a db_name
+		# prefix that `set(nx=True)` does not, causing it to silently no-op.
+		try:
+			cache.delete(debounce_key)
+		except Exception:
+			pass
+		frappe.log_error(
+			f"Failed to queue build for plan {plan_id}: {e}",
+			"Build Trigger Error",
+		)
 
 
 # =============================================================================
@@ -97,8 +216,10 @@ def _queue_plan_builds_for_subject(subject_id: str, doc):
 
 	When content changes, plans that reference the subject need rebuilding
 	to update aggregated fields like is_free_preview in their manifest.
+
+	Queue insertion is deferred to after-commit so the worker's next DB read
+	always sees the triggering edit. See _schedule_post_commit_build().
 	"""
-	# Find all plans that contain this subject
 	plan_subjects = frappe.get_all(
 		"Memora Plan Subject",
 		filters={"subject": subject_id},
@@ -108,45 +229,12 @@ def _queue_plan_builds_for_subject(subject_id: str, doc):
 	if not plan_subjects:
 		return
 
-	cache = frappe.cache
-	timestamp = str(int(time.time()))
-
+	doc_info = f"{doc.doctype} {doc.name} in subject {subject_id}"
 	for ps in plan_subjects:
 		plan_id = ps["parent"]
 		if not plan_id:
 			continue
-
-		debounce_key = build_debounce_key(plan_id)
-
-		# Redis SET NX EX pattern for debounce
-		was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
-
-		if not was_set:
-			continue
-
-		try:
-			build_queue = frappe.get_doc(
-				{
-					"doctype": "Memora Build Queue",
-					"target_type": "Memora Academic Plan",
-					"target_name": plan_id,
-					"trigger_reason": "content_update",
-					"triggered_by": frappe.session.user,
-					"status": "Pending",
-				}
-			)
-			build_queue.insert(ignore_permissions=True)
-
-			frappe.logger().info(
-				f"Build queued: {build_queue.name} for plan {plan_id} "
-				f"(triggered by {doc.doctype} {doc.name} in subject {subject_id})"
-			)
-		except Exception as e:
-			cache.delete_value(debounce_key)
-			frappe.log_error(
-				f"Failed to queue build for plan {plan_id}: {e}",
-				"Build Trigger Error",
-			)
+		_schedule_post_commit_build(plan_id, "content_update", doc_info)
 
 
 def _get_subject_id(doc) -> str | None:
@@ -252,36 +340,7 @@ def on_plan_updated(doc, method):
 				"Season Cache Invalidation Error",
 			)
 
-	cache = frappe.cache
-	debounce_key = build_debounce_key(plan_id)
-
-	# Redis SET NX EX pattern for debounce
-	timestamp = str(int(time.time()))
-	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
-
-	if not was_set:
-		return
-
-	# Create Build Queue entry
-	try:
-		build_queue = frappe.get_doc(
-			{
-				"doctype": "Memora Build Queue",
-				"target_type": "Memora Academic Plan",
-				"target_name": plan_id,
-				"trigger_reason": "plan_update",
-				"triggered_by": frappe.session.user,
-				"status": "Pending",
-			}
-		)
-		build_queue.insert(ignore_permissions=True)
-
-	except Exception as e:
-		cache.delete_value(debounce_key)
-		frappe.log_error(
-			f"Failed to queue build for plan {plan_id}: {e}",
-			"Build Trigger Error",
-		)
+	_schedule_post_commit_build(plan_id, "plan_update", f"plan {plan_id}")
 
 
 def on_plan_subject_changed(doc, method):
@@ -310,36 +369,9 @@ def on_plan_subject_changed(doc, method):
 
 	_invalidate_catalog_cache(plan_id)
 
-	# Reuse plan debounce logic
-	cache = frappe.cache
-	debounce_key = build_debounce_key(plan_id)
-
-	timestamp = str(int(time.time()))
-	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
-
-	if not was_set:
-		frappe.logger().debug(f"Build already pending for plan {plan_id}")
-		return
-
-	try:
-		build_queue = frappe.get_doc(
-			{
-				"doctype": "Memora Build Queue",
-				"target_type": "Memora Academic Plan",
-				"target_name": plan_id,
-				"trigger_reason": "plan_subject_change",
-				"triggered_by": frappe.session.user,
-				"status": "Pending",
-			}
-		)
-		build_queue.insert(ignore_permissions=True)
-
-	except Exception as e:
-		cache.delete_value(debounce_key)
-		frappe.log_error(
-			f"Failed to queue build for plan {plan_id}: {e}",
-			"Build Trigger Error",
-		)
+	_schedule_post_commit_build(
+		plan_id, "plan_subject_change", f"plan_subject change on {plan_id}"
+	)
 
 
 # =============================================================================
@@ -638,35 +670,9 @@ def on_plan_overrider_changed(doc, method):
 		)
 		return
 
-	cache = frappe.cache
-	debounce_key = build_debounce_key(plan_id)
-
-	timestamp = str(int(time.time()))
-	was_set = cache.set(debounce_key, timestamp, nx=True, ex=DEBOUNCE_SECONDS)
-
-	if not was_set:
-		frappe.logger().debug(f"Build already pending for plan {plan_id}")
-		return
-
-	try:
-		build_queue = frappe.get_doc(
-			{
-				"doctype": "Memora Build Queue",
-				"target_type": "Memora Academic Plan",
-				"target_name": plan_id,
-				"trigger_reason": "plan_overrider_change",
-				"triggered_by": frappe.session.user,
-				"status": "Pending",
-			}
-		)
-		build_queue.insert(ignore_permissions=True)
-
-	except Exception as e:
-		cache.delete_value(debounce_key)
-		frappe.log_error(
-			f"Failed to queue build for plan {plan_id}: {e}",
-			"Build Trigger Error",
-		)
+	_schedule_post_commit_build(
+		plan_id, "plan_overrider_change", f"Plan Overrider {doc.name}"
+	)
 
 
 # =============================================================================

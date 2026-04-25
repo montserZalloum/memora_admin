@@ -21,7 +21,11 @@ import frappe
 from frappe.utils import now_datetime
 
 from fastapi_app.core.redis_keys import build_retry_key as _build_retry_key_fn
-from fastapi_app.core.redis_keys import cache_invalidation_channel
+from fastapi_app.core.redis_keys import (
+	build_debounce_key,
+	build_dirty_key,
+	cache_invalidation_channel,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,15 +84,19 @@ def _process_single_build(build: dict):
 	build_doc.save(ignore_permissions=True)
 	frappe.db.commit()
 
-	# Clear the debounce key now that we are actively processing this build.
-	# If the plan is saved again while the build runs, on_plan_updated will be
-	# able to set a fresh debounce key and queue a new build — preventing the
-	# post-build blind window where changes made after build completion but
-	# before the 120s TTL expires were silently dropped.
+	# Clear the debounce key now that we are actively processing this build,
+	# AND clear the dirty flag — we are about to read the latest DB state, so
+	# any prior dirty signal is being consumed by this build.
+	#
+	# IMPORTANT: must use raw `cache.delete` (redis-py) — NOT `delete_value`,
+	# which prefixes the key with `<db_name>|`. The trigger sets the debounce
+	# key with raw `cache.set(..., nx=True)` (no prefix), so `delete_value`
+	# would target a different key and silently no-op, leaving the debounce
+	# alive for its full 120s TTL and dropping any content event that fired
+	# during that window.
 	try:
-		from fastapi_app.core.redis_keys import build_debounce_key
-
-		frappe.cache.delete_value(build_debounce_key(target_name))
+		frappe.cache.delete(build_debounce_key(target_name))
+		frappe.cache.delete(build_dirty_key(target_name))
 	except Exception:
 		pass  # Non-fatal — worst case is a redundant queued build, never a missed one
 
@@ -144,6 +152,12 @@ def _process_single_build(build: dict):
 
 			# Purge CDN cache for published files + orphans (best-effort, never fails build)
 			_purge_cdn_cache(files, extra_filenames=orphaned_filenames)
+
+			# If a content event tried to queue a build during our run AND its
+			# nx_set debounce check failed (because our build was already in
+			# flight), it set the dirty flag. Re-check it now and queue a
+			# follow-up build so no event is silently lost.
+			_queue_followup_build_if_dirty(target_name)
 
 			logger.info(
 				f"Build {build_name} completed successfully for plan {target_name}, {len(files)} files published"
@@ -225,6 +239,72 @@ def _notify_cache_invalidation(target_id: str, target_type: str = "Memora Academ
 	except Exception as e:
 		# Log but don't fail the build
 		logger.error(f"Failed to invalidate cache for plan {target_id}: {e}")
+
+
+def _queue_followup_build_if_dirty(plan_id: str):
+	"""Queue a follow-up build if the dirty flag was set during this build.
+
+	The dirty flag is set by build_trigger when a hook's nx_set on the debounce
+	key fails because a build was already in-flight (this one). Without a
+	follow-up, that content change would never trigger a rebuild — the
+	"trailing edit lost" race that motivates this whole pattern.
+
+	Best-effort: errors are logged but never fail the build.
+	"""
+	try:
+		dirty_key = build_dirty_key(plan_id)
+		# `frappe.cache.exists` is overridden to apply the `<db_name>|` prefix,
+		# but build_trigger sets this flag via the inherited redis-py `cache.set`
+		# (raw key, no prefix). Pass `shared=True` to skip the prefix and check
+		# the actual key. `cache.delete` below is the inherited (raw) method —
+		# correctly matched.
+		if not frappe.cache.exists(dirty_key, shared=True):
+			return
+
+		# Consume the signal. If another hook fires between this delete and the
+		# new build's start, that hook will queue cleanly via the normal path.
+		frappe.cache.delete(dirty_key)
+
+		debounce_key = build_debounce_key(plan_id)
+		import time as _time
+
+		was_set = frappe.cache.set(
+			debounce_key, str(int(_time.time())), nx=True, ex=120
+		)
+		if not was_set:
+			# Another build is already queued (a hook beat us to it after we
+			# cleared the debounce earlier). The dirty event will be picked up
+			# by that build's own re-check. Nothing more to do.
+			logger.info(
+				f"Dirty flag set for plan {plan_id}; another build already queued — skipping follow-up"
+			)
+			return
+
+		try:
+			build_queue = frappe.get_doc(
+				{
+					"doctype": "Memora Build Queue",
+					"target_type": "Memora Academic Plan",
+					"target_name": plan_id,
+					"trigger_reason": "post_build_dirty_recheck",
+					"triggered_by": frappe.session.user,
+					"status": "Pending",
+				}
+			)
+			build_queue.insert(ignore_permissions=True)
+			frappe.db.commit()
+			logger.info(
+				f"Follow-up build {build_queue.name} queued for plan {plan_id} (dirty flag was set)"
+			)
+		except Exception as e:
+			# Roll back the debounce so a future trigger can queue successfully.
+			try:
+				frappe.cache.delete(debounce_key)
+			except Exception:
+				pass
+			logger.error(f"Failed to queue follow-up build for plan {plan_id}: {e}")
+	except Exception as e:
+		logger.error(f"Failed to check dirty flag for plan {plan_id}: {e}")
 
 
 def _send_notification(

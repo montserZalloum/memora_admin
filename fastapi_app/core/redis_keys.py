@@ -744,6 +744,20 @@ def build_retry_key(build_id: str) -> str:
 	return f"memora:build:retry:{build_id}"
 
 
+def build_dirty_key(plan_id: str) -> str:
+	"""Plan dirty marker — set by hooks when their nx_set debounce check fails
+	(i.e., a build is already pending/processing). The worker checks this flag
+	after finishing its build and queues a follow-up if it's set, so no content
+	change can be silently lost during a build's run window.
+
+	Type: STRING (presence flag)
+	Producers: build_trigger.py (when nx_set on debounce key fails)
+	Consumers: build_worker.py (cleared at build start, re-checked at build end)
+	TTL: 24h (long enough to survive worker restart / scheduler delay)
+	"""
+	return f"memora:build:dirty:plan:{plan_id}"
+
+
 # =============================================================================
 # FSRS Background Processor (Frappe-managed)
 # =============================================================================
