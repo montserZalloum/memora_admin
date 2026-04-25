@@ -3,6 +3,15 @@
   "docstatus": 0,
   "doctype": "Memora Lesson Stage Settings",
   "is_skippable": 1,
+  "modified": "2026-04-21 16:15:20.850586",
+  "name": "HTML_PAGE",
+  "payload": null,
+  "stage_title": "HTML_PAGE"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Memora Lesson Stage Settings",
+  "is_skippable": 1,
   "modified": "2026-02-11 14:00:12.910097",
   "name": "SENTENCE_BUILDER",
   "payload": null,
