@@ -64,6 +64,9 @@ async function isEffectivelySkippable(row) {
 }
 
 frappe.ui.form.on("Memora Lesson", {
+	onload: function (frm) {
+		_sync_static_lesson_button(frm);
+	},
 	refresh: function (frm) {
 		frm.add_custom_button(__("إضافة سؤال"), () => open_add_question_dialog(frm));
 		frm.custom_buttons[__("إضافة سؤال")]?.removeClass("btn-default").addClass("btn-warning");
@@ -71,8 +74,116 @@ frappe.ui.form.on("Memora Lesson", {
 			frm.add_custom_button(__("Lesson Map"), () => open_lesson_map_dialog(frm));
 			frm.custom_buttons[__("Lesson Map")]?.removeClass("btn-default").addClass("btn-danger");
 		}
+		_sync_static_lesson_button(frm);
+	},
+	is_reviewable: function (frm) {
+		_sync_static_lesson_button(frm);
 	},
 });
+
+// =================================================
+// Static Lesson — HTML editor + live preview dialog
+// =================================================
+
+function _sync_static_lesson_button(frm) {
+	const field = frm.get_field("is_reviewable");
+	if (!field || !field.$wrapper) return;
+	const $wrap = field.$wrapper;
+	$wrap.siblings(".static-lesson-btn-row").remove();
+	if (!frm.doc.is_reviewable) {
+		const $row = $(
+			`<div class="static-lesson-btn-row" style="margin:6px 0 10px;">
+				<button type="button" class="btn btn-sm btn-warning static-lesson-btn">${__("STATIC LESSON")}</button>
+			</div>`
+		);
+		$row.find(".static-lesson-btn").on("click", () => open_static_lesson_dialog(frm));
+		$wrap.after($row);
+	}
+}
+
+function open_static_lesson_dialog(frm) {
+	const d = new frappe.ui.Dialog({
+		title: __("STATIC LESSON"),
+		size: "extra-large",
+		fields: [
+			{
+				fieldtype: "Code",
+				fieldname: "html_source",
+				options: "HTML",
+				label: __("HTML Editor"),
+			},
+			{ fieldtype: "Column Break" },
+			{
+				fieldtype: "HTML",
+				fieldname: "html_preview",
+				label: __("Preview"),
+			},
+		],
+		primary_action_label: __("Save"),
+		primary_action: function () {
+			const editor = d.fields_dict.html_source && d.fields_dict.html_source.editor;
+			const html =
+				(editor && editor.getValue()) || d.get_value("html_source") || "";
+			if (!html.trim()) {
+				frappe.msgprint(__("HTML content is empty."));
+				return;
+			}
+			const row = frm.add_child("stages");
+			row.stage_type = "HTML_PAGE";
+			row.config_json = JSON.stringify(
+				{
+					item_id: generateItemUUID(),
+					html: html,
+				},
+				null,
+				2
+			);
+			frm.refresh_field("stages");
+			frm.dirty();
+			d.hide();
+			frappe.show_alert({
+				message: __("تمت إضافة الصفحة — اضغط حفظ لتأكيد"),
+				indicator: "blue",
+			});
+		},
+	});
+
+	d.$wrapper.find(".modal-dialog").css({
+		"max-width": "95vw",
+		width: "95vw",
+		margin: "10px auto",
+	});
+
+	d.show();
+
+	const codeField = d.fields_dict.html_source;
+	const $previewWrap = d.fields_dict.html_preview.$wrapper;
+	$previewWrap.html(
+		`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+			<label class="control-label" style="margin:0;">${__("Preview")}</label>
+			<button type="button" class="btn btn-sm btn-primary static-lesson-refresh-btn">
+				<i class="fa fa-refresh"></i> ${__("Refresh Preview")}
+			</button>
+		</div>
+		<iframe class="static-lesson-preview" sandbox="allow-scripts" style="width:100%;height:70vh;border:1px solid var(--border-color);border-radius:6px;background:#fff;"></iframe>`
+	);
+	const $preview = $previewWrap.find(".static-lesson-preview");
+
+	const renderPreview = () => {
+		const html =
+			(codeField && codeField.editor && codeField.editor.getValue()) ||
+			d.get_value("html_source") ||
+			"";
+		$preview[0].srcdoc = html;
+	};
+	renderPreview();
+
+	$previewWrap.find(".static-lesson-refresh-btn").on("click", renderPreview);
+
+	$(codeField.wrapper)
+		.find(".ace_editor")
+		.css({ "min-height": "60vh", "max-height": "75vh" });
+}
 
 // =================================================
 // Add Question — quick-add a QUESTION stage
