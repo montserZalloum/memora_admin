@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>حفنة تمر — رحلة في قصّة الطيّب صالح</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg1:#2c1c0c; --bg2:#5a3f18; --bg3:#23341f;
+    --card:#ffffff; --ink:#3a2a16;
+    --p:#9a6a2a; --p2:#c08a3c;
+    --good:#16a34a; --bad:#ef4444;
+    --gold:#fbbf24; --gem:#22d3ee;
+    --soft:#f7eed9;
+    --palm:#3f8b3f; --nile:#2b8ca3; --sand:#e3c489; --grief:#b1456b;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:'Cairo','Tahoma','Segoe UI',sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2) 45%,var(--bg3));
+    color:var(--ink);
+    overflow:hidden; user-select:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .bgsym{position:fixed; inset:0; overflow:hidden; z-index:0; pointer-events:none;}
+  .bgsym span{position:absolute; color:#ffffff12; font-weight:900; animation:floaty linear infinite;}
+  @keyframes floaty{0%{transform:translateY(110vh) rotate(0)}100%{transform:translateY(-20vh) rotate(360deg)}}
+
+  #app{
+    position:relative; z-index:2;
+    width:min(440px,100vw); height:min(880px,100vh);
+    background:linear-gradient(180deg,#fffaf0,#fdf2dd);
+    border-radius:28px; overflow:hidden;
+    box-shadow:0 30px 80px #0008, inset 0 0 0 6px #ffffff10;
+    display:flex; flex-direction:column;
+  }
+  @media (max-width:460px){ #app{width:100vw;height:100vh;border-radius:0;} }
+
+  #hud{
+    display:flex; align-items:center; gap:8px; padding:12px 14px;
+    background:linear-gradient(90deg,var(--p),var(--p2));
+    color:#fff; box-shadow:0 6px 18px #9a6a2a55; z-index:5;
+  }
+  .pill{background:#ffffff25; border-radius:999px; padding:6px 12px; font-weight:900; font-size:15px; display:flex; align-items:center; gap:5px; backdrop-filter:blur(4px);}
+  #xpwrap{flex:1; height:14px; background:#ffffff30; border-radius:999px; overflow:hidden;}
+  #xpbar{height:100%; width:0%; background:linear-gradient(90deg,#fff,#fde68a); border-radius:999px; transition:width .5s cubic-bezier(.2,1,.3,1);}
+  #soundBtn{cursor:pointer; font-size:20px; background:#ffffff25; border:none; color:#fff; width:38px;height:38px;border-radius:50%;}
+
+  #screen{flex:1; position:relative; overflow:hidden;}
+  .view{position:absolute; inset:0; display:flex; flex-direction:column; padding:18px; overflow-y:auto; animation:slideIn .45s cubic-bezier(.2,1,.3,1);}
+  @keyframes slideIn{from{opacity:0; transform:translateX(30px)} to{opacity:1; transform:none}}
+
+  .mascot{width:96px;height:96px; flex:none; filter:drop-shadow(0 8px 12px #5a3f1844); animation:bob 2.4s ease-in-out infinite;}
+  .mascot.small{width:62px;height:62px;}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  .bubble{background:#fff; border:3px solid #f0dcb8; border-radius:20px; padding:14px 16px; font-size:18px; font-weight:700; line-height:1.95; box-shadow:0 8px 20px #9a6a2a18; position:relative;}
+  .bubble:after{content:""; position:absolute; bottom:-14px; right:36px; border:8px solid transparent; border-top-color:#fff;}
+
+  h1.title{font-size:25px; font-weight:900; color:var(--p); margin:6px 0; text-align:center; line-height:1.45;}
+  .sub{text-align:center; color:#7a5a2a; font-weight:700; margin-bottom:8px;}
+
+  .btn{
+    border:none; border-radius:18px; padding:16px; font-family:inherit;
+    font-size:20px; font-weight:900; cursor:pointer; color:#fff;
+    background:linear-gradient(180deg,var(--p2),var(--p));
+    box-shadow:0 6px 0 #6f4a16, 0 10px 18px #9a6a2a55;
+    transition:transform .08s, box-shadow .08s; width:100%;
+  }
+  .btn:active{transform:translateY(4px); box-shadow:0 2px 0 #6f4a16;}
+  .btn.gold{background:linear-gradient(180deg,#fcd34d,var(--gold)); color:#5b3d00; box-shadow:0 6px 0 #b45309,0 10px 18px #f59e0b66;}
+  .btn.ghost{background:#fff; color:var(--p); box-shadow:0 4px 0 #f0dcb8;}
+
+  .card{background:#fff; border-radius:22px; padding:18px; box-shadow:0 10px 26px #9a6a2a18; margin-top:auto;}
+
+  .opts{display:grid; gap:12px; margin-top:14px;}
+  .opt{
+    background:#fff; border:3px solid #f0dcb8; border-radius:18px; padding:15px;
+    font-size:19px; font-weight:900; color:var(--ink); cursor:pointer;
+    transition:transform .1s, border-color .1s, background .1s; text-align:center; line-height:1.7;
+    box-shadow:0 4px 0 #f0dcb8;
+  }
+  .opt:active{transform:translateY(3px); box-shadow:none;}
+  .opt.good{border-color:var(--good); background:#dcfce7; box-shadow:0 4px 0 #86efac; animation:pop .4s;}
+  .opt.bad{border-color:var(--bad); background:#fee2e2; box-shadow:0 4px 0 #fca5a5; animation:shake .4s;}
+  .opt.dim{opacity:.45;}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+
+  .prompt{font-size:20px; font-weight:900; text-align:center; margin:8px 0; line-height:1.85;}
+
+  .hint{background:var(--soft); border-radius:14px; padding:10px 14px; font-weight:700; color:#8a5a10; text-align:center; margin:8px 0; line-height:1.85;}
+
+  /* صندوق نصّ مفتاحيّ / مقولة */
+  .keybox{background:#fffbeb; border:2px dashed var(--gold); border-radius:14px; padding:14px 16px; font-weight:800; color:#7c4a12; text-align:center; margin:10px 0; line-height:2.05; font-size:17px; font-family:'Amiri','Cairo',serif;}
+  .keybox small{display:block;color:#a16207;font-weight:800;font-size:13px;margin-top:8px;font-family:'Cairo',sans-serif;}
+
+  /* نصّ القصّة (ورق) */
+  .passage{background:linear-gradient(180deg,#fdf6e6,#f6e8cd); border:2px solid #e3c99a; border-inline-start:6px solid var(--p); border-radius:16px; padding:16px 16px 14px; margin:12px 0; box-shadow:0 6px 16px #6b4a1a1a; position:relative;}
+  .passage .ptag{position:absolute; top:-12px; right:16px; background:var(--p); color:#fff; font-size:12px; font-weight:900; padding:3px 11px; border-radius:999px;}
+  .passage .ptext{font-size:18px; font-weight:700; line-height:2.15; color:#43320f; font-family:'Amiri','Cairo',serif;}
+  .kw{color:#9a3412; font-weight:900; border-bottom:2px dotted #c2410c; padding:0 1px;}
+
+  /* مَعجَم: كلمة ← معنى */
+  .gloss{background:#fff; border:2px solid #ecd9b8; border-radius:14px; padding:6px 10px; margin:10px 0; box-shadow:0 4px 12px #6b4a1a12;}
+  .grow{display:flex; gap:10px; align-items:flex-start; padding:8px 4px; border-bottom:1px dashed #f0e2c8; font-size:15px; line-height:1.75;}
+  .grow:last-child{border-bottom:none;}
+  .gw{flex:none; min-width:104px; font-weight:900; color:var(--p);}
+  .gm{font-weight:700; color:#5a4a30;}
+
+  /* خطوات / تحليل */
+  .steps{background:#fff; border:3px solid #f0dcb8; border-radius:16px; padding:14px; margin:8px 0; box-shadow:0 6px 16px #9a6a2a12;}
+  .steprow{display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px dashed #f0e2c8; font-weight:800; font-size:16px; line-height:1.85;}
+  .steprow:last-child{border-bottom:none;}
+  .stepno{flex:none; width:28px;height:28px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;}
+
+  /* رقائق */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin:10px 0;}
+  .chip{background:#fff;border:2px solid #ecd9b8;border-radius:999px;padding:8px 14px;font-weight:900;font-size:14px;color:var(--ink);box-shadow:0 3px 0 #ecd9b8;}
+  .chip.hl{border-color:var(--p);color:var(--p);box-shadow:0 3px 0 #e7cfa0;}
+  .chip.g{border-color:var(--palm);color:#2f6b2f;box-shadow:0 3px 0 #bfe0bf;}
+
+  /* جدول */
+  .cmp{width:100%;margin:10px 0;}
+  .cmp table{width:100%;border-collapse:collapse;font-weight:800;border-radius:14px;overflow:hidden;box-shadow:0 8px 20px #6b4a1a12;}
+  .cmp th,.cmp td{padding:9px 8px;text-align:center;font-size:13.5px;line-height:1.6;border:1px solid #efe6d4;}
+  .cmp thead th{color:#fff;font-size:14px;background:var(--p);}
+  .cmp td.k{background:#f6efe0;color:#6b4a1a;font-weight:900;}
+  .cmp tbody tr:nth-child(even) td{background:#fcf8ef;}
+
+  /* رسوم */
+  .diagram{display:flex;flex-direction:column;align-items:center;margin:12px 0;}
+  .dimlabel{font-weight:900;color:var(--p);font-size:13px;margin-top:8px;text-align:center;line-height:1.7;}
+  svg.fig{max-width:300px;width:100%;height:auto;background:#fff;border-radius:16px;box-shadow:0 8px 20px #6b4a1a14;padding:8px;}
+
+  #fb{position:absolute; left:0; right:0; bottom:0; transform:translateY(110%); transition:transform .4s cubic-bezier(.2,1,.3,1);
+      background:#fff; border-radius:24px 24px 0 0; padding:18px; box-shadow:0 -10px 30px #0002; z-index:8;}
+  #fb.show{transform:none;}
+  #fb.win{background:#dcfce7;} #fb.lose{background:#fee2e2;}
+  #fb .ttl{font-size:22px; font-weight:900; display:flex; align-items:center; gap:8px;}
+  #fb .exp{font-weight:700; color:#4a3a26; margin:8px 0 14px; line-height:1.95; font-size:16px;}
+
+  .path{flex:1; display:flex; flex-direction:column; align-items:center; gap:0; position:relative; padding-top:6px;}
+  .node{width:84px;height:84px;border-radius:50%; display:flex;align-items:center;justify-content:center; font-size:34px;
+         font-weight:900; color:#fff; position:relative; cursor:pointer; box-shadow:0 6px 0 #00000022, 0 10px 20px #0003; transition:transform .12s;}
+  .node:active{transform:scale(.94);}
+  .node.locked{background:#c4ad86; box-shadow:0 6px 0 #a08a64; cursor:not-allowed;}
+  .node.done{background:linear-gradient(180deg,#34d399,#10b981); box-shadow:0 6px 0 #059669;}
+  .node.cur{background:linear-gradient(180deg,var(--p2),var(--p)); box-shadow:0 6px 0 #6f4a16; animation:beat 1.4s infinite;}
+  .node.boss{background:linear-gradient(180deg,#fb7185,#be123c); box-shadow:0 6px 0 #881337;}
+  @keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  .node .nm{position:absolute; bottom:-24px; font-size:11.5px; color:#f3e7cf; font-weight:900; white-space:nowrap; background:#3a2a1699; padding:2px 8px;border-radius:8px;}
+  .node .stars{position:absolute; top:-14px; font-size:14px;}
+  .connector{width:6px;height:34px;background:#7a5a32;border-radius:999px;}
+  .connector.done{background:#34d399;}
+  .nodeoff{margin-inline-start:var(--off,0);}
+
+  .confetti{position:fixed; top:-20px; font-size:22px; z-index:99; pointer-events:none; animation:fall linear forwards;}
+  @keyframes fall{to{transform:translateY(105vh) rotate(720deg); opacity:.2}}
+
+  .cert{background:linear-gradient(180deg,#fffdf5,#fef3d8); border:5px double var(--gold); border-radius:20px; padding:22px; text-align:center; box-shadow:0 14px 30px #f59e0b33;}
+  .cert h2{color:#9a6a2a; margin:6px 0; font-size:22px;}
+  .cert .big{font-size:56px;}
+  .badge{font-size:80px; text-align:center; animation:bob 2s infinite;}
+</style>
+</head>
+<body>
+<div class="bgsym" id="bgsym"></div>
+
+<div id="app">
+  <div id="hud">
+    <button id="soundBtn" title="الصوت">🔊</button>
+    <div class="pill">💎 <span id="gems">0</span></div>
+    <div id="xpwrap"><div id="xpbar"></div></div>
+    <div class="pill">⭐ <span id="stars">0</span></div>
+  </div>
+  <div id="screen"></div>
+  <div id="fb">
+    <div class="ttl" id="fbttl"></div>
+    <div class="exp" id="fbexp"></div>
+    <button class="btn" id="fbbtn">متابعة</button>
+  </div>
+</div>
+
+<script>
+/* ============================ شخصية المرشد (تُمَيْر — حبّة التمر) ============================ */
+function mascot(cls){return `
+<svg class="mascot ${cls||''}" viewBox="0 0 120 120">
+  <!-- سعف النخيل فوق الرأس -->
+  <path d="M58 30 C50 14 34 10 24 14 C40 16 48 22 56 34 Z" fill="#3f8b3f"/>
+  <path d="M62 30 C70 14 86 10 96 14 C80 16 72 22 64 34 Z" fill="#357935"/>
+  <path d="M59 28 C55 10 48 4 40 4 C50 10 53 18 57 32 Z" fill="#4e9d4e"/>
+  <path d="M61 28 C65 10 72 4 80 4 C70 10 67 18 63 32 Z" fill="#3f8b3f"/>
+  <rect x="56" y="26" width="8" height="11" rx="3" fill="#6b4f2a"/>
+  <!-- جسم التمرة -->
+  <ellipse cx="60" cy="76" rx="35" ry="41" fill="#7a4a1e"/>
+  <ellipse cx="60" cy="76" rx="35" ry="41" fill="url(#tg)" opacity=".55"/>
+  <defs><linearGradient id="tg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cf9450"/><stop offset="1" stop-color="#7a4a1e" stop-opacity="0"/></linearGradient></defs>
+  <ellipse cx="46" cy="56" rx="9" ry="15" fill="#ffffff" opacity=".18"/>
+  <path d="M34 86 Q60 94 86 86" stroke="#5e3514" stroke-width="2" fill="none" opacity=".45"/>
+  <path d="M37 98 Q60 105 83 98" stroke="#5e3514" stroke-width="2" fill="none" opacity=".4"/>
+  <circle cx="48" cy="72" r="10" fill="#fff"/><circle cx="72" cy="72" r="10" fill="#fff"/>
+  <circle cx="50" cy="74" r="5" fill="#2a1a0c"/><circle cx="74" cy="74" r="5" fill="#2a1a0c"/>
+  <circle cx="52" cy="72" r="1.9" fill="#fff"/><circle cx="76" cy="72" r="1.9" fill="#fff"/>
+  <path d="M50 91 Q60 100 70 91" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>
+</svg>`;}
+
+/* ============================ الأصوات ============================ */
+let AC=null, soundOn=true;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} return AC; }
+function tone(f,d,t,v){ if(!soundOn||!ac())return; const o=ac().createOscillator(),g=ac().createGain();
+  o.type=t||'sine'; o.frequency.value=f; o.connect(g); g.connect(ac().destination);
+  const n=ac().currentTime; g.gain.setValueAtTime(0,n); g.gain.linearRampToValueAtTime(v||.18,n+.02);
+  g.gain.exponentialRampToValueAtTime(.0001,n+d); o.start(n); o.stop(n+d); }
+function sGood(){ [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.25,'triangle',.2),i*70)); }
+function sBad(){ tone(180,.3,'sawtooth',.12); setTimeout(()=>tone(120,.3,'sawtooth',.12),120); }
+function sTap(){ tone(494,.08,'square',.07); }
+function sWin(){ [523,659,784,1047,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.3,'triangle',.2),i*120)); }
+function sLevel(){ [659,880,1047].forEach((f,i)=>setTimeout(()=>tone(f,.22,'triangle',.18),i*90)); }
+
+/* ============================ مؤثرات ============================ */
+function confetti(n){ const e=['🎉','⭐','✨','🌴','📜','🌾','📖']; for(let i=0;i<(n||30);i++){
+  const c=document.createElement('div'); c.className='confetti'; c.textContent=e[i%e.length];
+  c.style.left=Math.random()*100+'vw'; c.style.fontSize=(16+Math.random()*22)+'px';
+  c.style.animationDuration=(1.4+Math.random()*1.6)+'s'; document.body.appendChild(c);
+  setTimeout(()=>c.remove(),3200);} }
+
+/* ============================ أدوات العرض ============================ */
+function passage(html){ return `<div class="passage"><div class="ptag">📜 من القصّة</div><div class="ptext">${html}</div></div>`; }
+function glossary(items){ return `<div class="gloss">${items.map(it=>`<div class="grow"><span class="gw">${it[0]}</span><span class="gm">${it[1]}</span></div>`).join('')}</div>`; }
+function chips(items){ return `<div class="chips">${items.map(it=>`<span class="chip ${it[1]||''}">${it[0]}</span>`).join('')}</div>`; }
+function table(head,rows){ return `<div class="cmp"><table><thead><tr>${head.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${r.map((c,i)=>`<td class="${i===0?'k':''}">${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`; }
+
+/* مشهد البيئة: المسجد والنهر والنخل */
+function palmScene(){ return `<div class="diagram"><svg class="fig" viewBox="0 0 260 150">
+  <rect x="0" y="0" width="260" height="150" rx="14" fill="#fcf3e0"/>
+  <rect x="0" y="0" width="260" height="96" fill="#cfe9f1" opacity=".55"/>
+  <circle cx="210" cy="28" r="14" fill="#fcd34d" opacity=".85"/>
+  <path d="M0 112 Q130 98 260 114 L260 150 L0 150 Z" fill="#2b8ca3"/>
+  <path d="M0 120 Q130 106 260 122" stroke="#fff" stroke-width="2" fill="none" opacity=".5"/>
+  <rect x="22" y="72" width="46" height="40" fill="#ead6ad" stroke="#b08a4a" stroke-width="1.5"/>
+  <path d="M20 72 Q45 50 70 72 Z" fill="#cdaa6a"/>
+  <rect x="43" y="44" width="4" height="28" fill="#b08a4a"/><circle cx="45" cy="43" r="4.5" fill="#cdaa6a"/>
+  <rect x="150" y="58" width="8" height="56" rx="3" fill="#7a4a1e"/>
+  <path d="M154 60 C124 56 112 66 102 72" stroke="#3f8b3f" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M154 60 C184 56 196 66 206 72" stroke="#3f8b3f" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M154 58 C140 46 132 40 120 40" stroke="#357935" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M154 58 C168 46 176 40 188 40" stroke="#357935" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <path d="M154 56 C152 44 152 38 152 32" stroke="#4e9d4e" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <circle cx="154" cy="58" r="5" fill="#8d5524"/>
+  <rect x="186" y="98" width="64" height="14" rx="3" fill="#cdb46a"/>
+  <text x="118" y="142" font-size="11" font-weight="900" text-anchor="middle" fill="#fff">النهر (النيل)</text>
+</svg><div class="dimlabel">المسجدُ · النهرُ · الحقلُ والنخلُ — معالمُ حياةِ الطفل</div></div>`; }
+
+/* بطاقة الكاتب */
+function authorCard(){ return `<div class="diagram"><svg class="fig" viewBox="0 0 260 170" style="max-width:280px">
+  <rect x="10" y="10" width="240" height="150" rx="16" fill="#fff" stroke="var(--p)" stroke-width="2"/>
+  <rect x="10" y="10" width="240" height="38" rx="14" fill="var(--p)"/>
+  <text x="130" y="35" font-size="16" font-weight="900" text-anchor="middle" fill="#fff">الطّيّب صالح</text>
+  <circle cx="58" cy="100" r="32" fill="#f3e6cf" stroke="#cdaa6a" stroke-width="2"/>
+  <circle cx="58" cy="88" r="12" fill="#9a6a2a"/>
+  <path d="M32 122 Q58 100 84 122 Z" fill="#9a6a2a"/>
+  <text x="160" y="78" font-size="13" font-weight="900" text-anchor="middle" fill="#3a2a16">1929 — 2009 م</text>
+  <text x="160" y="100" font-size="13" font-weight="900" text-anchor="middle" fill="#2b8ca3">السودان 🇸🇩</text>
+  <text x="160" y="128" font-size="12.5" font-weight="900" text-anchor="middle" fill="#9a3412">👑 عبقريُّ الرواية</text>
+  <text x="160" y="145" font-size="12.5" font-weight="900" text-anchor="middle" fill="#9a3412">العربيّة</text>
+</svg><div class="dimlabel">أديبٌ وروائيٌّ سودانيٌّ</div></div>`; }
+
+/* أرضُ مسعودٍ عبرَ الزمن */
+function landBars(){ return `<div class="diagram"><svg class="fig" viewBox="0 0 260 152">
+  <text x="130" y="16" font-size="12.5" font-weight="900" text-anchor="middle" fill="#3a2a16">أرضُ مسعودٍ (مئةُ فدّانٍ) عبرَ الزمن</text>
+  <text x="10" y="44" font-size="11.5" font-weight="900" fill="#2f6b2f">قبلَ 40 سنة</text>
+  <rect x="10" y="50" width="240" height="26" rx="7" fill="#3f8b3f"/>
+  <text x="130" y="68" font-size="12" font-weight="900" text-anchor="middle" fill="#fff">كلُّها مِلكُ مسعودٍ 🌴</text>
+  <text x="10" y="104" font-size="11.5" font-weight="900" fill="#9a3412">اليومَ</text>
+  <clipPath id="lb"><rect x="10" y="110" width="240" height="26" rx="7"/></clipPath>
+  <g clip-path="url(#lb)">
+    <rect x="10" y="110" width="160" height="26" fill="#9a6a2a"/>
+    <rect x="170" y="110" width="80" height="26" fill="#3f8b3f"/>
+  </g>
+  <text x="90" y="128" font-size="12" font-weight="900" text-anchor="middle" fill="#fff">الجدُّ: الثُّلثان</text>
+  <text x="210" y="128" font-size="11" font-weight="900" text-anchor="middle" fill="#fff">الثُّلث</text>
+</svg><div class="dimlabel">كانت كلُّها لمسعودٍ، فصارَ ثُلثاها للجدِّ — ويطمعُ في الباقي</div></div>`; }
+
+/* خريطةُ الشخصيّات */
+function charMap(){ return `<div class="diagram"><svg class="fig" viewBox="0 0 260 178">
+  <rect x="14" y="20" width="100" height="54" rx="12" fill="#9a6a2a"/>
+  <text x="64" y="42" font-size="14" font-weight="900" text-anchor="middle" fill="#fff">الجَدّ</text>
+  <text x="64" y="60" font-size="10" font-weight="800" text-anchor="middle" fill="#ffe9c9">دائنٌ · قويٌّ · طامعٌ</text>
+  <rect x="146" y="20" width="100" height="54" rx="12" fill="#b1456b"/>
+  <text x="196" y="42" font-size="14" font-weight="900" text-anchor="middle" fill="#fff">مسعود</text>
+  <text x="196" y="60" font-size="10" font-weight="800" text-anchor="middle" fill="#ffe1ec">مَدينٌ · ضعيفٌ · خاملٌ</text>
+  <defs><marker id="ar" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0 0 L6 3 L0 6 Z" fill="#475569"/></marker></defs>
+  <line x1="146" y1="47" x2="116" y2="47" stroke="#475569" stroke-width="2.5" marker-end="url(#ar)"/>
+  <text x="131" y="40" font-size="9.5" font-weight="900" text-anchor="middle" fill="#475569">دَيْنٌ</text>
+  <rect x="80" y="110" width="100" height="56" rx="12" fill="#2b8ca3"/>
+  <text x="130" y="132" font-size="13.5" font-weight="900" text-anchor="middle" fill="#fff">الطّفل (الراوي)</text>
+  <text x="130" y="151" font-size="10" font-weight="800" text-anchor="middle" fill="#d9f2f8">ذكيٌّ · حسّاسٌ · ضميرٌ</text>
+  <line x1="100" y1="110" x2="66" y2="74" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"/>
+  <line x1="160" y1="110" x2="194" y2="74" stroke="#94a3b8" stroke-width="2" stroke-dasharray="4 3"/>
+  <text x="76" y="100" font-size="9.5" font-weight="900" fill="#2f6b2f">حُبٌّ</text>
+  <text x="178" y="100" font-size="9.5" font-weight="900" fill="#b1456b">عَطفٌ</text>
+</svg><div class="dimlabel">الطفلُ بينَ حُبِّه لجَدِّه وعطفِه على مسعودٍ المظلوم</div></div>`; }
+
+/* تقاسُمُ أكياسِ التمر */
+function bagsFig(){ const rows=[['🛍️ حُسَيْن التاجر',10,false],['🐪 رجلٌ غريبٌ',5,false],['🐪 رجلٌ غريبٌ',5,false],['🌾 موسى (الجار)',5,false],['👳 الجَدّ',5,false],['✗ مسعودٌ (صاحبُ الأرضِ والتمر)',0,true]];
+  return `<div class="cmp" style="margin-top:12px"><table>
+   <thead><tr><th>مَن أخذَ التمرَ؟</th><th>عددُ الأكياس</th></tr></thead>
+   <tbody>${rows.map(r=>`<tr><td class="k" style="text-align:start;${r[2]?'color:#b91c1c':''}">${r[0]}</td><td style="font-weight:900;${r[2]?'color:#b91c1c':'color:#6b4a1a'}">${r[1]===0?'صِفر 😢':r[1]+' أكياس'}</td></tr>`).join('')}
+   <tr><td class="k" style="text-align:start">المجموع</td><td style="font-weight:900">30 كيسًا</td></tr></tbody>
+  </table></div>`; }
+
+/* رحلةُ مشاعرِ الطفل */
+function emotionArc(){ const e=['فخرٌ بالجدِّ وحُبٌّ 😍','خوفٌ من كلماتِه 😟','عطفٌ على مسعودٍ 🥺','حياءٌ داخليٌّ 😣','ألمٌ حادٌّ في الصدر 💔','رفضٌ وتطهُّرٌ (تقيُّؤ) 🤮'];
+  return `<div class="diagram"><div style="display:flex;flex-direction:column;gap:6px;width:100%;max-width:300px">
+   ${e.map((t,i)=>`<div style="display:flex;align-items:center;gap:8px">
+     <div style="flex:none;width:24px;height:24px;border-radius:50%;background:var(--p);color:#fff;font-weight:900;font-size:12px;display:flex;align-items:center;justify-content:center">${i+1}</div>
+     <div style="flex:1;background:#fff;border:2px solid #f0dcb8;border-radius:12px;padding:8px 10px;font-weight:900;font-size:13.5px;color:#5a4a30">${t}</div></div>
+     ${i<e.length-1?'<div style="text-align:center;color:var(--p);font-weight:900;margin:-3px 0;font-size:15px">↓</div>':''}`).join('')}
+  </div><div class="dimlabel">رحلةُ مشاعرِ الطفلِ — تحوُّلٌ تدريجيٌّ من الحُبِّ إلى الرفض</div></div>`; }
+
+/* ============================ الحالة ============================ */
+const State={ xp:0, gems:0, stars:0, maxUnlocked:0, levelStars:{} };
+try{ const s=JSON.parse(localStorage.getItem('hafnatamr')); if(s)Object.assign(State,s); }catch(e){}
+function save(){ try{localStorage.setItem('hafnatamr',JSON.stringify(State));}catch(e){} }
+function setHUD(){ document.getElementById('gems').textContent=State.gems;
+  document.getElementById('stars').textContent=State.stars;
+  document.getElementById('xpbar').style.width=Math.min(100,(State.xp%100))+'%'; }
+function addXP(n){ State.xp+=n; setHUD(); save(); }
+
+/* ============================ تعريف المراحل ============================ */
+/* أنواع الخطوات: story | choice | solve */
+const LEVELS=[
+
+ /* ---------- 0: قبل القراءة ---------- */
+ { name:'قبل القراءة', icon:'🌴', steps:[
+   {type:'story', say:'أهلين فيك يا بطل! 🌴 أنا <b>تُمَيْر</b>، ورح أكون رفيقَك بهالرحلة. اليوم رح نغوص سوا بقصّة قصيرة حلوة كتير اسمها <b>«حَفْنةُ تَمْر»</b> للأديب السودانيّ الكبير <b>الطّيّب صالح</b>. لا تستعجل — رح نمشي خطوة خطوة، ونفهم كلَّ كلمة وكلَّ مشهد. يلّا نبلّش! 💪', diagram:palmScene()},
+   {type:'story', say:'هاي القصّة من نوع <b>القصّة القصيرة</b>. والمطلوب نقراها <b>قراءةً جهريّةً</b> — يعني بصوت عالٍ، <b>مُعبِّرة ومُمثِّلة للمعنى</b>؛ بحيث صوتك يتفاعل مع الأحداث: فرح، خوف، حزن... متل الممثّل بالضبط. 🎭'},
+   {type:'story', say:'قبل ما نبلّش، خلّينا نتأمّل مقولتين بتمهّدوا للدرس. الأولى للأديب المصريّ <b>عبّاس محمود العقّاد</b> عن القراءة:', keybox:'«لَستُ أهوى القراءةَ لأكتُبَ... وإنّما أهوى القراءةَ؛ لأنّ عندي حياةً واحدةً، وحياةً واحدةً لا تكفيني... والقراءةُ وحدَها هي التي تُعطيني أكثرَ من حياةٍ واحدةٍ في مَدى عُمرِ الإنسان».<small>عبّاس محمود العقّاد — أديبٌ مصريٌّ</small>'},
+   {type:'story', say:'والثانية للروائيّ السنغاليّ <b>عثمان سمبين</b>، وبتحكي عن علاقة الأديب ببلده:', keybox:'«حينَما يُبدِعُ الأديبُ فهوَ لا يُفكِّرُ في العالَمِ، بل يُفكِّرُ في بلدِه».<small>عثمان سمبين — روائيٌّ سنغاليٌّ</small>'},
+   {type:'story', say:'شو يعني الكلام هاد؟ يعني الأديب أوّل ما يبدع، بيكتب عن <b>همّ بلده وناسه</b> — وهاد بالضبط اللي رح نشوفه عند الطّيّب صالح، اللي كتب عن السودان وفلّاحينه البسطاء. 🌾'},
+   {type:'story', say:'وكمان قبل القراءة، اسأل حالك سؤالين (متل جدول التعلّم KWL): <b>شو بعرف</b> عن الطّيّب صالح؟ و<b>شو بدّي أتعلّم</b> عنه وعن أعماله الأدبيّة؟ خبّي الجواب براسك... وبآخر الرحلة شوف قدّيش تعلّمت! 😉'},
+   {type:'choice', prompt:'نصُّ «حفنة تمر» هو نصٌّ من نوع...؟',
+     options:['قصّةٌ قصيرةٌ','قصيدةٌ شعريّةٌ','مقالةٌ علميّةٌ'], correct:0, exp:'هي قصّةٌ قصيرةٌ من المجموعة القصصيّة «دُومة وَدّ حامد» ✦'},
+   {type:'choice', prompt:'كيف طُلِبَ منّا أن نقرأ القصّة؟',
+     options:['قراءةً جهريّةً معبِّرةً ممثِّلةً للمعنى','قراءةً صامتةً سريعةً','قراءةً رتيبةً بلا تعبير'], correct:0, exp:'قراءةٌ جهريّةٌ معبِّرةٌ: صوتُك يُمثّل المعنى ويتفاعل مع المشاعر ✦'},
+   {type:'choice', prompt:'حسب مقولة عثمان سمبين، الأديبُ حين يُبدع يُفكّر في...؟',
+     options:['بلدِه وناسِه','نفسِه فقط','العالَمِ كلِّه دون بلدِه'], correct:0, exp:'يُفكّر في بلدِه — والأدب صورةٌ صادقةٌ عن مجتمعه ✦'},
+ ]},
+
+ /* ---------- 1: الكاتب الطيّب صالح ---------- */
+ { name:'الكاتب الطّيّب صالح', icon:'✍️', steps:[
+   {type:'story', say:'يلّا نتعرّف على صاحب القصّة. 👤 <b>الطّيّب صالح</b> أديبٌ وكاتبٌ <b>سودانيٌّ</b>، عاش بين سنة <b>1929</b> و<b>2009</b> م. بلّش رحلته مع الكتابة بـ<b>خمسينيّات</b> القرن العشرين.', diagram:authorCard()},
+   {type:'story', say:'كتاباته انترجمت لِلُغاتٍ عالميّة، وكان إلها دور كبير بنشر <b>الأدب السودانيّ</b> والثقافة السودانيّة عالميًّا. حتى لقّبوه بـ<b>«عبقريِّ الرواية العربيّة»</b> 👑 — وهاد لقب ما بيندفع لأيِّ حدا!'},
+   {type:'story', say:'من أشهر أعماله: «ضَوْءُ البيت»، و«عُرْسُ الزَّيْن»، و«مَرْيود»، و«مَنْسي»، و«بَنْدَر شاه»، و<b>«دُومةُ وَدّ حامد»</b> اللي أُخِذت منها قصّتنا، إضافةً لأشهرها كلِّها: رواية <b>«موسمُ الهجرةِ إلى الشَّمال»</b>. 📚', diagram:chips([['ضَوْءُ البيت'],['عُرْسُ الزَّيْن'],['مَرْيود'],['مَنْسي'],['بَنْدَر شاه'],['دُومةُ وَدّ حامد 📜','hl'],['موسمُ الهجرةِ إلى الشمال','hl']])},
+   {type:'story', say:'أسلوبه؟ الطّيّب صالح كان <b>مسكونًا ببيئته السودانيّة</b> — يعني عايشها بقلبه وعبّر عن مدى التصاقه بوطنه. عالج أحوال مجتمعه الريفيّ بأسلوب أدبيّ راقٍ، واستفاد من ثقافته الواسعة (لغة، أدب، شعر، سياسة، فقه، فلسفة، إعلام). فصار أسلوبه يجمع بين <b>الإقناع الفكريّ</b> 🧠 و<b>التأثير الوجدانيّ</b> ❤️ — بيقنع عقلك وبيحرّك مشاعرك بنفس الوقت.'},
+   {type:'choice', prompt:'الطّيّب صالح أديبٌ من...؟',
+     options:['السودان','مصر','السنغال'], correct:0, exp:'أديبٌ وروائيٌّ سودانيٌّ (1929 – 2009م) ✦'},
+   {type:'choice', prompt:'بأيِّ لقبٍ عُرِفَ الطّيّب صالح؟',
+     options:['عبقريُّ الرواية العربيّة','أميرُ الشعراء','شيخُ المؤرّخين'], correct:0, exp:'لُقِّبَ «عبقريَّ الرواية العربيّة» لمكانته العالية ✦'},
+   {type:'choice', prompt:'من أيِّ مجموعةٍ قصصيّةٍ أُخِذَت قصّةُ «حفنة تمر»؟',
+     options:['دُومةُ وَدّ حامد','عُرْسُ الزَّيْن','موسمُ الهجرةِ إلى الشمال'], correct:0, exp:'أُخِذَت من مجموعة «دُومة وَدّ حامد» (بتصرُّف) ✦'},
+   {type:'choice', prompt:'ما أشهرُ رواياتِ الطّيّب صالح؟',
+     options:['موسمُ الهجرةِ إلى الشمال','البخلاء','الأيّام'], correct:0, exp:'«موسم الهجرة إلى الشمال» من أشهر الروايات العربيّة عالميًّا ✦'},
+ ]},
+
+ /* ---------- 2: الأدب العربيّ الإفريقيّ ---------- */
+ { name:'الأدب العربيّ الإفريقيّ', icon:'🌍', steps:[
+   {type:'story', say:'وقفة سريعة 🌍: قصّتنا جزء من <b>الأدب العربيّ الإفريقيّ</b>، وهاد أدب إله حضور كبير يستاهل الدراسة والنقد. اتّخذ أنواعًا متنوّعة — شعر ورواية وقصّة — وركّز محتواه على التعبير عن <b>مكنونات الحياة الإفريقيّة</b> (ولا سيّما العربيّة منها) وأوضاعها، انعكاسًا لطبيعة المكان والظروف المُناخيّة والسياسيّة والمعيشيّة.'},
+   {type:'story', say:'وبين كلّ الفنون، <b>القصّة</b> هي اللي تفوّقت. ليش؟ لأنّها اعتمدت <b>اللغة السهلة</b> والعبارات المحكيّة المستمدّة من اللهجات، مع المحافظة على <b>التكثيف والإيحاء والرمز</b>. فطلعت أعمال تحكي واقعها وتعبّر عنه — صورة تاريخيّة صادقة مرسومة بمشاهد ولوحات إبداعيّة ما بتقلّ عن مثيلاتها في الأدب المَشرقيّ. 🎨'},
+   {type:'story', say:'وبرزت أسماء كبيرة بكلّ بلد عربيّ إفريقيّ. شوف الجدول، ولاحظ مين الأبرز بالسودان 👇', diagram:table(['الدولة','أبرزُ الأسماء'],[['المغرب','إدريس الشرايبي · محمد الأشعري · عبد اللطيف اللعبي · محمد زفزاف'],['الجزائر','عبد الملك مرتاض · واسيني الأعرج · مالك حدّاد · محمد القاسمي'],['تونس','علي الدوعاجي · شكري المبخوت'],['ليبيا','إبراهيم الكَوني · شيماء بن عُمَر · محمد فريد سيالة'],['مصر','نجيب محفوظ'],['السودان','⭐ الطّيّب صالح']])},
+   {type:'choice', prompt:'أيُّ فنٍّ أدبيٍّ <b>تفوّقَ</b> في الأدب العربيّ الإفريقيّ؟',
+     options:['القصّة','الملحمة','الخُطبة'], correct:0, exp:'تفوّق فنُّ القصّة لاعتماده اللغة السهلة والعبارات المحكيّة مع الإيحاء والرمز ✦'},
+   {type:'choice', prompt:'ما الذي ميّزَ لغةَ القصّةِ في الأدب الإفريقيّ؟',
+     options:['لغةٌ سهلةٌ وعباراتٌ محكيّةٌ مع التكثيف والإيحاء','لغةٌ صعبةٌ معقّدةٌ','لغةٌ أجنبيّةٌ بالكامل'], correct:0, exp:'سهولةُ اللغة + المحكيّةُ من اللهجات + التكثيفُ والإيحاءُ والرمز ✦'},
+   {type:'choice', prompt:'مَنِ الأبرزُ في فنِّ القصّة من <b>السودان</b>؟',
+     options:['الطّيّب صالح','نجيب محفوظ','إبراهيم الكَوني'], correct:0, exp:'الطّيّب صالح أبرزُ أدباء السودان، واختير له هذا النصّ ✦'},
+   {type:'choice', prompt:'الأديبُ <b>نجيب محفوظ</b> من أيِّ دولةٍ؟',
+     options:['مصر','تونس','ليبيا'], correct:0, exp:'نجيب محفوظ من مصر ✦'},
+ ]},
+
+ /* ---------- 3: جوُّ النصّ ---------- */
+ { name:'جوُّ النصّ', icon:'🧭', steps:[
+   {type:'story', say:'قبل ما نقرأ، خلّيني أحكيلك عن <b>جوِّ القصّة</b> 🧭 — يعني عن شو رح تحكي. القصّة بتعرض <b>مأساةَ</b> فلّاحٍ ريفيٍّ سودانيٍّ اسمه <b>مسعود</b>، <b>تُستَلَبُ أرضُه</b> (تُنتزَعُ منه شيئًا فشيئًا) بسبب <b>تقاعُسِه</b> (كسلِه)، و<b>قلّةِ حيلتِه</b>، و<b>قصورِ رؤيتِه</b> (ما بيخطّط لبُكرا).'},
+   {type:'story', say:'وهاي وحدة من <b>مشكلات الريف السودانيّ</b>: في فلّاحين بسطاء بيبيعوا أراضيهم عشان يجيبوا مصاري، وفي ناس أقوياء <b>بيترصّدوا</b> (بيستنّوا الفرصة) ليشتروا هالأراضي بـ<b>ثمنٍ زهيدٍ</b> (رخيص)، مستغلّين حاجةَ الفلّاح. ظلمٌ اجتماعيٌّ واضح. ⚖️'},
+   {type:'story', say:'وأهمّ إشي تنتبهله: الأديب <b>تقمّصَ شخصيّةَ الراوي</b> — يعني خلّى اللي بيحكي القصّة <b>طفلًا</b>! فإحنا رح نشوف كلَّ شي بعيونِ طفلٍ بريء. وهدول أبطالُنا التلاتة 👇', diagram:charMap()},
+   {type:'story', say:'القصّة بتبلّش بذكريات الطفل مع جدّه، وكيف الجدُّ امتلكَ معظمَ أرضِ جارِه مسعود (كان يبيعُله قطعةً كلَّما تجوّزَ مرّةً جديدة، لأنه مسعود <b>مِزواجٌ</b>!). وبعدين بنشوف <b>موسمَ حصادِ التمر</b>، اللي بينتهي بصدمةٍ كبيرةٍ للطفل. رح نعيشها سوا مشهدًا مشهدًا.'},
+   {type:'choice', prompt:'مَن «مسعودٌ» في القصّة؟',
+     options:['فلّاحٌ ريفيٌّ تُستَلَبُ أرضُه','تاجرٌ غنيٌّ','شيخُ المسجد'], correct:0, exp:'مسعودٌ فلّاحٌ ريفيٌّ سودانيٌّ، بطلُ المأساةِ، تُسلَبُ أرضُه ✦'},
+   {type:'choice', prompt:'ما أسبابُ فقدانِ مسعودٍ لأرضِه كما يعرضُها جوُّ النصّ؟',
+     options:['تقاعُسُه وقلّةُ حيلتِه وقصورُ رؤيتِه','حربٌ ومجاعةٌ','هجرتُه إلى المدينة'], correct:0, exp:'التقاعُس (الكسل) + قلّةُ الحيلةِ + قصورُ الرؤية ✦'},
+   {type:'choice', prompt:'مَنِ الذي يَروي أحداثَ القصّة؟',
+     options:['طفلٌ تقمّصَ الأديبُ شخصيّتَه','الجَدّ','راوٍ عليمٌ من خارج القصّة'], correct:0, exp:'الراوي طفلٌ — نرى الأحداثَ بعينيه البريئتين (راوٍ مُشارِكٌ بضميرِ المتكلّم) ✦'},
+ ]},
+
+ /* ---------- 4: القصّة (1) — الطفلُ وجَدُّه ---------- */
+ { name:'القصّة (1): الطفلُ وجَدُّه', icon:'👦', steps:[
+   {type:'story', say:'وصلنا للقصّة! 🎬 رح نقراها مشهدًا مشهدًا. اقرأ كلَّ مقطعٍ بصوتٍ معبّر، وأنا رح أفسّرلك كلَّ كلمةٍ صعبة. المشهدُ الأوّل: الطفلُ بيحكيلنا عن طفولتِه وجدِّه.'},
+   {type:'story', say:'اقرأ هالمقطع منيح 👇', diagram:passage('لا بُدَّ أنّني كنتُ صغيرًا جِدًّا حينذاكَ. لستُ أذكُرُ كم كانت سِنّي تمامًا، ولكنّني أذكُرُ أنّ الناسَ حينَ كانوا يَرَوْنَني معَ جَدّي كانوا <span class="kw">يُربِّتونَ على رأسي</span> ويُقَرِّصونَني في خَدّي، ولم يكونوا يفعلونَ ذلكَ معَ جَدّي. العجيبُ أنّني لم أَخرُجْ قطُّ معَ أبي، ولكنَّ جَدّي كانَ يأخُذُني معَهُ حيثُما ذهبَ، إلّا في الصباحِ حينَ كنتُ أذهبُ إلى المسجدِ لِحفظِ القرآنِ.')+glossary([['الحَفْنة (العنوان)','مِلءُ الكفِّ أو الكفّينِ من شيءٍ (ج: حَفَنات / حُفُنات)'],['يُربِّتونَ على رأسي','يضربونَ بأيديهم على رأسِه ضربًا خفيفًا مُلاطفةً']])},
+   {type:'story', say:'شو فهمنا؟ الطفل كان زغير كتير لدرجة ما بيتذكّر عمره. الناس كانوا يلاطفوه ويربّتوا على راسه — بس مع الجدّ لأ، لأنه الجدّ زلمة <b>مَهيبٌ ومحترَم</b>. والغريب إنه أبوه ما كان ياخده معه، بس <b>جدّه</b> كان ياخده على طول لكلّ مكان. بسّ الصبح، كان يروح عالمسجد يحفظ قرآن.'},
+   {type:'choice', prompt:'لماذا كان الناسُ يُربِّتونَ على رأسِ الطفلِ ولا يفعلونَ ذلك مع الجَدّ؟',
+     options:['لأنّ الجَدَّ رجلٌ مَهيبٌ يُوقَّرُ، والطفلَ صغيرٌ يُلاطَفُ','لأنّهم لا يعرفونَ الجَدّ','مصادفةً'], correct:0, exp:'الجدُّ رجلٌ مهيبٌ يُوقَّرُ، أمّا الطفلُ فصغيرٌ يُلاطَفُ ويُربَّتُ على رأسِه ✦'},
+   {type:'story', say:'اقرأ المقطعَ التالي 👇', diagram:passage('المسجدُ والنهرُ والحقلُ، هذهِ كانت معالِمَ حياتِنا. ... حالَما نَفرَغُ مِن قراءتِنا وقتَ الضُّحى، كنتُ أَرمي لَوْحي الخشبيَّ، وأَجري كالبرقِ إلى أُمّي، <span class="kw">ألتَهِمُ</span> إفطاري بسُرعةٍ شديدةٍ، وأَجري إلى النهرِ، وأَغمِسُ نفسي فيهِ. وحينَ <span class="kw">أَكِلُّ</span> مِنَ السباحةِ، كنتُ أَجلِسُ على <span class="kw">الحافَةِ</span>، وأتأمَّلُ الشاطئَ الذي يَنحني في الشرقِ، ويختبئُ وراءَ غابةٍ كثيفةٍ مِن شجرِ <span class="kw">الطَّلْحِ</span>.')+glossary([['ألتَهِمُ إفطاري','أتناولُه بسرعةٍ ونَهَمٍ'],['أَكِلُّ (من السباحةِ)','أتعَبُ وأُعْيا'],['الحافَة','الطَّرَفُ (طرفُ النهر)'],['شجرُ الطَّلْح','شجرُ المَوز (كما في مُعجَمِ النصّ)']])},
+   {type:'story', say:'لاحظ هون معلومتين: أوّل إشي، <b>معالمُ حياتهم</b> ثلاثة: المسجد، النهر، الحقل — بيئةٌ ريفيّةٌ بسيطة. تاني إشي، انتبه لكلمة <b>الطَّلْح</b>: بمعجم النصّ معناها <b>شجرُ الموز</b> (مش شجر الشوك متل ما بتتوقّع!). والطفل بيرسملنا صورة حلوة: بيخلّص تحفيظ، بيركض عَ أمّه، بياكل فطوره بسرعة، وبيركض عالنهر يسبح. 🏊'},
+   {type:'choice', prompt:'ما معنى «شجرِ الطَّلْحِ» في مُعجَمِ هذا النصّ؟',
+     options:['شجرُ المَوز','شجرُ الشَّوك','شجرُ الزيتون'], correct:0, exp:'في هذا النصّ: الطَّلْحُ = شجرُ المَوز ✦'},
+   {type:'choice', prompt:'ما معنى «حينَ أَكِلُّ مِنَ السباحةِ»؟',
+     options:['أتعَبُ وأُعْيا','أنتهي وأخرُجُ','أبدأُ السباحةَ'], correct:0, exp:'«أَكِلُّ» = أتعَبُ وأُعْيا من السباحة ✦'},
+   {type:'story', say:'اقرأ المقطعَ الثالث 👇', diagram:passage('كنتُ أَسرَحُ بخيالي، وأتصوَّرُ قبيلةً مِنَ العمالقةِ يعيشونَ وراءَ تلكَ الغابةِ... قَوْمٌ طِوالٌ لهم لُحًى بيضاءُ وأنوفٌ حادّةٌ مثلُ أنفِ جَدّي. كانَ جَدّي طويلًا و<span class="kw">نَحيلًا</span>، وكنتُ أُحبُّهُ، وأتخيَّلُ نفسي حينَ <span class="kw">أَستَوي</span> رجلًا <span class="kw">أَذرَعُ</span> الأرضَ مثلَهُ في خطواتٍ واسعةٍ. وأَظُنُّ جَدّي كانَ <span class="kw">يُؤْثِرُني</span> دونَ بقيّةِ <span class="kw">أحفادِهِ</span>... وكنتُ أُحضِرُ لهُ سَجّادةَ الصلاةِ، وأَملأُ لهُ الإبريقَ قبلَ أن يطلُبَ، ويَلَذُّ لهُ أن يستمعَ إليَّ أقرأُ مِنَ القرآنِ بصوتٍ <span class="kw">مُنَغَّمٍ</span>.')+glossary([['نَحيلًا','ضعيفًا / نَحيفًا'],['أَستَوي رجلًا','أستقيمُ وأعتدلُ: أكبَرُ وأصيرُ رجلًا'],['أَذرَعُ الأرضَ','أقطَعُها وأمشيها بخُطًى واسعةٍ'],['يُؤْثِرُني','يُفضِّلُني'],['الأحفاد','مفردُه حفيدٌ: أولادُ الأبناءِ أو البنات'],['المُنَغَّم','المُرتَّلُ ذو اللحنِ الحسَنِ']])},
+   {type:'story', say:'هون منشوف خيالَ الطفلِ الواسع: بيتخيّل <b>عمالقة</b> طوال بلُحى بيضا وراء الغابة، وبيشبّه أنوفهم بأنف جدّه! وبيوصفلنا جدّه: <b>طويلٌ ونحيلٌ</b> (نحيف)، وبيحبّه كتير لدرجة إنه بدّه يكبر ويصير متله. والجدّ <b>كان يفضّله</b> على باقي أحفاده، والطفل كان يخدمه بحبّ: سجّادة الصلاة، الإبريق، وقراءة قرآن بصوت <b>منغّم</b> (حلو وملحّن). ❤️'},
+   {type:'choice', prompt:'ماذا تكشفُ خدمةُ الطفلِ لجَدِّه (سجّادةُ الصلاةِ، الإبريقُ، القراءةُ المُنَغَّمةُ)؟',
+     options:['عُمقَ حُبِّه وتعلُّقِه بجَدِّه','خوفَه الشديدَ منه','رغبتَه في المالِ'], correct:0, exp:'تكشفُ حُبَّ الطفلِ العميقَ لجَدِّه — وهذا مِفتاحٌ لفهمِ صراعِه النفسيِّ لاحقًا ✦'},
+   {type:'story', say:'لَخّصنا المشهدَ الأوّل: طفلٌ ذكيٌّ حسّاسٌ، بيحبّ جدّه حبًّا كبيرًا ويفتخر فيه. خبّي هالنقطة براسك — لأنها رح تصير مهمّة لمّا نشوف الجدّ بيعمل إشي مش حلو! 😏 يلّا للمشهد الثاني.'},
+ ]},
+
+ /* ---------- 5: القصّة (2) — مسعودٌ والأرض ---------- */
+ { name:'القصّة (2): مسعودٌ والأرض', icon:'🌴', steps:[
+   {type:'story', say:'المشهدُ الثاني 🌴: الطفلُ بيسأل جدّه عن الجار <b>مسعود</b>. وهون رح نعرف سرَّ الأرض. ركّز منيح، لأنه هون بتبلّش <b>عُقدةُ القصّة</b>.'},
+   {type:'story', say:'اقرأ 👇', diagram:passage('قلتُ لجَدّي: «أَظُنُّكَ لا تُحِبُّ جارَنا مسعودًا؟»، فأجابَ بعدَ أن حكَّ طرَفَ أنفِهِ بسَبّابتِهِ: «لأنّهُ رجلٌ <span class="kw">خامِلٌ</span>، وأنا لا أُحِبُّ الرجلَ الخامِلَ»، قلتُ: «وما الرجلُ الخامِلُ؟»، فأَطرَقَ جَدّي <span class="kw">بُرهَةً</span> ثُمَّ قال: «انظُرْ إلى هذا الحقلِ الواسعِ، ألا تراهُ يمتدُّ مِن طرَفِ الصحراءِ إلى حافةِ النيلِ مِئةَ <span class="kw">فَدّانٍ</span>؟ كُلُّ هذا كانَ حلالًا لمسعودٍ، وَرِثَهُ عن أبيهِ... كانت كلُّها قبلَ أربعينَ عامًا مِلكًا لمسعودٍ، ثُلُثاها الآنَ لي أنا».')+glossary([['خامِلٌ','كَسلانٌ غيرُ نشيطٍ يُؤْثِرُ الراحةَ'],['بُرهَةً','مدّةً من الزمن'],['الفَدّان','مقدارٌ من الأرضِ يزيدُ قليلًا على 4200 م² (ج: فَدادين / فُدُن)']])},
+   {type:'story', say:'انتبه! الجدّ بيكره مسعود لأنه <b>خامِل</b> (كسلان). وبعدين بيكشف سرًّا كبيرًا: هالحقل الواسع كلّه — <b>مئة فدّان</b> من الصحرا للنيل — كان كلّه مِلكَ مسعود، ورثه عن أبوه! بس <b>هلّق ثُلثينه صاروا للجدّ</b>! الطفل انصدم، لأنه كان فاكر الأرض مِلك جدّه من يوم ما خلق الله الأرض! 😲', diagram:landBars()},
+   {type:'choice', prompt:'لماذا لا يُحِبُّ الجَدُّ جارَه مسعودًا؟',
+     options:['لأنّه رجلٌ «خامِلٌ» (كسلانٌ)','لأنّه فقيرٌ','لأنّه غريبٌ'], correct:0, exp:'الجدُّ لا يحبُّ الرجلَ الخامِلَ (الكسلانَ المُؤْثِرَ للراحة) ✦'},
+   {type:'choice', prompt:'ماذا اكتشفَ الطفلُ عن أرضِ الحقلِ الواسعِ؟',
+     options:['أنّها كانت كلُّها لمسعودٍ، وصارَ ثُلثاها للجَدّ','أنّها مِلكُ الدولةِ','أنّها لأبي الطفلِ'], correct:0, exp:'كانت مئةَ فدّانٍ مِلكًا لمسعودٍ، فصارَ ثُلثاها للجدِّ خلالَ أربعينَ عامًا ✦'},
+   {type:'story', say:'اقرأ 👇', diagram:passage('«لم أَكُنْ أَملِكُ فدّانًا واحدًا حينَ <span class="kw">وَطِئَتْ</span> قدمايَ هذا البلدَ، وكانَ مسعودٌ يملِكُ كلَّ هذا الخيرِ، ولكنَّ الحالَ انقلبَ الآنَ، وأَظُنُّني قبلَ أن يتوفّاني اللهُ سأَشتري الثُّلثَ الباقيَ أيضًا». ... سألتُ جَدّي: «لماذا باعَ مسعودٌ أرضَهُ؟»... «مسعودٌ، يا بُنَيَّ، رجلٌ <span class="kw">مِزْواجٌ</span>، كُلَّ مرّةٍ تزوَّجَ فيها امرأةً باعَ لي فدّانًا أو فدّانينِ». وبسُرعةٍ حَسَبْتُ أنَّ مسعودًا لا بُدَّ أنّهُ تزوَّجَ تسعينَ امرأةً!')+glossary([['وَطِئَتْ قدمايَ','داسَتْ ودخلَتْ (أوّلَ ما جاءَ هذا البلدَ)'],['مِزْواجٌ','كثيرُ الزواجِ (صيغةُ مُبالغةٍ)']])},
+   {type:'story', say:'هون منفهم القصّة كلّها: الجدّ أوّل ما إجا عَ هالبلد ما كان يملك <b>ولا فدّان</b>، وكلّ الخير كان لمسعود. بس <b>انقلبَ الحال</b>، وصار الجدّ طامحًا يشتري <b>الثلثَ الباقي</b> كمان قبل ما يموت! وليش باع مسعود أرضه؟ لأنه <b>مِزواجٌ</b>، وكلّ ما يتجوّز وحدة بيبيع فدّان أو اثنين عشان يصرف! الطفل من سذاجته حسب إنه مسعود تجوّز <b>90 مرّة</b> 😄 — وهاد بيوريك براءته.'},
+   {type:'choice', prompt:'لماذا باعَ مسعودٌ أرضَه شيئًا فشيئًا؟',
+     options:['لأنّه «مِزواجٌ»؛ كلَّما تزوّجَ باعَ فدّانًا أو فدّانينِ','لأنّه سافرَ','لأنّه تبرّعَ بها'], correct:0, exp:'مسعودٌ مِزواجٌ (كثيرُ الزواجِ)، فكانَ يبيعُ أرضَه ليُنفِقَ على زيجاتِه ✦'},
+   {type:'choice', prompt:'ما معنى «حينَ وَطِئَتْ قدمايَ هذا البلدَ»؟',
+     options:['حينَ داسَتْ ودخلَتْ','حينَ تعِبَتْ','حينَ خرجَتْ'], correct:0, exp:'«وَطِئَتْ» = داسَتْ ودخلَتْ ✦'},
+   {type:'story', say:'صار عنا الصورة كاملة: <b>الجدّ الطامع</b> اشترى ثلثين أرضِ <b>مسعود المِزواج المبذّر</b>، وبدّه الباقي كمان. والطفل بلّش يحسّ بشي مش مريح: «أحسستُ بخوفٍ من كلماتِ جَدّي، وشعرتُ بالعطفِ على جارِنا مسعودٍ». هون بلّش <b>الصراعُ الداخليّ</b> بقلب الطفل! يلّا لموسم الحصاد. 🌾'},
+ ]},
+
+ /* ---------- 6: القصّة (3) — حصادُ التمر ---------- */
+ { name:'القصّة (3): حصادُ التمر', icon:'🌾', steps:[
+   {type:'story', say:'المشهدُ الثالث 🌾: <b>موسمُ حصادِ التمر</b>! مسعود بنفسه إجا يدعو الجدّ للحصاد. شي غريب، صح؟ تعا نشوف.'},
+   {type:'story', say:'اقرأ 👇', diagram:passage('قالَ مسعودٌ: «سنحصُدُ التمرَ اليومَ، ألا تُريدُ أن تَحضُرَ؟». وأَحسَسْتُ أنّهُ لا يُريدُ جَدّي أن يَحضُرَ بالفعلِ، ولكنَّ جَدّي هبَّ واقفًا، ورأيتُ عينَهُ تلمعُ بُرهَةً ببريقٍ شديدٍ... وذهبْنا إلى حصادِ تمرِ مسعودٍ. كانوا <span class="kw">خَلْقًا</span> كثيرًا... ولكنّني أخذتُ أُراقِبُ مسعودًا، كانَ واقفًا بعيدًا عن ذلكَ <span class="kw">الحَشْدِ</span> كأنَّ الأمرَ لا يَعنيهِ، معَ أنَّ النخلَ الذي يُحصَدُ كانَ نخلَهُ هوَ.')+glossary([['خَلْقًا كثيرًا','أُناسًا كثيرين'],['الحَشْد','الجماعةُ من الناس']])},
+   {type:'story', say:'لاحظ التناقضَ القويّ: مسعود <b>صاحبُ الأرض</b>، بس واقف <b>بعيدٌ لحاله</b> كأنّ الأمرَ ما بيخصّه! بينما <b>عينُ الجدِّ تلمعُ ببريقٍ</b> أوّل ما سمع كلمة «حصاد» — بريقُ الطمع! 💰 الجدّ بدّه ياخد تمره سدادًا لِدَين مسعود. حسّ الطفل إنه مسعود ما بدّه الجدّ يحضر فعليًّا، بس الجدّ هبّ واقف على طول.'},
+   {type:'choice', prompt:'ماذا تكشفُ «عينُ الجَدِّ تلمعُ ببريقٍ شديدٍ» عند ذِكرِ الحصادِ؟',
+     options:['طمَعَه وحرصَه على أخذِ التمرِ','خوفَه','حزنَه على مسعودٍ'], correct:0, exp:'البريقُ في عينِه يكشفُ طمَعَه وحرصَه على جَنْيِ التمرِ سدادًا للدَّيْنِ ✦'},
+   {type:'story', say:'اقرأ هالمقطعَ المهمّ كتير 👇', diagram:passage('ومَرَّةً صاحَ بالصبيِّ الذي استوى فوقَ قمّةِ النخلةِ، وأخذَ يَقطَعُ <span class="kw">السَّبيطةَ</span> بمِنجَلِهِ الطويلِ الحادِّ: «حاذِرْ، لا تَقطَعْ قلبَ النخلةِ». ... أخذتُ أُفكِّرُ في قَوْلِ مسعودٍ «قلبُ النخلةِ»، وتصوَّرْتُ النخلةَ شيئًا يَحُسُّ، لهُ قلبٌ يَنبُضُ. وتذكَّرْتُ قَوْلَهُ مرّةً رآني أَعبثُ <span class="kw">بجريدةِ</span> نخلةٍ صغيرةٍ: «النخلُ، يا بُنَيَّ، كالآدميِّينَ يَفرحُ ويتألَّمُ».')+glossary([['السَّبيطة','عِذقُ النخلِ: عناقيدُ النخلِ التي يكونُ فيها ثمرُها'],['العُرجون','العِذقُ الذي يحملُ التمرَ (كالعنقودِ من العنبِ)'],['جريدةُ النخلة','السَّعفةُ بعدَ تجريدِها من أوراقِها']])},
+   {type:'story', say:'هون <b>أعمقُ</b> جزءٍ بالقصّة! مسعود — رغم كلّ اللي بيصير — همّه الوحيد إنه ما حدا يأذي <b>قلبَ النخلة</b>! بيصرخ عالصبي: «حاذِرْ، لا تَقطَعْ قلبَ النخلةِ». مسعود بيحبّ أرضه وشجره متل ما بتحبّ ابنك! وبيحكي جملة عظيمة: «النخلُ، يا بُنَيَّ، كالآدميّينَ يفرحُ ويتألّم» — يعني النخلة <b>بتحسّ متل البني آدم</b>. هون الكاتب بيخلّينا نحبّ مسعود ونتعاطف معه. 🌴❤️'},
+   {type:'choice', prompt:'ماذا تكشفُ عبارةُ مسعودٍ «النخلُ كالآدميِّينَ يَفرحُ ويتألَّمُ»؟',
+     options:['حُبَّ مسعودٍ العميقَ لأرضِه وشجرِه وحِسَّه المُرهَفَ','كراهيتَه للنخلِ','جهلَه بالزراعةِ'], correct:0, exp:'تكشفُ تعلُّقَ مسعودٍ بأرضِه وحِسَّه المرهَفَ؛ فيُشخِّصُ النخلَ إنسانًا يفرحُ ويتألّمُ ✦'},
+   {type:'choice', prompt:'ما المقصودُ بـ«السَّبيطة»؟',
+     options:['عِذقُ النخلِ (عناقيدُ ثمرِه)','جِذعُ النخلةِ','سعفةٌ يابسةٌ'], correct:0, exp:'السَّبيطة = عِذقُ النخلِ الذي يحملُ التمرَ ✦'},
+   {type:'story', say:'اقرأ 👇', diagram:passage('ولمّا نظرتُ إلى الساحةِ رأيتُ رفاقي الأطفالَ يموجونَ كالنملِ تحتَ <span class="kw">جُذوعِ</span> النخلِ، يجمعونَ التمرَ ويأكلونَ أكثرَهُ. واجتمعَ التمرُ أكوامًا عاليةً، ثُمَّ رأيتُ قومًا يَكيلونَهُ في أكياسٍ بـ<span class="kw">المكاييلِ</span>، وعَدَدْتُ منها ثلاثينَ كيسًا... وأعطاني جَدّي قبضةً مِنَ التمرِ أَمضُغُها، ورأيتُ مسعودًا يَملأُ راحتَيهِ مِنَ التمرِ، ويُقرِّبُهُ مِن أنفِهِ، ويَشُمُّهُ طويلًا، ثُمَّ يُعيدُهُ إلى مكانِهِ.')+glossary([['الجُذوع','جمعُ جِذعٍ: ساقُ النخلةِ'],['المكاييل','جمعُ مِكيالٍ: وعاءٌ يُكالُ به للموادِّ الجافّةِ والسوائلِ']])},
+   {type:'story', say:'صار عنا <b>30 كيس</b> تمر! الأطفال متل النمل بيجمعوا ويوكلوا. والطفل أكل قبضة تمر عطاه ياها جدّه. بس انتبه لمسعود: بيعبّي إيديه تمر، بيقرّبه من أنفه، و<b>بيشمّه طويلًا</b>... وبعدين <b>بيرجّعه مكانه</b>! ما أكل ولا حبّة! بس بيشمّه وداعًا... كأنه بيودّع أرضه وتمره الرايح منه. مشهدٌ بيكسر القلب. 💔'},
+   {type:'choice', prompt:'لماذا يَشُمُّ مسعودٌ التمرَ طويلًا ثُمَّ يُعيدُهُ دونَ أن يأكلَ؟',
+     options:['حَسرةً ووداعًا لأرضِه وتمرِه الذاهبِ منه','لأنّه شبعانٌ','لأنّ التمرَ فاسدٌ'], correct:0, exp:'إنّه الحنينُ والوداعُ المؤلمُ؛ يَشُمُّ تمرَه الذي لن يبقى له ✦'},
+   {type:'story', say:'لَخّصنا: 30 كيس تمرٍ جاهزة للتقسيم، ومسعود بيتفرّج بحسرةٍ عاللي راح منه. هلّق السؤال الكبير: <b>مين رح ياخد التمر؟</b> وشو نصيبُ مسعود صاحبِ الأرض؟ المشهدُ الأخير... خُد نَفَسًا. 😢'},
+ ]},
+
+ /* ---------- 7: القصّة (4) — النهايةُ الصادمة ---------- */
+ { name:'القصّة (4): النهايةُ الصادمة', icon:'💔', steps:[
+   {type:'story', say:'المشهدُ الأخير 💔 — وهو <b>ذروةُ القصّة</b>. شدّ حيلك، لأنه هون رح تنصدم متل ما انصدم الطفل.'},
+   {type:'story', say:'اقرأ بتمعّن 👇', diagram:passage('حُسَيْنٌ التاجرُ أخذَ عشَرةَ أكياسٍ، والرجلانِ الغريبانِ كلُّ مِنهما خمسةَ أكياسٍ، وموسى صاحبُ الحقلِ المُجاوِرِ خمسةَ أكياسٍ، وجَدّي خمسةَ أكياسٍ، ولم أفهَمْ شيئًا. ونظرتُ إلى مسعودٍ فرأيتُهُ <span class="kw">زائغَ العينَينِ</span>، تَجري عيناهُ شِمالًا ويمينًا كأنّهما فأرانِ صغيرانِ تاها عن جُحْرَيهِما. وقالَ جَدّي لمسعودٍ: «ما زِلْتَ <span class="kw">مَدينًا</span> لي بخمسينَ جُنيهًا نتحدَّثُ عنها في ما بعدُ».')+glossary([['زائغَ العينَينِ','مائلَ العينينِ (من الحَيرةِ والأسى)'],['مَدينًا','عليهِ دَيْنٌ يجبُ أن يردَّهُ']])},
+   {type:'story', say:'انصدمنا! 😱 التمر كلّه انقسم: حسين التاجر <b>10</b>، الغريبان <b>5+5</b>، موسى الجار <b>5</b>، والجدّ <b>5</b> = 30 كيس. ومسعود <b>صاحبُ الأرض</b>؟ <b>ولا كيس! صِفر!</b> وعيونه «زائغة» بتروح يمين وشمال من الحَيرة والذلّ متل فارَين ضايعين! ومش بس هيك — الجدّ بيقلّه: «<b>لسّا عليك خمسين جنيه دَين</b>»! يعني خسر أرضه وتمره وضلّ عليه دَين! ظلمٌ فوقَ ظلم.', diagram:bagsFig()},
+   {type:'choice', prompt:'كم كيسًا أخذَ مسعودٌ (صاحبُ الأرضِ) من تمرِهِ؟',
+     options:['لا شيءَ (صِفر)','خمسةَ أكياسٍ','عشَرةَ أكياسٍ'], correct:0, exp:'لم يأخُذْ مسعودٌ شيئًا، بل بقيَ مَدينًا للجدِّ بخمسينَ جُنيهًا! ✦'},
+   {type:'choice', prompt:'بمَ شبَّهَ الراوي عينَي مسعودٍ الزائغتينِ؟',
+     options:['بفأرَينِ صغيرَينِ تاها عن جُحرَيهِما','بنجمتينِ لامعتينِ','بعينَي صقرٍ'], correct:0, exp:'شبّههما بفأرَينِ صغيرَينِ تاها عن جُحرَيهِما — صورةُ الحَيرةِ والضياعِ ✦'},
+   {type:'story', say:'اقرأ النهايةَ 👇', diagram:passage('ونادى حُسَيْنٌ صِبيانَهُ فجاؤوا بالحميرِ، والرجلانِ الغريبانِ جاءا بخمسةِ جِمالٍ، ووُضِعَتْ أكياسُ التمرِ على الحميرِ والجِمالِ، ونهَقَ أحدُ الحميرِ، وأخذَ الجَمَلُ <span class="kw">يَرغو</span> ويصيحُ. وشعرتُ بيدي تمتدُّ إليهِ... وسمعتُهُ يُحدِثُ صوتًا في حَلْقِهِ مثلَ شخيرِ <span class="kw">الحَمَلِ</span> حينَ يُذبَحُ... ولكنّي أَحسَسْتُ بألمٍ حادٍّ في صدري، و<span class="kw">عَدَوْتُ</span> مُبتعِدًا. ... ولكنّني أَدخَلْتُ إصبَعَيَّ في حَلْقي، وتقيَّأْتُ، وألقَيْتُ التمرَ الذي أَكَلْتُ.')+glossary([['يَرغو','يُصدِرُ صوتًا (الرُّغاءُ صوتُ الإبلِ)'],['الحَمَل','الصغيرُ من الضأنِ (الخروفِ)'],['عَدَوْتُ','رَكَضْتُ مُسرِعًا']])},
+   {type:'story', say:'النهاية المؤلمة: حمّلوا التمر عالحمير والجمال، والجمال عمتصيح. ومسعود؟ طلع منه صوت من حلقه <b>«مثل شخيرِ الحَمَلِ حينَ يُذبَحُ»</b> — يعني متل صوت الخروف وهو بينذبح! 🐑 الطفل حسّ حاله قريب من مسعود وحبّ يلمسه. بس فجأة حسّ <b>بألمٍ حادٍّ بصدره</b> وركض بعيد... وأدخل إصبعه بحلقه و<b>تقيّأ التمر اللي أكله</b>! ليش؟ لأنه ضميره ما تحمّل إنه ياكل من تمرٍ <b>مسلوبٍ</b> من مظلوم. التقيّؤ = <b>رفضٌ وتطهُّر</b>. 🤮'},
+   {type:'choice', prompt:'لماذا أدخلَ الطفلُ إصبعَهُ في حَلْقِهِ وتقيّأَ التمرَ في نهايةِ القصّة؟',
+     options:['رفضًا أخلاقيًّا ووجدانيًّا لِظُلمِ جَدِّه ومأساةِ مسعودٍ','لأنّ التمرَ كانَ فاسدًا','لأنّه مريضٌ بمعدتِه'], correct:0, exp:'إنّه رفضٌ نفسيٌّ وتطهُّرٌ؛ لم يحتمِلْ ضميرُه أن يأكلَ من تمرٍ سُلِبَ من مظلومٍ ✦'},
+   {type:'choice', prompt:'بمَ شُبِّهَ الصوتُ الذي أحدثَهُ مسعودٌ في حَلْقِهِ؟',
+     options:['بشخيرِ الحَمَلِ حينَ يُذبَحُ','بصوتِ الرعدِ','بضحكةٍ عاليةٍ'], correct:0, exp:'شُبِّهَ بشخيرِ الحَمَلِ (الخروفِ) حينَ يُذبَحُ — صورةُ الضحيّةِ المظلومةِ ✦'},
+   {type:'story', say:'وهيك بتنتهي القصّة 📜 — مأخوذة من مجموعة <b>«دُومة وَدّ حامد»</b> للطّيّب صالح (بتصرُّف). انتبه: ما في نهاية «وعاشوا بسعادة»! الكاتب تركنا مع <b>صدمةِ الطفلِ وتقيُّئِه</b>. هاي النهاية مقصودة، ورح نحلّلها بعدين. أحسنت إنك وصلت لهون! 👏 هلّق خلّينا نرتّب المفردات كلّها بكنزٍ واحد.'},
+ ]},
+
+ /* ---------- 8: كنزُ المفردات ---------- */
+ { name:'كنزُ المفردات', icon:'📖', steps:[
+   {type:'story', say:'برافو! خلّصنا القصّة كاملة 🎉. هلّق خلّينا نجمع <b>كنزَ المفردات</b> ونتأكّد إنّنا ماسكين كلَّ كلمة. رح ألعب معك: بعطيك كلمةً من القصّة، وإنت بتختار معناها الصح. جاهز؟ 💎'},
+   {type:'story', say:'أوّلًا، راجِع كلماتِ المشهدِ الأوّلِ والثاني 👇', diagram:glossary([['الحَفْنة','مِلءُ الكفّينِ من شيءٍ'],['يُربِّتونَ','يضربونَ بأيديهم بلُطفٍ على الرأسِ'],['أَكِلُّ','أتعَبُ وأُعْيا'],['نَحيلًا','نحيفًا / ضعيفًا'],['يُؤْثِرُني','يُفضِّلُني'],['المُنَغَّم','المُرتَّلُ ذو اللحنِ الحسَنِ'],['خامِلٌ','كَسلانٌ غيرُ نشيطٍ'],['الفَدّان','مقدارُ أرضٍ (~4200 م²)'],['مِزواجٌ','كثيرُ الزواجِ']])},
+   {type:'story', say:'وهدول من مشهدِ الحصادِ والنهاية 👇', diagram:glossary([['بُرهَةً','مدّةً من الزمنِ'],['الحَشْد','الجماعةُ من الناسِ'],['السَّبيطة','عِذقُ النخلِ (عناقيدُ ثمرِه)'],['العُرجون','العِذقُ الحاملُ للتمرِ'],['جريدةُ النخلةِ','السَّعفةُ المجرّدةُ من أوراقِها'],['الجُذوع','جمعُ جِذعٍ: ساقُ النخلةِ'],['المكاييل','أوعيةُ الكَيلِ'],['زائغَ العينينِ','مائلَ العينينِ من الحَيرةِ'],['يَرغو','يُصدِرُ صوتًا (للإبلِ)'],['عَدَوْتُ','رَكَضْتُ مُسرِعًا']])},
+   {type:'choice', prompt:'في سياقِ «حينَ أَكِلُّ مِنَ السباحةِ» — «أَكِلُّ» تعني...؟',
+     options:['أتعَبُ وأُعْيا','آكُلُ الطعامَ','أكسِرُ'], correct:0, exp:'أَكِلُّ = أتعَبُ وأُعْيا من السباحةِ ✦'},
+   {type:'choice', prompt:'في «أَذرَعُ الأرضَ مثلَهُ في خطواتٍ واسعةٍ» — «أَذرَعُ» تعني...؟',
+     options:['أقطَعُها وأمشيها بخُطًى واسعةٍ','أزرَعُها','أقيسُها بالذراعِ'], correct:0, exp:'أَذرَعُ الأرضَ = أقطَعُها وأمشيها بخطًى واسعةٍ ✦'},
+   {type:'choice', prompt:'في «حينَ وَطِئَتْ قدمايَ هذا البلدَ» — «وَطِئَتْ» تعني...؟',
+     options:['داسَتْ ودخلَتْ','تعِبَتْ','هربَتْ'], correct:0, exp:'وَطِئَتْ = داسَتْ ودخلَتْ ✦'},
+   {type:'choice', prompt:'في «ما زِلْتَ مَدينًا لي بخمسينَ جُنيهًا» — «مَدينًا» تعني...؟',
+     options:['عليهِ دَيْنٌ يجبُ أن يردَّهُ','غنيًّا','مدينةً'], correct:0, exp:'مَدينًا = عليهِ دَيْنٌ في ذمّتِه يردُّه ✦'},
+   {type:'choice', prompt:'«السَّبيطة» في القصّةِ هي...؟',
+     options:['عِذقُ النخلِ وعناقيدُ ثمرِه','نوعٌ من السمكِ','أداةُ حصادٍ'], correct:0, exp:'السَّبيطة = عِذقُ النخلِ ✦'},
+   {type:'choice', prompt:'«جريدةُ النخلةِ» هي...؟',
+     options:['السَّعفةُ المجرّدةُ من أوراقِها','ثمرةُ النخلةِ','جذعُ النخلةِ'], correct:0, exp:'الجريدةُ = السَّعفةُ بعدَ تجريدِها من أوراقِها ✦'},
+   {type:'choice', prompt:'كلمةُ «خامِلٌ» تعني...؟',
+     options:['كَسلانٌ غيرُ نشيطٍ','شجاعٌ','كريمٌ'], correct:0, exp:'خامِلٌ = كَسلانٌ غيرُ نشيطٍ يُؤْثِرُ الراحةَ ✦'},
+ ]},
+
+ /* ---------- 9: التحليل — الشخصيّاتُ والصراعُ ---------- */
+ { name:'التحليل: الشخصيّاتُ والصراعُ', icon:'🔍', steps:[
+   {type:'story', say:'يلّا نلبس طاقيّة <b>المُحلِّل الأدبيّ</b> 🔍 ونفكّك القصّة. هالمرحلة عن <b>الشخصيّات</b> و<b>الراوي</b> و<b>الصراع</b>. ركّز معي!'},
+   {type:'solve', title:'عناصرُ القصّةِ في «حفنة تمر»', rows:[
+     '<b>الشخوصُ:</b> الطفلُ (الراوي) · الجَدُّ · مسعودٌ — وداعمةٌ: حُسَيْنٌ التاجرُ وموسى والرجلانِ الغريبانِ والأمُّ والشيخُ',
+     '<b>المكانُ:</b> قريةٌ سودانيّةٌ على ضفّةِ النيلِ (المسجدُ، النهرُ، الحقلُ، غابةُ الطَّلْحِ)',
+     '<b>الزمانُ:</b> زمنُ طفولةِ الراوي — وتحديدًا <b>موسمُ حصادِ التمرِ</b>',
+     '<b>العقدةُ:</b> استلابُ أرضِ مسعودٍ وحرمانُه من تمرِه &nbsp;←&nbsp; <b>الحلُّ:</b> تقيُّؤُ الطفلِ رفضًا للظلمِ']},
+   {type:'choice', prompt:'مَنِ الشخصيّاتُ <b>الرئيسةُ</b> في القصّة؟',
+     options:['الطفلُ والجَدُّ ومسعودٌ','حُسَيْنٌ وموسى','الأمُّ والشيخُ'], correct:0, exp:'الرئيسةُ: الطفلُ والجَدُّ ومسعودٌ؛ والبقيّةُ شخصيّاتٌ داعمةٌ ✦'},
+   {type:'choice', prompt:'أيُّ شخصيّةٍ <b>ناميةٌ</b> (تتطوّرُ مشاعرُها عبرَ القصّة)؟',
+     options:['الطفلُ (الراوي)','الجَدُّ','مسعودٌ'], correct:0, exp:'الطفلُ شخصيّةٌ ناميةٌ؛ تتحوّلُ مشاعرُه من الحُبِّ الأعمى إلى الرفضِ، والجدُّ ومسعودٌ ثابتانِ ✦'},
+   {type:'choice', prompt:'أينَ دارَتْ أحداثُ القصّة (الفضاءُ المكانيُّ)؟',
+     options:['قريةٌ ريفيّةٌ سودانيّةٌ على ضفّةِ النيلِ','مدينةٌ كبيرةٌ','صحراءُ خاليةٌ'], correct:0, exp:'في قريةٍ ريفيّةٍ سودانيّةٍ على ضفّةِ النيلِ: المسجدُ والنهرُ والحقلُ ✦'},
+   {type:'solve', title:'الراوي الداخليُّ (المُشارِكُ) — ولماذا اختارَه القاصُّ؟', rows:[
+     'اعتمدَ القاصُّ <b>الراوي الداخليَّ</b> = راوٍ مُشارِكٌ يَسرُدُ بضميرِ <b>المتكلّمِ</b> («كنتُ... رأيتُ... أحسستُ»)',
+     'وكأنّ المؤلّفَ شخصيّةٌ من شخصيّاتِ القصّةِ (هو الطفلُ)',
+     '<b>لماذا؟</b> ليزيدَ القصّةَ صِدقًا وواقعيّةً وحميميّةً',
+     'وليجعلَ القارئَ يعيشُ الظلمَ ويراهُ <b>بعينَي الطفلِ البريءِ</b> ويشاركَه صراعَه الداخليَّ']},
+   {type:'choice', prompt:'الراوي في القصّةِ يَسرُدُ بضميرِ...؟',
+     options:['المتكلّمِ (راوٍ مُشارِكٌ داخليٌّ)','الغائبِ (راوٍ عليمٌ)','المخاطَبِ'], correct:0, exp:'بضميرِ المتكلّمِ — راوٍ مُشارِكٌ داخليٌّ يزيدُ الصدقَ والحميميّةَ ✦'},
+   {type:'solve', title:'الصراعُ بنوعَيهِ', rows:[
+     '<b>صراعٌ خارجيٌّ:</b> بينَ الجَدِّ (الدائنِ الطامعِ) ومسعودٍ (المَدينِ الضعيفِ) على الأرضِ والتمرِ',
+     '<b>صراعٌ داخليٌّ:</b> في نفسِ الطفلِ بينَ حُبِّه لجَدِّه وتعاطفِه مع مسعودٍ المظلومِ',
+     '<b>الأكثرُ حضورًا وفعاليّةً:</b> الصراعُ <b>الداخليُّ</b> في نفسِ الطفلِ',
+     'فهو الذي يبني الشخصيّةَ ويصنعُ الذروةَ والنهايةَ (التقيُّؤَ)']},
+   {type:'choice', prompt:'أيُّ صراعٍ كانَ <b>الأكثرَ حضورًا</b> وأثرًا في البناءِ الفنيِّ للقصّة؟',
+     options:['الصراعُ الداخليُّ في نفسِ الطفلِ','الصراعُ الخارجيُّ على الأرضِ فقط','لا صراعَ في القصّةِ'], correct:0, exp:'الصراعُ الداخليُّ في نفسِ الطفلِ هو محرّكُ البناءِ والنهايةِ ✦'},
+   {type:'solve', title:'الجَدُّ × مسعودٌ — تحليلُ الشخصيّتينِ', rows:[
+     '<b>الجَدُّ:</b> طويلٌ نحيلٌ، قويٌّ مَهيبٌ، عمليٌّ، <b>طامعٌ</b> محبٌّ للتملُّكِ، يحتقرُ الكسولَ (الخاملَ)',
+     '<b>مسعودٌ:</b> <b>مِزواجٌ</b> مُبذِّرٌ، خاملٌ ضعيفُ التدبيرِ، خاسرٌ مستسلمٌ',
+     '...لكنّه <b>مُرهَفُ الحِسِّ</b> محبٌّ لأرضِه وشجرِه («قلبُ النخلةِ» / «النخلُ كالآدميّينَ»)',
+     'فالكاتبُ يجعلُنا نُدينُ طمَعَ الجَدِّ ونتعاطفُ مع ضعفِ مسعودٍ']},
+   {type:'choice', prompt:'أيُّ الصفاتِ تَصِفُ <b>الجَدَّ</b> بدقّةٍ؟',
+     options:['قويٌّ طامعٌ محبٌّ للتملُّكِ','كسولٌ مُبذِّرٌ ضعيفٌ','فقيرٌ بسيطٌ'], correct:0, exp:'الجَدُّ قويٌّ مَهيبٌ طامعٌ محبٌّ للتملُّكِ، ينظرُ لمسعودٍ نظرةً دونيّةً ✦'},
+   {type:'choice', prompt:'رغمَ ضعفِ مسعودٍ وخمولِه، أيُّ صفةٍ <b>إيجابيّةٍ</b> أبرزَها القاصُّ فيه؟',
+     options:['رِقّةُ حِسِّه وحُبُّه لأرضِه وشجرِه','شجاعتُه في الحربِ','ذكاؤُه في التجارةِ'], correct:0, exp:'مسعودٌ مُرهَفُ الحِسِّ يحبُّ أرضَه وشجرَه؛ لذا نتعاطفُ معه ✦'},
+   {type:'story', say:'وأهمّ إشي بالقصّة: <b>تحوُّلُ مشاعرِ الطفل</b> تجاه جدّه ومسعود. شوف كيف تدرّجت من الحبّ للرفض 👇 — كلّ مرحلة سبّبها مشهد: لمّا عرف إنّ جدّه أخذ أرض مسعود (خوف)، لمّا شاف حبّ مسعود للنخل (عطف)، لمّا حُرِم مسعود من تمره (ألم ورفض).', diagram:emotionArc()},
+   {type:'choice', prompt:'كيف تطوّرَتْ مشاعرُ الطفلِ خلالَ القصّة؟',
+     options:['من الحُبِّ الأعمى للجَدِّ إلى الخوفِ فالعطفِ على مسعودٍ فالرفضِ','من الكرهِ إلى الحُبِّ للجَدِّ','بقيَتْ ثابتةً دونَ تغيُّرٍ'], correct:0, exp:'تدرُّجٌ: فخرٌ بالجَدِّ ← خوفٌ ← عطفٌ على مسعودٍ ← حياءٌ ← ألمٌ ← رفضٌ (تقيُّؤٌ) ✦'},
+   {type:'solve', title:'سُلطةُ الجَدِّ — موروثٌ اجتماعيٌّ يُحرِّكُ الأحداثَ', rows:[
+     'تَبرُزُ <b>سلطةُ الجَدِّ</b> موروثًا اجتماعيًّا (توقيرُ الكبيرِ وهيبتُه)',
+     '<b>أمثلةٌ:</b> الناسُ يُربِّتونَ على رأسِ الطفلِ احترامًا للجَدِّ',
+     'الطفلُ يخدمُ جَدَّه ويطيعُه دونَ نقاشٍ (السجّادةُ، الإبريقُ)',
+     'مسعودٌ يدعو الجَدَّ للحصادِ ويُجاملُه رغمَ أنّه يأخذُ تمرَه']},
+   {type:'choice', prompt:'ما مظهرُ <b>سلطةِ الجَدِّ</b> (الموروثِ الاجتماعيِّ) في القصّة؟',
+     options:['توقيرُ الناسِ له وطاعةُ الطفلِ ومجاملةُ مسعودٍ','تمرُّدُ الجميعِ عليه','عزلتُه عن الناسِ'], correct:0, exp:'موروثٌ يُحرّكُ الأحداثَ: يُوقِّرُه الناسُ، ويطيعُه الطفلُ، ويُجاملُه مسعودٌ ✦'},
+ ]},
+
+ /* ---------- 10: التحليل — البناءُ والنهايةُ واللغةُ ---------- */
+ { name:'التحليل: البناءُ والنهايةُ', icon:'🧩', steps:[
+   {type:'story', say:'نكمّل التحليل 🧩: هالمرحلة عن <b>القضيّة المحوريّة</b>، و<b>ذروة الأحداث</b>، و<b>النهاية</b>، و<b>ألفاظ الحواسّ</b>، وشوية فروقٍ لغويّةٍ دقيقة. يلّا!'},
+   {type:'solve', title:'دلالةُ بعضِ التعابيرِ', rows:[
+     '<b>حكَّ طرَفَ أنفِهِ بسَبّابتِهِ:</b> التروّي والتفكيرُ قبلَ الإجابةِ',
+     '<b>حاذِرْ لا تَقطَعْ قلبَ النخلةِ:</b> شفقةُ مسعودٍ وحرصُه على شجرِه كأنّه كائنٌ حيٌّ',
+     '<b>يُقرِّبُهُ من أنفِهِ ويَشُمُّهُ طويلًا:</b> حنينُ مسعودٍ وحَسرتُه ووداعُه لأرضِه',
+     '<b>ألمٌ حادٌّ في صدري وعَدَوْتُ مُبتعِدًا:</b> ألمُ الطفلِ النفسيُّ ورفضُه للظلمِ']},
+   {type:'choice', prompt:'دلالةُ «يُقرِّبُ التمرَ من أنفِه ويَشُمُّهُ طويلًا» هي...؟',
+     options:['الحنينُ والحَسرةُ ووداعُ الأرضِ','الجوعُ الشديدُ','فحصُ جودةِ التمرِ للبيعِ'], correct:0, exp:'إنّها حَسرةُ مسعودٍ وحنينُه ووداعُه لتمرِه الذاهبِ ✦'},
+   {type:'solve', title:'القضيّةُ المحوريّةُ وذروةُ التأزُّمِ', rows:[
+     '<b>القضيّةُ المحوريّةُ:</b> استلابُ أراضي الفلّاحينَ البسطاءِ واستغلالُ حاجتِهم (الجشعُ مقابلَ الضعفِ)',
+     '<b>ذروةُ التأزُّمِ:</b> تقاسُمُ التمرِ وحرمانُ مسعودٍ منه وبقاؤُه مَدينًا',
+     'وسماعُ الطفلِ صوتَ مسعودٍ <b>كشخيرِ الحَمَلِ المذبوحِ</b> ← ثُمَّ تقيُّؤُ الطفلِ']},
+   {type:'choice', prompt:'ما <b>القضيّةُ المحوريّةُ</b> التي تعرضُها القصّة؟',
+     options:['استلابُ أراضي الفلّاحينَ واستغلالُ حاجتِهم','الصراعُ بينَ الأجيالِ','حُبُّ الوطنِ في الحربِ'], correct:0, exp:'القضيّةُ: استلابُ أرضِ الفلّاحِ البسيطِ واستغلالُ ضعفِه (الجشعُ × الضعفُ) ✦'},
+   {type:'choice', prompt:'ما <b>ذروةُ التأزُّمِ</b> في القصّة؟',
+     options:['حرمانُ مسعودٍ من تمرِه وبقاؤُه مَدينًا','وصولُ الطفلِ إلى المسجدِ','سباحةُ الطفلِ في النهرِ'], correct:0, exp:'الذروةُ: حرمانُ مسعودٍ من تمرِه وبقاؤُه مَدينًا، وما تبِعَه من ألمِ الطفلِ ✦'},
+   {type:'solve', title:'نوعُ النهايةِ ولماذا اختارَها', rows:[
+     'النهايةُ <b>مغلقةٌ</b> على مستوى موقفِ الطفلِ: حَسمٌ انفعاليٌّ واضحٌ (التقيُّؤُ رفضًا)',
+     'وهي خاتمةٌ <b>صادمةٌ مكثَّفةٌ</b>؛ لا «وعاشوا بسعادةٍ»',
+     '<b>الهدفُ:</b> تتركُ أثرًا عميقًا وتُدينُ الظلمَ دونَ خُطبةٍ مباشرةٍ، وتدعو القارئَ للتأمُّلِ']},
+   {type:'choice', prompt:'كيفَ تُصنَّفُ نهايةُ القصّةِ من حيثُ موقفُ الطفلِ؟',
+     options:['نهايةٌ مغلقةٌ حاسمةٌ (رفضٌ بالتقيُّؤِ)','نهايةٌ سعيدةٌ تقليديّةٌ','بلا نهايةٍ'], correct:0, exp:'نهايةٌ مغلقةٌ حاسمةٌ: موقفُ الطفلِ محسومٌ — رفضٌ وتطهُّرٌ بالتقيُّؤِ ✦'},
+   {type:'story', say:'الكاتب وظّف <b>ألفاظَ الحواسّ</b> (لون · صوت · حركة) ليُحيي المشهدَ ويُشركَ حواسَّك. شوف 👇', diagram:table(['الحاسّة','أمثلةٌ من القصّة'],[['🎨 اللونُ','لُحًى بيضاءُ · عينُه تلمعُ ببريقٍ'],['🔊 الصوتُ','نهَقَ الحمارُ · الجملُ يَرغو ويصيحُ · شخيرُ الحَمَلِ · صوتٌ مُنَغَّمٌ'],['🏃 الحركةُ','أجري كالبرقِ · السَّبيطةُ تَهوي · يموجونَ كالنملِ · عَدَوْتُ مُبتعِدًا']])},
+   {type:'choice', prompt:'عبارةُ «الجملُ يَرغو ويصيحُ» من ألفاظِ حاسّةِ...؟',
+     options:['السمعِ (الصوتِ)','البصرِ (اللونِ)','الشمِّ'], correct:0, exp:'من ألفاظِ <b>الصوتِ</b> (السمعِ)؛ توحي بصخبِ المشهدِ وقسوتِه ✦'},
+   {type:'choice', prompt:'عبارةُ «يموجونَ كالنملِ» و«السَّبيطةُ تَهوي» من ألفاظِ...؟',
+     options:['الحركةِ','اللونِ','الطعمِ'], correct:0, exp:'من ألفاظِ <b>الحركةِ</b>؛ تمنحُ المشهدَ حيويّةً وديناميكيّةً ✦'},
+   {type:'solve', title:'فروقٌ لغويّةٌ دقيقةٌ', rows:[
+     '<b>استوى</b> (استوى الصبيُّ فوقَ النخلةِ) = اعتدلَ واستقرَّ وجلسَ',
+     '<b>استوى</b> (المتنبّي: ثُمَّ استوى فيكَ إسراري وإعلاني) = <b>تساوى</b> وصارَ سواءً',
+     '<b>لُحًى</b> (قَوْمٌ طِوالٌ لهم لُحًى) = جمعُ لِحيةٍ (شعرُ الوجهِ)',
+     '<b>لَحى</b> (الفرزدق: لَحى اللهُ أقوامًا) = دعاءٌ بالقُبحِ واللعنِ (لَحاهُ = قبّحَه)']},
+   {type:'choice', prompt:'«استوى» في بيتِ المتنبّي «ثُمَّ استوى فيكَ إسراري وإعلاني» تعني...؟',
+     options:['تساوى وصارَ سواءً','اعتدلَ وجلسَ','نضِجَ'], correct:0, exp:'هنا استوى = تساوى؛ بخلافِ «استوى الصبيُّ فوقَ النخلةِ» = اعتدلَ واستقرَّ ✦'},
+   {type:'choice', prompt:'«لَحى اللهُ أقوامًا» (الفرزدق) — «لَحى» هنا بمعنى...؟',
+     options:['قبّحَ ولعَنَ (دعاءٌ عليهم)','أنبتَ لِحيةً','جمعَ لِحًى'], correct:0, exp:'لَحاهُ اللهُ = قبّحَه؛ دعاءٌ بالقُبحِ، وتختلفُ عن «لُحًى» جمعِ لِحيةٍ ✦'},
+   {type:'story', say:'وأخيرًا بهالمرحلة، اسمع مقولةَ الطّيّب صالح نفسِه عن طموحِه وجرأتِه:', keybox:'«ثَمّةَ آفاقٌ كثيرةٌ لا بُدَّ أن تُزارَ، وثَمّةَ ثِمارٌ يجبُ أن تُقطَفَ، وكُتُبٌ كثيرةٌ تُقرَأُ، وصَفحاتٌ بيضاءُ في سِجِلِّ العُمرِ — سأكتُبُ فيها جُمَلًا واضحةً بخَطٍّ جريءٍ».<small>الطّيّب صالح</small>'},
+   {type:'story', say:'شو يعني «بخَطٍّ جريء»؟ يعني الجرأة إنه يكتب عن قضايا حسّاسة بصراحة ووضوح — متل <b>استغلال الفلّاحين وجشع الأقوياء</b> — وما يخاف. وبانت جرأته بهالقصّة: عرّى الظلم، واختار <b>نهاية صادمة</b> (التقيّؤ) بدل النهاية المريحة. ✊'},
+   {type:'choice', prompt:'عن أيِّ «جُرأةٍ» يتحدّثُ الطّيّب صالح، وكيفَ بدَتْ في القصّة؟',
+     options:['جُرأةُ تناولِ قضايا اجتماعيّةٍ حسّاسةٍ بصراحةٍ، ونهايةٍ صادمةٍ تُعرّي الظلمَ','جُرأةُ استخدامِ كلماتٍ صعبةٍ','جُرأةُ الكتابةِ بلغةٍ أجنبيّةٍ'], correct:0, exp:'الجرأةُ في فضحِ استغلالِ الفلّاحينَ وجشعِ الأقوياءِ، واختيارِ نهايةٍ صادمةٍ (التقيُّؤِ) ✦'},
+ ]},
+
+ /* ---------- 11: التذوُّقُ والنقدُ ---------- */
+ { name:'التذوُّقُ والنقدُ', icon:'🎨', steps:[
+   {type:'story', say:'آخر مرحلة قبل التحدّي! 🎨 رح نتذوّق القصّة كالنقّاد: <b>الواقعيّة</b>، و<b>الصُّور الفنيّة</b>، و<b>الأساليب الإنشائيّة</b>، و<b>بنية الكلمات</b>، و<b>دلالة الأسماء</b>، و<b>المحسّنات البديعيّة</b>. يلّا نبدع!'},
+   {type:'solve', title:'مظاهرُ الواقعيّةِ في القصّةِ', rows:[
+     'الطّيّب صالح من مدرسةِ <b>الأدبِ المُلتزِمِ الواقعيِّ</b>: يُعبّرُ بصدقٍ عن واقعِ الناسِ وهمومِهم',
+     '<b>القضيّةُ واقعيّةٌ:</b> استلابُ أراضي الفلّاحينَ',
+     '<b>المكانُ واقعيٌّ:</b> قريةٌ سودانيّةٌ على النيلِ، نخلٌ وحقولٌ',
+     '<b>العلاقاتُ واقعيّةٌ:</b> دائنٌ ومَدينٌ، جارٌ وجارٌ، قويٌّ وضعيفٌ']},
+   {type:'choice', prompt:'ما أبرزُ مظاهرِ <b>الواقعيّةِ</b> في القصّة؟',
+     options:['قضيّةٌ ومكانٌ وعلاقاتٌ مأخوذةٌ من واقعِ الريفِ السودانيِّ','أحداثٌ خياليّةٌ عجائبيّةٌ','شخصيّاتٌ أسطوريّةٌ'], correct:0, exp:'الواقعيّةُ في القضيّةِ والمكانِ والشخصيّاتِ والعلاقاتِ الاجتماعيّةِ ✦'},
+   {type:'solve', title:'الخاتمةُ: «القصّةُ هي النهايةُ»', rows:[
+     'كانتِ الخاتمةُ اعترافَ الساردِ بجهلِه ← فأدخلَ إصبعَه في حَلْقِه ليتقيّأَ',
+     'وهذا قالبٌ قصصيٌّ تكونُ فيه <b>القصّةُ هي النهايةَ</b>',
+     'فكلُّ ما سبقَ (الطفولةُ، الجَدُّ، الحصادُ) مُجرَّدُ <b>تجهيزٍ للأرضيّةِ</b> التي تنفجرُ في لحظةِ التقيُّؤِ']},
+   {type:'choice', prompt:'بحسبِ النقدِ، الخاتمةُ (التقيُّؤُ) تجعلُ القصّةَ من قالبٍ تكونُ فيه...؟',
+     options:['القصّةُ هي النهايةَ، وكلُّ ما قبلَها تجهيزٌ لها','النهايةُ منفصلةٌ عن الأحداثِ','لا نهايةَ واضحةً'], correct:0, exp:'قالبُ «القصّةُ هي النهايةَ»؛ كلُّ ما سبقَ يُمهِّدُ للحظةِ التقيُّؤِ الصادمةِ ✦'},
+   {type:'solve', title:'الصُّورُ الفنيّةُ والتشخيصُ', rows:[
+     '<b>الشاطئُ يَنحني ويختبئُ وراءَ الغابةِ:</b> <b>تشخيصٌ</b> — الشاطئُ كإنسانٍ ينحني ويختبئُ',
+     '<b>صوتٌ في حَلْقِه مثلَ شخيرِ الحَمَلِ حينَ يُذبَحُ:</b> <b>تشبيهٌ</b> مؤلمٌ — مسعودٌ كالذبيحةِ المظلومةِ',
+     '<b>أحملُ في صدري سِرًّا أَوَدُّ أن أتخلّصَ منه:</b> <b>استعارةٌ</b> — الألمُ النفسيُّ كحِملٍ ثقيلٍ']},
+   {type:'choice', prompt:'في «أتأمّلُ الشاطئَ الذي يَنحني... ويختبئُ وراءَ غابةٍ» نوعُ الصورةِ...؟',
+     options:['تشخيصٌ (تصويرُ الشاطئِ إنسانًا ينحني ويختبئُ)','طِباقٌ','جناسٌ'], correct:0, exp:'تشخيصٌ: مَنحُ الجمادِ (الشاطئِ) صفاتِ الإنسانِ — فيُضفي حيويّةً وجمالًا ✦'},
+   {type:'choice', prompt:'تشبيهُ صوتِ مسعودٍ بـ«شخيرِ الحَمَلِ حينَ يُذبَحُ» يوحي بأنّ مسعودًا...؟',
+     options:['ضحيّةٌ مظلومةٌ تُذبَحُ في صمتٍ','رجلٌ غاضبٌ قويٌّ','سعيدٌ بما حدثَ'], correct:0, exp:'صورةُ الضحيّةِ المظلومةِ؛ يُعمّقُ التعاطفَ ويُبرزُ قسوةَ الظلمِ ✦'},
+   {type:'solve', title:'الأساليبُ الإنشائيّةُ ودلالتُها', rows:[
+     '<b>حاذِرْ، لا تَقطَعْ قلبَ النخلةِ:</b> أسلوبُ <b>نهيٍ</b> غرضُه التحذيرُ والشفقةُ',
+     '<b>انظُرْ إلى هذا الحقلِ الواسعِ:</b> أسلوبُ <b>أمرٍ</b> غرضُه التنبيهُ ولفتُ الانتباهِ',
+     '<b>ألا تراهُ يمتدُّ... مِئةَ فدّانٍ؟:</b> أسلوبُ <b>استفهامٍ</b> غرضُه التقريرُ والإقناعُ']},
+   {type:'choice', prompt:'«حاذِرْ، لا تَقطَعْ قلبَ النخلةِ» أسلوبٌ إنشائيٌّ غرضُه...؟',
+     options:['النهيُ للتحذيرِ والشفقةِ','الاستفهامُ للتعجُّبِ','الأمرُ للتهديدِ'], correct:0, exp:'أسلوبُ نهيٍ خرجَ إلى التحذيرِ والشفقةِ على النخلةِ ✦'},
+   {type:'solve', title:'بِنى الكلماتِ والنعتُ والحالُ واللغةُ السهلةُ', rows:[
+     '<b>«مِزواجٌ» بدلَ «متزوّجٍ»:</b> صيغةُ <b>مبالغةٍ</b> تدلُّ على كثرةِ الزواجِ',
+     '<b>كثرةُ النعتِ والحالِ:</b> (طويلٌ، نحيلٌ، زائغَ العينينِ، واقفًا، مُبتعِدًا) لدقّةِ الوصفِ وإحياءِ الصورةِ',
+     '<b>اللغةُ السهلةُ</b> لا تتعارضُ مع جودةِ العملِ؛ بل تزيدُه صِدقًا وقُربًا من الواقعِ']},
+   {type:'choice', prompt:'لماذا اختارَ القاصُّ «مِزواجٌ» بدلَ «مُتزوِّجٍ»؟',
+     options:['لأنّها صيغةُ مبالغةٍ تدلُّ على كثرةِ الزواجِ','لأنّها أسهلُ نطقًا فقط','لا فرقَ بينهما'], correct:0, exp:'«مِزواجٌ» صيغةُ مبالغةٍ: تُكثِّفُ المعنى وتُبرزُ كثرةَ زواجِ مسعودٍ — سببَ بيعِه أرضَه ✦'},
+   {type:'solve', title:'دلالةُ الأسماءِ', rows:[
+     '<b>اسمُ «مسعود»</b> (من السعادةِ) فيه <b>مفارقةٌ ساخرةٌ مؤلمةٌ</b>: اسمُه مسعودٌ وهو شقيٌّ خسِرَ كلَّ شيءٍ',
+     '<b>إخفاءُ اسمَيِ الجَدِّ والطفلِ:</b> <b>تعميمٌ</b> — الجَدُّ يمثّلُ كلَّ طامعٍ، والطفلُ كلَّ ضميرٍ بريءٍ',
+     'فالقصّةُ تُصوّرُ <b>واقعًا عامًّا مَعيشًا</b> لا أفرادًا بأعيانِهم']},
+   {type:'choice', prompt:'ما دلالةُ تسميةِ الفلّاحِ المظلومِ <b>«مسعودًا»</b> تحديدًا؟',
+     options:['مفارقةٌ ساخرةٌ؛ اسمُه من السعادةِ وهو شقيٌّ خاسرٌ','لأنّه أسعدُ أهلِ القريةِ','اسمٌ عشوائيٌّ بلا دلالةٍ'], correct:0, exp:'مفارقةٌ تهكُّميّةٌ مؤلمةٌ: «مسعودٌ» من السعادةِ، وواقعُه الشقاءُ وفقدانُ الأرضِ ✦'},
+   {type:'choice', prompt:'لماذا أخفى القاصُّ اسمَيِ الجَدِّ والطفلِ؟',
+     options:['للتعميمِ؛ الجَدُّ كلُّ طامعٍ والطفلُ كلُّ ضميرٍ بريءٍ','نسيانًا','لأنّهما غيرُ مهمّينِ'], correct:0, exp:'الإخفاءُ تعميمٌ: تصبحُ القصّةُ رمزًا لواقعٍ عامٍّ لا حكايةَ أفرادٍ ✦'},
+   {type:'solve', title:'المحسّناتُ البديعيّةُ والتكرارُ والخيالُ', rows:[
+     '<b>الطِّباقُ:</b> «النخلُ... يَفرحُ ويتألّمُ» (فرحٌ × ألمٌ) يُبرزُ أنّ النخلَ كالإنسانِ في مشاعرِه',
+     '<b>التكرارُ:</b> «لستُ أدري السببَ» تكرّرَ — يُعمّقُ حَيرةَ الطفلِ وصِدقَه النفسيَّ',
+     '<b>الخيالُ والماورائيّاتُ:</b> قبيلةُ العمالقةِ، والنخلةُ ذاتُ القلبِ — لتجسيدِ عالمِ الطفلِ البريءِ']},
+   {type:'choice', prompt:'في «النخلُ... يَفرحُ ويتألّمُ» يظهرُ مُحسِّنٌ بديعيٌّ هو...؟',
+     options:['الطِّباقُ (يفرحُ × يتألّمُ)','السجعُ','الجناسُ'], correct:0, exp:'طِباقٌ بينَ «يفرحُ» و«يتألّمُ»؛ يُعمّقُ تشخيصَ النخلِ ويُبرزُ مشاعرَه ✦'},
+   {type:'choice', prompt:'ما الأثرُ النفسيُّ لتكرارِ عبارةِ «لستُ أدري السببَ»؟',
+     options:['تعميقُ حَيرةِ الطفلِ وصِدقِ انفعالِه','الإطالةُ بلا فائدةٍ','إضحاكُ القارئِ'], correct:0, exp:'يُعمّقُ حَيرةَ الطفلِ البريءِ وصِدقَ مشاعرِه أمامَ ما لا يفهمُه ✦'},
+   {type:'solve', title:'الحاسّةُ السادسةُ للأديبِ ورسالتُه', rows:[
+     'للأديبِ <b>حاسّةٌ سادسةٌ</b>: يرى ما لا يراهُ غيرُه ويسمعُ ما لا يسمعُه (إحساسَ النخلةِ، وألمَ مسعودٍ الخفيَّ)',
+     '<b>الرسالةُ الأدبيّةُ:</b> إدانةُ الجشعِ والظلمِ، والتعاطفُ مع الضعفاءِ، وقيمةُ الضميرِ الإنسانيِّ',
+     '<b>الدورُ الفنيُّ:</b> أثرى الطّيّب صالح القصّةَ القصيرةَ السودانيّةَ بالواقعيّةِ والرمزِ واللغةِ المحلّيّةِ']},
+   {type:'choice', prompt:'ما <b>الرسالةُ الأدبيّةُ</b> التي أرادَ الطّيّب صالح إيصالَها؟',
+     options:['إدانةُ الجشعِ والظلمِ والتعاطفُ مع الضعفاءِ وقيمةُ الضميرِ','مدحُ الأقوياءِ','وصفُ جمالِ الطبيعةِ فقط'], correct:0, exp:'رسالةٌ إنسانيّةٌ: إدانةُ الظلمِ والجشعِ، ونصرةُ الضعيفِ، وإعلاءُ الضميرِ ✦'},
+ ]},
+
+ /* ---------- 12: تحدّي الأديب (Boss) ---------- */
+ { name:'تحدّي الأديب', icon:'🏅', boss:true, steps:[
+   {type:'story', say:'وصلت للتحدّي الأخير! 🏆 أثبت إنك صرت <b>ناقدًا للقصّة القصيرة</b>. ركّز بكلّ سؤال — هاي أسئلة بتجمع كلّ اللي تعلّمناه. بالتوفيق يا بطل! 💪', diagram:authorCard()},
+   {type:'choice', prompt:'تسخين 🔥: مَن كاتبُ قصّةِ «حفنة تمر»؟', options:['الطّيّب صالح','نجيب محفوظ','إبراهيم الكَوني'], correct:0, exp:'الطّيّب صالح، عبقريُّ الرواية العربيّة ✦'},
+   {type:'choice', prompt:'الطّيّب صالح أديبٌ من...؟', options:['السودان','مصر','المغرب'], correct:0, exp:'سودانيٌّ (1929 – 2009م) ✦'},
+   {type:'choice', prompt:'مَنِ الذي يَروي القصّةَ؟', options:['طفلٌ بضميرِ المتكلّمِ','الجَدُّ','راوٍ عليمٌ'], correct:0, exp:'راوٍ مُشارِكٌ داخليٌّ — طفلٌ ✦'},
+   {type:'choice', prompt:'لماذا لا يُحِبُّ الجَدُّ جارَه مسعودًا؟', options:['لأنّه «خامِلٌ» كسلانٌ','لأنّه غنيٌّ','لأنّه غريبٌ'], correct:0, exp:'الجدُّ لا يحبُّ الخامِلَ (الكسلانَ) ✦'},
+   {type:'choice', prompt:'لماذا باعَ مسعودٌ أرضَه شيئًا فشيئًا؟', options:['لأنّه «مِزواجٌ» يبيعُ كلَّما تزوّجَ','بسببِ الحربِ','للهجرةِ'], correct:0, exp:'مِزواجٌ: يبيعُ فدّانًا أو فدّانينِ كلَّما تزوّجَ ✦'},
+   {type:'choice', prompt:'كم كيسًا أخذَ مسعودٌ من تمرِه في الحصاد؟', options:['لا شيءَ (صِفر) وبقيَ مَدينًا','عشَرةَ أكياسٍ','نصفَ المحصولِ'], correct:0, exp:'صِفر! وبقيَ مَدينًا للجدِّ بخمسينَ جُنيهًا ✦'},
+   {type:'choice', prompt:'لماذا تقيّأَ الطفلُ التمرَ في النهاية؟', options:['رفضًا للظلمِ وتطهُّرًا','لأنّ التمرَ فاسدٌ','من شدّةِ الجوعِ'], correct:0, exp:'رفضٌ أخلاقيٌّ ووجدانيٌّ لظلمِ جَدِّه ✦'},
+   {type:'choice', prompt:'«النخلُ، يا بُنَيَّ، كالآدميِّينَ يَفرحُ ويتألَّمُ» فيها مُحسِّنٌ هو...؟', options:['الطِّباقُ (يفرحُ × يتألّمُ)','الجناسُ','السجعُ'], correct:0, exp:'طِباقٌ يُعمّقُ تشخيصَ النخلِ ✦'},
+   {type:'choice', prompt:'تشبيهُ صوتِ مسعودٍ بـ«شخيرِ الحَمَلِ حينَ يُذبَحُ» يدلُّ على أنّه...؟', options:['ضحيّةٌ مظلومةٌ','بطلٌ منتصرٌ','رجلٌ مرِحٌ'], correct:0, exp:'صورةُ الضحيّةِ المظلومةِ تُذبَحُ في صمتٍ ✦'},
+   {type:'choice', prompt:'ما دلالةُ اختيارِ اسمِ «مسعود» للفلّاحِ المظلومِ؟', options:['مفارقةٌ ساخرةٌ (اسمُه سعادةٌ وواقعُه شقاءٌ)','لأنّه أسعدُ الناسِ','بلا دلالةٍ'], correct:0, exp:'مفارقةٌ تهكُّميّةٌ مؤلمةٌ بينَ الاسمِ والواقعِ ✦'},
+   {type:'choice', prompt:'أيُّ صراعٍ كانَ الأبرزَ في بناءِ القصّة؟', options:['الصراعُ الداخليُّ في نفسِ الطفلِ','الصراعُ على المالِ فقط','لا صراعَ'], correct:0, exp:'الصراعُ الداخليُّ في نفسِ الطفلِ ✦'},
+   {type:'choice', prompt:'وَصفُ نهايةِ القصّةِ الأدقُّ هو أنّها...؟', options:['نهايةٌ مغلقةٌ صادمةٌ (تقيُّؤٌ رفضًا)','نهايةٌ سعيدةٌ','نهايةٌ هزليّةٌ'], correct:0, exp:'نهايةٌ مغلقةٌ صادمةٌ تُدينُ الظلمَ وتُحرّكُ ضميرَ القارئِ ✦'},
+ ]},
+
+];
+
+/* ============================ التنقّل ============================ */
+const screen=document.getElementById('screen');
+function setView(html){ screen.innerHTML=`<div class="view">${html}</div>`; }
+
+function titleScreen(){
+  setView(`
+    <div style="text-align:center;margin-top:10px">${mascot()}</div>
+    <h1 class="title">حفنةُ تَمْر</h1>
+    <div class="sub">رحلةٌ في قصّةِ الطّيّب صالح · الصفّ الحادي عشر 🌴📜</div>
+    <div class="bubble" style="margin:14px 0">نبدأُ من <b>الصفر</b>: مين الطّيّب صالح؟ ثمّ نقرأُ القصّةَ <b>مشهدًا مشهدًا</b> ونفهمُ كلَّ كلمة، ونحلِّلُ <b>الشخصيّاتِ والصراعَ والصُّورَ الفنيّةَ</b>، وننقدُها كالأدباء! أنا <b>تُمَيْر</b> رفيقُك 🌴</div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="startBtn">🚀 ابدأ الرحلة</button>
+      ${State.maxUnlocked>0?'<button class="btn ghost" id="resetBtn">🔄 إعادة من البداية</button>':''}
+    </div>`);
+  document.getElementById('startBtn').onclick=()=>{ac(); sLevel(); mapScreen();};
+  const r=document.getElementById('resetBtn');
+  if(r) r.onclick=()=>{ State.xp=0;State.gems=0;State.stars=0;State.maxUnlocked=0;State.levelStars={}; save(); setHUD(); titleScreen(); };
+}
+
+function mapScreen(){
+  let html=`<h1 class="title" style="font-size:23px">🗺️ خريطةُ الرحلة</h1><div class="path">`;
+  LEVELS.forEach((lv,i)=>{
+    const done=i<State.maxUnlocked, cur=i===State.maxUnlocked, locked=i>State.maxUnlocked;
+    const off=[0,42,-42,56,-56,30,-30][i%7];
+    const cls=lv.boss?'boss':(done?'done':(cur?'cur':'locked'));
+    const st=State.levelStars[i]||0;
+    const starsHtml=done?`<div class="stars">${'⭐'.repeat(st)||'⭐'}</div>`:'';
+    html+=`<div class="nodeoff" style="--off:${off}px">
+      <div class="node ${cls}" data-i="${i}">${locked&&!lv.boss?'🔒':lv.icon}${starsHtml}
+        <span class="nm">${i+1}. ${lv.name}</span></div></div>`;
+    if(i<LEVELS.length-1) html+=`<div class="connector ${done?'done':''}"></div>`;
+  });
+  html+=`</div><div style="height:30px"></div>`;
+  setView(html);
+  screen.querySelectorAll('.node').forEach(n=>{
+    const i=+n.dataset.i;
+    if(i<=State.maxUnlocked) n.onclick=()=>{ sTap(); startLevel(i); };
+  });
+}
+
+let cur={level:0, step:0, perfect:true, wrongHere:false};
+function startLevel(i){ cur={level:i, step:0, perfect:true, wrongHere:false}; renderStep(); }
+function renderStep(){
+  const lv=LEVELS[cur.level]; const st=lv.steps[cur.step];
+  if(!st){ return finishLevel(); }
+  if(st.type==='story') return renderStory(st,lv);
+  if(st.type==='solve') return renderSolve(st,lv);
+  if(st.type==='choice') return renderChoice(st,lv);
+}
+function progressTop(lv){
+  const pct=Math.round((cur.step)/lv.steps.length*100);
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <button class="opt" style="padding:8px 12px;font-size:18px;box-shadow:none;border-width:2px;width:auto" id="backMap">✕</button>
+    <div style="flex:1;height:12px;background:#ecdcbf;border-radius:999px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--p2),var(--p));border-radius:999px;transition:width .4s"></div></div>
+    <div style="font-weight:900;color:var(--p)">${cur.step+1}/${lv.steps.length}</div></div>`;
+}
+function bindBack(){ const b=document.getElementById('backMap'); if(b)b.onclick=()=>{sTap();mapScreen();}; }
+
+function renderStory(st,lv){
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px">${mascot('small')}
+      <div class="bubble" style="flex:1">${st.say}</div></div>
+    ${st.keybox?`<div class="keybox">${st.keybox}</div>`:''}
+    ${st.diagram||''}
+    <div style="margin-top:auto"><button class="btn" id="next">متابعة ⟵</button></div>`);
+  bindBack();
+  document.getElementById('next').onclick=()=>{ sTap(); cur.step++; renderStep(); };
+}
+
+function renderSolve(st,lv){
+  setView(`${progressTop(lv)}
+    <div class="hint">🔧 ${st.title}</div>
+    <div class="steps">
+      ${st.rows.map((r,i)=>`<div class="steprow"><div class="stepno">${i+1}</div><div>${r}</div></div>`).join('')}
+    </div>
+    ${st.diagram||''}
+    <div style="margin-top:auto"><button class="btn" id="next">فهمتُ، تابع ⟵</button></div>`);
+  bindBack();
+  document.getElementById('next').onclick=()=>{ sTap(); cur.step++; renderStep(); };
+}
+
+function renderChoice(st,lv){
+  /* نُبعثِرُ ترتيبَ الخيارات بصريًّا مع الاحتفاظ بالفهرس الأصليّ في data-i */
+  const order=st.options.map((o,i)=>i);
+  for(let k=order.length-1;k>0;k--){ const j=Math.floor(Math.random()*(k+1)); const t=order[k]; order[k]=order[j]; order[j]=t; }
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin:8px 0 4px">${mascot('small')}
+      <div class="bubble" style="flex:1"><div class="prompt" style="margin:0;font-size:19px">${st.prompt}</div></div></div>
+    ${st.diagram||st.visual||''}
+    <div class="opts" id="opts">
+      ${order.map(oi=>`<button class="opt" data-i="${oi}">${st.options[oi]}</button>`).join('')}
+    </div>`);
+  bindBack();
+  cur.wrongHere=false;
+  screen.querySelectorAll('.opt').forEach(b=>{
+    b.onclick=()=>{
+      const i=+b.dataset.i;
+      if(i===st.correct){
+        b.classList.add('good'); sGood(); confetti(22);
+        screen.querySelectorAll('.opt').forEach(x=>{x.style.pointerEvents='none'; if(x!==b)x.classList.add('dim');});
+        const reward=cur.wrongHere?5:15; addXP(reward); showFB(true, st.exp, reward);
+      } else {
+        b.classList.add('bad'); sBad(); b.classList.add('dim'); b.style.pointerEvents='none';
+        cur.wrongHere=true; cur.perfect=false;
+      }
+    };
+  });
+}
+
+const fb=document.getElementById('fb');
+function showFB(good, exp, reward){
+  fb.className=good?'show win':'show lose';
+  document.getElementById('fbttl').innerHTML=good?`✅ صحيح! <span style="color:#16a34a">+${reward} XP</span>`:'حاول مجدّدًا';
+  document.getElementById('fbexp').innerHTML=exp||'';
+  const btn=document.getElementById('fbbtn'); btn.textContent='متابعة ⟵';
+  btn.onclick=()=>{ sTap(); fb.className=''; cur.step++; renderStep(); };
+}
+
+function finishLevel(){
+  const lv=LEVELS[cur.level];
+  const earnedStars=cur.perfect?3:2;
+  State.levelStars[cur.level]=Math.max(State.levelStars[cur.level]||0, earnedStars);
+  State.stars+= earnedStars; State.gems+=10;
+  if(cur.level+1>State.maxUnlocked) State.maxUnlocked=cur.level+1;
+  setHUD(); save(); sLevel(); confetti(40);
+  if(lv.boss && cur.level===LEVELS.length-1){ return winScreen(); }
+  setView(`
+    <div style="text-align:center;margin-top:24px">${mascot()}</div>
+    <h1 class="title">🎉 اكتملت المرحلة!</h1>
+    <div class="card" style="text-align:center;margin-top:14px">
+      <div style="font-size:40px">${'⭐'.repeat(earnedStars)}</div>
+      <div style="font-weight:900;font-size:22px;color:var(--p);margin-top:8px">${lv.name}</div>
+      <div style="margin-top:10px;font-weight:700;color:#7a5a2a">💎 +10 جوهرة &nbsp;|&nbsp; ⭐ +${earnedStars} نجوم</div>
+    </div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="cont">المرحلة التالية ⟵</button>
+      <button class="btn ghost" id="map">🗺️ الخريطة</button>
+    </div>`);
+  document.getElementById('cont').onclick=()=>{ sTap(); if(cur.level+1<LEVELS.length) startLevel(cur.level+1); else mapScreen(); };
+  document.getElementById('map').onclick=()=>{ sTap(); mapScreen(); };
+}
+
+function winScreen(){
+  sWin(); confetti(80);
+  setView(`
+    <div class="badge">🏆</div>
+    <div class="cert">
+      <div class="big">🌴</div>
+      <h2>شهادةُ ناقدِ القصّةِ القصيرةِ</h2>
+      <div style="font-weight:700;color:#7a5a10;line-height:2">
+        أتقنتَ قصّةَ <b>«حفنة تمر»</b> للطّيّب صالح:<br>
+        الكاتبُ وأدبُه ✦ القصّةُ كاملةً ✦ المفرداتُ ✦ الشخصيّاتُ والصراعُ ✦ الصُّورُ الفنيّةُ والرموزُ ✦ النقدُ والتذوُّق
+      </div>
+      <div style="margin-top:14px;font-weight:900;color:#9a6a2a;font-size:20px">⭐ ${State.stars} نجمة &nbsp; | &nbsp; 💎 ${State.gems} جوهرة</div>
+    </div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="again">🗺️ العودة للخريطة</button>
+    </div>`);
+  document.getElementById('again').onclick=()=>{ sTap(); mapScreen(); };
+}
+
+/* ============================ التشغيل ============================ */
+document.getElementById('soundBtn').onclick=function(){ soundOn=!soundOn; this.textContent=soundOn?'🔊':'🔇'; if(soundOn)sTap(); };
+(function bg(){ const host=document.getElementById('bgsym'); const sy=['🌴','📜','🌾','🐪','🌅','📖','💧','تمر'];
+  for(let i=0;i<14;i++){ const s=document.createElement('span'); s.textContent=sy[i%sy.length];
+    s.style.left=Math.random()*100+'vw'; s.style.fontSize=(20+Math.random()*40)+'px';
+    s.style.animationDuration=(8+Math.random()*10)+'s'; s.style.animationDelay=(-Math.random()*10)+'s'; host.appendChild(s);} })();
+setHUD();
+titleScreen();
+</script>
+</body>
+</html>

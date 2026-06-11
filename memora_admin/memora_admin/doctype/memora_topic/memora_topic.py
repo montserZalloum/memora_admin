@@ -1,7 +1,10 @@
 # Copyright (c) 2026, corex and contributors
 # For license information, please see license.txt
 
+import json
+
 import frappe
+from frappe import _
 from frappe.model.document import Document
 
 
@@ -37,6 +40,54 @@ class MemoraTopic(Document):
 					new_unit, unit_data.track, unit_data.subject,
 				),
 			)
+
+
+@frappe.whitelist()
+def get_topic_lessons(topic):
+	"""Return lessons for a topic ordered by sort_order (then title) for the reorder dialog."""
+	if not topic:
+		return []
+
+	frappe.has_permission("Memora Lesson", "read", throw=True)
+
+	return frappe.get_all(
+		"Memora Lesson",
+		filters={"topic": topic},
+		fields=["name", "lesson_title", "sort_order", "is_published"],
+		order_by="sort_order asc, lesson_title asc",
+	)
+
+
+@frappe.whitelist()
+def save_lesson_order(topic, ordered_lessons):
+	"""Persist a new lesson ordering for a topic.
+
+	`ordered_lessons` is a JSON-encoded list of lesson names in the desired order.
+	Each lesson's `sort_order` is rewritten to its 1-based position.
+	"""
+	if not topic:
+		frappe.throw(_("Topic is required."))
+
+	frappe.has_permission("Memora Lesson", "write", throw=True)
+
+	if isinstance(ordered_lessons, str):
+		ordered_lessons = json.loads(ordered_lessons)
+
+	# Guard against tampering: every submitted lesson must belong to this topic.
+	valid_names = set(
+		frappe.get_all(
+			"Memora Lesson", filters={"topic": topic}, pluck="name"
+		)
+	)
+	submitted = list(dict.fromkeys(ordered_lessons))  # de-dupe, preserve order
+	unknown = [name for name in submitted if name not in valid_names]
+	if unknown:
+		frappe.throw(_("Some lessons do not belong to this topic: {0}").format(", ".join(unknown)))
+
+	for position, lesson_name in enumerate(submitted, start=1):
+		frappe.db.set_value("Memora Lesson", lesson_name, "sort_order", position, update_modified=False)
+
+	return {"updated": len(submitted)}
 
 
 @frappe.whitelist()

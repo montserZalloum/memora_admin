@@ -76,11 +76,14 @@ def _prefetch_plan_subject_tree(subject_id: str) -> PlanSubjectTree:
 	tree.topics_by_unit = topics_by_unit
 
 	# Query 4: lessons (published only)
+	# Order by sort_order (admin-managed via Topic "Reorder Lessons" tool); name is a
+	# stable tiebreaker. sort_order is intentionally NOT selected — it only drives
+	# ordering here and must not leak into the built lesson JSON.
 	all_lessons = frappe.get_all(
 		"Memora Lesson",
 		filters={"subject": subject_id, "is_published": 1},
 		fields=["name", "topic", "lesson_title", "base_xp", "max_hearts", "is_reviewable"],
-		order_by="name asc",
+		order_by="sort_order asc, name asc",
 	)
 	lessons_by_topic = defaultdict(list)
 	for l in all_lessons:
@@ -793,8 +796,9 @@ def _generate_unit_content(unit_id: str, overrides: dict) -> dict:
 		lessons = frappe.get_all(
 			"Memora Lesson",
 			filters={"topic": topic["name"], "is_published": 1},
+			# sort_order drives ordering only; it is not emitted in the lesson JSON.
 			fields=["name", "lesson_title"],
-			order_by="name asc",
+			order_by="sort_order asc, name asc",
 		)
 
 		lessons_data = [

@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>مغامرة المثلّث — نظرية فيثاغورس</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg1:#06283a; --bg2:#0e4a7c; --bg3:#083a5a;
+    --card:#ffffff; --ink:#12283a;
+    --p:#0d9488; --p2:#14b8a6;
+    --good:#22c55e; --bad:#ef4444;
+    --gold:#fbbf24; --gem:#22d3ee;
+    --soft:#e2f7f4;
+    --leg:#0ea5e9; --hyp:#f97316; --right:#a855f7;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:'Cairo','Tahoma','Segoe UI',sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2) 45%,var(--bg3));
+    color:var(--ink);
+    overflow:hidden; user-select:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .bgsym{position:fixed; inset:0; overflow:hidden; z-index:0; pointer-events:none;}
+  .bgsym span{position:absolute; color:#ffffff12; font-weight:900; animation:floaty linear infinite;}
+  @keyframes floaty{0%{transform:translateY(110vh) rotate(0)}100%{transform:translateY(-20vh) rotate(360deg)}}
+
+  #app{
+    position:relative; z-index:2;
+    width:min(440px,100vw); height:min(860px,100vh);
+    background:linear-gradient(180deg,#f3fdfb,#e6f7f4);
+    border-radius:28px; overflow:hidden;
+    box-shadow:0 30px 80px #0008, inset 0 0 0 6px #ffffff10;
+    display:flex; flex-direction:column;
+  }
+  @media (max-width:460px){ #app{width:100vw;height:100vh;border-radius:0;} }
+
+  #hud{
+    display:flex; align-items:center; gap:8px; padding:12px 14px;
+    background:linear-gradient(90deg,var(--p),var(--p2));
+    color:#fff; box-shadow:0 6px 18px #0d948855; z-index:5;
+  }
+  .pill{background:#ffffff25; border-radius:999px; padding:6px 12px; font-weight:900; font-size:15px; display:flex; align-items:center; gap:5px; backdrop-filter:blur(4px);}
+  #xpwrap{flex:1; height:14px; background:#ffffff30; border-radius:999px; overflow:hidden;}
+  #xpbar{height:100%; width:0%; background:linear-gradient(90deg,#fff,#a7f3d0); border-radius:999px; transition:width .5s cubic-bezier(.2,1,.3,1);}
+  #soundBtn{cursor:pointer; font-size:20px; background:#ffffff25; border:none; color:#fff; width:38px;height:38px;border-radius:50%;}
+
+  #screen{flex:1; position:relative; overflow:hidden;}
+  .view{position:absolute; inset:0; display:flex; flex-direction:column; padding:18px; overflow-y:auto; animation:slideIn .45s cubic-bezier(.2,1,.3,1);}
+  @keyframes slideIn{from{opacity:0; transform:translateX(30px)} to{opacity:1; transform:none}}
+
+  .mascot{width:96px;height:96px; flex:none; filter:drop-shadow(0 8px 12px #0d948855); animation:bob 2.4s ease-in-out infinite;}
+  .mascot.small{width:64px;height:64px;}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  .bubble{background:#fff; border:3px solid #c6efe8; border-radius:20px; padding:14px 16px; font-size:18px; font-weight:700; line-height:1.8; box-shadow:0 8px 20px #0d948822; position:relative;}
+  .bubble:after{content:""; position:absolute; bottom:-14px; right:36px; border:8px solid transparent; border-top-color:#fff;}
+
+  h1.title{font-size:27px; font-weight:900; color:var(--p); margin:6px 0; text-align:center; line-height:1.4;}
+  .sub{text-align:center; color:#3a7d75; font-weight:700; margin-bottom:8px;}
+
+  .btn{
+    border:none; border-radius:18px; padding:16px; font-family:inherit;
+    font-size:20px; font-weight:900; cursor:pointer; color:#fff;
+    background:linear-gradient(180deg,var(--p2),var(--p));
+    box-shadow:0 6px 0 #0f766e, 0 10px 18px #0d948855;
+    transition:transform .08s, box-shadow .08s; width:100%;
+  }
+  .btn:active{transform:translateY(4px); box-shadow:0 2px 0 #0f766e;}
+  .btn.gold{background:linear-gradient(180deg,#fcd34d,var(--gold)); color:#5b3d00; box-shadow:0 6px 0 #b45309,0 10px 18px #f59e0b66;}
+  .btn.ghost{background:#fff; color:var(--p); box-shadow:0 4px 0 #c6efe8;}
+
+  .card{background:#fff; border-radius:22px; padding:18px; box-shadow:0 10px 26px #0d948818; margin-top:auto;}
+
+  .opts{display:grid; gap:12px; margin-top:14px;}
+  .opt{
+    background:#fff; border:3px solid #c6efe8; border-radius:18px; padding:16px;
+    font-size:22px; font-weight:900; color:var(--ink); cursor:pointer;
+    transition:transform .1s, border-color .1s, background .1s; text-align:center;
+    box-shadow:0 4px 0 #c6efe8;
+  }
+  .opt:active{transform:translateY(3px); box-shadow:none;}
+  .opt.good{border-color:var(--good); background:#dcfce7; box-shadow:0 4px 0 #86efac; animation:pop .4s;}
+  .opt.bad{border-color:var(--bad); background:#fee2e2; box-shadow:0 4px 0 #fca5a5; animation:shake .4s;}
+  .opt.dim{opacity:.45;}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+
+  .prompt{font-size:22px; font-weight:900; text-align:center; margin:8px 0; line-height:1.7;}
+  .math{font-weight:900;}
+  sup{font-size:.65em; vertical-align:super;}
+
+  .root{display:inline-flex; align-items:flex-start;}
+  .root .rad{border-top:3px solid currentColor; padding:2px 4px 0; margin-top:2px;}
+
+  .hint{background:var(--soft); border-radius:14px; padding:10px 14px; font-weight:700; color:#0f766e; text-align:center; margin:8px 0; line-height:1.8;}
+  .keybox{background:#fff7ed; border:2px dashed var(--hyp); border-radius:14px; padding:12px 14px; font-weight:900; color:#9a3412; text-align:center; margin:10px 0; line-height:1.9; font-size:19px;}
+
+  /* steps panel */
+  .steps{background:#fff; border:3px solid #c6efe8; border-radius:16px; padding:14px; margin:8px 0; box-shadow:0 6px 16px #0d948818;}
+  .steprow{display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px dashed #d6efe9; font-weight:800; font-size:17px; line-height:1.7;}
+  .steprow:last-child{border-bottom:none;}
+  .stepno{flex:none; width:28px;height:28px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;}
+
+  /* diagrams */
+  .diagram{display:flex;flex-direction:column;align-items:center;margin:12px 0;}
+  .dimlabel{font-weight:900;color:var(--p);font-size:14px;margin-top:8px;text-align:center;line-height:1.6;}
+  svg.fig{max-width:280px;width:100%;height:auto;background:#fff;border-radius:16px;box-shadow:0 8px 20px #0d948818;padding:6px;}
+
+  .legend{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:8px;font-weight:900;font-size:13px;}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .dot{width:13px;height:13px;border-radius:4px;display:inline-block;}
+
+  #fb{position:absolute; left:0; right:0; bottom:0; transform:translateY(110%); transition:transform .4s cubic-bezier(.2,1,.3,1);
+      background:#fff; border-radius:24px 24px 0 0; padding:18px; box-shadow:0 -10px 30px #0002; z-index:8;}
+  #fb.show{transform:none;}
+  #fb.win{background:#dcfce7;} #fb.lose{background:#fee2e2;}
+  #fb .ttl{font-size:22px; font-weight:900; display:flex; align-items:center; gap:8px;}
+  #fb .exp{font-weight:700; color:#3a5161; margin:8px 0 14px; line-height:1.8; font-size:17px;}
+
+  .path{flex:1; display:flex; flex-direction:column; align-items:center; gap:0; position:relative; padding-top:6px;}
+  .node{width:84px;height:84px;border-radius:50%; display:flex;align-items:center;justify-content:center; font-size:34px;
+         font-weight:900; color:#fff; position:relative; cursor:pointer; box-shadow:0 6px 0 #00000022, 0 10px 20px #0003; transition:transform .12s;}
+  .node:active{transform:scale(.94);}
+  .node.locked{background:#a9c6cf; box-shadow:0 6px 0 #87a8b1; cursor:not-allowed;}
+  .node.done{background:linear-gradient(180deg,#34d399,#10b981); box-shadow:0 6px 0 #059669;}
+  .node.cur{background:linear-gradient(180deg,var(--p2),var(--p)); box-shadow:0 6px 0 #0f766e; animation:beat 1.4s infinite;}
+  .node.boss{background:linear-gradient(180deg,#fb7185,#e11d48); box-shadow:0 6px 0 #9f1239;}
+  @keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  .node .nm{position:absolute; bottom:-26px; font-size:12px; color:#2a4a55; font-weight:900; white-space:nowrap; background:#fff8; padding:2px 8px;border-radius:8px;}
+  .node .stars{position:absolute; top:-14px; font-size:14px;}
+  .connector{width:6px;height:34px;background:#cfe9e3;border-radius:999px;}
+  .connector.done{background:#34d399;}
+  .nodeoff{margin-inline-start:var(--off,0);}
+
+  .confetti{position:fixed; top:-20px; font-size:22px; z-index:99; pointer-events:none; animation:fall linear forwards;}
+  @keyframes fall{to{transform:translateY(105vh) rotate(720deg); opacity:.2}}
+
+  .cert{background:linear-gradient(180deg,#f7fffd,#e8fbf6); border:5px double var(--gold); border-radius:20px; padding:22px; text-align:center; box-shadow:0 14px 30px #14b8a633;}
+  .cert h2{color:#0f766e; margin:6px 0; font-size:24px;}
+  .cert .big{font-size:60px;}
+  .badge{font-size:80px; text-align:center; animation:bob 2s infinite;}
+</style>
+</head>
+<body>
+<div class="bgsym" id="bgsym"></div>
+
+<div id="app">
+  <div id="hud">
+    <button id="soundBtn" title="الصوت">🔊</button>
+    <div class="pill">💎 <span id="gems">0</span></div>
+    <div id="xpwrap"><div id="xpbar"></div></div>
+    <div class="pill">⭐ <span id="stars">0</span></div>
+  </div>
+  <div id="screen"></div>
+  <div id="fb">
+    <div class="ttl" id="fbttl"></div>
+    <div class="exp" id="fbexp"></div>
+    <button class="btn" id="fbbtn">متابعة</button>
+  </div>
+</div>
+
+<script>
+/* ============================ شخصية المرشد (فيثا المساح) ============================ */
+function mascot(cls){return `
+<svg class="mascot ${cls||''}" viewBox="0 0 120 120">
+  <!-- قبّعة مساح -->
+  <path d="M30 36 L60 14 L90 36 Z" fill="#f59e0b"/>
+  <rect x="26" y="34" width="68" height="8" rx="4" fill="#d97706"/>
+  <!-- الجسم -->
+  <rect x="22" y="42" width="76" height="60" rx="20" fill="#0d9488"/>
+  <rect x="22" y="42" width="76" height="60" rx="20" fill="url(#g)" opacity=".4"/>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+  <!-- العينان -->
+  <circle cx="47" cy="66" r="11" fill="#fff"/><circle cx="73" cy="66" r="11" fill="#fff"/>
+  <circle cx="49" cy="68" r="5.5" fill="#12283a"/><circle cx="75" cy="68" r="5.5" fill="#12283a"/>
+  <circle cx="51" cy="66" r="2" fill="#fff"/><circle cx="77" cy="66" r="2" fill="#fff"/>
+  <path d="M48 86 Q60 96 72 86" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <!-- مثلث صغير شارة -->
+  <path d="M84 90 L96 90 L90 80 Z" fill="#f97316" stroke="#fff" stroke-width="2"/>
+</svg>`;}
+
+/* ============================ الأصوات ============================ */
+let AC=null, soundOn=true;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} return AC; }
+function tone(f,d,t,v){ if(!soundOn||!ac())return; const o=ac().createOscillator(),g=ac().createGain();
+  o.type=t||'sine'; o.frequency.value=f; o.connect(g); g.connect(ac().destination);
+  const n=ac().currentTime; g.gain.setValueAtTime(0,n); g.gain.linearRampToValueAtTime(v||.18,n+.02);
+  g.gain.exponentialRampToValueAtTime(.0001,n+d); o.start(n); o.stop(n+d); }
+function sGood(){ [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.25,'triangle',.2),i*70)); }
+function sBad(){ tone(180,.3,'sawtooth',.12); setTimeout(()=>tone(120,.3,'sawtooth',.12),120); }
+function sTap(){ tone(494,.08,'square',.07); }
+function sWin(){ [523,659,784,1047,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.3,'triangle',.2),i*120)); }
+function sLevel(){ [659,880,1047].forEach((f,i)=>setTimeout(()=>tone(f,.22,'triangle',.18),i*90)); }
+
+/* ============================ مؤثرات ============================ */
+function confetti(n){ const e=['🎉','⭐','✨','📐','🔺','📏','🧭']; for(let i=0;i<(n||30);i++){
+  const c=document.createElement('div'); c.className='confetti'; c.textContent=e[i%e.length];
+  c.style.left=Math.random()*100+'vw'; c.style.fontSize=(16+Math.random()*22)+'px';
+  c.style.animationDuration=(1.4+Math.random()*1.6)+'s'; document.body.appendChild(c);
+  setTimeout(()=>c.remove(),3200);} }
+function rootHTML(inner){ return `<span class="root math">√<span class="rad">${inner}</span></span>`; }
+function sq(x){ return `${x}<sup>2</sup>`; }
+
+/* ============================ الرسم: مثلث قائم الزاوية ============================ */
+/* labA: ضلع رأسي (الساق a) | labB: ضلع أفقي (الساق b) | labC: الوتر | hi: 'a'|'b'|'c'|'' للتمييز */
+function tri(labA,labB,labC,hi){
+  const C={x:46,y:150}, B={x:206,y:150}, A={x:46,y:34}; // C زاوية قائمة
+  const col=s=>hi===s?'#fde047':'#fff';
+  const sw=s=>hi===s?6:4;
+  const legCol='#0ea5e9', hypCol='#f97316';
+  return `<div class="diagram"><svg class="fig" viewBox="0 0 240 180">
+    <polygon points="${A.x},${A.y} ${B.x},${B.y} ${C.x},${C.y}" fill="#e0f2fe" stroke="#0369a1" stroke-width="1.5"/>
+    <!-- الساق a (رأسي) -->
+    <line x1="${C.x}" y1="${C.y}" x2="${A.x}" y2="${A.y}" stroke="${legCol}" stroke-width="${sw('a')}" stroke-linecap="round"/>
+    <!-- الساق b (أفقي) -->
+    <line x1="${C.x}" y1="${C.y}" x2="${B.x}" y2="${B.y}" stroke="${legCol}" stroke-width="${sw('b')}" stroke-linecap="round"/>
+    <!-- الوتر c -->
+    <line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="${hypCol}" stroke-width="${sw('c')}" stroke-linecap="round"/>
+    <!-- علامة الزاوية القائمة -->
+    <path d="M${C.x+18} ${C.y} L${C.x+18} ${C.y-18} L${C.x} ${C.y-18}" fill="none" stroke="#a855f7" stroke-width="3"/>
+    <rect x="${C.x+3}" y="${C.y-15}" width="11" height="11" fill="#a855f733"/>
+    <!-- نقاط -->
+    <circle cx="${A.x}" cy="${A.y}" r="4" fill="#0369a1"/><circle cx="${B.x}" cy="${B.y}" r="4" fill="#0369a1"/><circle cx="${C.x}" cy="${C.y}" r="4" fill="#0369a1"/>
+    <!-- التسميات -->
+    ${labA?`<rect x="2" y="84" width="34" height="22" rx="6" fill="${col('a')}" stroke="${legCol}" stroke-width="2"/><text x="19" y="100" font-size="15" font-weight="900" text-anchor="middle" fill="#075985">${labA}</text>`:''}
+    ${labB?`<rect x="108" y="158" width="38" height="20" rx="6" fill="${col('b')}" stroke="${legCol}" stroke-width="2"/><text x="127" y="173" font-size="15" font-weight="900" text-anchor="middle" fill="#075985">${labB}</text>`:''}
+    ${labC?`<rect x="132" y="74" width="40" height="22" rx="6" fill="${col('c')}" stroke="${hypCol}" stroke-width="2"/><text x="152" y="90" font-size="15" font-weight="900" text-anchor="middle" fill="#9a3412">${labC}</text>`:''}
+  </svg>
+  <div class="legend">
+    <span><i class="dot" style="background:#f97316"></i> الوتر c</span>
+    <span><i class="dot" style="background:#0ea5e9"></i> الساقان a, b</span>
+    <span><i class="dot" style="background:#a855f7"></i> الزاوية القائمة</span>
+  </div></div>`;
+}
+
+/* رسم السلّم المستند إلى حائط */
+function ladderFig(){
+  const C={x:60,y:150}, top={x:60,y:30}, base={x:170,y:150};
+  return `<div class="diagram"><svg class="fig" viewBox="0 0 240 180">
+    <rect x="40" y="20" width="20" height="135" fill="#cbd5e1"/>
+    <rect x="40" y="155" width="170" height="14" fill="#94a3b8"/>
+    <line x1="${base.x}" y1="${base.y}" x2="${top.x}" y2="${top.y}" stroke="#f97316" stroke-width="7" stroke-linecap="round"/>
+    <line x1="${C.x}" y1="${C.y}" x2="${top.x}" y2="${top.y}" stroke="#0ea5e9" stroke-width="5" stroke-dasharray="6 5"/>
+    <line x1="${C.x}" y1="${C.y}" x2="${base.x}" y2="${base.y}" stroke="#0ea5e9" stroke-width="5"/>
+    <path d="M${C.x+16} ${C.y} L${C.x+16} ${C.y-16} L${C.x} ${C.y-16}" fill="none" stroke="#a855f7" stroke-width="3"/>
+    <text x="30" y="95" font-size="14" font-weight="900" fill="#0369a1">b = ?</text>
+    <text x="150" y="80" font-size="14" font-weight="900" fill="#9a3412">سلّم 2m</text>
+    <text x="92" y="173" font-size="14" font-weight="900" fill="#0369a1">0.8m</text>
+  </svg><div class="dimlabel">السلّم = الوتر (c) ، والبُعد عن الحائط = ساق (a)</div></div>`;
+}
+
+/* رسم شكل مركّب من مثلثين قائمين */
+function compositeFig(){
+  return `<div class="diagram"><svg class="fig" viewBox="0 0 250 180">
+    <polygon points="40,150 40,40 100,150" fill="#e0f2fe" stroke="#0369a1" stroke-width="1.5"/>
+    <polygon points="100,150 40,40 220,40" fill="#fef3c7" stroke="#b45309" stroke-width="1.5"/>
+    <text x="20" y="100" font-size="13" font-weight="900" fill="#0369a1">6</text>
+    <text x="64" y="168" font-size="13" font-weight="900" fill="#0369a1">8</text>
+    <text x="60" y="100" font-size="13" font-weight="900" fill="#9a3412">10</text>
+    <text x="130" y="32" font-size="13" font-weight="900" fill="#0369a1">24</text>
+    <text x="170" y="105" font-size="13" font-weight="900" fill="#9a3412">26</text>
+    <path d="M52 40 L52 52 L40 52" fill="none" stroke="#a855f7" stroke-width="2"/>
+  </svg><div class="dimlabel">شكل مكوّن من مثلثين قائمين — الوتر 10 مشترك بينهما</div></div>`;
+}
+
+/* لوحة المربّعات السريعة */
+function squaresTable(){
+  const r=[3,4,5,6,8,10,12,13,15,16,20,24];
+  return `<div class="steps" style="padding:12px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-weight:900">
+      ${r.map(n=>`<div style="background:var(--soft);border-radius:10px;padding:6px;text-align:center;line-height:1.5">
+        <div style="color:var(--p);font-size:14px">${sq(n)} = ${n*n}</div></div>`).join('')}
+    </div></div>`;
+}
+
+/* ============================ الحالة ============================ */
+const State={ xp:0, gems:0, stars:0, maxUnlocked:0, levelStars:{} };
+try{ const s=JSON.parse(localStorage.getItem('pythagoras')); if(s)Object.assign(State,s); }catch(e){}
+function save(){ try{localStorage.setItem('pythagoras',JSON.stringify(State));}catch(e){} }
+function setHUD(){ document.getElementById('gems').textContent=State.gems;
+  document.getElementById('stars').textContent=State.stars;
+  document.getElementById('xpbar').style.width=Math.min(100,(State.xp%100))+'%'; }
+function addXP(n){ State.xp+=n; setHUD(); save(); }
+
+/* ============================ تعريف المراحل ============================ */
+/* أنواع الخطوات: story | choice | solve */
+const LEVELS=[
+
+ /* ---------- 0: المثلث القائم وعناصره ---------- */
+ { name:'المثلث القائم', icon:'📐', steps:[
+   {type:'story', say:'أهلاً يا بطل! 🧭 أنا <b>فيثا</b> المسّاح الصغير. اليوم سنكتشف معًا <b>أقوى قاعدة</b> في الهندسة: <b>نظرية فيثاغورس</b>! سنبدأ من الصفر خطوة خطوة. 💪'},
+   {type:'story', say:'أولًا: ما <b>المثلث القائم الزاوية</b>؟ 📐<br>هو مثلث فيه <b>زاوية واحدة قياسها 90°</b> (زاوية قائمة) — مثل ركن الكتاب أو زاوية الحائط تمامًا.', diagram:tri('','','','')},
+   {type:'story', say:'الضلع المقابل للزاوية القائمة له اسم خاص: <b>الوتر</b> (Hypotenuse). 🍊<br>وهو دائمًا الضلع <b>الأطول</b> في المثلث، ونرمز له بالرمز <b>c</b>.', diagram:tri('','','c','c')},
+   {type:'story', say:'أمّا الضلعان اللذان يصنعان الزاوية القائمة فاسمهما <b>الساقان</b> (Legs)، 🦵<br>ونرمز لهما بالرمزين <b>a</b> و <b>b</b>.', diagram:tri('a','b','c','')},
+   {type:'choice', prompt:'أيّ ضلع هو <b>الوتر</b> في المثلث القائم؟', diagram:tri('a','b','c',''),
+     options:['الضلع المقابل للزاوية القائمة','أيّ ساق نختاره','أقصر ضلع'], correct:0, exp:'الوتر هو الضلع المقابل للزاوية القائمة، وهو الأطول دائمًا ✦'},
+   {type:'choice', prompt:'الوتر دائمًا هو الضلع... ؟',
+     options:['الأقصر','الأطول','المتوسط'], correct:1, exp:'الوتر c هو الضلع الأطول في المثلث القائم ✦'},
+   {type:'choice', prompt:'كم زاوية قائمة في المثلث القائم الزاوية؟',
+     options:['زاوية واحدة (90°)','زاويتان','ثلاث زوايا'], correct:0, exp:'فيه زاوية واحدة فقط قياسها 90° ✦'},
+ ]},
+
+ /* ---------- 1: إيجاد الوتر ---------- */
+ { name:'إيجاد الوتر', icon:'🔺', steps:[
+   {type:'story', say:'والآن السرّ الكبير! 🌟 تقول نظرية فيثاغورس:<br>«في المثلث القائم الزاوية، <b>مربع طول الوتر يساوي مجموع مربعي طولي ساقيه</b>».'},
+   {type:'story', say:'وبالرموز نكتبها هكذا 👇', keybox:`${sq('c')} = ${sq('a')} + ${sq('b')}`, diagram:tri('a','b','c','c')},
+   {type:'solve', title:'مثال: ساقاه a=5 و b=12 ، أجد الوتر c', rows:[
+       'نكتب القانون:&nbsp; '+sq('c')+' = '+sq('a')+' + '+sq('b'),
+       'نعوّض القيم:&nbsp; '+sq('c')+' = '+sq('5')+' + '+sq('12'),
+       'نحسب المربّعات:&nbsp; '+sq('c')+' = 25 + 144 = 169',
+       'نأخذ الجذر <b>الموجب</b> (لأنه طول):&nbsp; c = '+rootHTML('169')+' = 13 cm ✓'
+     ]},
+   {type:'choice', prompt:'ما القانون الصحيح لإيجاد الوتر c؟',
+     options:[sq('c')+' = '+sq('a')+' + '+sq('b'), 'c = a + b', sq('c')+' = '+sq('a')+' − '+sq('b')], correct:0, exp:'نظرية فيثاغورس: '+sq('c')+' = '+sq('a')+' + '+sq('b')+' ✦'},
+   {type:'choice', prompt:'مثلث قائم ساقاه <b>3</b> و <b>4</b>. ما طول الوتر c؟<br><small>'+sq('c')+' = '+sq('3')+' + '+sq('4')+' = 9 + 16</small>', diagram:tri('3','4','c?','c'),
+     options:['5','7','25','12'], correct:0, exp:sq('c')+' = 9 + 16 = 25 ← c = '+rootHTML('25')+' = 5 ✦'},
+   {type:'choice', prompt:'ساقاه <b>6</b> و <b>8</b>. أجد الوتر c.<br><small>36 + 64</small>',
+     options:['10','14','48','100'], correct:0, exp:sq('c')+' = 36 + 64 = 100 ← c = '+rootHTML('100')+' = 10 ✦'},
+   {type:'choice', prompt:'تدريب ص26: ساقاه <b>12</b> و <b>16</b>. أجد الوتر d.<br><small>144 + 256</small>',
+     options:['20','24','28','18'], correct:0, exp:sq('d')+' = 144 + 256 = 400 ← d = '+rootHTML('400')+' = 20 cm ✦'},
+ ]},
+
+ /* ---------- 2: إيجاد الساق المجهول ---------- */
+ { name:'الساق المجهول', icon:'🧩', steps:[
+   {type:'story', say:'أحيانًا نعرف <b>الوتر</b> وأحد الساقين، ونبحث عن <b>الساق الآخر</b>. 🧩<br>نستعمل القانون نفسه لكن نُعيد ترتيبه: ننقل المربّع المعلوم للطرف الآخر بالطرح.'},
+   {type:'story', say:'إذا كان الوتر c وساق a معلومين، فإن الساق المجهول b:', keybox:`${sq('b')} = ${sq('c')} − ${sq('a')}`, diagram:tri('a','b=?','c','b')},
+   {type:'solve', title:'مثال: الوتر c=24 وساق a=8 ، أجد الساق b', rows:[
+       'نكتب القانون:&nbsp; '+sq('c')+' = '+sq('a')+' + '+sq('b'),
+       'نعوّض:&nbsp; '+sq('24')+' = '+sq('8')+' + '+sq('b')+' ← 576 = 64 + '+sq('b'),
+       'نطرح 64 من الطرفين:&nbsp; '+sq('b')+' = 576 − 64 = 512',
+       'نأخذ الجذر الموجب:&nbsp; b = '+rootHTML('512')+' ≈ 22.6 cm ✓'
+     ]},
+   {type:'choice', prompt:'لإيجاد الساق المجهول b نستعمل... ؟',
+     options:[sq('b')+' = '+sq('c')+' − '+sq('a'), sq('b')+' = '+sq('c')+' + '+sq('a'), 'b = c − a'], correct:0, exp:'نطرح مربع الساق المعلوم من مربع الوتر: '+sq('b')+' = '+sq('c')+' − '+sq('a')+' ✦'},
+   {type:'choice', prompt:'الوتر <b>13</b> وأحد الساقين <b>12</b>. أجد الساق المجهول.<br><small>169 − 144</small>', diagram:tri('?','12','13','a'),
+     options:['5','7','25','1'], correct:0, exp:sq('a')+' = 169 − 144 = 25 ← a = '+rootHTML('25')+' = 5 cm ✦'},
+   {type:'choice', prompt:'تدريب ص26 (مسألة 3): الوتر <b>26</b> وساق <b>24</b>. أجد الساق a.<br><small>676 − 576</small>',
+     options:['10','12','8','14'], correct:0, exp:sq('a')+' = 676 − 576 = 100 ← a = '+rootHTML('100')+' = 10 cm ✦'},
+   {type:'choice', prompt:'أتحقق ص23: الوتر <b>10</b> وساق <b>6</b>. أجد الساق الآخر.<br><small>100 − 36</small>',
+     options:['8','7','64','4'], correct:0, exp:'a = '+rootHTML('100−36')+' = '+rootHTML('64')+' = 8 cm ✦'},
+ ]},
+
+ /* ---------- 3: عكس نظرية فيثاغورس ---------- */
+ { name:'عكس النظرية', icon:'✅', steps:[
+   {type:'story', say:'سؤال محقّق! 🕵️ هل يمكن أن نعرف إن كان مثلثٌ ما <b>قائم الزاوية</b> فقط من أطوال أضلاعه؟ نعم! بـ <b>عكس نظرية فيثاغورس</b>.'},
+   {type:'story', say:'<b>القاعدة:</b> إذا كان مربع <b>الضلع الأطول</b> يساوي مجموع مربعي الضلعين الآخرين، فالمثلث <b>قائم الزاوية</b>. وإلا فهو ليس قائمًا.', keybox:`هل ${sq('c')} = ${sq('a')} + ${sq('b')} ؟`},
+   {type:'solve', title:'طريقة الفحص (مثال: 9 ، 12 ، 15)', rows:[
+       'نحدّد الضلع الأطول ونفترضه الوتر:&nbsp; c = 15',
+       'نربّع الضلع الأطول:&nbsp; '+sq('15')+' = 225',
+       'نجمع مربّعي الضلعين الآخرين:&nbsp; '+sq('9')+' + '+sq('12')+' = 81 + 144 = 225',
+       'نقارن: 225 = 225 ✓ ← المثلث <b>قائم الزاوية</b>'
+     ]},
+   {type:'choice', prompt:'أول خطوة في الفحص هي... ؟',
+     options:['تحديد الضلع الأطول (الوتر المُفترَض)','جمع كل الأضلاع','ضرب الأضلاع'], correct:0, exp:'نبدأ بتحديد الضلع الأطول لأنه الوتر المُفترَض ✦'},
+   {type:'choice', prompt:'أتحقق ص25: الأطوال <b>5 ، 12 ، 13</b>. هل المثلث قائم؟<br><small>قارن '+sq('13')+' بـ '+sq('5')+'+'+sq('12')+'</small>',
+     options:['نعم، قائم','لا، ليس قائمًا'], correct:0, exp:'25 + 144 = 169 = '+sq('13')+' ✓ ← قائم الزاوية ✦'},
+   {type:'choice', prompt:'تدريب ص26 (7): الأطوال <b>3 ، 4 ، 6</b>. هل المثلث قائم؟<br><small>'+sq('6')+' مقابل '+sq('3')+'+'+sq('4')+'</small>',
+     options:['نعم، قائم','لا، ليس قائمًا'], correct:1, exp:'9 + 16 = 25 ، لكن '+sq('6')+' = 36 ≠ 25 ← ليس قائمًا ✦'},
+   {type:'choice', prompt:'تدريب ص26 (8): الأطوال <b>12 ، 35 ، 37</b>. هل المثلث قائم؟<br><small>'+sq('37')+' = 1369</small>',
+     options:['نعم، قائم','لا، ليس قائمًا'], correct:0, exp:'144 + 1225 = 1369 = '+sq('37')+' ✓ ← قائم الزاوية ✦'},
+ ]},
+
+ /* ---------- 4: تطبيقات من الحياة ---------- */
+ { name:'مسألة السلّم', icon:'🪜', steps:[
+   {type:'story', say:'حان وقت الحياة الواقعية! 🪜 يستند سلّم طوله <b>2 m</b> إلى حائط عمودي، وتبعد قاعدته <b>0.8 m</b> عن الحائط. كم يرتفع أعلى السلّم عن الأرض؟', diagram:ladderFig()},
+   {type:'story', say:'الحيلة 🔑: السلّم نفسه هو <b>الوتر</b> (c = 2)، والبُعد عن الحائط هو <b>ساق</b> (a = 0.8)، والارتفاع المطلوب هو الساق الآخر <b>b</b>.'},
+   {type:'solve', title:'حلّ مسألة السلّم', rows:[
+       'نكتب:&nbsp; '+sq('b')+' = '+sq('c')+' − '+sq('a'),
+       'نعوّض:&nbsp; '+sq('b')+' = '+sq('2')+' − '+sq('0.8')+' = 4 − 0.64',
+       'نحسب:&nbsp; '+sq('b')+' = 3.36',
+       'نأخذ الجذر الموجب:&nbsp; b = '+rootHTML('3.36')+' ≈ 1.83 m ✓'
+     ]},
+   {type:'choice', prompt:'في مسألة السلّم، ماذا يمثّل <b>طول السلّم</b> (2 m)؟',
+     options:['الوتر c','ساق a','الارتفاع المطلوب'], correct:0, exp:'السلّم مائل ومقابل للزاوية القائمة ← هو الوتر c ✦'},
+   {type:'choice', prompt:'ارتفاع أعلى السلّم عن الأرض ≈ ؟<br><small>'+rootHTML('3.36')+'</small>',
+     options:['1.83 m','3.36 m','2.83 m','0.92 m'], correct:0, exp:'b = '+rootHTML('3.36')+' ≈ 1.83 m ✦'},
+   {type:'story', say:'مسألة الألعاب النارية 🎆: خط الرؤية (الوتر) = <b>335 m</b>، والبُعد الأفقي (ساق) = <b>300 m</b>. نريد الارتفاع الرأسي x عن مستوى العين.'},
+   {type:'choice', prompt:'الارتفاع الرأسي x ≈ ؟<br><small>'+sq('x')+' = '+sq('335')+' − '+sq('300')+' = 112225 − 90000</small>',
+     options:['149.1 m','22225 m','100 m','60 m'], correct:0, exp:sq('x')+' = 22225 ← x = '+rootHTML('22225')+' ≈ 149.1 m (ثم نضيف 1.5m لمستوى العين = 150.6m) ✦'},
+ ]},
+
+ /* ---------- 5: الأشكال المركبة ---------- */
+ { name:'الأشكال المركّبة', icon:'🏗️', steps:[
+   {type:'story', say:'مشروع المهندس! 🏗️ شكلٌ مكوّن من <b>مثلثين قائمين</b> يتشاركان وترًا. سنجد <b>محيطه</b> ثم نتعلّم حساب <b>المساحة</b>.', diagram:compositeFig()},
+   {type:'solve', title:'محيط الشكل المركّب (مسألة 14)', rows:[
+       'المثلث الأول ساقاه 6 و 8 ← وتره المشترك = '+rootHTML(sq('6')+'+'+sq('8'))+' = '+rootHTML('100')+' = 10',
+       'المثلث الثاني ساقاه 10 و 24 ← وتره الخارجي = '+rootHTML(sq('10')+'+'+sq('24'))+' = '+rootHTML('676')+' = 26',
+       'نجمع الأضلاع الخارجية فقط:&nbsp; 6 + 8 + 24 + 26',
+       'المحيط الكلي = 64 cm ✓'
+     ]},
+   {type:'choice', prompt:'وتر المثلث الأول (ساقاه 6 و 8) = ؟<br><small>'+rootHTML('36+64')+'</small>',
+     options:['10','14','48','100'], correct:0, exp:rootHTML('36+64')+' = '+rootHTML('100')+' = 10 cm ✦'},
+   {type:'choice', prompt:'محيط الشكل المركّب كله = ؟<br><small>6 + 8 + 24 + 26</small>',
+     options:['64 cm','54 cm','74 cm','46 cm'], correct:0, exp:'نجمع الأضلاع الخارجية: 6+8+24+26 = 64 cm ✦'},
+   {type:'story', say:'الآن المساحة 📏 (مسألة 16): مثلث قائم وتره <b>26</b> وأحد ساقيه <b>10</b>. مساحة المثلث القائم = ½ × الساق × الساق (الساقان هما القاعدة والارتفاع).'},
+   {type:'choice', prompt:'أولًا نجد الساق المجهول (الارتفاع) = ؟<br><small>'+rootHTML(sq('26')+'−'+sq('10'))+' = '+rootHTML('676−100')+'</small>',
+     options:['24','16','36','22'], correct:0, exp:rootHTML('576')+' = 24 cm ✦'},
+   {type:'choice', prompt:'مساحة المثلث = ½ × 10 × 24 = ؟',
+     options:['120 cm²','240 cm²','60 cm²','34 cm²'], correct:0, exp:'½ × 10 × 24 = 120 cm² ✦'},
+ ]},
+
+ /* ---------- 6: تحدّي فيثاغورس (Boss) ---------- */
+ { name:'تحدّي فيثاغورس', icon:'🏅', boss:true, steps:[
+   {type:'story', say:'المشروع الأخير! 🏆 أثبت أنك <b>بطل نظرية فيثاغورس</b>. تذكّر: '+sq('c')+' = '+sq('a')+' + '+sq('b')+' ، ونأخذ <b>الجذر الموجب</b> دائمًا للأطوال!'},
+   {type:'choice', prompt:'تسخين 🔥: ساقاه 8 و 15. الوتر = ؟<br><small>64 + 225</small>', options:['17','21','23'], correct:0, exp:rootHTML('289')+' = 17 ✦'},
+   {type:'choice', prompt:'الوتر 25 وساق 7. الساق الآخر = ؟<br><small>625 − 49</small>', options:['24','18','20'], correct:0, exp:rootHTML('576')+' = 24 ✦'},
+   {type:'choice', prompt:'الأطوال 11 ، 60 ، 61. هل المثلث قائم؟<br><small>'+sq('61')+' = 3721</small>', options:['نعم','لا'], correct:0, exp:'121 + 3600 = 3721 = '+sq('61')+' ✓ قائم ✦'},
+   {type:'choice', prompt:'الأطوال 4 ، 8 ، 9. هل المثلث قائم؟', options:['نعم','لا'], correct:1, exp:'16 + 64 = 80 ≠ '+sq('9')+'=81 ← ليس قائمًا ✦'},
+   {type:'choice', prompt:'في الأطوال والمسافات، أيّ جذر نأخذ؟', options:['الموجب فقط','السالب فقط','الاثنين'], correct:0, exp:'الطول لا يكون سالبًا ← الموجب فقط ✦'},
+   {type:'choice', prompt:'مثلث قائم وتره 26 وساق 10. مساحته = ؟<br><small>الساق الآخر '+rootHTML('576')+'=24</small>', options:['120 cm²','130 cm²','260 cm²'], correct:0, exp:'½×10×24 = 120 cm² ✦'},
+   {type:'choice', prompt:'سلّم 2m قاعدته تبعد 0.8m عن الحائط. ارتفاع قمّته ≈ ؟', options:['1.83 m','1.2 m','2.8 m'], correct:0, exp:rootHTML('4−0.64')+' = '+rootHTML('3.36')+' ≈ 1.83 m ✦'},
+ ]},
+];
+
+/* ============================ التنقّل ============================ */
+const screen=document.getElementById('screen');
+function setView(html){ screen.innerHTML=`<div class="view">${html}</div>`; }
+
+function titleScreen(){
+  setView(`
+    <div style="text-align:center;margin-top:10px">${mascot()}</div>
+    <h1 class="title">مغامرة المثلّث</h1>
+    <div class="sub">نظرية فيثاغورس خطوة بخطوة 📐🔺</div>
+    <div class="bubble" style="margin:14px 0">نبدأ من <b>الصفر</b>: ما المثلث القائم؟ ما الوتر والساقان؟ ثم نحلّ ألغازًا حقيقية — <b>سلالم</b> و<b>ألعاب نارية</b> و<b>أشكال هندسية</b>! 🧭</div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="startBtn">🚀 ابدأ المغامرة</button>
+      ${State.maxUnlocked>0?'<button class="btn ghost" id="resetBtn">🔄 إعادة من البداية</button>':''}
+    </div>`);
+  document.getElementById('startBtn').onclick=()=>{ac(); sLevel(); mapScreen();};
+  const r=document.getElementById('resetBtn');
+  if(r) r.onclick=()=>{ State.xp=0;State.gems=0;State.stars=0;State.maxUnlocked=0;State.levelStars={}; save(); setHUD(); titleScreen(); };
+}
+
+function mapScreen(){
+  let html=`<h1 class="title" style="font-size:24px">🗺️ خريطة المغامرة</h1><div class="path">`;
+  LEVELS.forEach((lv,i)=>{
+    const done=i<State.maxUnlocked, cur=i===State.maxUnlocked, locked=i>State.maxUnlocked;
+    const off=[0,40,-40,55,-55,30,-30][i%7];
+    const cls=lv.boss?'boss':(done?'done':(cur?'cur':'locked'));
+    const st=State.levelStars[i]||0;
+    const starsHtml=done?`<div class="stars">${'⭐'.repeat(st)||'⭐'}</div>`:'';
+    html+=`<div class="nodeoff" style="--off:${off}px">
+      <div class="node ${cls}" data-i="${i}">${locked&&!lv.boss?'🔒':lv.icon}${starsHtml}
+        <span class="nm">${i+1}. ${lv.name}</span></div></div>`;
+    if(i<LEVELS.length-1) html+=`<div class="connector ${done?'done':''}"></div>`;
+  });
+  html+=`</div><div style="height:30px"></div>`;
+  setView(html);
+  screen.querySelectorAll('.node').forEach(n=>{
+    const i=+n.dataset.i;
+    if(i<=State.maxUnlocked) n.onclick=()=>{ sTap(); startLevel(i); };
+  });
+}
+
+let cur={level:0, step:0, perfect:true, wrongHere:false};
+function startLevel(i){ cur={level:i, step:0, perfect:true, wrongHere:false}; renderStep(); }
+function renderStep(){
+  const lv=LEVELS[cur.level]; const st=lv.steps[cur.step];
+  if(!st){ return finishLevel(); }
+  if(st.type==='story') return renderStory(st,lv);
+  if(st.type==='solve') return renderSolve(st,lv);
+  if(st.type==='choice') return renderChoice(st,lv);
+}
+function progressTop(lv){
+  const pct=Math.round((cur.step)/lv.steps.length*100);
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <button class="opt" style="padding:8px 12px;font-size:18px;box-shadow:none;border-width:2px;width:auto" id="backMap">✕</button>
+    <div style="flex:1;height:12px;background:#cfe9e3;border-radius:999px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#14b8a6,#0d9488);border-radius:999px;transition:width .4s"></div></div>
+    <div style="font-weight:900;color:#0d9488">${cur.step+1}/${lv.steps.length}</div></div>`;
+}
+function bindBack(){ const b=document.getElementById('backMap'); if(b)b.onclick=()=>{sTap();mapScreen();}; }
+
+function renderStory(st,lv){
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px">${mascot('small')}
+      <div class="bubble" style="flex:1">${st.say}</div></div>
+    ${st.keybox?`<div class="keybox">${st.keybox}</div>`:''}
+    ${st.diagram||''}
+    <div style="margin-top:auto"><button class="btn" id="next">متابعة ⟵</button></div>`);
+  bindBack();
+  document.getElementById('next').onclick=()=>{ sTap(); cur.step++; renderStep(); };
+}
+
+function renderSolve(st,lv){
+  setView(`${progressTop(lv)}
+    <div class="hint">🔧 ${st.title}</div>
+    <div class="steps">
+      ${st.rows.map((r,i)=>`<div class="steprow"><div class="stepno">${i+1}</div><div>${r}</div></div>`).join('')}
+    </div>
+    <div style="margin-top:auto"><button class="btn" id="next">فهمت، تابع ⟵</button></div>`);
+  bindBack();
+  document.getElementById('next').onclick=()=>{ sTap(); cur.step++; renderStep(); };
+}
+
+function renderChoice(st,lv){
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin:8px 0 4px">${mascot('small')}
+      <div class="bubble" style="flex:1"><div class="prompt" style="margin:0;font-size:20px">${st.prompt}</div></div></div>
+    ${st.diagram||st.visual||''}
+    <div class="opts" id="opts">
+      ${st.options.map((o,i)=>`<button class="opt" data-i="${i}">${o}</button>`).join('')}
+    </div>`);
+  bindBack();
+  cur.wrongHere=false;
+  screen.querySelectorAll('.opt').forEach(b=>{
+    b.onclick=()=>{
+      const i=+b.dataset.i;
+      if(i===st.correct){
+        b.classList.add('good'); sGood(); confetti(22);
+        screen.querySelectorAll('.opt').forEach(x=>{x.style.pointerEvents='none'; if(x!==b)x.classList.add('dim');});
+        const reward=cur.wrongHere?5:15; addXP(reward); showFB(true, st.exp, reward);
+      } else {
+        b.classList.add('bad'); sBad(); b.classList.add('dim'); b.style.pointerEvents='none';
+        cur.wrongHere=true; cur.perfect=false;
+      }
+    };
+  });
+}
+
+const fb=document.getElementById('fb');
+function showFB(good, exp, reward){
+  fb.className=good?'show win':'show lose';
+  document.getElementById('fbttl').innerHTML=good?`✅ صحيح! <span style="color:#16a34a">+${reward} XP</span>`:'حاول مجددًا';
+  document.getElementById('fbexp').innerHTML=exp||'';
+  const btn=document.getElementById('fbbtn'); btn.textContent='متابعة ⟵';
+  btn.onclick=()=>{ sTap(); fb.className=''; cur.step++; renderStep(); };
+}
+
+function finishLevel(){
+  const lv=LEVELS[cur.level];
+  const earnedStars=cur.perfect?3:2;
+  State.levelStars[cur.level]=Math.max(State.levelStars[cur.level]||0, earnedStars);
+  State.stars+= earnedStars; State.gems+=10;
+  if(cur.level+1>State.maxUnlocked) State.maxUnlocked=cur.level+1;
+  setHUD(); save(); sLevel(); confetti(40);
+  if(lv.boss && cur.level===LEVELS.length-1){ return winScreen(); }
+  setView(`
+    <div style="text-align:center;margin-top:24px">${mascot()}</div>
+    <h1 class="title">🎉 اكتملت المرحلة!</h1>
+    <div class="card" style="text-align:center;margin-top:14px">
+      <div style="font-size:40px">${'⭐'.repeat(earnedStars)}</div>
+      <div style="font-weight:900;font-size:22px;color:#0d9488;margin-top:8px">${lv.name}</div>
+      <div style="margin-top:10px;font-weight:700;color:#3a7d75">💎 +10 جوهرة &nbsp;|&nbsp; ⭐ +${earnedStars} نجوم</div>
+    </div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="cont">المرحلة التالية ⟵</button>
+      <button class="btn ghost" id="map">🗺️ الخريطة</button>
+    </div>`);
+  document.getElementById('cont').onclick=()=>{ sTap(); if(cur.level+1<LEVELS.length) startLevel(cur.level+1); else mapScreen(); };
+  document.getElementById('map').onclick=()=>{ sTap(); mapScreen(); };
+}
+
+function winScreen(){
+  sWin(); confetti(80);
+  setView(`
+    <div class="badge">🏆</div>
+    <div class="cert">
+      <div class="big">📐</div>
+      <h2>شهادة بطل نظرية فيثاغورس</h2>
+      <div style="font-weight:700;color:#0f766e;line-height:1.9">
+        أتقنت <b>نظرية فيثاغورس</b>:<br>
+        ${sq('c')} = ${sq('a')} + ${sq('b')} ✦ إيجاد الوتر والساق ✦ عكس النظرية ✦ تطبيقات السلالم والأشكال المركّبة
+      </div>
+      <div style="margin-top:14px;font-weight:900;color:#0f766e;font-size:20px">⭐ ${State.stars} نجمة &nbsp; | &nbsp; 💎 ${State.gems} جوهرة</div>
+    </div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="again">🗺️ العودة للخريطة</button>
+    </div>`);
+  document.getElementById('again').onclick=()=>{ sTap(); mapScreen(); };
+}
+
+/* ============================ التشغيل ============================ */
+document.getElementById('soundBtn').onclick=function(){ soundOn=!soundOn; this.textContent=soundOn?'🔊':'🔇'; if(soundOn)sTap(); };
+(function bg(){ const host=document.getElementById('bgsym'); const sy=['√','📐','c²','🔺','a²','b²','90°','13','25'];
+  for(let i=0;i<14;i++){ const s=document.createElement('span'); s.textContent=sy[i%sy.length];
+    s.style.left=Math.random()*100+'vw'; s.style.fontSize=(20+Math.random()*40)+'px';
+    s.style.animationDuration=(8+Math.random()*10)+'s'; s.style.animationDelay=(-Math.random()*10)+'s'; host.appendChild(s);} })();
+setHUD();
+titleScreen();
+</script>
+</body>
+</html>

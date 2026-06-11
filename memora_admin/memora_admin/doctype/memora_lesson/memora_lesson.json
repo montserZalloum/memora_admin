@@ -11,6 +11,7 @@
   "main_section",
   "lesson_title",
   "topic",
+  "sort_order",
   "base_xp",
   "is_reviewable",
   "max_hearts",
@@ -51,6 +52,14 @@
    "label": "Topic",
    "options": "Memora Topic",
    "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Order of this lesson within its topic. Managed via the \"Reorder Lessons\" tool on the Topic form.",
+   "fieldname": "sort_order",
+   "fieldtype": "Int",
+   "label": "Sort Order",
+   "read_only": 1
   },
   {
    "default": "0",

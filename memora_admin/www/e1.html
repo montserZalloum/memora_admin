@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>مدينتي بالإنجليزي — City life</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg1:#2a1b54; --bg2:#5b2a86; --bg3:#1a1138;
+    --card:#fff; --ink:#2a2140;
+    --p:#f97316; --p2:#fb923c;          /* برتقالي غروب المدينة */
+    --good:#22c55e; --bad:#ef4444;
+    --gold:#fbbf24; --gem:#22d3ee;
+    --soft:#fff1e6; --line:#ffd9bd;
+    --en:#7c3aed;                        /* بنفسجي للإنجليزي */
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:'IBM Plex Sans Arabic','Tahoma','Segoe UI',sans-serif;
+    background:linear-gradient(165deg,var(--bg1),var(--bg2) 50%,var(--bg3));
+    color:var(--ink);
+    overflow:hidden; user-select:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .en{font-family:'Fredoka','IBM Plex Sans Arabic',sans-serif; direction:ltr; unicode-bidi:isolate; font-weight:600; letter-spacing:.3px;}
+
+  .bgsym{position:fixed; inset:0; overflow:hidden; z-index:0; pointer-events:none;}
+  .bgsym span{position:absolute; opacity:.13; font-size:34px; animation:floaty linear infinite;}
+  @keyframes floaty{0%{transform:translateY(110vh) rotate(0)}100%{transform:translateY(-20vh) rotate(360deg)}}
+
+  #app{
+    position:relative; z-index:2;
+    width:min(440px,100vw); height:min(880px,100vh);
+    background:linear-gradient(180deg,#fffaf5,#fff3ea);
+    border-radius:28px; overflow:hidden;
+    box-shadow:0 30px 80px #0008, inset 0 0 0 6px #ffffff14;
+    display:flex; flex-direction:column;
+  }
+  @media (max-width:460px){ #app{width:100vw;height:100vh;border-radius:0;} }
+
+  #hud{
+    display:flex; align-items:center; gap:8px; padding:12px 14px;
+    background:linear-gradient(90deg,var(--p),#f59e0b);
+    color:#fff; box-shadow:0 6px 18px #f9731655; z-index:5;
+  }
+  .pill{background:#ffffff2a; border-radius:999px; padding:6px 12px; font-weight:700; font-size:15px; display:flex; align-items:center; gap:5px;}
+  #xpwrap{flex:1; height:14px; background:#ffffff33; border-radius:999px; overflow:hidden;}
+  #xpbar{height:100%; width:0%; background:linear-gradient(90deg,#fff,#fde68a); border-radius:999px; transition:width .5s cubic-bezier(.2,1,.3,1);}
+  #soundBtn{cursor:pointer; font-size:20px; background:#ffffff2a; border:none; color:#fff; width:38px;height:38px;border-radius:50%;}
+
+  #screen{flex:1; position:relative; overflow:hidden;}
+  .view{position:absolute; inset:0; display:flex; flex-direction:column; padding:18px; overflow-y:auto; animation:slideIn .45s cubic-bezier(.2,1,.3,1);}
+  @keyframes slideIn{from{opacity:0; transform:translateX(26px)} to{opacity:1; transform:none}}
+
+  .mascot{width:96px;height:96px; flex:none; filter:drop-shadow(0 8px 12px #f9731655); animation:bob 2.4s ease-in-out infinite;}
+  .mascot.small{width:62px;height:62px;}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  .bubble{background:#fff; border:3px solid var(--line); border-radius:20px; padding:14px 16px; font-size:18px; font-weight:600; line-height:1.85; box-shadow:0 8px 20px #f9731620; position:relative;}
+  .bubble:after{content:""; position:absolute; bottom:-14px; right:36px; border:8px solid transparent; border-top-color:#fff;}
+
+  h1.title{font-size:26px; font-weight:700; color:var(--p); margin:6px 0; text-align:center; line-height:1.4;}
+  .sub{text-align:center; color:#a35a1c; font-weight:700; margin-bottom:8px;}
+
+  .btn{
+    border:none; border-radius:18px; padding:16px; font-family:inherit;
+    font-size:20px; font-weight:700; cursor:pointer; color:#fff;
+    background:linear-gradient(180deg,var(--p2),var(--p));
+    box-shadow:0 6px 0 #c2410c, 0 10px 18px #f9731655;
+    transition:transform .08s, box-shadow .08s; width:100%;
+  }
+  .btn:active{transform:translateY(4px); box-shadow:0 2px 0 #c2410c;}
+  .btn.gold{background:linear-gradient(180deg,#fcd34d,var(--gold)); color:#5b3d00; box-shadow:0 6px 0 #b45309,0 10px 18px #f59e0b66;}
+  .btn.ghost{background:#fff; color:var(--p); box-shadow:0 4px 0 var(--line);}
+  .btn:disabled{filter:grayscale(.4) opacity(.6); pointer-events:none;}
+
+  .card{background:#fff; border-radius:22px; padding:18px; box-shadow:0 10px 26px #f9731618; margin-top:auto;}
+
+  .opts{display:grid; gap:12px; margin-top:14px;}
+  .opt{
+    background:#fff; border:3px solid var(--line); border-radius:18px; padding:16px;
+    font-size:21px; font-weight:700; color:var(--ink); cursor:pointer;
+    transition:transform .1s, border-color .1s, background .1s; text-align:center;
+    box-shadow:0 4px 0 var(--line);
+  }
+  .opt:active{transform:translateY(3px); box-shadow:none;}
+  .opt.good{border-color:var(--good); background:#dcfce7; box-shadow:0 4px 0 #86efac; animation:pop .4s;}
+  .opt.bad{border-color:var(--bad); background:#fee2e2; box-shadow:0 4px 0 #fca5a5; animation:shake .4s;}
+  .opt.dim{opacity:.4;}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+
+  .prompt{font-size:20px; font-weight:700; text-align:center; margin:8px 0; line-height:1.7;}
+  .hint{background:var(--soft); border-radius:14px; padding:10px 14px; font-weight:700; color:#a35a1c; text-align:center; margin:8px 0; line-height:1.8;}
+
+  /* بطاقة الكلمة */
+  .wordcard{background:#fff; border:3px solid var(--line); border-radius:24px; padding:18px; text-align:center; box-shadow:0 12px 28px #f9731618; margin:10px 0;}
+  .emoji-big{font-size:96px; line-height:1.1; margin:6px 0; animation:bob 2.6s ease-in-out infinite;}
+  .word-en{font-size:40px; color:var(--en); margin:4px 0;}
+  .syll{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-top:6px;}
+  .syll b{background:#f3ecff; color:var(--en); border-radius:10px; padding:4px 12px; font-family:'Fredoka',sans-serif; font-size:20px;}
+  .playbtn{display:inline-flex; align-items:center; gap:8px; background:#f3ecff; color:var(--en); border:2px solid #ddd0ff; border-radius:999px; padding:10px 18px; font-weight:700; font-size:18px; cursor:pointer; font-family:inherit;}
+  .playbtn:active{transform:scale(.96);}
+  .ar-help{background:#fff7ed; border:2px dashed var(--p); border-radius:12px; color:#9a3412; font-weight:700; padding:8px 12px; margin:8px 0; display:inline-block;}
+  .ar-btn{background:none; border:2px dashed var(--p); color:#9a3412; border-radius:12px; padding:8px 14px; font-weight:700; font-family:inherit; cursor:pointer;}
+
+  /* اختيار صورة */
+  .imgopts{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;}
+  .imgopt{background:#fff; border:3px solid var(--line); border-radius:20px; padding:18px; font-size:56px; cursor:pointer; box-shadow:0 5px 0 var(--line); transition:transform .1s;}
+  .imgopt:active{transform:translateY(3px); box-shadow:none;}
+  .imgopt.good{border-color:var(--good); background:#dcfce7; animation:pop .4s;}
+  .imgopt.bad{border-color:var(--bad); background:#fee2e2; animation:shake .4s;}
+  .imgopt.dim{opacity:.4; pointer-events:none;}
+
+  /* بناء بالبلاطات */
+  .slots{display:flex; gap:8px; justify-content:center; flex-wrap:wrap; min-height:62px; margin:10px 0;}
+  .slot{min-width:58px; height:58px; border-radius:14px; border:3px dashed #e8c3a3; background:#fff8f1; display:flex; align-items:center; justify-content:center; font-family:'Fredoka',sans-serif; font-size:24px; color:var(--en); padding:0 8px;}
+  .slot.full{border-style:solid; border-color:var(--good); background:#dcfce7;}
+  .model{font-family:'Fredoka',sans-serif; font-size:26px; color:#c9b8ee; letter-spacing:3px; text-align:center; margin-bottom:2px;}
+  .bank{display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-top:14px;}
+  .tile{min-width:56px; height:56px; padding:0 14px; border-radius:14px; border:none; background:linear-gradient(180deg,#a78bfa,#7c3aed); color:#fff; font-family:'Fredoka',sans-serif; font-size:24px; cursor:pointer; box-shadow:0 5px 0 #5b21b6; transition:transform .08s;}
+  .tile:active{transform:translateY(3px); box-shadow:0 2px 0 #5b21b6;}
+  .tile.used{visibility:hidden;}
+  .tile.wrong{animation:shake .4s;}
+
+  /* مطابقة */
+  .matchwrap{display:flex; gap:14px; margin-top:12px;}
+  .mcol{flex:1; display:flex; flex-direction:column; gap:10px;}
+  .mitem{background:#fff; border:3px solid var(--line); border-radius:16px; padding:14px; text-align:center; font-size:22px; font-weight:700; cursor:pointer; box-shadow:0 4px 0 var(--line);}
+  .mitem .en{font-size:22px;}
+  .mitem.sel{border-color:var(--en); background:#f3ecff;}
+  .mitem.done{border-color:var(--good); background:#dcfce7; pointer-events:none; opacity:.75;}
+  .mitem.bad{animation:shake .4s;}
+
+  #fb{position:absolute; left:0; right:0; bottom:0; transform:translateY(110%); transition:transform .4s cubic-bezier(.2,1,.3,1);
+      background:#fff; border-radius:24px 24px 0 0; padding:18px; box-shadow:0 -10px 30px #0002; z-index:8;}
+  #fb.show{transform:none;}
+  #fb.win{background:#dcfce7;} #fb.lose{background:#fee2e2;}
+  #fb .ttl{font-size:21px; font-weight:700; display:flex; align-items:center; gap:8px;}
+  #fb .exp{font-weight:600; color:#3a5161; margin:8px 0 14px; line-height:1.85; font-size:17px;}
+
+  /* الخريطة + سماء المدينة */
+  .skyline{position:relative; height:96px; margin:2px 0 8px; border-radius:16px; overflow:hidden;
+    background:linear-gradient(180deg,#3a2566,#1d1340); box-shadow:inset 0 0 0 2px #ffffff14;}
+  .skyline .moon{position:absolute; top:12px; left:18px; font-size:24px;}
+  .bld{position:absolute; bottom:0; background:#2a1c4d; border-radius:5px 5px 0 0;}
+  .bld i{position:absolute; width:7px; height:7px; border-radius:2px; background:#5b4a82; transition:background .5s, box-shadow .5s;}
+  .bld.lit i{background:#fde047; box-shadow:0 0 8px #fde047cc;}
+
+  .path{flex:1; display:flex; flex-direction:column; align-items:center; gap:0; position:relative; padding-top:6px;}
+  .node{width:82px;height:82px;border-radius:50%; display:flex;align-items:center;justify-content:center; font-size:34px;
+         font-weight:700; color:#fff; position:relative; cursor:pointer; box-shadow:0 6px 0 #00000022, 0 10px 20px #0003; transition:transform .12s;}
+  .node:active{transform:scale(.94);}
+  .node.locked{background:#cbb8a6; box-shadow:0 6px 0 #a8907c; cursor:not-allowed;}
+  .node.done{background:linear-gradient(180deg,#34d399,#10b981); box-shadow:0 6px 0 #059669;}
+  .node.cur{background:linear-gradient(180deg,var(--p2),var(--p)); box-shadow:0 6px 0 #c2410c; animation:beat 1.4s infinite;}
+  .node.boss{background:linear-gradient(180deg,#fb7185,#e11d48); box-shadow:0 6px 0 #9f1239;}
+  @keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  .node .nm{position:absolute; bottom:-24px; font-size:12px; color:#fff; font-weight:700; white-space:nowrap; background:#0006; padding:2px 9px;border-radius:8px;}
+  .node .stars{position:absolute; top:-14px; font-size:14px;}
+  .connector{width:6px;height:30px;background:#ffffff44;border-radius:999px;}
+  .connector.done{background:#34d399;}
+  .nodeoff{margin-inline-start:var(--off,0);}
+
+  .confetti{position:fixed; top:-20px; font-size:22px; z-index:99; pointer-events:none; animation:fall linear forwards;}
+  @keyframes fall{to{transform:translateY(108vh) rotate(720deg); opacity:.2}}
+
+  .cert{background:linear-gradient(180deg,#fffdf6,#fff3df); border:5px double var(--gold); border-radius:20px; padding:22px; text-align:center; box-shadow:0 14px 30px #f59e0b33;}
+  .cert h2{color:#b45309; margin:6px 0; font-size:23px;}
+  .cert .big{font-size:58px;}
+  .badge{font-size:78px; text-align:center; animation:bob 2s infinite;}
+  .progtop{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+</style>
+</head>
+<body>
+<div class="bgsym" id="bgsym"></div>
+
+<div id="app">
+  <div id="hud">
+    <button id="soundBtn" title="الصوت">🔊</button>
+    <div class="pill">💎 <span id="gems">0</span></div>
+    <div id="xpwrap"><div id="xpbar"></div></div>
+    <div class="pill">⭐ <span id="stars">0</span></div>
+  </div>
+  <div id="screen"></div>
+  <div id="fb">
+    <div class="ttl" id="fbttl"></div>
+    <div class="exp" id="fbexp"></div>
+    <button class="btn" id="fbbtn">متابعة</button>
+  </div>
+</div>
+
+<script>
+/* ============================ المرشد: سام دليل المدينة ============================ */
+function mascot(cls){return `
+<svg class="mascot ${cls||''}" viewBox="0 0 120 120">
+  <path d="M30 34 L60 14 L90 34 Z" fill="#f59e0b"/>
+  <rect x="26" y="32" width="68" height="8" rx="4" fill="#d97706"/>
+  <rect x="22" y="40" width="76" height="62" rx="22" fill="#7c3aed"/>
+  <rect x="22" y="40" width="76" height="62" rx="22" fill="url(#g)" opacity=".4"/>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".55"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+  <circle cx="47" cy="64" r="11" fill="#fff"/><circle cx="73" cy="64" r="11" fill="#fff"/>
+  <circle cx="49" cy="66" r="5.5" fill="#2a2140"/><circle cx="75" cy="66" r="5.5" fill="#2a2140"/>
+  <circle cx="51" cy="64" r="2" fill="#fff"/><circle cx="77" cy="64" r="2" fill="#fff"/>
+  <path d="M48 84 Q60 94 72 84" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/>
+  <rect x="80" y="84" width="16" height="12" rx="3" fill="#f97316" stroke="#fff" stroke-width="2"/>
+  <circle cx="88" cy="90" r="3.4" fill="#fde047"/>
+</svg>`;}
+
+/* ============================ الأصوات (مؤثرات) ============================ */
+let AC=null, soundOn=true;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} return AC; }
+function tone(f,d,t,v){ if(!soundOn||!ac())return; const o=ac().createOscillator(),g=ac().createGain();
+  o.type=t||'sine'; o.frequency.value=f; o.connect(g); g.connect(ac().destination);
+  const n=ac().currentTime; g.gain.setValueAtTime(0,n); g.gain.linearRampToValueAtTime(v||.18,n+.02);
+  g.gain.exponentialRampToValueAtTime(.0001,n+d); o.start(n); o.stop(n+d); }
+function sGood(){ [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.25,'triangle',.2),i*70)); }
+function sBad(){ tone(180,.3,'sawtooth',.12); setTimeout(()=>tone(120,.3,'sawtooth',.12),120); }
+function sTap(){ tone(494,.08,'square',.06); }
+function sWin(){ [523,659,784,1047,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.3,'triangle',.2),i*120)); }
+function sLevel(){ [659,880,1047].forEach((f,i)=>setTimeout(()=>tone(f,.22,'triangle',.18),i*90)); }
+
+/* ============================ نطق الإنجليزي (TTS) ============================ */
+let voices=[];
+function loadVoices(){ try{ voices=speechSynthesis.getVoices(); }catch(e){} }
+loadVoices(); if('speechSynthesis' in window){ speechSynthesis.onvoiceschanged=loadVoices; }
+function say(text,rate){
+  if(!soundOn || !('speechSynthesis' in window)) return;
+  try{ speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(text);
+    u.lang='en-GB'; u.rate=rate||.82; u.pitch=1;
+    const v=voices.find(x=>/en[-_]GB/i.test(x.lang))||voices.find(x=>/^en/i.test(x.lang));
+    if(v)u.voice=v; speechSynthesis.speak(u);
+  }catch(e){}
+}
+
+/* ============================ مؤثرات ============================ */
+function confetti(n){ const e=['🎉','⭐','✨','🏙️','🚕','⛲','🗽','📸']; for(let i=0;i<(n||30);i++){
+  const c=document.createElement('div'); c.className='confetti'; c.textContent=e[i%e.length];
+  c.style.left=Math.random()*100+'vw'; c.style.fontSize=(16+Math.random()*22)+'px';
+  c.style.animationDuration=(1.4+Math.random()*1.6)+'s'; document.body.appendChild(c);
+  setTimeout(()=>c.remove(),3200);} }
+function en(w){ return `<span class="en">${w}</span>`; }
+function shuffle(a){ a=a.slice(); for(let i=a.length-1;i>0;i--){ const j=Math.floor((i+1)*pseudo()); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+/* عشوائية بسيطة بدون Math.random كي لا تكسر شيئاً عند الحاجة */
+let _seed=7;
+function pseudo(){ _seed=(_seed*9301+49297)%233280; return _seed/233280; }
+
+/* ============================ محتوى الدرس (CONTENT) — وحدة City life ============================ */
+/* الترتيب = نفس الكتاب (Lesson 1 Vocabulary + Lesson 3 Grammar: used to) */
+const WORDS={
+  taxi:    {text:'taxi',    type:'concrete',        emoji:'🚕', syllables:['ta','xi'],     letters:['t','a','x','i'],         arabic:null,  arabic_mode:'none',           note:null},
+  fountain:{text:'fountain',type:'concrete',        emoji:'⛲', syllables:['foun','tain'], letters:['f','o','u','n','t','a','i','n'], arabic:null, arabic_mode:'none', note:null},
+  statue:  {text:'statue',  type:'concrete',        emoji:'🗽', syllables:['stat','ue'],   letters:['s','t','a','t','u','e'], arabic:null,  arabic_mode:'none',           note:null},
+  tourist: {text:'tourist', type:'simple_abstract', emoji:'🧳', syllables:['tour','ist'],  letters:['t','o','u','r','i','s','t'], arabic:'سائح', arabic_mode:'on_demand',
+            note:'شخص بيزور بلد ثاني — بياخد معه شنطته وكاميرته 📷'},
+};
+const WORD_ORDER=['taxi','fountain','statue','tourist'];
+
+/* ============================ الحالة ============================ */
+const State={ xp:0, gems:0, stars:0, maxUnlocked:0, levelStars:{} };
+try{ const s=JSON.parse(localStorage.getItem('citylife_micro')); if(s)Object.assign(State,s); }catch(e){}
+function save(){ try{localStorage.setItem('citylife_micro',JSON.stringify(State));}catch(e){} }
+function setHUD(){ document.getElementById('gems').textContent=State.gems;
+  document.getElementById('stars').textContent=State.stars;
+  document.getElementById('xpbar').style.width=Math.min(100,(State.xp%100))+'%'; }
+function addXP(n){ State.xp+=n; setHUD(); save(); }
+
+/* ============================ المراحل ============================ */
+/* أنواع الخطوات: story | word | recog | build | choice | match | fill | reading */
+const LEVELS=[
+
+ /* ---------- 0: كلمات المدينة (تمييز) ---------- */
+ { name:'كلمات المدينة', icon:'🏙️', steps:[
+   {type:'story', say:'أهلاً يا بطل! 👋 أنا <b>سام</b>، دليلك في المدينة. اليوم رح نتعلّم <b>٤ كلمات إنجليزي</b> عن المدينة — كلمة كلمة، بالصوت والصورة. اسمع منيح وكرّر ورايي! 🔊'},
+   {type:'word', word:'taxi'},
+   {type:'word', word:'fountain'},
+   {type:'word', word:'statue'},
+   {type:'word', word:'tourist'},
+   {type:'story', say:'حلو! 🎧 هلأ رح نتأكد إنك عرفتهم. <b>اسمع الكلمة</b> واختر الصورة الصح. لو غلطت ما في مشكلة — جرّب كمان مرة. 💪'},
+   {type:'recog', word:'taxi',     pool:['taxi','fountain','statue','tourist']},
+   {type:'recog', word:'statue',   pool:['statue','taxi','fountain','tourist']},
+   {type:'recog', word:'fountain', pool:['fountain','tourist','taxi','statue']},
+   {type:'recog', word:'tourist',  pool:['tourist','statue','fountain','taxi']},
+ ]},
+
+ /* ---------- 1: ركّب الكلمة (إنتاج) ---------- */
+ { name:'ركّب الكلمة', icon:'🔤', steps:[
+   {type:'story', say:'الآن دورك تبني الكلمة بنفسك! 🧩 رح تشوف <b>مقاطع مبعثرة</b>، رتّبها بالترتيب الصح. النموذج الباهت فوق بيساعدك. لو نقرت غلط، البلاطة بترجع لمكانها — بدون عقاب. 😊'},
+   {type:'build', word:'taxi',     unit:'syll', model:true},
+   {type:'build', word:'fountain', unit:'syll', model:true},
+   {type:'build', word:'statue',   unit:'syll', model:true},
+   {type:'build', word:'tourist',  unit:'letter', model:true},
+ ]},
+
+ /* ---------- 2: used to (قاعدة) ---------- */
+ { name:'used to', icon:'📜', steps:[
+   {type:'story', say:'قاعدة اليوم: <b>'+en('used to')+'</b> 📜<br>منستخدمها لما نحكي عن <b>عادة قديمة</b> — إشي كنّا نعمله كثير بالماضي وخلص بطّلنا نعمله.'},
+   {type:'story', say:'الصيغة بسيطة:<br><b>'+en('used to')+' + الفعل</b> (بصيغته الأساسية).', keybox:en('used to')+' + verb'},
+   {type:'word_ex', en:'They used to live here.', ar:'كانوا يعيشون هون.'},
+   {type:'word_ex', en:'I used to play football.', ar:'كنت ألعب كرة قدم.'},
+   {type:'choice', prompt:'اختر الصح:<br>"He ___ in a small city."',
+     options:[en('used to live'), en('used to lives'), en('use to live')], correct:0,
+     exp:'بعد '+en('used to')+' بنحط الفعل بصيغته الأساسية: '+en('used to live')+' ✦'},
+   {type:'choice', prompt:'اختر الصح:<br>"We ___ football every day."',
+     options:[en('used to play'), en('used to played'), en('used play')], correct:0,
+     exp:en('used to')+' + '+en('play')+' (بدون تغيير) ✦'},
+   {type:'story', say:'ممتاز! 🌟 آخر تحدّي بالقاعدة: رتّب <b>الجملة كاملة</b> بالبلاطات.'},
+   {type:'build_sent', correct:['She','used','to','live','here'], distractors:['lives'],
+     exp:'She used to live here = كانت تعيش هون ✦'},
+ ]},
+
+ /* ---------- 3: الامتحان (Boss) ---------- */
+ { name:'الامتحان', icon:'🏆', boss:true, steps:[
+   {type:'story', say:'وصلنا للامتحان! 🏆 نفس صيغة ورقة الامتحان: <b>قراءة</b>، ثم <b>اختر الصح</b> و<b>طابق</b> و<b>أكمل الفراغ</b> — وكل الكلمات تعلّمناها سوا. ركّز! 💪'},
+   {type:'reading', title:'Read the text', text:[
+       'Sami is a <b>tourist</b>.',
+       'Last year he visited Amman.',
+       'He saw a big <b>statue</b> and a beautiful <b>fountain</b>.',
+       'He <b>used to</b> travel by <b>taxi</b> every day.'
+     ]},
+   {type:'choice', prompt:'<b>Choose the correct answer</b><br>Sami is a ___ .',
+     options:[en('tourist'), en('taxi'), en('fountain')], correct:0,
+     exp:'النص: "Sami is a tourist" ✦'},
+   {type:'choice', prompt:'<b>Choose the correct answer</b><br>What did Sami see?',
+     options:[en('a statue and a fountain'), en('a taxi and a bus'), en('a school')], correct:0,
+     exp:'النص: "a big statue and a beautiful fountain" ✦'},
+   {type:'match', title:'Match the word to the picture', pairs:[
+       {w:'taxi', e:'🚕'},{w:'fountain', e:'⛲'},{w:'statue', e:'🗽'}
+     ]},
+   {type:'fill', prompt:'<b>Complete</b><br>People ___ travel by horse.',
+     options:['used to','use to','uses to'], correct:0,
+     exp:'عادة قديمة → '+en('used to')+' travel ✦'},
+ ]},
+];
+
+/* ============================ التنقّل ============================ */
+const screen=document.getElementById('screen');
+function setView(html){ screen.innerHTML=`<div class="view">${html}</div>`; }
+
+function skylineHTML(){
+  const lit=State.maxUnlocked, total=LEVELS.length;
+  const blds=[{l:18,w:34,h:54},{l:60,w:40,h:74},{l:108,w:30,h:46},{l:146,w:44,h:66},{l:198,w:34,h:58},{l:240,w:38,h:50}];
+  let s=`<div class="skyline"><div class="moon">🌙</div>`;
+  blds.forEach((b,i)=>{
+    const on=i< Math.round(lit/total*blds.length);
+    let win=''; for(let r=0;r<Math.floor(b.h/16);r++)for(let c=0;c<Math.floor(b.w/14);c++){
+      win+=`<i style="left:${5+c*13}px;bottom:${8+r*14}px"></i>`; }
+    s+=`<div class="bld ${on?'lit':''}" style="left:${b.l}px;width:${b.w}px;height:${b.h}px">${win}</div>`;
+  });
+  s+=`</div>`; return s;
+}
+
+function titleScreen(){
+  setView(`
+    <div style="text-align:center;margin-top:6px">${mascot()}</div>
+    <h1 class="title">مدينتي بالإنجليزي</h1>
+    <div class="sub">${en('City life')} — درس مصغّر 🏙️</div>
+    <div class="bubble" style="margin:14px 0">رح نتعلّم <b>٤ كلمات</b> عن المدينة + قاعدة <b>${en('used to')}</b> — بالصوت، الصورة، والبلاطات. وبالآخر <b>امتحان</b> بصيغة الورقة! 🚀</div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="startBtn">🚀 يلا نبدأ</button>
+      ${State.maxUnlocked>0?'<button class="btn ghost" id="resetBtn">🔄 إعادة من البداية</button>':''}
+    </div>`);
+  document.getElementById('startBtn').onclick=()=>{ac(); sLevel(); mapScreen();};
+  const r=document.getElementById('resetBtn');
+  if(r) r.onclick=()=>{ State.xp=0;State.gems=0;State.stars=0;State.maxUnlocked=0;State.levelStars={}; save(); setHUD(); titleScreen(); };
+}
+
+function mapScreen(){
+  let html=`<h1 class="title" style="font-size:22px">🗺️ طريق المدينة</h1>${skylineHTML()}<div class="path">`;
+  LEVELS.forEach((lv,i)=>{
+    const done=i<State.maxUnlocked, cur=i===State.maxUnlocked, locked=i>State.maxUnlocked;
+    const off=[0,46,-46,40][i%4];
+    const cls=lv.boss?(done?'done':'boss'):(done?'done':(cur?'cur':'locked'));
+    const st=State.levelStars[i]||0;
+    const starsHtml=done?`<div class="stars">${'⭐'.repeat(st)||'⭐'}</div>`:'';
+    html+=`<div class="nodeoff" style="--off:${off}px">
+      <div class="node ${cls}" data-i="${i}">${locked&&!lv.boss?'🔒':lv.icon}${starsHtml}
+        <span class="nm">${i+1}. ${lv.name}</span></div></div>`;
+    if(i<LEVELS.length-1) html+=`<div class="connector ${done?'done':''}"></div>`;
+  });
+  html+=`</div><div style="height:30px"></div>`;
+  setView(html);
+  screen.querySelectorAll('.node').forEach(n=>{
+    const i=+n.dataset.i;
+    if(i<=State.maxUnlocked) n.onclick=()=>{ sTap(); startLevel(i); };
+  });
+}
+
+let cur={level:0, step:0, perfect:true, wrongHere:false};
+function startLevel(i){ cur={level:i, step:0, perfect:true, wrongHere:false}; renderStep(); }
+function renderStep(){
+  const lv=LEVELS[cur.level]; const st=lv.steps[cur.step];
+  if(!st){ return finishLevel(); }
+  cur.wrongHere=false;
+  ({story:renderStory, word:renderWord, word_ex:renderWordEx, recog:renderRecog,
+    build:renderBuild, build_sent:renderBuildSent, choice:renderChoice,
+    match:renderMatch, fill:renderChoice, reading:renderReading}[st.type])(st,lv);
+}
+function progressTop(lv){
+  const pct=Math.round((cur.step)/lv.steps.length*100);
+  return `<div class="progtop">
+    <button class="opt" style="padding:8px 12px;font-size:18px;box-shadow:none;border-width:2px;width:auto" id="backMap">✕</button>
+    <div style="flex:1;height:12px;background:#ffe3cc;border-radius:999px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#fb923c,#f97316);border-radius:999px;transition:width .4s"></div></div>
+    <div style="font-weight:700;color:#f97316">${cur.step+1}/${lv.steps.length}</div></div>`;
+}
+function bindBack(){ const b=document.getElementById('backMap'); if(b)b.onclick=()=>{sTap();mapScreen();}; }
+function advance(){ cur.step++; renderStep(); }
+
+/* ---------- story ---------- */
+function renderStory(st,lv){
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px">${mascot('small')}
+      <div class="bubble" style="flex:1">${st.say}</div></div>
+    ${st.keybox?`<div class="hint" style="font-size:22px">${st.keybox}</div>`:''}
+    <div style="margin-top:auto"><button class="btn" id="next">متابعة ⟵</button></div>`);
+  bindBack();
+  document.getElementById('next').onclick=()=>{ sTap(); advance(); };
+}
+
+/* ---------- word: تعرّف بالصوت ثم الشكل (R0→R2) ---------- */
+function renderWord(st,lv){
+  const w=WORDS[st.word];
+  setView(`${progressTop(lv)}
+    <div class="hint">👂 اسمع الكلمة، كرّرها، بعدين اكشف الشكل</div>
+    <div class="wordcard">
+      <div class="emoji-big">${w.emoji}</div>
+      <button class="playbtn" id="play">🔊 اسمع</button>
+      <div id="reveal" style="margin-top:12px"></div>
+    </div>
+    <div id="contwrap" style="margin-top:auto"></div>`);
+  bindBack();
+  setTimeout(()=>say(w.text),350); // الصوت أولاً
+  document.getElementById('play').onclick=()=>{ say(w.text); };
+  let revealed=false;
+  const reveal=document.getElementById('reveal');
+  reveal.innerHTML=`<button class="btn ghost" id="show">👁 اعرض الكلمة</button>`;
+  document.getElementById('show').onclick=()=>{
+    if(revealed) return; revealed=true; sTap(); say(w.text);
+    reveal.innerHTML=`
+      <div class="word-en">${w.text}</div>
+      <div class="syll">${w.syllables.map(s=>`<b>${s}</b>`).join('')}</div>
+      ${w.arabic_mode==='on_demand'?`<div style="margin-top:10px"><button class="ar-btn" id="arbtn">🇯🇴 عربي؟</button></div>`:''}
+      ${w.arabic_mode==='first_then_fade'?`<div class="ar-help">${w.arabic}</div>`:''}
+    `;
+    const ab=document.getElementById('arbtn');
+    if(ab) ab.onclick=()=>{ ab.outerHTML=`<div class="ar-help">${w.arabic}${w.note?' — '+w.note:''}</div>`; };
+    document.getElementById('contwrap').innerHTML=`<button class="btn" id="next">متابعة ⟵</button>`;
+    document.getElementById('next').onclick=()=>{ sTap(); advance(); };
+  };
+}
+
+/* ---------- word_ex: مثال جملة بالقاعدة + ترجمة خفيفة + صوت ---------- */
+function renderWordEx(st,lv){
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px">${mascot('small')}
+      <div class="bubble" style="flex:1">مثال — اسمع واقرأ:</div></div>
+    <div class="wordcard">
+      <div class="word-en" style="font-size:26px;line-height:1.5">${st.en}</div>
+      <button class="playbtn" id="play" style="margin-top:8px">🔊 اسمع</button>
+      <div class="ar-help" style="margin-top:12px">${st.ar}</div>
+    </div>
+    <div style="margin-top:auto"><button class="btn" id="next">متابعة ⟵</button></div>`);
+  bindBack();
+  setTimeout(()=>say(st.en),350);
+  document.getElementById('play').onclick=()=>say(st.en);
+  document.getElementById('next').onclick=()=>{ sTap(); advance(); };
+}
+
+/* ---------- recog: اسمع → اختر الصورة (R3) ---------- */
+function renderRecog(st,lv){
+  const target=WORDS[st.word];
+  const pool=shuffle(st.pool);
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin:8px 0">${mascot('small')}
+      <div class="bubble" style="flex:1"><div class="prompt" style="margin:0">اسمع واختر الصورة الصحيحة 👇</div></div></div>
+    <div style="text-align:center"><button class="playbtn" id="play">🔊 اسمع الكلمة</button></div>
+    <div class="imgopts" id="opts">
+      ${pool.map(k=>`<button class="imgopt" data-k="${k}">${WORDS[k].emoji}</button>`).join('')}
+    </div>`);
+  bindBack();
+  setTimeout(()=>say(target.text),400);
+  document.getElementById('play').onclick=()=>say(target.text);
+  screen.querySelectorAll('.imgopt').forEach(b=>{
+    b.onclick=()=>{
+      if(b.dataset.k===st.word){
+        b.classList.add('good'); sGood(); confetti(18); say(target.text);
+        screen.querySelectorAll('.imgopt').forEach(x=>{ x.style.pointerEvents='none'; if(x!==b)x.classList.add('dim'); });
+        const reward=cur.wrongHere?5:15; addXP(reward);
+        showFB(true, `${target.text} = ${WORDS[st.word].emoji} ${target.arabic?'('+target.arabic+')':''} ✦`, reward);
+      } else {
+        b.classList.add('bad'); sBad(); b.classList.add('dim');
+        cur.wrongHere=true; cur.perfect=false;
+        setTimeout(()=>{ b.classList.remove('bad'); },420);
+      }
+    };
+  });
+}
+
+/* ---------- build: ترتيب مقاطع/حروف (إنتاج P2/P3) ---------- */
+function renderBuild(st,lv){
+  const w=WORDS[st.word];
+  const parts=(st.unit==='syll')?w.syllables:w.letters;
+  buildEngine({
+    parts, model: st.model? w.text : null, lv,
+    say:w.text, emoji:w.emoji,
+    instr: st.unit==='syll'?'رتّب المقاطع لتكوين الكلمة':'رتّب الحروف لتكوين الكلمة',
+    exp:`${w.text} = ${w.emoji} ✦`
+  });
+}
+function renderBuildSent(st,lv){
+  buildEngine({
+    parts: st.correct, model:null, lv, sentence:true,
+    say: st.correct.join(' '), emoji:'💬',
+    extra: st.distractors||[],
+    instr:'رتّب الكلمات لتكوين الجملة الصحيحة',
+    exp: st.exp
+  });
+}
+function buildEngine(cfg){
+  const parts=cfg.parts;
+  const bank=shuffle(parts.concat(cfg.extra||[]));
+  let idx=0;
+  setView(`${progressTop(cfg.lv)}
+    <div class="hint">🧩 ${cfg.instr}</div>
+    <div style="text-align:center;font-size:54px;margin:4px 0">${cfg.emoji}</div>
+    ${cfg.model?`<div class="model">${cfg.model.split('').join(' ')}</div>`:''}
+    <div class="slots" id="slots">${parts.map(()=>`<div class="slot"></div>`).join('')}</div>
+    <div class="bank" id="bank">
+      ${bank.map((p,i)=>`<button class="tile" data-t="${p}" data-i="${i}">${p}</button>`).join('')}
+    </div>`);
+  bindBack();
+  const slots=screen.querySelectorAll('.slot');
+  screen.querySelectorAll('.tile').forEach(t=>{
+    t.onclick=()=>{
+      if(t.dataset.t===parts[idx]){
+        sTap(); t.classList.add('used');
+        slots[idx].textContent=parts[idx]; slots[idx].classList.add('full');
+        idx++;
+        if(idx===parts.length){
+          sGood(); confetti(20); say(cfg.say);
+          const reward=cur.wrongHere?6:18; addXP(reward);
+          setTimeout(()=>showFB(true, cfg.exp, reward), 250);
+        }
+      } else {
+        sBad(); t.classList.add('wrong'); cur.wrongHere=true; cur.perfect=false;
+        setTimeout(()=>t.classList.remove('wrong'),420); // البلاطة بترجع، بدون عقاب
+      }
+    };
+  });
+}
+
+/* ---------- choice / fill: MCQ ---------- */
+function renderChoice(st,lv){
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin:8px 0 4px">${mascot('small')}
+      <div class="bubble" style="flex:1"><div class="prompt" style="margin:0;font-size:19px">${st.prompt}</div></div></div>
+    <div class="opts" id="opts">
+      ${st.options.map((o,i)=>`<button class="opt" data-i="${i}">${o}</button>`).join('')}
+    </div>`);
+  bindBack();
+  screen.querySelectorAll('.opt').forEach(b=>{
+    b.onclick=()=>{
+      const i=+b.dataset.i;
+      if(i===st.correct){
+        b.classList.add('good'); sGood(); confetti(20);
+        screen.querySelectorAll('.opt').forEach(x=>{x.style.pointerEvents='none'; if(x!==b)x.classList.add('dim');});
+        const reward=cur.wrongHere?5:15; addXP(reward); showFB(true, st.exp, reward);
+      } else {
+        b.classList.add('bad'); sBad(); b.classList.add('dim'); b.style.pointerEvents='none';
+        cur.wrongHere=true; cur.perfect=false;
+      }
+    };
+  });
+}
+
+/* ---------- match: مطابقة كلمة↔صورة ---------- */
+function renderMatch(st,lv){
+  const left=st.pairs.map(p=>p.w);
+  const right=shuffle(st.pairs.map(p=>p.e));
+  setView(`${progressTop(lv)}
+    <div class="hint">🔗 ${st.title}</div>
+    <div class="matchwrap">
+      <div class="mcol" id="colL">${left.map(w=>`<div class="mitem" data-w="${w}">${en(w)}</div>`).join('')}</div>
+      <div class="mcol" id="colR">${right.map(e=>`<div class="mitem" data-e="${e}">${e}</div>`).join('')}</div>
+    </div>`);
+  bindBack();
+  const map={}; st.pairs.forEach(p=>map[p.w]=p.e);
+  let selW=null, done=0;
+  function clearSel(){ if(selW){selW.classList.remove('sel'); selW=null;} }
+  screen.querySelectorAll('#colL .mitem').forEach(el=>{
+    el.onclick=()=>{ sTap(); clearSel(); selW=el; el.classList.add('sel'); };
+  });
+  screen.querySelectorAll('#colR .mitem').forEach(el=>{
+    el.onclick=()=>{
+      if(!selW) return;
+      const w=selW.dataset.w, e=el.dataset.e;
+      if(map[w]===e){
+        sGood(); selW.classList.add('done'); el.classList.add('done'); say(w);
+        clearSel(); done++;
+        if(done===st.pairs.length){
+          confetti(24); const reward=cur.wrongHere?6:18; addXP(reward);
+          setTimeout(()=>showFB(true,'أحسنت! طابقت كل الكلمات ✦',reward),250);
+        }
+      } else {
+        sBad(); el.classList.add('bad'); cur.wrongHere=true; cur.perfect=false;
+        setTimeout(()=>el.classList.remove('bad'),420);
+      }
+    };
+  });
+}
+
+/* ---------- reading: بطاقة قراءة ثابتة ---------- */
+function renderReading(st,lv){
+  setView(`${progressTop(lv)}
+    <div class="hint">📖 ${st.title} — اسمع واقرأ، بعدها أسئلة</div>
+    <div class="card" style="margin-top:8px;margin-bottom:8px">
+      <div class="word-en" dir="ltr" style="font-size:21px;line-height:2;color:#2a2140;text-align:left">
+        ${st.text.map(l=>`<div>${l}</div>`).join('')}
+      </div>
+      <div style="text-align:center;margin-top:12px"><button class="playbtn" id="play">🔊 اسمع النص</button></div>
+    </div>
+    <div style="margin-top:auto"><button class="btn" id="next">جاهز للأسئلة ⟵</button></div>`);
+  bindBack();
+  const plain=st.text.join(' ').replace(/<[^>]+>/g,'');
+  setTimeout(()=>say(plain,.8),400);
+  document.getElementById('play').onclick=()=>say(plain,.8);
+  document.getElementById('next').onclick=()=>{ sTap(); advance(); };
+}
+
+/* ---------- التغذية الراجعة ---------- */
+const fb=document.getElementById('fb');
+function showFB(good, exp, reward){
+  fb.className=good?'show win':'show lose';
+  document.getElementById('fbttl').innerHTML=good?`✅ صح! <span style="color:#16a34a">+${reward} XP</span>`:'حاول مجددًا';
+  document.getElementById('fbexp').innerHTML=exp||'';
+  const btn=document.getElementById('fbbtn'); btn.textContent='متابعة ⟵';
+  btn.onclick=()=>{ sTap(); fb.className=''; advance(); };
+}
+
+/* ---------- نهاية المرحلة ---------- */
+function finishLevel(){
+  const lv=LEVELS[cur.level];
+  const earnedStars=cur.perfect?3:2;
+  State.levelStars[cur.level]=Math.max(State.levelStars[cur.level]||0, earnedStars);
+  State.stars+=earnedStars; State.gems+=10;
+  if(cur.level+1>State.maxUnlocked) State.maxUnlocked=cur.level+1;
+  setHUD(); save(); sLevel(); confetti(40);
+  if(lv.boss && cur.level===LEVELS.length-1){ return winScreen(); }
+  setView(`
+    <div style="text-align:center;margin-top:24px">${mascot()}</div>
+    <h1 class="title">🎉 خلّصت المرحلة!</h1>
+    <div class="card" style="text-align:center;margin-top:14px">
+      <div style="font-size:40px">${'⭐'.repeat(earnedStars)}</div>
+      <div style="font-weight:700;font-size:22px;color:#f97316;margin-top:8px">${lv.name}</div>
+      <div style="margin-top:10px;font-weight:600;color:#a35a1c">💎 +10 جوهرة &nbsp;|&nbsp; ⭐ +${earnedStars} نجوم</div>
+    </div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="cont">المرحلة التالية ⟵</button>
+      <button class="btn ghost" id="map">🗺️ الخريطة</button>
+    </div>`);
+  document.getElementById('cont').onclick=()=>{ sTap(); if(cur.level+1<LEVELS.length) startLevel(cur.level+1); else mapScreen(); };
+  document.getElementById('map').onclick=()=>{ sTap(); mapScreen(); };
+}
+
+function winScreen(){
+  sWin(); confetti(80);
+  setView(`
+    <div class="badge">🏆</div>
+    <div class="cert">
+      <div class="big">🏙️</div>
+      <h2>شهادة بطل City life</h2>
+      <div style="font-weight:600;color:#a35a1c;line-height:2">
+        تعلّمت ${en('taxi')} · ${en('fountain')} · ${en('statue')} · ${en('tourist')}<br>
+        وأتقنت قاعدة ${en('used to')} ✦ وعدّيت الامتحان!
+      </div>
+      <div style="margin-top:14px;font-weight:700;color:#b45309;font-size:20px">⭐ ${State.stars} نجمة &nbsp; | &nbsp; 💎 ${State.gems} جوهرة</div>
+    </div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="again">🗺️ العودة للخريطة</button>
+    </div>`);
+  document.getElementById('again').onclick=()=>{ sTap(); mapScreen(); };
+}
+
+/* ============================ التشغيل ============================ */
+document.getElementById('soundBtn').onclick=function(){ soundOn=!soundOn; this.textContent=soundOn?'🔊':'🔇';
+  if(!soundOn && 'speechSynthesis' in window) speechSynthesis.cancel(); if(soundOn)sTap(); };
+(function bg(){ const host=document.getElementById('bgsym'); const sy=['🏙️','🚕','⛲','🗽','📸','🧳','🚌','🌆','✈️','🗺️'];
+  for(let i=0;i<12;i++){ const s=document.createElement('span'); s.textContent=sy[i%sy.length];
+    s.style.left=(i*8.5)+'vw'; s.style.fontSize=(22+ (i%4)*10)+'px';
+    s.style.animationDuration=(9+ (i%5)*2)+'s'; s.style.animationDelay=(-i*1.3)+'s'; host.appendChild(s);} })();
+setHUD();
+titleScreen();
+</script>
+</body>
+</html>

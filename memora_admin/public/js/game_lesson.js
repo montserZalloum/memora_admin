@@ -102,8 +102,21 @@ function _sync_static_lesson_button(frm) {
 }
 
 function open_static_lesson_dialog(frm) {
+	// Load existing HTML_PAGE stage (if any) so the editor opens with current content
+	const existingRow = (frm.doc.stages || []).find((s) => s.stage_type === "HTML_PAGE");
+	let existingConfig = {};
+	let existingHtml = "";
+	if (existingRow && existingRow.config_json) {
+		try {
+			existingConfig = JSON.parse(existingRow.config_json) || {};
+			existingHtml = existingConfig.html || "";
+		} catch (e) {
+			console.error("Invalid HTML_PAGE config_json", e);
+		}
+	}
+
 	const d = new frappe.ui.Dialog({
-		title: __("STATIC LESSON"),
+		title: existingRow ? __("STATIC LESSON — Edit") : __("STATIC LESSON"),
 		size: "extra-large",
 		fields: [
 			{
@@ -111,6 +124,7 @@ function open_static_lesson_dialog(frm) {
 				fieldname: "html_source",
 				options: "HTML",
 				label: __("HTML Editor"),
+				default: existingHtml,
 			},
 			{ fieldtype: "Column Break" },
 			{
@@ -126,6 +140,27 @@ function open_static_lesson_dialog(frm) {
 				(editor && editor.getValue()) || d.get_value("html_source") || "";
 			if (!html.trim()) {
 				frappe.msgprint(__("HTML content is empty."));
+				return;
+			}
+			if (existingRow) {
+				// Update the existing static page in place, preserving its item_id
+				existingConfig.html = html;
+				if (!existingConfig.item_id) {
+					existingConfig.item_id = generateItemUUID();
+				}
+				frappe.model.set_value(
+					existingRow.doctype,
+					existingRow.name,
+					"config_json",
+					JSON.stringify(existingConfig, null, 2)
+				);
+				frm.refresh_field("stages");
+				frm.dirty();
+				d.hide();
+				frappe.show_alert({
+					message: __("تم تحديث الصفحة — اضغط حفظ لتأكيد"),
+					indicator: "blue",
+				});
 				return;
 			}
 			const row = frm.add_child("stages");
@@ -157,6 +192,14 @@ function open_static_lesson_dialog(frm) {
 	d.show();
 
 	const codeField = d.fields_dict.html_source;
+
+	// Ensure the Ace editor is populated with existing content (default alone is unreliable for Code fields)
+	if (existingHtml) {
+		d.set_value("html_source", existingHtml);
+		if (codeField && codeField.editor && codeField.editor.getValue() !== existingHtml) {
+			codeField.editor.setValue(existingHtml, -1);
+		}
+	}
 	const $previewWrap = d.fields_dict.html_preview.$wrapper;
 	$previewWrap.html(
 		`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">

@@ -1,0 +1,820 @@
+<!DOCTYPE html>
+<!-- الأردنّ في العصور الحجرية — micro-lesson. Fresh design: archaeological stratigraphy / excavation trench.
+     Same locked identity (6 colors + 3 fonts) + same 8-stage structure as the skill; layout deliberately
+     unlike the reference (no circular step-cards, no horizontal era-bar). Palette-strict: age accents are
+     derived only from ink/crimson/olive/gold — no new hue. -->
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>الأردنّ في العصور الحجرية — حفريّة في الزمن</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Rubik:wght@400;500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* SACRED */
+  --crimson:#8b2b1f; --gold:#b8860b; --olive:#5c6d3e;
+  --ink:#231a12; --parchment:#f1e7cf; --paper:#fbf6e8;
+  /* derived only */
+  --ink-soft:#6c5b46; --line:#d7c39a; --line-soft:#e4d6b4;
+  --crimson-deep:#6f2018; --crimson-wash:#f4e2db;
+  --olive-wash:#e9eedb; --olive-deep:#3f4d2a;
+  --gold-wash:#f6ead0; --gold-deep:#8a6608;
+  --ok:#41702f; --ok-wash:#e6efdb; --no:#9a2a20; --no-wash:#f6e1dd;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:'Tajawal',sans-serif;color:var(--ink);line-height:1.8;
+  -webkit-font-smoothing:antialiased;
+  background:
+    repeating-linear-gradient(0deg, transparent 0 38px, rgba(108,91,70,.045) 38px 39px),
+    radial-gradient(900px 460px at 12% -8%, #fff7e4 0%, transparent 60%),
+    linear-gradient(168deg,#efe4c8,#e7d8b6);
+  background-attachment:fixed;
+}
+.app{max-width:780px;margin:0 auto;padding:0 16px 90px}
+
+/* ===== TOPBAR ===== */
+.topbar{position:sticky;top:0;z-index:40;padding:11px 2px 9px;margin-bottom:8px;
+  background:linear-gradient(180deg,rgba(239,228,200,.97),rgba(239,228,200,.78));
+  backdrop-filter:blur(7px);border-bottom:1px dashed var(--line);}
+.trail{font-family:'Rubik','Tajawal',sans-serif;font-size:12px;color:var(--ink-soft);letter-spacing:.2px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.trail .pin{color:var(--crimson)}
+.trail b{color:var(--crimson)}
+.dots{display:flex;gap:5px;margin-top:8px}
+.dot{flex:1;height:6px;border-radius:2px;background:#d8c6a0;transition:.4s}
+.dot.done{background:var(--olive)}
+.dot.active{background:var(--crimson);box-shadow:0 0 0 2px var(--crimson-wash)}
+
+/* ===== SCENES ===== */
+.scene{display:none;animation:dig .5s ease}
+.scene.on{display:block}
+@keyframes dig{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+.stage-tag{font-family:'Rubik','Tajawal',sans-serif;font-size:11px;font-weight:600;letter-spacing:.6px;
+  color:var(--gold-deep);background:var(--gold-wash);border:1px solid var(--line);
+  padding:4px 11px;border-radius:3px;display:inline-block;margin:16px 0 8px}
+.scene-title{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;font-size:21px;color:var(--ink);
+  margin:0 0 4px;display:flex;align-items:center;gap:9px}
+.scene-title::before{content:"";width:13px;height:13px;border:3px solid var(--crimson);border-radius:50%;flex-shrink:0}
+.lead{font-size:15.5px;color:#433424;margin:8px 0 18px}
+.lead b{color:var(--crimson)}
+
+/* ===== ARCHIVAL PLATE (base card w/ crop-mark corners) ===== */
+.plate{background:var(--paper);border:1px solid var(--line);border-radius:5px;padding:18px;margin:14px 0;
+  position:relative;box-shadow:0 14px 30px -22px rgba(60,40,18,.6)}
+.plate::before,.plate::after{content:"";position:absolute;width:13px;height:13px;pointer-events:none}
+.plate::before{top:6px;right:6px;border-top:2px solid var(--gold);border-right:2px solid var(--gold)}
+.plate::after{bottom:6px;left:6px;border-bottom:2px solid var(--gold);border-left:2px solid var(--gold)}
+.plate-label{font-family:'Rubik','Tajawal',sans-serif;font-size:11.5px;font-weight:600;letter-spacing:1px;
+  color:var(--crimson);margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.plate-label .sq{width:8px;height:8px;background:var(--crimson);display:inline-block}
+
+/* ===== SPLASH ===== */
+.splash{padding-top:22px}
+.kicker{font-family:'Rubik','Tajawal',sans-serif;font-size:12.5px;letter-spacing:3px;color:var(--gold-deep);margin-bottom:10px}
+.title{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;font-size:clamp(30px,8.5vw,50px);line-height:1.18;color:var(--ink)}
+.title em{color:var(--crimson);font-style:normal}
+.hook-line{font-family:'Amiri',serif;font-style:italic;font-size:clamp(17px,4.6vw,22px);color:var(--olive-deep);
+  margin:16px 0 20px;padding-right:13px;border-right:3px solid var(--gold)}
+.promise{font-size:16px;line-height:1.95;color:#3c2d20}
+.promise b{color:var(--crimson)}
+.recap{margin-top:20px;background:linear-gradient(180deg,var(--olive-wash),var(--paper));
+  border:1px solid #c9d2ab;border-radius:6px;padding:16px 18px}
+.recap h3{font-family:'Rubik','Tajawal',sans-serif;color:var(--olive-deep);font-size:14px;margin-bottom:9px;display:flex;gap:8px;align-items:center}
+.recap h3::before{content:"⌖";color:var(--olive)}
+.recap p{font-size:14.5px;margin:6px 0;padding-right:18px;position:relative;color:#3c2d20}
+.recap p::before{content:"▸";position:absolute;right:0;color:var(--gold-deep)}
+
+/* ===== BUTTONS ===== */
+.btn-row{display:flex;gap:11px;flex-wrap:wrap;margin:24px 0 6px}
+.btn{font-family:'Rubik','Tajawal',sans-serif;font-weight:600;font-size:15.5px;color:var(--paper);cursor:pointer;
+  background:linear-gradient(135deg,var(--crimson),var(--crimson-deep));border:none;border-radius:5px;
+  padding:13px 24px;box-shadow:0 10px 22px -12px rgba(111,32,24,.85);transition:.18s}
+.btn:hover{transform:translateY(-2px)}
+.btn.ghost{background:transparent;color:var(--crimson);border:1.5px solid var(--crimson);box-shadow:none}
+
+/* ===== NAME — river confluence ===== */
+.river{display:flex;flex-direction:column;align-items:center;gap:0;margin:6px 0 16px}
+.tribs{display:flex;gap:30px;align-items:flex-end}
+.trib{text-align:center}
+.trib .nm{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;font-size:22px;color:var(--crimson);
+  background:var(--crimson-wash);border:1.5px solid var(--crimson);border-radius:5px;padding:8px 18px;display:inline-block}
+.trib .sub{font-size:12px;color:var(--ink-soft);margin-top:5px;font-family:'Tajawal',sans-serif}
+.confl{font-size:26px;color:var(--gold);line-height:1;margin:2px 0}
+.river .merged{font-family:'Amiri',serif;font-weight:700;font-size:30px;color:var(--paper);
+  background:linear-gradient(135deg,#2c1d13,#43301f);border-radius:6px;padding:8px 30px;letter-spacing:1px}
+.tribnote{text-align:center;font-size:13.5px;color:var(--ink-soft);margin-bottom:14px}
+.tribnote b{color:var(--olive-deep)}
+.meanings{display:grid;gap:9px}
+.mrow{display:flex;gap:10px;align-items:center;background:var(--parchment);border:1px solid var(--line-soft);border-radius:5px;padding:10px 12px}
+.mrow .lang{font-family:'Rubik','Tajawal',sans-serif;font-size:12px;font-weight:700;color:var(--paper);
+  background:var(--olive);border-radius:4px;padding:5px 11px;white-space:nowrap;flex-shrink:0}
+.mrow .txt{font-size:15px}
+.mrow .txt b{color:var(--crimson)}
+
+/* ===== WHY-HERE ===== */
+.factors{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin:6px 0 12px}
+.factor{background:var(--gold-wash);border:1px solid var(--line);border-right:4px solid var(--gold);
+  border-radius:5px;padding:11px 13px;font-size:14.5px;font-weight:500}
+.factor b{color:var(--gold-deep);font-family:'Rubik','Tajawal',sans-serif;font-size:13.5px}
+.bridge{background:linear-gradient(180deg,#2c1d13,#3d2a1c);color:#f0e2c6;border-radius:6px;padding:14px 16px;margin:10px 0;text-align:center}
+.bridge .lbl{font-family:'Rubik','Tajawal',sans-serif;font-size:11.5px;letter-spacing:1.5px;color:var(--gold);margin-bottom:7px}
+.bridge .body{font-family:'Amiri',serif;font-size:17px;line-height:1.85}
+.bridge .body b{color:#eccb6f}
+.bridge .sides{display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-family:'Rubik','Tajawal',sans-serif;font-size:12.5px}
+.bridge .sides span{background:rgba(240,226,198,.12);border:1px solid rgba(240,226,198,.25);border-radius:4px;padding:4px 9px}
+.causeline{display:flex;align-items:center;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:12px;
+  font-family:'Rubik','Tajawal',sans-serif;font-size:14px}
+.causeline .c{background:var(--gold-wash);border:1px solid var(--line);border-radius:5px;padding:8px 13px;color:var(--gold-deep);font-weight:600}
+.causeline .arr{color:var(--crimson);font-size:20px}
+.causeline .e{background:var(--olive-wash);border:1px solid #c9d2ab;border-radius:5px;padding:8px 13px;color:var(--olive-deep);font-weight:700}
+
+/* ===== SPLIT (pre / historic) ===== */
+.split{display:grid;grid-template-columns:1fr;gap:0;margin:10px 0;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.split-row{display:grid;grid-template-columns:118px 1fr;align-items:stretch}
+.split .marker{background:linear-gradient(135deg,#2c1d13,#43301f);color:#f3c969;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;padding:12px 8px;text-align:center}
+.split .marker .pen{font-size:20px}
+.split .marker .yr{font-family:'Rubik','Tajawal',sans-serif;font-size:12px;margin-top:3px;line-height:1.35}
+.split .seg{padding:14px 15px}
+.split .seg.pre{background:var(--crimson-wash)}
+.split .seg.post{background:var(--olive-wash)}
+.split .seg .h{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;font-size:15px;margin-bottom:3px}
+.split .seg.pre .h{color:var(--crimson)}
+.split .seg.post .h{color:var(--olive-deep)}
+.split .seg .d{font-size:14px;color:#433424}
+.keynote{font-size:14px;color:var(--ink-soft);margin-top:9px}
+.keynote b{color:var(--crimson)}
+
+/* ===== VERTICAL TIMELINE (core sample) ===== */
+.core{position:relative;margin:8px 0 6px;padding-right:6px}
+.core::before{content:"";position:absolute;top:6px;bottom:6px;right:74px;width:3px;
+  background:linear-gradient(180deg,var(--olive),var(--gold),var(--crimson),var(--ink))}
+.crow{display:grid;grid-template-columns:74px 1fr;align-items:center;min-height:34px;position:relative}
+.crow .when{font-family:'Rubik','Tajawal',sans-serif;font-size:11px;color:var(--ink-soft);text-align:left;padding-left:16px;position:relative}
+.crow .when::after{content:"";position:absolute;left:-1px;top:50%;transform:translateY(-50%);width:9px;height:9px;border-radius:50%;background:var(--paper);border:2px solid var(--ink)}
+.crow .bar{margin:3px 0;border-radius:4px;padding:8px 12px;color:var(--paper);font-family:'Rubik','Tajawal',sans-serif;font-size:13px;font-weight:600;
+  display:flex;justify-content:space-between;align-items:center;box-shadow:0 6px 14px -10px rgba(40,24,12,.7)}
+.crow .bar .ds{font-size:10.5px;font-weight:400;opacity:.92}
+.crow.event{min-height:26px}
+.crow.event .bar{background:none;box-shadow:none;color:var(--crimson);font-weight:700;font-size:12.5px;padding:2px 12px}
+.crow.event .when::after{background:var(--crimson);border-color:var(--crimson-deep)}
+.b-iron{background:#5d503c}.b-bronze{background:#7a6a4a}
+.b-chalco{background:linear-gradient(90deg,var(--gold),var(--gold-deep))}
+.b-neo{background:linear-gradient(90deg,var(--olive),var(--olive-deep))}
+.b-meso{background:linear-gradient(90deg,var(--crimson),var(--crimson-deep))}
+.b-paleo{background:linear-gradient(90deg,#3a2a1b,var(--ink))}
+.stone-tag{display:inline-block;font-size:9.5px;background:rgba(251,246,232,.22);border-radius:3px;padding:1px 6px;margin-right:6px}
+.corecap{font-size:13px;color:var(--ink-soft);margin-top:10px;text-align:center}
+.corecap b{color:var(--crimson)}
+
+/* ===== TRENCH (the 4 ages as stacked strata) ===== */
+.trench{position:relative;margin:8px 0;border-radius:7px;overflow:hidden;border:1px solid var(--line);box-shadow:0 18px 36px -24px rgba(50,32,14,.7)}
+.depth-hd{font-family:'Rubik','Tajawal',sans-serif;font-size:12px;color:var(--ink-soft);text-align:center;margin:4px 0 8px}
+.depth-hd b{color:var(--crimson)}
+.stratum{display:grid;grid-template-columns:84px 1fr;border-bottom:2px solid rgba(40,24,12,.18)}
+.stratum:last-child{border-bottom:none}
+.gauge{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px 6px;text-align:center;color:var(--paper)}
+.gauge .gn{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;font-size:20px;line-height:1;background:rgba(251,246,232,.18);border:1.5px solid rgba(251,246,232,.5);border-radius:4px;width:30px;height:30px;display:grid;place-items:center;margin-bottom:7px}
+.gauge .gy{font-family:'Rubik','Tajawal',sans-serif;font-size:11px;line-height:1.4}
+.g-chalco{background:linear-gradient(160deg,var(--gold),var(--gold-deep))}
+.g-neo{background:linear-gradient(160deg,var(--olive),var(--olive-deep))}
+.g-meso{background:linear-gradient(160deg,var(--crimson),var(--crimson-deep))}
+.g-paleo{background:linear-gradient(160deg,#3a2a1b,var(--ink))}
+.layer{padding:14px 15px;background:var(--paper)}
+.layer.l-chalco{background:linear-gradient(180deg,#fbf2dc,var(--paper))}
+.layer.l-neo{background:linear-gradient(180deg,#eef2e0,var(--paper))}
+.layer.l-meso{background:linear-gradient(180deg,#f7e6e0,var(--paper))}
+.layer.l-paleo{background:linear-gradient(180deg,#efe6d2,var(--paper))}
+.layer .lname{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;font-size:17px;color:var(--ink);margin-bottom:5px;display:flex;align-items:center;gap:8px}
+.layer .lname .em{font-size:19px}
+.layer .leap{font-size:14.5px;color:#3c2d20;line-height:1.8;margin-bottom:9px}
+.layer .leap b{color:var(--crimson)}
+.star{display:flex;gap:9px;align-items:flex-start;background:linear-gradient(135deg,#2c1d13,#43301f);color:#f1e3c7;border-radius:5px;padding:10px 12px;margin-bottom:8px}
+.star .st{color:#f3c969;font-size:16px;flex-shrink:0;margin-top:1px}
+.star .sname{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;color:#f3c969;font-size:14.5px}
+.star .sworld{font-size:12.5px;display:block;margin-top:2px;opacity:.95;line-height:1.6}
+.star .sworld b{color:#eccb6f}
+.others{font-size:13px;color:var(--ink-soft);line-height:1.75}
+.others .ol{font-family:'Rubik','Tajawal',sans-serif;color:var(--olive-deep);font-weight:700}
+.others .gov{color:var(--crimson)}
+.spine{background:linear-gradient(135deg,#2c1d13,#43301f);color:#f1e3c7;border-radius:6px;padding:18px 16px;margin:16px 0 6px;text-align:center}
+.spine .lbl{font-family:'Rubik','Tajawal',sans-serif;font-size:11.5px;letter-spacing:2px;color:var(--gold);margin-bottom:11px}
+.spine .flow{font-family:'Amiri',serif;font-size:clamp(16px,4.8vw,21px);line-height:1.7}
+.spine .flow b{color:#f3c969}
+.spine .flow .a{color:var(--gold);margin:0 5px;font-weight:700}
+
+/* ===== Q CARDS ===== */
+.qcard{background:var(--paper);border:1px solid var(--line);border-radius:6px;padding:18px;margin:14px 0;
+  position:relative;box-shadow:0 14px 30px -22px rgba(60,40,18,.6)}
+.qcard::before{content:"";position:absolute;top:0;right:0;width:5px;height:100%;background:var(--gold);border-radius:0 6px 6px 0}
+.qtag{display:inline-block;font-family:'Rubik','Tajawal',sans-serif;font-size:11.5px;font-weight:600;
+  padding:5px 11px;border-radius:4px;margin-bottom:11px;background:var(--parchment);color:#6b4f2a;letter-spacing:.3px;border:1px solid var(--line-soft)}
+.qtag.easy{background:var(--ok-wash);color:var(--ok)}
+.qtag.med{background:var(--gold-wash);color:var(--gold-deep)}
+.qtag.hard{background:var(--crimson-wash);color:var(--crimson)}
+.qtext{font-size:15.5px;font-weight:500;color:#3a2c1f;margin:6px 0 12px}
+.sentence{font-family:'Amiri',serif;font-size:20px;line-height:1.7;text-align:center;color:var(--ink);
+  background:var(--parchment);border:1px solid var(--line-soft);border-radius:6px;padding:14px;margin:4px 0 13px}
+
+.options{display:flex;flex-direction:column;gap:9px}
+.opt{background:var(--parchment);border:1.5px solid var(--line);border-radius:5px;padding:12px 15px;
+  font-size:15px;cursor:pointer;transition:.16s;position:relative;font-family:'Tajawal',sans-serif}
+.opt:hover{border-color:var(--gold);background:var(--paper)}
+.opt.ok{background:var(--ok-wash);border-color:var(--ok);color:#2c5320;font-weight:700}
+.opt.ok::after{content:"✓";position:absolute;left:14px;color:var(--ok);font-weight:900}
+.opt.no{background:var(--no-wash);border-color:var(--no);color:var(--no)}
+.opt.no::after{content:"✗";position:absolute;left:14px;color:var(--no);font-weight:900}
+.opt.lock{pointer-events:none;opacity:.5}
+.opt.lock.ok,.opt.lock.no{opacity:1}
+
+.feedback{display:none;margin-top:13px;padding:15px 16px;border-radius:6px;
+  background:linear-gradient(180deg,var(--olive-wash),var(--paper));border:1px solid #c9d2ab;border-right:4px solid var(--olive);
+  font-size:14.5px;line-height:1.85;color:#33291f}
+.feedback.show{display:block;animation:dig .35s}
+.feedback b{color:var(--crimson)}
+.feedback i{color:var(--olive-deep);font-style:normal;font-weight:700}
+
+/* tiles */
+.fillq{font-family:'Amiri',serif;font-size:19px;line-height:2.4;text-align:center;margin:4px 0 12px}
+.blank{display:inline-block;min-width:90px;border-bottom:3px dashed var(--gold);margin:0 4px;color:var(--crimson);font-weight:700;text-align:center}
+.blank.filled{border-bottom-style:solid;border-color:var(--ok);color:var(--ok)}
+.tileq{margin:9px 0}
+.tlabel{font-family:'Rubik','Tajawal',sans-serif;font-size:12px;color:var(--ink-soft);margin-bottom:6px;text-align:center}
+.tiles{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.tile{font-family:'Amiri',serif;font-size:18px;background:var(--parchment);border:1.5px solid var(--line);
+  border-radius:5px;padding:8px 16px;cursor:pointer;transition:.15s;color:var(--ink)}
+.tile:hover{border-color:var(--gold);background:var(--paper);transform:translateY(-2px)}
+.tile.ok{background:var(--ok-wash);border-color:var(--ok);color:#2c5320;font-weight:700;pointer-events:none}
+.tile.no{background:var(--no-wash);border-color:var(--no);color:var(--no);animation:shake .35s}
+.tileq.done .tile{pointer-events:none;opacity:.45}
+.tileq.done .tile.ok{opacity:1}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+/* matching */
+.match-intro{font-family:'Rubik','Tajawal',sans-serif;font-size:12px;color:var(--ink-soft);text-align:center;margin-bottom:9px}
+.match-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.match-col{display:flex;flex-direction:column;gap:9px}
+.match-head{font-family:'Rubik','Tajawal',sans-serif;font-size:12px;font-weight:700;text-align:center;color:var(--crimson);margin-bottom:1px}
+.match-item{background:var(--parchment);border:1.5px solid var(--line);border-radius:5px;padding:11px 9px;text-align:center;
+  cursor:pointer;transition:.15s;font-size:14px;min-height:48px;display:grid;place-items:center;font-family:'Tajawal',sans-serif}
+.match-item.sel{border-color:var(--crimson);background:var(--crimson-wash)}
+.match-item.done{background:var(--ok-wash);border-color:var(--ok);color:#2c5320;font-weight:700;pointer-events:none}
+.match-item .pnum{display:none;font-family:'Rubik','Tajawal',sans-serif;font-size:11px;background:var(--ok);color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;margin-right:6px}
+.match-item.done .pnum{display:inline-block}
+.match-item.flash{animation:shake .35s;border-color:var(--no);background:var(--no-wash)}
+
+/* ordering */
+.order-intro{font-family:'Rubik','Tajawal',sans-serif;font-size:12px;color:var(--ink-soft);text-align:center;margin-bottom:9px}
+.order-pool{display:flex;flex-direction:column;gap:9px}
+.order-item{display:flex;align-items:center;gap:11px;background:var(--parchment);border:1.5px solid var(--line);
+  border-radius:5px;padding:11px 13px;cursor:pointer;transition:.15s;font-size:15px}
+.order-item:hover{border-color:var(--gold);background:var(--paper)}
+.order-item .obadge{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;width:27px;height:27px;border-radius:4px;
+  display:grid;place-items:center;background:#e6d6b0;color:#6b4f2a;flex-shrink:0}
+.order-item.done{background:var(--ok-wash);border-color:var(--ok);pointer-events:none}
+.order-item.done .obadge{background:var(--ok);color:#fff}
+.order-item.flash{animation:shake .35s;border-color:var(--no);background:var(--no-wash)}
+
+/* varied counter */
+.pcounter{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;color:var(--crimson);text-align:center;font-size:14px;margin:4px 0}
+.progress{display:flex;gap:7px;justify-content:center;margin-bottom:4px}
+.pdot{width:11px;height:11px;border-radius:2px;background:#d8c6a0;transition:.3s;transform:rotate(45deg)}
+.pdot.on{background:var(--olive)}
+
+/* review */
+.rev-ages{display:grid;gap:8px;margin-top:4px}
+.rev-age{display:grid;grid-template-columns:78px 1fr;gap:9px;align-items:center;background:var(--parchment);
+  border:1px solid var(--line-soft);border-radius:5px;padding:9px 12px;font-size:14px;border-right:4px solid var(--gold)}
+.rev-age .ra-name{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;color:var(--ink)}
+.rev-age .ra-site{color:var(--crimson);font-weight:700}
+.rev-age .ra-world{color:var(--ink-soft);font-size:12.5px}
+.spaced{text-align:center;color:var(--olive-deep);font-style:italic;font-family:'Amiri',serif;font-size:15.5px;margin-top:14px}
+
+/* closing */
+.closing{text-align:center;padding-top:16px}
+.orn{color:var(--gold);font-size:16px;letter-spacing:7px;margin:14px 0}
+.congrats{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;font-size:30px;color:var(--crimson)}
+.csub{color:var(--ink-soft);font-size:15px;margin:5px 0 16px}
+.unitprog{display:flex;gap:8px;justify-content:center;margin:14px 0 4px}
+.unitprog .u{width:13px;height:13px;border-radius:3px;background:#d8c6a0;transform:rotate(45deg)}
+.unitprog .u.on{background:var(--crimson)}
+.next-box{background:linear-gradient(180deg,var(--gold-wash),var(--paper));border:1px solid var(--line);border-radius:6px;padding:16px 18px;margin:18px 0;text-align:right}
+.next-box .lbl{font-family:'Rubik','Tajawal',sans-serif;color:var(--gold-deep);font-size:12.5px;font-weight:700;letter-spacing:.5px}
+.next-box .ttl{font-family:'Rubik','Tajawal',sans-serif;font-weight:700;font-size:19px;color:var(--ink);margin:4px 0 6px}
+.next-box p{font-size:14px;color:#433424}
+.next-box i{color:var(--crimson);font-style:normal;font-weight:700}
+
+@media(max-width:520px){
+  .factors{grid-template-columns:1fr}
+  .stratum{grid-template-columns:68px 1fr}
+  .split-row{grid-template-columns:96px 1fr}
+  .tribs{gap:16px}
+  .rev-age{grid-template-columns:64px 1fr}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<div class="topbar">
+  <div class="trail"><span class="pin">⌖</span> تاريخ الأردن › الوحدة الأولى › <b>العصور الحجرية</b> › الدرس ١</div>
+  <div class="dots" id="dots"></div>
+</div>
+
+<!-- ============ SCENE 0 · SPLASH ============ -->
+<section class="scene on" data-scene="0">
+  <div class="splash">
+    <div class="kicker">حفريّة في الزمن · طبقة بعد طبقة</div>
+    <h1 class="title">الأردنّ في <em>العصور الحجرية</em></h1>
+    <p class="hook-line">انزل معي طبقة طبقة بأرض الأردن — وكلّ ما نزلنا أعمق، رجعنا أقدم بالزمن.</p>
+    <p class="promise">بهالدرس رح نعرف ليش اسم بلدك <b>«الأردن»</b>، وليش صار مهد حضارات، وبعدها رح نحفر بأربع طبقات حجرية — من إنسان <b>يصطاد بالحجر</b> لحدّ إنسان <b>يصهر النحاس</b> — كلّ طبقة فيها موقع نجم «أوّل في العالم» بتمسكه لأنّه قصّة، مش لستة حفظ.</p>
+
+    <div class="recap">
+      <h3>قبل ما ننزل الحفرة — ثبّت هالفكرتين</h3>
+      <p>المؤرّخ بيقرأ الماضي من اللي خلّفه الإنسان وراه: أدوات، مبانٍ، تماثيل. وعلم الآثار بيقدر يرسم تصوّر لحياة الناس القدماء من <b>أدواتهم</b>، حتّى لو ما تركوا نقوش ولا كتابة.</p>
+      <p>كلّ ما رجعنا بالزمن لورا، قلّت الكتابة وزادت الآثار — لهيك أقدم العصور اسمها «ما قبل التاريخ».</p>
+    </div>
+
+    <div class="btn-row"><button class="btn" onclick="go(1)">ابدأ الحفر ←</button></div>
+  </div>
+</section>
+
+<!-- ============ SCENE 1 · HOOK ============ -->
+<section class="scene" data-scene="1">
+  <div class="stage-tag">المرحلة ١ · الخطّاف</div>
+  <h2 class="scene-title">قدّيش موقع أثري تحت أرض الأردن؟</h2>
+  <p class="lead">خمّن بس — ما في صح وغلط، بدّي أصدمك بالرقم قبل ما نبلّش.</p>
+
+  <div class="qcard">
+    <div class="qtext">قدّيش عدد المواقع الأثرية المكتشفة في الأردن كلّه؟</div>
+    <div class="options" data-q="hook">
+      <div class="opt" data-ok="0">حوالي خمسة عشر ألف موقع</div>
+      <div class="opt" data-ok="0">حوالي خمسين ألف موقع</div>
+      <div class="opt" data-ok="1">نحو مئة ألف موقع تقريبًا</div>
+    </div>
+    <div class="feedback" data-fb="hook">
+      <b>نحو مئة ألف موقع أثري!</b> ومعظمها بيعود لعصور <b>ما قبل التاريخ</b>. أمّا المسجّل منها رسميًا فنحو <b>خمسة عشر ألف موقع</b> بس. يعني الأردن مش بلد فيه آثار — الأردن أرض الآثار. ومش أيّ آثار: هون <i>أقدم مقبرة منظّمة في العالم</i>، وهون <i>أقدم تماثيل من الجبس في العالم</i>، وهون من <i>أقدم مواقع الإنسان في قارة آسيا كلّها</i>. الدرس رح يوريك وين بالظبط كلّ وحدة — خلّيك فخور وإنت بتحفظ، هاي حكاية أرضك.
+    </div>
+  </div>
+
+  <div class="btn-row"><button class="btn" onclick="go(2)">الاسم وليش استقرّينا هون ←</button></div>
+</section>
+
+<!-- ============ SCENE 2 · DISPLAY A — NAME + WHY-HERE ============ -->
+<section class="scene" data-scene="2">
+  <div class="stage-tag">المرحلة ٢ · تخزين (بلا أسئلة)</div>
+  <h2 class="scene-title">من وين إجا الاسم؟ وليش هون بالذات؟</h2>
+  <p class="lead">اقرأهم بتأنّي — ما في أسئلة هون، بس تخزين بالطبقة الأولى من الذاكرة.</p>
+
+  <div class="plate">
+    <div class="plate-label"><span class="sq"></span> تركيب كلمة «الأردنّ» — رافدان بيلتقوا</div>
+    <div class="river">
+      <div class="tribs">
+        <div class="trib"><span class="nm">جور</span><span class="sub">(بانياس)</span></div>
+        <div class="trib"><span class="nm">دان</span><span class="sub">رافد شمالي</span></div>
+      </div>
+      <div class="confl">⮷ ⮶</div>
+      <div class="merged">الأردنّ</div>
+    </div>
+    <p class="tribnote">«جور» و«دان» هما <b>الرافدان الشماليّان لنهر الأردنّ</b>، واسم النهر (بالإنجليزية Jordan) تألّف من اسميهما.</p>
+    <div class="meanings">
+      <div class="mrow"><span class="lang">عند العرب</span><span class="txt">أطلقوا على المنطقة اسم الأردنّ، وتعني <b>الشِّدّة والغَلَبة</b>.</span></div>
+      <div class="mrow"><span class="lang">إغريقي</span><span class="txt">الاسم الإغريقي للأردنّ هو <b>«يوردانيم»</b>.</span></div>
+      <div class="mrow"><span class="lang">آرامي</span><span class="txt">تعني الأردنّ بالآراميّة: <b>النهر المتعرّج شديد الانحدار</b>.</span></div>
+    </div>
+  </div>
+
+  <div class="plate">
+    <div class="plate-label"><span class="sq"></span> ليش استقرّ الإنسان وقامت الحضارات هون؟</div>
+    <p style="font-size:14.5px;margin-bottom:10px">استقرّ الإنسان في الأردنّ منذ العصور الحجرية القديمة، ودلّت الاكتشافات الأثرية على أنّه كان <b style="color:var(--crimson)">مأهولًا بالسكّان</b>. وقامت على أرضه حضارات كثيرة لأسباب مجتمعة:</p>
+    <div class="factors">
+      <div class="factor"><b>اعتدال المناخ</b></div>
+      <div class="factor"><b>وفرة المياه</b></div>
+      <div class="factor"><b>التربة الخصبة</b></div>
+      <div class="factor"><b>الموقع المتوسّط</b></div>
+    </div>
+    <div class="bridge">
+      <div class="lbl">◆ الموقع المتوسّط = جسر بين حضارات ◆</div>
+      <div class="body">الأردنّ بالنصّ بين <b>حضارات بلاد الشام وبلاد الرافدين</b> من جهة، و<b>حضارات شبه الجزيرة العربية ومصر</b> من جهة أخرى.</div>
+      <div class="sides"><span>بلاد الشام</span><span>بلاد الرافدين</span><span>شبه الجزيرة العربية</span><span>مصر</span></div>
+    </div>
+    <div class="causeline">
+      <span class="c">مناخ + مياه + تربة + موقع</span>
+      <span class="arr">←</span>
+      <span class="e">استقرار الإنسان منذ العصور القديمة</span>
+    </div>
+  </div>
+
+  <div class="btn-row"><button class="btn" onclick="go(3)">خطّ الزمن وخطّ الفصل ←</button></div>
+</section>
+
+<!-- ============ SCENE 3 · DISPLAY B — SPLIT + TIMELINE ============ -->
+<section class="scene" data-scene="3">
+  <div class="stage-tag">المرحلة ٢ · تخزين (بلا أسئلة)</div>
+  <h2 class="scene-title">وين بنحطّ العصور الحجرية بالزمن؟</h2>
+  <p class="lead">اتّفق علماء الآثار والمؤرّخون على تقسيم العصور القديمة <b>تسهيلًا لدراستها</b> ومعرفة النشاط البشري. وخطّ الفصل بين القسمين هو <b>اختراع الكتابة</b>.</p>
+
+  <div class="split">
+    <div class="split-row">
+      <div class="marker"><span class="pen">✍︎</span><span class="yr">اختراع الكتابة<br>3500 ق.م</span></div>
+      <div class="seg pre"><div class="h">عصور ما قبل التاريخ</div><div class="d">من نشأة الإنسان على الأرض حتّى بداية اختراعه الكتابة.</div></div>
+    </div>
+    <div class="split-row">
+      <div class="marker" style="background:linear-gradient(135deg,#3f4d2a,#2c3a1c);color:#cfe0a8"><span class="pen">▤</span><span class="yr">بعد<br>الكتابة</span></div>
+      <div class="seg post"><div class="h">العصور التاريخية</div><div class="d">تشمل كلّ ما جاء بعد اختراع الكتابة.</div></div>
+    </div>
+  </div>
+  <p class="keynote">المفتاح: سُمّيت «ما قبل <b>التاريخ</b>» لأنّه ما كان في كتابة تأرّخ أحداثها وتسجّلها — مش لأنّ الإنسان مش موجود. <b>الكتابة</b> هي خطّ الفصل.</p>
+
+  <div class="plate" style="margin-top:18px">
+    <div class="plate-label"><span class="sq"></span> الخطّ الزمني للعصور القديمة في الأردنّ</div>
+    <div class="depth-hd">من <b>الأحدث فوق</b> ← نازل لـ<b>الأقدم تحت</b> · العصور الأربعة المظلّلة هي <b>الحجرية</b></div>
+    <div class="core">
+      <div class="crow event"><span class="when">332 ق.م</span><div class="bar">◇ قدوم الإسكندر المقدوني</div></div>
+      <div class="crow event"><span class="when">السنة 0</span><div class="bar">◇ ميلاد سيدنا عيسى</div></div>
+      <div class="crow"><span class="when">1200 ق.م ←</span><div class="bar b-iron">العصر الحديدي <span class="ds">1200 ق.م فما بعد</span></div></div>
+      <div class="crow"><span class="when">2000–1200</span><div class="bar b-bronze">العصر البرونزي <span class="ds">2000 – 1200 ق.م</span></div></div>
+      <div class="crow event"><span class="when">3500 ق.م</span><div class="bar">✍︎ اختراع الكتابة — خطّ الفصل</div></div>
+      <div class="crow"><span class="when">4500–2000</span><div class="bar b-chalco"><span><span class="stone-tag">حجري</span>النحاسي</span><span class="ds">4500 – 2000 ق.م</span></div></div>
+      <div class="crow"><span class="when">8500–4500</span><div class="bar b-neo"><span><span class="stone-tag">حجري</span>الحديث</span><span class="ds">8500 – 4500 ق.م</span></div></div>
+      <div class="crow"><span class="when">20000–8500</span><div class="bar b-meso"><span><span class="stone-tag">حجري</span>الوسيط</span><span class="ds">20000 – 8500 ق.م</span></div></div>
+      <div class="crow"><span class="when">2.5 مليون</span><div class="bar b-paleo"><span><span class="stone-tag">حجري</span>القديم</span><span class="ds">2.5 مليون – 20000 ق.م</span></div></div>
+    </div>
+    <p class="corecap">أقدم بقايا أثرية للإنسان في الأردنّ بترجع لـ<b>2.5 مليون سنة</b> تقريبًا — وهي قاع الحفرة، أعمق طبقة بحكايتنا.</p>
+  </div>
+
+  <div class="btn-row"><button class="btn" onclick="go(4)">انزل بالطبقات الأربع ←</button></div>
+</section>
+
+<!-- ============ SCENE 4 · DISPLAY C — THE FOUR STRATA ============ -->
+<section class="scene" data-scene="4">
+  <div class="stage-tag">المرحلة ٢ · تخزين (بلا أسئلة)</div>
+  <h2 class="scene-title">أربع طبقات = أربع قفزات في حياة الإنسان</h2>
+  <p class="lead">السرّ في الحفظ: العصور الأربعة مش معلومات مبعثرة — هي <b>قصّة تطوّر واحدة</b>. لكلّ طبقة قفزة وموقع نجم «أوّل/أشهر». بنقرأ من فوق (الأحدث) لتحت (الأقدم) — متل ما بيحفر عالم الآثار.</p>
+
+  <div class="trench">
+
+    <div class="stratum">
+      <div class="gauge g-chalco"><div class="gn">٤</div><div class="gy">4500–2000<br>ق.م</div></div>
+      <div class="layer l-chalco">
+        <div class="lname"><span class="em">⚒︎</span> العصر الحجري النحاسي</div>
+        <div class="leap">بلّش الإنسان يصنع أدواته <b>من معدن النحاس</b>، إلى جانب استمراره باستخدام أدوات الحجر. عرف <b>استخراج خامات النحاس وصهرها وطرقها</b> — وهاد بيدلّ على ظهور <b>طبقة الصنّاع والحرفيّين</b> إلى جانب المزارعين والرعاة.</div>
+        <div class="star"><span class="st">★</span><div><span class="sname">وادي فينان</span> — قرب وادي عربة، جنوبي الأردنّ<span class="sworld">من <b>أشهر مناجم استخراج معدن النحاس</b>.</span></div></div>
+        <div class="others"><span class="ol">مواقع تانية:</span> تلّ الشونة الشمالية <span class="gov">(محافظة إربد)</span>، وتليلات الغسول <span class="gov">(شمال البحر الميت)</span>، وتلّ أبو حامد <span class="gov">(غور الأردنّ الشمالي)</span>.</div>
+      </div>
+    </div>
+
+    <div class="stratum">
+      <div class="gauge g-neo"><div class="gn">٣</div><div class="gy">8500–4500<br>ق.م</div></div>
+      <div class="layer l-neo">
+        <div class="lname"><span class="em">🏘︎</span> العصر الحجري الحديث</div>
+        <div class="leap">استقرّ الإنسان في <b>قرى زراعية</b>، و<b>دجّن الحيوانات</b>، وبنى البيوت التي أصبحت <b>تتّخذ شكلًا هندسيًا</b>. (صار مزارع مستقرّ، خلص التنقّل).</div>
+        <div class="star"><span class="st">★</span><div><span class="sname">عين غزال</span> — عمّان (نموذج لهالقرى)<span class="sworld">تماثيله أقدم <b>تماثيل في العالم مصنوعة من الجبس</b>.</span></div></div>
+        <div class="others"><span class="ol">مواقع تانية:</span> موقع بسطة <span class="gov">(محافظة معان)</span>، وتلّ أبو الصوّان <span class="gov">(محافظة جرش)</span>.</div>
+      </div>
+    </div>
+
+    <div class="stratum">
+      <div class="gauge g-meso"><div class="gn">٢</div><div class="gy">20000–8500<br>ق.م</div></div>
+      <div class="layer l-meso">
+        <div class="lname"><span class="em">🌾</span> العصر الحجري الوسيط</div>
+        <div class="leap">مرحلة <b>انتقالية</b>: من مجتمعات <b>الصيد وجمع الطعام</b> ← إلى مجتمعات <b>منتِجة للغذاء</b>. (الخطوة الأولى نحو الزراعة).</div>
+        <div class="star"><span class="st">★</span><div><span class="sname">عيون الحَمام</span> — وادي زقلاب (محافظة إربد)<span class="sworld">أقدم <b>مقبرة منظّمة في العالم</b> · تعود إلى ستّة عشر ألف عام تقريبًا.</span></div></div>
+        <div class="others"><span class="ol">مواقع تانية:</span> الأزرق، والحَرّانة <span class="gov">(جنوب شرق عمّان)</span>.</div>
+      </div>
+    </div>
+
+    <div class="stratum">
+      <div class="gauge g-paleo"><div class="gn">١</div><div class="gy">2.5 مليون<br>–20000 ق.م</div></div>
+      <div class="layer l-paleo">
+        <div class="lname"><span class="em">🪨</span> العصر الحجري القديم</div>
+        <div class="leap">العصر الذي بلّش فيه الإنسان يصنع أدواته <b>من الحجر</b>، وعاش <b>صيّادًا للحيوانات وجامعًا للطعام</b> (لسّا ما بيزرع ولا بيربّي).</div>
+        <div class="star"><span class="st">★</span><div><span class="sname">موقع دوقرة</span> — وادي الزرقاء<span class="sworld">من <b>أقدم مواقع هذا العصر في قارة آسيا</b> · يعود إلى 2.5 مليون سنة تقريبًا.</span></div></div>
+        <div class="others"><span class="ol">مواقع تانية:</span> وادي الحسا واللجّون <span class="gov">(محافظتَي الطفيلة والكرك)</span>، وطبقة فحل <span class="gov">(غور الأردنّ الشمالي التابع لمحافظة إربد)</span>.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="spine">
+    <div class="lbl">◆ القصّة بسطر واحد ◆</div>
+    <div class="flow">صيّاد بالحجر <span class="a">←</span> <b>منتِج للغذاء</b> <span class="a">←</span> مزارع مستقرّ <span class="a">←</span> <b>صانع نحاس</b></div>
+  </div>
+
+  <div class="btn-row"><button class="btn" onclick="go(5)">التطبيق المتدرّج ←</button></div>
+</section>
+
+<!-- ============ SCENE 5 · GRADUATED ============ -->
+<section class="scene" data-scene="5">
+  <div class="stage-tag">المرحلة ٣ · التطبيق المتدرّج</div>
+  <h2 class="scene-title">اسحب المعلومة من راسك — ٣ مرّات</h2>
+  <p class="lead">بعد ما خزّنت، خلّينا نسحب: مرّة <b>بتتعرّف</b>، مرّة <b>بتكمّل</b>، ومرّة <b>بتفكّر</b>.</p>
+
+  <div class="qcard">
+    <div class="qtag easy">🟢 تعرّف</div>
+    <div class="qtext">في أيّ عصر استقرّ الإنسان في قرى زراعية، ودجّن الحيوانات، وبنى بيوتًا بشكل هندسي؟</div>
+    <div class="options" data-q="g1">
+      <div class="opt" data-ok="0">العصر الحجري القديم</div>
+      <div class="opt" data-ok="1">العصر الحجري الحديث</div>
+      <div class="opt" data-ok="0">العصر الحجري النحاسي</div>
+    </div>
+    <div class="feedback" data-fb="g1"><b>ممتاز.</b> الاستقرار + القرى الزراعية + تدجين الحيوانات = العصر الحجري <b>الحديث</b>. تذكّر القصّة: هون الإنسان «خلص تنقّل وصار مزارع مستقرّ»، ونموذجه موقع <i>عين غزال</i>.</div>
+  </div>
+
+  <div class="qcard">
+    <div class="qtag med">🟡 إكمال</div>
+    <div class="qtext">اضغط الكلمة الصح لكلّ فراغ:</div>
+    <div class="fillq">موقع <span class="blank" data-slot="a">………</span> في عمّان فيه أقدم تماثيل في العالم مصنوعة من <span class="blank" data-slot="b">………</span>.</div>
+    <div class="tileq" data-target="a"><div class="tlabel">اسم الموقع:</div><div class="tiles">
+      <span class="tile" data-ok="0">دوقرة</span><span class="tile" data-ok="1">عين غزال</span><span class="tile" data-ok="0">عيون الحَمام</span>
+    </div></div>
+    <div class="tileq" data-target="b"><div class="tlabel">المادّة:</div><div class="tiles">
+      <span class="tile" data-ok="0">النحاس</span><span class="tile" data-ok="1">الجبس</span><span class="tile" data-ok="0">الحجر</span>
+    </div></div>
+    <div class="feedback" data-fb="g2"><b>بالظبط.</b> <b>عين غزال</b> (عمّان) + <b>الجبس</b>. ربط مفيد: عين غزال = العصر الحديث (القرى الزراعية)، وتماثيلها أقدم تماثيل جبس بالعالم.</div>
+  </div>
+
+  <div class="qcard">
+    <div class="qtag hard">🔴 تفكير</div>
+    <div class="qtext">ليش سمّى المؤرّخون أقدم العصور باسم «عصور ما قبل التاريخ»؟</div>
+    <div class="options" data-q="g3">
+      <div class="opt" data-ok="0">لأنّ الإنسان ما كان موجودًا فيها بعد</div>
+      <div class="opt" data-ok="1">لأنّها قبل اختراع الكتابة، فما كان في كتابة تسجّل أحداثها وتأرّخها</div>
+      <div class="opt" data-ok="0">لأنّها ما فيها أيّ مواقع أثرية</div>
+    </div>
+    <div class="feedback" data-fb="g3"><b>أحسنت</b> — هاد سؤال بيفرّق الطالب الفاهم. خطّ الفصل هو <b>الكتابة</b>: قبلها = ما قبل التاريخ (ما في تسجيل مكتوب)، بعدها = العصور التاريخية. الإنسان كان موجود وعنده آثار كثير (الأردن كان مأهولًا)، بس ما خلّى وراه <i>كتابة</i>.</div>
+  </div>
+
+  <div class="btn-row"><button class="btn" onclick="go(6)">التثبيت المتنوّع ←</button></div>
+</section>
+
+<!-- ============ SCENE 6 · VARIED ============ -->
+<section class="scene" data-scene="6">
+  <div class="stage-tag">المرحلة ٤ · التثبيت المتنوّع</div>
+  <h2 class="scene-title">ثبّت القصّة بستّ طرق</h2>
+  <p class="lead">كلّ سؤال شكل جديد: توصيل، صح/غلط، اختيار، إكمال، وترتيب.</p>
+
+  <div class="pcounter" id="vcounter">٠ / ٦</div>
+  <div class="progress" id="vprogress">
+    <div class="pdot"></div><div class="pdot"></div><div class="pdot"></div>
+    <div class="pdot"></div><div class="pdot"></div><div class="pdot"></div>
+  </div>
+
+  <div class="qcard" data-vq="1">
+    <div class="qtag">🔗 ١/٦ · توصيل</div>
+    <div class="qtext">وصّل كلّ موقع نجم مع عصره:</div>
+    <div class="match-intro">اضغط موقع من اليمين، بعدها العصر اللي بيقابله من اليسار.</div>
+    <div class="match-grid" data-match="m1">
+      <div class="match-col"><div class="match-head">الموقع</div>
+        <div class="match-item" data-pair="paleo">دوقرة</div>
+        <div class="match-item" data-pair="meso">عيون الحَمام</div>
+        <div class="match-item" data-pair="neo">عين غزال</div>
+        <div class="match-item" data-pair="chalco">وادي فينان</div>
+      </div>
+      <div class="match-col"><div class="match-head">العصر</div>
+        <div class="match-item" data-pair="neo">الحجري الحديث</div>
+        <div class="match-item" data-pair="chalco">الحجري النحاسي</div>
+        <div class="match-item" data-pair="paleo">الحجري القديم</div>
+        <div class="match-item" data-pair="meso">الحجري الوسيط</div>
+      </div>
+    </div>
+    <div class="feedback" data-fb="v1"><b>ممتاز!</b> دوقرة=القديم، عيون الحَمام=الوسيط، عين غزال=الحديث، وادي فينان=النحاسي. هدول الأربعة هم العمود الفقري للدرس.</div>
+  </div>
+
+  <div class="qcard" data-vq="2">
+    <div class="qtag">🔗 ٢/٦ · توصيل</div>
+    <div class="qtext">وصّل كلّ عصر مع القفزة اللي ميّزته:</div>
+    <div class="match-intro">اضغط العصر من اليمين، بعدها صفته من اليسار.</div>
+    <div class="match-grid" data-match="m2">
+      <div class="match-col"><div class="match-head">العصر</div>
+        <div class="match-item" data-pair="c-paleo">القديم</div>
+        <div class="match-item" data-pair="c-meso">الوسيط</div>
+        <div class="match-item" data-pair="c-neo">الحديث</div>
+        <div class="match-item" data-pair="c-chalco">النحاسي</div>
+      </div>
+      <div class="match-col"><div class="match-head">القفزة</div>
+        <div class="match-item" data-pair="c-neo">قرى زراعية وتدجين</div>
+        <div class="match-item" data-pair="c-paleo">صيد وجمع طعام</div>
+        <div class="match-item" data-pair="c-chalco">صهر النحاس وطرقه</div>
+        <div class="match-item" data-pair="c-meso">مرحلة انتقالية للإنتاج</div>
+      </div>
+    </div>
+    <div class="feedback" data-fb="v2"><b>بالظبط.</b> القصّة ماشية: صيد ← انتقال ← زراعة مستقرّة ← نحاس. كلّ خطوة أرقى من اللي قبلها.</div>
+  </div>
+
+  <div class="qcard" data-vq="3">
+    <div class="qtag">✅ ٣/٦ · صح / غلط</div>
+    <div class="sentence">«يُعدّ موقع دوقرة في وادي الزرقاء من أقدم مواقع العصر الحجري القديم في قارة آسيا.»</div>
+    <div class="qtext">هل العبارة صحيحة؟</div>
+    <div class="options" data-q="v3">
+      <div class="opt" data-ok="1">صح</div>
+      <div class="opt" data-ok="0">غلط</div>
+    </div>
+    <div class="feedback" data-fb="v3"><b>صح.</b> دوقرة (وادي الزرقاء) من أقدم مواقع العصر الحجري القديم في <b>قارة آسيا</b>، ويعود لـ2.5 مليون سنة. من أكثر الحقائق اللي بتيجي بالامتحان.</div>
+  </div>
+
+  <div class="qcard" data-vq="4">
+    <div class="qtag">⭕ ٤/٦ · اختيار</div>
+    <div class="qtext">أيّ موقع يُعدّ أقدم مقبرة منظّمة في العالم؟</div>
+    <div class="options" data-q="v4">
+      <div class="opt" data-ok="0">موقع عين غزال (عمّان)</div>
+      <div class="opt" data-ok="1">موقع عيون الحَمام (وادي زقلاب — إربد)</div>
+      <div class="opt" data-ok="0">موقع وادي فينان (جنوبي الأردنّ)</div>
+    </div>
+    <div class="feedback" data-fb="v4"><b>ممتاز.</b> <b>عيون الحَمام</b> في وادي زقلاب (إربد) = أقدم مقبرة منظّمة في العالم، من العصر الحجري <b>الوسيط</b>. انتبه ما تخلطها مع عين غزال (تماثيل) — رح نرجعلها بالمصيدة.</div>
+  </div>
+
+  <div class="qcard" data-vq="5">
+    <div class="qtag">✍︎ ٥/٦ · إكمال</div>
+    <div class="qtext">كمّل العبارة من الكلمات تحت:</div>
+    <div class="fillq">العصر اللي بلّش فيه الإنسان يصنع أدواته من معدن <span class="blank" data-slot="a">………</span> هو العصر الحجري <span class="blank" data-slot="b">………</span>.</div>
+    <div class="tileq" data-target="a"><div class="tlabel">المعدن:</div><div class="tiles">
+      <span class="tile" data-ok="0">الحديد</span><span class="tile" data-ok="1">النحاس</span><span class="tile" data-ok="0">البرونز</span>
+    </div></div>
+    <div class="tileq" data-target="b"><div class="tlabel">اسم العصر:</div><div class="tiles">
+      <span class="tile" data-ok="0">الحديث</span><span class="tile" data-ok="1">النحاسي</span><span class="tile" data-ok="0">الوسيط</span>
+    </div></div>
+    <div class="feedback" data-fb="v5"><b>صح.</b> معدن <b>النحاس</b> ← العصر الحجري <b>النحاسي</b>. وهون ظهرت طبقة الصنّاع والحرفيّين، وأشهر مناجمه <i>وادي فينان</i>.</div>
+  </div>
+
+  <div class="qcard" data-vq="6">
+    <div class="qtag">🔢 ٦/٦ · ترتيب</div>
+    <div class="qtext">رتّب العصور الحجرية الأربعة من <b>الأقدم للأحدث</b>:</div>
+    <div class="order-intro">ابدأ بالأقدم (قاع الحفرة). كلّ ضغطة صح بتاخد رقمها.</div>
+    <div class="order-pool" data-order="o1">
+      <div class="order-item" data-order-idx="3"><span class="obadge">؟</span> العصر الحجري النحاسي</div>
+      <div class="order-item" data-order-idx="1"><span class="obadge">؟</span> العصر الحجري الوسيط</div>
+      <div class="order-item" data-order-idx="0"><span class="obadge">؟</span> العصر الحجري القديم</div>
+      <div class="order-item" data-order-idx="2"><span class="obadge">؟</span> العصر الحجري الحديث</div>
+    </div>
+    <div class="feedback" data-fb="v6"><b>أحسنت!</b> القديم ← الوسيط ← الحديث ← النحاسي. نفس ترتيب القصّة: صيّاد ← انتقال ← مزارع ← صانع نحاس. لو مسكت الترتيب، مسكت نصف الدرس.</div>
+  </div>
+
+  <div class="btn-row"><button class="btn" onclick="go(7)">المصيدة الذكية ←</button></div>
+</section>
+
+<!-- ============ SCENE 7 · TRAP ============ -->
+<section class="scene" data-scene="7">
+  <div class="stage-tag">المرحلة ٥ · المصيدة الذكية</div>
+  <h2 class="scene-title">الموقعان اللي الطلاب بيخلطوا بينهم</h2>
+  <p class="lead">⚠️ اقرأ بتركيز، ما تستعجل.</p>
+
+  <div class="qcard">
+    <div class="sentence" style="font-size:18px">«موقع عين غزال في عمّان يُعدّ أقدم مقبرة منظّمة في العالم.»</div>
+    <div class="qtext">هل العبارة صحيحة؟</div>
+    <div class="options" data-q="trap">
+      <div class="opt" data-ok="0">صح — عين غزال أقدم مقبرة في العالم</div>
+      <div class="opt" data-ok="1">غلط — عين غزال مشهور بالتماثيل، أمّا أقدم مقبرة منظّمة فهي عيون الحَمام</div>
+    </div>
+    <div class="feedback" data-fb="trap"><b>أحسنت — هاي بالظبط المصيدة.</b> صار خلط بين موقعين:<br><br>
+      • <b>عين غزال</b> (عمّان) = العصر الحجري <b>الحديث</b> = أقدم <i>تماثيل من الجبس</i> في العالم.<br>
+      • <b>عيون الحَمام</b> (إربد) = العصر الحجري <b>الوسيط</b> = أقدم <i>مقبرة منظّمة</i> في العالم.<br><br>
+      حيلة تفصلهم: <b>عَين غزال → تَماثيل</b> (الفنّ في المدينة الكبيرة عمّان)، و<b>عيون الحَمام → مقبرة</b> (الحَمام بيرمز للروح اللي طارت). يلّي بيفرّق بينهم طالب فاهم فعلًا.</div>
+  </div>
+
+  <div class="btn-row"><button class="btn" onclick="go(8)">المراجعة السريعة ←</button></div>
+</section>
+
+<!-- ============ SCENE 8 · REVIEW ============ -->
+<section class="scene" data-scene="8">
+  <div class="stage-tag">المرحلة ٦ · المراجعة السريعة</div>
+  <h2 class="scene-title">بطاقة التلخيص — هاي اللي رح ترجعلك</h2>
+  <p class="lead">خذ نص دقيقة عليها.</p>
+
+  <div class="plate">
+    <div class="spine" style="margin:0 0 16px">
+      <div class="lbl">◆ الاسم وخطّ الفصل ◆</div>
+      <div class="flow" style="font-size:17px;line-height:1.8">«الأردن» = جور + دان (رافدان شماليّان)<br>الكتابة (3500 ق.م) = الفصل بين «ما قبل التاريخ» و«التاريخية»</div>
+    </div>
+    <div class="plate-label" style="margin:4px 0 9px"><span class="sq"></span> الطبقات الأربع ونجومها (الأقدم → الأحدث)</div>
+    <div class="rev-ages">
+      <div class="rev-age"><span class="ra-name">القديم</span><span><span class="ra-site">دوقرة</span> <span class="ra-world">— أقدم مواقع آسيا · صيد وجمع</span></span></div>
+      <div class="rev-age"><span class="ra-name">الوسيط</span><span><span class="ra-site">عيون الحَمام</span> <span class="ra-world">— أقدم مقبرة بالعالم · مرحلة انتقالية</span></span></div>
+      <div class="rev-age"><span class="ra-name">الحديث</span><span><span class="ra-site">عين غزال</span> <span class="ra-world">— أقدم تماثيل جبس بالعالم · قرى زراعية</span></span></div>
+      <div class="rev-age"><span class="ra-name">النحاسي</span><span><span class="ra-site">وادي فينان</span> <span class="ra-world">— أشهر مناجم النحاس · صنّاع وحرفيّون</span></span></div>
+    </div>
+  </div>
+
+
+  <div class="btn-row"><button class="btn" onclick="go(9)">الخاتمة ←</button></div>
+</section>
+
+<!-- ============ SCENE 9 · CLOSING ============ -->
+<section class="scene closing" data-scene="9">
+  <div class="orn">❖ ❖ ❖</div>
+  <div class="congrats">أحسنت 🌿</div>
+  <div class="csub">خلّصت حفريّة «الأردنّ في العصور الحجرية»</div>
+
+  <div class="spine" style="text-align:center">
+    <div class="lbl">◆ اللي طلعت فيه اليوم ◆</div>
+    <div class="flow" style="font-size:18px;line-height:1.85">الإنسان بالأردن مرّ بأربع قفزات:<br><b>صيّاد بالحجر ← منتِج ← مزارع مستقرّ ← صانع نحاس</b><br>ولكلّ قفزة موقع نجم «أوّل في العالم».</div>
+  </div>
+
+  <h3 style="font-family:'Rubik','Tajawal',sans-serif;margin-top:10px;color:var(--ink)">تقدّمك في وحدة العصور القديمة</h3>
+  <div class="unitprog"><div class="u on"></div><div class="u"></div><div class="u"></div><div class="u"></div></div>
+  <p style="color:var(--ink-soft);font-family:'Rubik','Tajawal',sans-serif;font-size:14px">١ من ٤</p>
+
+  <div class="next-box">
+    <div class="lbl">الدرس القادم ←</div>
+    <div class="ttl">الأردنّ في العصر البرونزي</div>
+    <p>رح نكمّل القصّة: بعد النحاس، شو صار لمّا اكتشف الإنسان <i>البرونز</i> (2000–1200 ق.م)، وكيف بلّشت المدن والممالك تظهر على أرض الأردن.</p>
+  </div>
+
+
+  <div class="btn-row" style="justify-content:center">
+    <button class="btn ghost" onclick="go(0)">↺ إعادة من البداية</button>
+  </div>
+  <div class="orn">❖ ❖ ❖</div>
+</section>
+
+</div>
+
+<script>
+/* ===== scenes ===== */
+var SCENES=document.querySelectorAll('.scene');
+var TOTAL=SCENES.length;
+var dotsWrap=document.getElementById('dots');
+for(var i=0;i<TOTAL;i++){var d=document.createElement('div');d.className='dot';dotsWrap.appendChild(d);}
+var DOTS=dotsWrap.querySelectorAll('.dot');
+function go(n){
+  SCENES.forEach(function(s){s.classList.remove('on');});
+  var t=document.querySelector('.scene[data-scene="'+n+'"]');
+  if(t)t.classList.add('on');
+  DOTS.forEach(function(dot,idx){dot.classList.remove('active','done');if(idx<n)dot.classList.add('done');else if(idx===n)dot.classList.add('active');});
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+go(0);
+function revealFB(el){var card=el.closest('.qcard');if(!card)return;var fb=card.querySelector('.feedback');if(fb)fb.classList.add('show');}
+/* MCQ / TF */
+document.querySelectorAll('.options').forEach(function(group){
+  group.querySelectorAll('.opt').forEach(function(opt){
+    opt.addEventListener('click',function(){
+      if(group.dataset.answered)return;group.dataset.answered='1';
+      group.querySelectorAll('.opt').forEach(function(o){o.classList.add('lock');if(o.dataset.ok==='1')o.classList.add('ok');});
+      if(opt.dataset.ok==='1')opt.classList.add('ok');else opt.classList.add('no');
+      revealFB(opt);bumpVaried(opt);
+    });
+  });
+});
+/* TILES */
+document.querySelectorAll('.tileq').forEach(function(tq){
+  var target=tq.dataset.target;
+  tq.querySelectorAll('.tile').forEach(function(tile){
+    tile.addEventListener('click',function(){
+      if(tq.classList.contains('done'))return;
+      if(tile.dataset.ok==='1'){
+        tile.classList.add('ok');tq.classList.add('done');
+        var card=tq.closest('.qcard');var blank=card.querySelector('.blank[data-slot="'+target+'"]');
+        if(blank){blank.textContent=tile.textContent;blank.classList.add('filled');}
+        var all=card.querySelectorAll('.tileq');var done=card.querySelectorAll('.tileq.done');
+        if(all.length===done.length){revealFB(tile);bumpVaried(tile);}
+      }else{tile.classList.add('no');setTimeout(function(){tile.classList.remove('no');},380);}
+    });
+  });
+});
+/* MATCHING */
+document.querySelectorAll('.match-grid').forEach(function(grid){
+  var selected=null,pairCount=0,totalPairs=grid.querySelectorAll('.match-item').length/2;
+  grid.querySelectorAll('.match-item').forEach(function(item){
+    item.addEventListener('click',function(){
+      if(item.classList.contains('done'))return;
+      if(!selected){selected=item;item.classList.add('sel');return;}
+      if(selected===item){item.classList.remove('sel');selected=null;return;}
+      if(selected.parentElement===item.parentElement){selected.classList.remove('sel');selected=item;item.classList.add('sel');return;}
+      if(selected.dataset.pair===item.dataset.pair){
+        var n=pairCount+1;
+        [selected,item].forEach(function(x){x.classList.remove('sel');x.classList.add('done');var b=document.createElement('span');b.className='pnum';b.textContent=n;x.appendChild(b);});
+        pairCount++;selected=null;
+        if(pairCount===totalPairs){revealFB(item);bumpVaried(item);}
+      }else{var a=selected,b=item;a.classList.add('flash');b.classList.add('flash');setTimeout(function(){a.classList.remove('flash','sel');b.classList.remove('flash');},380);selected=null;}
+    });
+  });
+});
+/* ORDERING */
+document.querySelectorAll('.order-pool').forEach(function(pool){
+  var next=0,items=pool.querySelectorAll('.order-item');
+  items.forEach(function(item){
+    item.addEventListener('click',function(){
+      if(item.classList.contains('done'))return;
+      var idx=parseInt(item.dataset.orderIdx,10);
+      if(idx===next){item.classList.add('done');item.querySelector('.obadge').textContent=next+1;next++;if(next===items.length){revealFB(item);bumpVaried(item);}}
+      else{item.classList.add('flash');setTimeout(function(){item.classList.remove('flash');},380);}
+    });
+  });
+});
+/* varied counter */
+var variedDone={};
+function bumpVaried(el){
+  var card=el.closest('.qcard');if(!card||!card.dataset.vq)return;
+  var id=card.dataset.vq;if(variedDone[id])return;variedDone[id]=true;
+  var count=Object.keys(variedDone).length;
+  var arNums=['٠','١','٢','٣','٤','٥','٦'];
+  var counter=document.getElementById('vcounter');if(counter)counter.textContent=arNums[count]+' / ٦';
+  var pdots=document.querySelectorAll('#vprogress .pdot');if(pdots[count-1])pdots[count-1].classList.add('on');
+}
+</script>
+</body>
+</html>

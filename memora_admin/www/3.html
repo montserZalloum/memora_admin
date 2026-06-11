@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>ورشة المهندس — تطبيقات الجذر التربيعي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg1:#3a2406; --bg2:#7c4a0e; --bg3:#5a3208;
+    --card:#ffffff; --ink:#3a2a12;
+    --p:#d97706; --p2:#f59e0b;
+    --good:#22c55e; --bad:#ef4444;
+    --gold:#fbbf24; --gem:#22d3ee;
+    --soft:#fff4e2;
+    --pool:#0ea5e9;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:'Cairo','Tahoma','Segoe UI',sans-serif;
+    background:linear-gradient(160deg,var(--bg1),var(--bg2) 45%,var(--bg3));
+    color:var(--ink);
+    overflow:hidden; user-select:none;
+    display:flex; align-items:center; justify-content:center;
+  }
+  .bgsym{position:fixed; inset:0; overflow:hidden; z-index:0; pointer-events:none;}
+  .bgsym span{position:absolute; color:#ffffff14; font-weight:900; animation:floaty linear infinite;}
+  @keyframes floaty{0%{transform:translateY(110vh) rotate(0)}100%{transform:translateY(-20vh) rotate(360deg)}}
+
+  #app{
+    position:relative; z-index:2;
+    width:min(440px,100vw); height:min(860px,100vh);
+    background:linear-gradient(180deg,#fffaf2,#fff1dd);
+    border-radius:28px; overflow:hidden;
+    box-shadow:0 30px 80px #0008, inset 0 0 0 6px #ffffff10;
+    display:flex; flex-direction:column;
+  }
+  @media (max-width:460px){ #app{width:100vw;height:100vh;border-radius:0;} }
+
+  #hud{
+    display:flex; align-items:center; gap:8px; padding:12px 14px;
+    background:linear-gradient(90deg,var(--p),var(--p2));
+    color:#fff; box-shadow:0 6px 18px #d9770655; z-index:5;
+  }
+  .pill{background:#ffffff25; border-radius:999px; padding:6px 12px; font-weight:900; font-size:15px; display:flex; align-items:center; gap:5px; backdrop-filter:blur(4px);}
+  #xpwrap{flex:1; height:14px; background:#ffffff30; border-radius:999px; overflow:hidden;}
+  #xpbar{height:100%; width:0%; background:linear-gradient(90deg,#fff,#fde68a); border-radius:999px; transition:width .5s cubic-bezier(.2,1,.3,1);}
+  #soundBtn{cursor:pointer; font-size:20px; background:#ffffff25; border:none; color:#fff; width:38px;height:38px;border-radius:50%;}
+
+  #screen{flex:1; position:relative; overflow:hidden;}
+  .view{position:absolute; inset:0; display:flex; flex-direction:column; padding:18px; overflow-y:auto; animation:slideIn .45s cubic-bezier(.2,1,.3,1);}
+  @keyframes slideIn{from{opacity:0; transform:translateX(30px)} to{opacity:1; transform:none}}
+
+  .mascot{width:96px;height:96px; flex:none; filter:drop-shadow(0 8px 12px #d9770655); animation:bob 2.4s ease-in-out infinite;}
+  .mascot.small{width:64px;height:64px;}
+  @keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+  .bubble{background:#fff; border:3px solid #ffe3bd; border-radius:20px; padding:14px 16px; font-size:18px; font-weight:700; line-height:1.7; box-shadow:0 8px 20px #d9770622; position:relative;}
+  .bubble:after{content:""; position:absolute; bottom:-14px; right:36px; border:8px solid transparent; border-top-color:#fff;}
+
+  h1.title{font-size:27px; font-weight:900; color:var(--p); margin:6px 0; text-align:center; line-height:1.4;}
+  .sub{text-align:center; color:#8a6a3a; font-weight:700; margin-bottom:8px;}
+
+  .btn{
+    border:none; border-radius:18px; padding:16px; font-family:inherit;
+    font-size:20px; font-weight:900; cursor:pointer; color:#fff;
+    background:linear-gradient(180deg,var(--p2),var(--p));
+    box-shadow:0 6px 0 #b45309, 0 10px 18px #d9770655;
+    transition:transform .08s, box-shadow .08s; width:100%;
+  }
+  .btn:active{transform:translateY(4px); box-shadow:0 2px 0 #b45309;}
+  .btn.gold{background:linear-gradient(180deg,#fcd34d,var(--gold)); color:#5b3d00; box-shadow:0 6px 0 #b45309,0 10px 18px #f59e0b66;}
+  .btn.ghost{background:#fff; color:var(--p); box-shadow:0 4px 0 #ffe3bd;}
+
+  .card{background:#fff; border-radius:22px; padding:18px; box-shadow:0 10px 26px #d9770618; margin-top:auto;}
+
+  .opts{display:grid; gap:12px; margin-top:14px;}
+  .opt{
+    background:#fff; border:3px solid #ffe3bd; border-radius:18px; padding:16px;
+    font-size:23px; font-weight:900; color:var(--ink); cursor:pointer;
+    transition:transform .1s, border-color .1s, background .1s; text-align:center;
+    box-shadow:0 4px 0 #ffe3bd;
+  }
+  .opt:active{transform:translateY(3px); box-shadow:none;}
+  .opt.good{border-color:var(--good); background:#dcfce7; box-shadow:0 4px 0 #86efac; animation:pop .4s;}
+  .opt.bad{border-color:var(--bad); background:#fee2e2; box-shadow:0 4px 0 #fca5a5; animation:shake .4s;}
+  .opt.dim{opacity:.45;}
+  @keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.12)}100%{transform:scale(1)}}
+  @keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+
+  .prompt{font-size:23px; font-weight:900; text-align:center; margin:8px 0; line-height:1.7;}
+  .math{font-family:'Cairo',serif; font-weight:900;}
+  sup{font-size:.7em;}
+
+  .root{display:inline-flex; align-items:flex-start;}
+  .root .rad{border-top:3px solid currentColor; padding:2px 4px 0; margin-top:2px;}
+
+  .hint{background:var(--soft); border-radius:14px; padding:10px 14px; font-weight:700; color:#8a5a10; text-align:center; margin:8px 0; line-height:1.7;}
+
+  /* steps panel */
+  .steps{background:#fff; border:3px solid #ffe3bd; border-radius:16px; padding:14px; margin:8px 0; box-shadow:0 6px 16px #d9770618;}
+  .steprow{display:flex; gap:10px; align-items:flex-start; padding:8px 0; border-bottom:1px dashed #f0dcc0; font-weight:800; font-size:17px; line-height:1.6;}
+  .steprow:last-child{border-bottom:none;}
+  .stepno{flex:none; width:28px;height:28px;border-radius:50%;background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:15px;}
+
+  /* diagrams */
+  .diagram{display:flex;flex-direction:column;align-items:center;margin:10px 0;}
+  .frameOuter{position:relative; background:linear-gradient(135deg,#a86a2c,#7a4a16); padding:26px; border-radius:8px; box-shadow:0 10px 24px #0003;}
+  .frameLabel{position:absolute; top:-14px; right:50%; transform:translateX(50%); background:#fff; border:2px solid var(--p); border-radius:8px; padding:2px 8px; font-size:12px; font-weight:900; color:var(--p); white-space:nowrap;}
+  .photo{width:150px;height:150px;background:linear-gradient(135deg,#67c1ff,#3b82f6); border-radius:4px; display:flex;align-items:center;justify-content:center; color:#fff; font-weight:900; font-size:16px; text-align:center; box-shadow:inset 0 0 0 3px #ffffff66;}
+
+  .poolOuter{position:relative; background:repeating-linear-gradient(45deg,#e7c089,#e7c089 8px,#dbb074 8px,#dbb074 16px); padding:26px; border-radius:10px; box-shadow:0 10px 24px #0003;}
+  .poolWalk{position:absolute; top:4px; right:8px; font-size:12px; font-weight:900; color:#7a4a16;}
+  .poolInner{width:140px;height:140px;background:linear-gradient(160deg,#38bdf8,#0284c7); border-radius:6px; display:flex;align-items:center;justify-content:center; color:#fff; font-weight:900; font-size:16px; box-shadow:inset 0 6px 18px #00000033;}
+  .dimlabel{font-weight:900;color:var(--p);font-size:15px;margin-top:8px;text-align:center;}
+  .arrowdim{font-size:12px;color:#7a4a16;font-weight:900;text-align:center;margin-top:4px;}
+
+  .tilewrap{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;max-width:240px;margin:8px auto;}
+  .tile{width:14px;height:14px;border-radius:3px;}
+
+  #fb{position:absolute; left:0; right:0; bottom:0; transform:translateY(110%); transition:transform .4s cubic-bezier(.2,1,.3,1);
+      background:#fff; border-radius:24px 24px 0 0; padding:18px; box-shadow:0 -10px 30px #0002; z-index:8;}
+  #fb.show{transform:none;}
+  #fb.win{background:#dcfce7;} #fb.lose{background:#fee2e2;}
+  #fb .ttl{font-size:22px; font-weight:900; display:flex; align-items:center; gap:8px;}
+  #fb .exp{font-weight:700; color:#5a4a32; margin:8px 0 14px; line-height:1.7; font-size:17px;}
+
+  .path{flex:1; display:flex; flex-direction:column; align-items:center; gap:0; position:relative; padding-top:6px;}
+  .node{width:84px;height:84px;border-radius:50%; display:flex;align-items:center;justify-content:center; font-size:36px;
+         font-weight:900; color:#fff; position:relative; cursor:pointer; box-shadow:0 6px 0 #00000022, 0 10px 20px #0003; transition:transform .12s;}
+  .node:active{transform:scale(.94);}
+  .node.locked{background:#d8c4a4; box-shadow:0 6px 0 #bda87f; cursor:not-allowed;}
+  .node.done{background:linear-gradient(180deg,#34d399,#10b981); box-shadow:0 6px 0 #059669;}
+  .node.cur{background:linear-gradient(180deg,var(--p2),var(--p)); box-shadow:0 6px 0 #b45309; animation:beat 1.4s infinite;}
+  .node.boss{background:linear-gradient(180deg,#fb7185,#e11d48); box-shadow:0 6px 0 #9f1239;}
+  @keyframes beat{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+  .node .nm{position:absolute; bottom:-26px; font-size:12px; color:#5a4a32; font-weight:900; white-space:nowrap; background:#fff8; padding:2px 8px;border-radius:8px;}
+  .node .stars{position:absolute; top:-14px; font-size:14px;}
+  .connector{width:6px;height:34px;background:#ecd9b8;border-radius:999px;}
+  .connector.done{background:#34d399;}
+  .nodeoff{margin-inline-start:var(--off,0);}
+
+  .confetti{position:fixed; top:-20px; font-size:22px; z-index:99; pointer-events:none; animation:fall linear forwards;}
+  @keyframes fall{to{transform:translateY(105vh) rotate(720deg); opacity:.2}}
+
+  .cert{background:linear-gradient(180deg,#fffdf5,#fff4d6); border:5px double var(--gold); border-radius:20px; padding:22px; text-align:center; box-shadow:0 14px 30px #f59e0b33;}
+  .cert h2{color:#b45309; margin:6px 0; font-size:24px;}
+  .cert .big{font-size:60px;}
+  .badge{font-size:80px; text-align:center; animation:bob 2s infinite;}
+</style>
+</head>
+<body>
+<div class="bgsym" id="bgsym"></div>
+
+<div id="app">
+  <div id="hud">
+    <button id="soundBtn" title="الصوت">🔊</button>
+    <div class="pill">💎 <span id="gems">0</span></div>
+    <div id="xpwrap"><div id="xpbar"></div></div>
+    <div class="pill">⭐ <span id="stars">0</span></div>
+  </div>
+  <div id="screen"></div>
+  <div id="fb">
+    <div class="ttl" id="fbttl"></div>
+    <div class="exp" id="fbexp"></div>
+    <button class="btn" id="fbbtn">متابعة</button>
+  </div>
+</div>
+
+<script>
+/* ============================ شخصية المرشد (جُذَيْر المهندس) ============================ */
+function mascot(cls){return `
+<svg class="mascot ${cls||''}" viewBox="0 0 120 120">
+  <path d="M22 34 Q60 8 98 34 L102 40 L18 40 Z" fill="#fbbf24"/>
+  <rect x="46" y="22" width="28" height="12" rx="4" fill="#f59e0b"/>
+  <rect x="20" y="40" width="80" height="62" rx="20" fill="#d97706"/>
+  <rect x="20" y="40" width="80" height="62" rx="20" fill="url(#g)" opacity=".4"/>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+  <circle cx="46" cy="66" r="11" fill="#fff"/><circle cx="74" cy="66" r="11" fill="#fff"/>
+  <circle cx="48" cy="68" r="5.5" fill="#3a2a12"/><circle cx="76" cy="68" r="5.5" fill="#3a2a12"/>
+  <circle cx="50" cy="66" r="2" fill="#fff"/><circle cx="78" cy="66" r="2" fill="#fff"/>
+  <path d="M48 86 Q60 96 72 86" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round"/>
+</svg>`;}
+
+/* ============================ الأصوات ============================ */
+let AC=null, soundOn=true;
+function ac(){ if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}} return AC; }
+function tone(f,d,t,v){ if(!soundOn||!ac())return; const o=ac().createOscillator(),g=ac().createGain();
+  o.type=t||'sine'; o.frequency.value=f; o.connect(g); g.connect(ac().destination);
+  const n=ac().currentTime; g.gain.setValueAtTime(0,n); g.gain.linearRampToValueAtTime(v||.18,n+.02);
+  g.gain.exponentialRampToValueAtTime(.0001,n+d); o.start(n); o.stop(n+d); }
+function sGood(){ [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,.25,'triangle',.2),i*70)); }
+function sBad(){ tone(180,.3,'sawtooth',.12); setTimeout(()=>tone(120,.3,'sawtooth',.12),120); }
+function sTap(){ tone(494,.08,'square',.07); }
+function sWin(){ [523,659,784,1047,784,1047].forEach((f,i)=>setTimeout(()=>tone(f,.3,'triangle',.2),i*120)); }
+function sLevel(){ [659,880,1047].forEach((f,i)=>setTimeout(()=>tone(f,.22,'triangle',.18),i*90)); }
+
+/* ============================ مؤثرات ============================ */
+function confetti(n){ const e=['🎉','⭐','✨','🏗️','📐','🧱','🏊']; for(let i=0;i<(n||30);i++){
+  const c=document.createElement('div'); c.className='confetti'; c.textContent=e[i%e.length];
+  c.style.left=Math.random()*100+'vw'; c.style.fontSize=(16+Math.random()*22)+'px';
+  c.style.animationDuration=(1.4+Math.random()*1.6)+'s'; document.body.appendChild(c);
+  setTimeout(()=>c.remove(),3200);} }
+function rootHTML(inner){ return `<span class="root math">√<span class="rad">${inner}</span></span>`; }
+
+/* رسومات توضيحية */
+function frameDiagram(){ return `<div class="diagram">
+  <div class="frameOuter"><div class="frameLabel">برواز ضلعه الداخلي 58 cm</div>
+    <div class="photo">صورة<br>3136 cm²</div></div>
+  <div class="dimlabel">هل تتسع الصورة داخل البرواز؟</div></div>`; }
+function poolDiagram(){ return `<div class="diagram">
+  <div class="poolOuter"><div class="poolWalk">ممر 1m ⟿</div>
+    <div class="poolInner">مسبح<br>169 m²</div></div>
+  <div class="dimlabel">مسبح مربع يحيط به ممر عرضه 1m من كل جهة</div></div>`; }
+function tilesDiagram(){ // 225 tiles colored 75 each
+  let t=''; for(let i=0;i<225;i++){ const c=i<75?'#fff':(i<150?'#fde047':'#a16207'); const b=i<75?'border:1px solid #e5d9c0;':'';
+    t+=`<div class="tile" style="background:${c};${b}"></div>`; }
+  return `<div class="diagram"><div class="tilewrap" style="grid-template-columns:repeat(15,1fr)">${t}</div>
+    <div class="dimlabel">75 أبيض + 75 أصفر + 75 بني = 225 بلاطة (مربّعة 15×15)</div></div>`; }
+
+/* شبكة مربّعة n×n لتوضيح المساحة والجذر */
+function squareGrid(n,label,color){
+  const cell=Math.max(10,Math.min(22,Math.floor(280/n)));
+  let t='';
+  for(let i=0;i<n*n;i++) t+=`<div style="width:${cell}px;height:${cell}px;background:${color||'#38bdf8'};border-radius:3px;box-shadow:inset 0 0 0 1.5px #ffffffcc"></div>`;
+  return `<div class="diagram">
+    <div style="display:inline-grid;grid-template-columns:repeat(${n},${cell}px);gap:2px;padding:6px;background:#a86a2c;border-radius:8px;box-shadow:0 8px 18px #0003">${t}</div>
+    ${label?`<div class="dimlabel">${label}</div>`:''}</div>`;
+}
+
+/* لوحة المربّعات: العدد × نفسه وجذره */
+function squaresTable(){
+  const r=[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+  return `<div class="steps" style="padding:12px">
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-weight:900">
+      ${r.map(n=>`<div style="background:var(--soft);border-radius:10px;padding:6px;text-align:center;line-height:1.5">
+        <div style="color:var(--p);font-size:14px">${n} × ${n} = ${n*n}</div>
+        <div style="font-size:12px;color:#8a5a10">${rootHTML(n*n)} = ${n}</div></div>`).join('')}
+    </div></div>`;
+}
+
+/* ============================ الحالة ============================ */
+const State={ xp:0, gems:0, stars:0, maxUnlocked:0, levelStars:{} };
+try{ const s=JSON.parse(localStorage.getItem('engworkshop')); if(s)Object.assign(State,s); }catch(e){}
+function save(){ try{localStorage.setItem('engworkshop',JSON.stringify(State));}catch(e){} }
+function setHUD(){ document.getElementById('gems').textContent=State.gems;
+  document.getElementById('stars').textContent=State.stars;
+  document.getElementById('xpbar').style.width=Math.min(100,(State.xp%100))+'%'; }
+function addXP(n){ State.xp+=n; setHUD(); save(); }
+
+/* ============================ تعريف المراحل ============================ */
+/* أنواع الخطوات: story | choice | solve */
+const LEVELS=[
+ { name:'ما هو المربّع؟', icon:'🟧', steps:[
+   {type:'story', say:'أهلاً يا بطل! 🏗️ أنا <b>جُذَيْر</b> المهندس الصغير. لا تخف من الكلمات الكبيرة — سنبدأ من الصفر، خطوة خطوة، وبعد قليل ستحلّ مسائل يحلّها الكبار! 💪'},
+   {type:'story', say:'أولًا: ما هو <b>المربّع</b>؟ 🟧<br>هو شكل له <b>4 أضلاع متساوية تمامًا</b> (كل الأطوال سواء)، مثل بلاطة الأرض أو نافذة مربعة.', diagram:squareGrid(3,'مربّع: كل أضلاعه متساوية','#fbbf24')},
+   {type:'story', say:'الآن كلمة <b>المساحة</b> 🟦<br>المساحة = عدد <b>المربّعات الصغيرة</b> التي تملأ الشكل من الداخل. تخيّل أننا نفرش الأرض ببلاطات صغيرة ونعدّها!', diagram:squareGrid(3,'نعدّ المربّعات الصغيرة بالداخل')},
+   {type:'story', say:'انظر: ضلع هذا المربّع فيه <b>3</b> مربّعات. ولو عددنا كل المربّعات الصغيرة لوجدناها <b>9</b>.<br>لماذا 9؟ لأن لدينا <b>3 صفوف</b>، وفي كل صف <b>3 مربّعات</b>: 3 × 3 = 9 ✦', diagram:squareGrid(3,'3 صفوف × 3 في كل صف = 9')},
+   {type:'story', say:'هذه هي القاعدة الذهبية 🌟<br><b>المساحة = الضلع × الضلع</b><br>ونكتب «الضلع × الضلع» بشكل أقصر هكذا: <b>الضلع²</b> ونقرؤها «الضلع <b>تربيع</b>».'},
+   {type:'choice', prompt:'كم عدد المربّعات الصغيرة في هذا الشكل؟<br><small>عُدّها، أو احسب 2 × 2</small>', diagram:squareGrid(2,'صفّان، في كل صف مربّعان'),
+     options:['4','2','6','8'], correct:0, exp:'صفّان، كل صف فيه مربّعان: 2 × 2 = 4 ✦'},
+   {type:'choice', prompt:'مربّع طول ضلعه <b>4</b>. ما مساحته؟<br><small>المساحة = الضلع × الضلع = 4 × 4</small>',
+     options:['8','12','16','44'], correct:2, exp:'4 × 4 = 16 ، نضرب الضلع في نفسه ✦'},
+   {type:'choice', prompt:'مربّع طول ضلعه <b>5</b>. مساحته = 5 × 5 = ؟',
+     options:['10','25','55','20'], correct:1, exp:'5 × 5 = 25 ✦'},
+ ]},
+
+ { name:'الجذر التربيعي', icon:'√', steps:[
+   {type:'story', say:'ممتاز! 🎉 تعلّمنا أن نضرب الضلع في نفسه لنجد المساحة.<br>الآن نلعب <b>بالعكس</b>: نعرف المساحة، ونريد أن نجد <b>الضلع</b>. اسم هذه العملية <b>الجذر التربيعي</b>!'},
+   {type:'story', say:'علامة الجذر هي '+rootHTML('&nbsp;')+' .<br><b>'+rootHTML('9')+' تعني:</b> أيّ عدد إذا ضربناه في نفسه يعطينا 9؟<br>الجواب <b>3</b> لأن 3 × 3 = 9. إذن '+rootHTML('9')+' = 3 ✦', diagram:squareGrid(3,'المساحة 9 ← الضلع 3')},
+   {type:'story', say:'ببساطة 🔑<br><b>تربيع</b>: من الضلع إلى المساحة (نضرب العدد في نفسه).<br><b>جذر</b>: من المساحة إلى الضلع (العكس تمامًا).<br>كل عملية تُلغي الأخرى!'},
+   {type:'story', say:'هذه <b>لوحة المهندس</b> 📋 احفظها فهي سرّ الحلّ السريع. كل خانة تقول: العدد × نفسه = الناتج، والجذر يرجعك للعدد.', diagram:squaresTable()},
+   {type:'choice', prompt:'<span class="math">'+rootHTML('4')+'</span> = ؟<br><small>أيّ عدد × نفسه = 4؟</small>', diagram:squareGrid(2,''),
+     options:['2','4','1','8'], correct:0, exp:'2 × 2 = 4 ، إذن '+rootHTML('4')+' = 2 ✦'},
+   {type:'choice', prompt:'<span class="math">'+rootHTML('25')+'</span> = ؟<br><small>أيّ عدد × نفسه = 25؟</small>',
+     options:['6','4','5','7'], correct:2, exp:'5 × 5 = 25 ، إذن '+rootHTML('25')+' = 5 ✦'},
+   {type:'choice', prompt:'<span class="math">'+rootHTML('16')+'</span> = ؟',
+     options:['8','4','6','3'], correct:1, exp:'4 × 4 = 16 ، إذن '+rootHTML('16')+' = 4 ✦'},
+   {type:'choice', prompt:'<span class="math">'+rootHTML('100')+'</span> = ؟<br><small>راجع لوحة المهندس</small>',
+     options:['10','50','20','1000'], correct:0, exp:'10 × 10 = 100 ، إذن '+rootHTML('100')+' = 10 ✦'},
+ ]},
+
+ { name:'سرّ الإشارة الموجبة', icon:'➕', steps:[
+   {type:'story', say:'سؤال ذكي 🤔: نعرف أن 3 × 3 = 9 ... لكن أيضًا (−3) × (−3) = 9! فلماذا نختار في الأطوال <b>3 فقط</b> وليس −3؟'},
+   {type:'story', say:'لأن الطول في الواقع <b>لا يمكن أن يكون سالبًا</b>! 📏<br>لا يوجد ضلع طوله «ناقص 6 أمتار»، ولا حبل طوله «سالب». الأطوال والمسافات دائمًا <b>موجبة</b>.'},
+   {type:'story', say:'⚠️ <b>قاعدة المهندس:</b> في الأطوال والمسافات والأبعاد نأخذ <b>الجذر الموجب فقط</b>. تذكّرها جيدًا، سنستعملها في كل مشروع! ✦'},
+   {type:'choice', prompt:'أرضية مربعة مساحتها <b>36 m²</b>. ما طول ضلعها؟', visual:'<div class="hint">الضلع = '+rootHTML('المساحة')+' = '+rootHTML('36')+'<br>أيّ عدد × نفسه = 36؟</div>',
+     options:['6 m','±6 m','18 m','12 m'], correct:0, exp:'6 × 6 = 36 ، ونأخذ الموجب فقط لأنه طول حقيقي = 6 m ✦'},
+   {type:'choice', prompt:'لماذا أهملنا الجذر السالب (−6) في المسألة السابقة؟',
+     options:['لأن الطول لا يمكن أن يكون سالبًا','لأن 36 عدد كبير','صدفة'], correct:0, exp:'الأطوال والمسافات قيم موجبة دائمًا، لذلك نهمل الجذر السالب ✦'},
+ ]},
+
+ { name:'هرم الشمس', icon:'🔺', steps:[
+   {type:'story', say:'أول مشروع حقيقي! 🌞 <b>هرم الشمس</b> في المكسيك 🇲🇽 قاعدته مربعة الشكل، ومساحتها <b>50625 m²</b>. مهمتنا: إيجاد طول ضلع القاعدة.'},
+   {type:'story', say:'لا تخف من العدد الكبير! 😎 الفكرة نفسها تمامًا مثل '+rootHTML('9')+' = 3.<br>العدد كبير فقط، لذلك يستعين المهندس <b>بالآلة الحاسبة</b> أو <b>لوحة المربّعات</b> — لكن <b>الطريقة هي ذاتها</b>.'},
+   {type:'solve', title:'خطوات حلّ هرم الشمس', rows:[
+       'نفهم المسألة: القاعدة مربّعة ومساحتها معلومة = 50625 m²',
+       'نكتب القاعدة:&nbsp; المساحة = الضلع²&nbsp; ←&nbsp; الضلع² = 50625',
+       'نسأل: أيّ عدد × نفسه = 50625؟ نجد أنّ&nbsp; 225 × 225 = 50625',
+       'نأخذ الجذر <b>الموجب</b> (لأننا نبحث عن طول):&nbsp; الضلع = '+rootHTML('50625')+' = 225 m ✓'
+     ]},
+   {type:'choice', prompt:'ما المعادلة الصحيحة التي تمثّل المسألة؟<br><small>(x = الضلع)</small>',
+     options:['x² = 50625','x = 50625 × 2','x² = 225'], correct:0, exp:'مساحة المربع = الضلع² ، إذن x² = 50625 ✦'},
+   {type:'choice', prompt:'إذن طول ضلع قاعدة الهرم = <span class="math">'+rootHTML('50625')+'</span> = ؟',
+     options:['450 m','225 m','±225 m','325 m'], correct:1, exp:'225 × 225 = 50625 ، ونأخذ الموجب فقط = 225 m ✦'},
+ ]},
+
+ { name:'برواز ريما', icon:'🖼️', steps:[
+   {type:'story', say:'أرادت <b>ريما</b> وضع صورة مربعة مساحتها <b>3136 cm²</b> داخل برواز مربع طول ضلعه الداخلي <b>58 cm</b>. 🤔 هل تتّسع الصورة؟ لنكتشف!', diagram:frameDiagram()},
+   {type:'story', say:'خطة الحلّ بسيطة 🧩<br>1) نجد طول ضلع الصورة من مساحتها (بالجذر).<br>2) نقارنه بطول ضلع البرواز (58).<br>إذا كان ضلع الصورة <b>أصغر</b> ← تتّسع. وإذا كان <b>أكبر</b> ← لا تتّسع.'},
+   {type:'choice', prompt:'الخطوة 1: طول ضلع الصورة = <span class="math">'+rootHTML('3136')+'</span> = ؟<br><small>جرّب: 56 × 56</small>', diagram:frameDiagram(),
+     options:['56 cm','58 cm','62 cm','48 cm'], correct:0, exp:'56 × 56 = 3136 ، إذن ضلع الصورة = 56 cm ✦'},
+   {type:'choice', prompt:'الخطوة 2: نقارن <b>56</b> (الصورة) مع <b>58</b> (البرواز). فهل تتّسع الصورة؟',
+     options:['نعم، لأن 56 أصغر من 58','لا، لأن الصورة أكبر'], correct:0, exp:'ضلع الصورة (56) أصغر من ضلع البرواز الداخلي (58)، إذن تتّسع داخله ✓ ✦'},
+ ]},
+
+ { name:'بلاط البنّاء', icon:'🧱', steps:[
+   {type:'story', say:'بلّط بنّاء أرضية <b>غرفة مربعة</b> بـ <b>75</b> بلاطة بيضاء، و<b>75</b> صفراء، و<b>75</b> بنّية (كلها مربّعة ومتساوية). السؤال: كم بلاطة على طول <b>ضلع</b> الغرفة؟', diagram:tilesDiagram()},
+   {type:'story', say:'فكّر معي 💡 كل البلاطات تملأ الأرضية المربّعة، إذن <b>عددها الكلي = مساحة الأرضية بالبلاطات</b>. أولًا نجمعها، ثم نأخذ الجذر لنعرف عدد البلاطات في الصف الواحد.'},
+   {type:'choice', prompt:'الخطوة 1: ما العدد الكلي للبلاطات؟<br><small>75 + 75 + 75</small>',
+     options:['150','225','275','325'], correct:1, exp:'75 + 75 + 75 = 225 بلاطة (وهذه مساحة الأرضية بالبلاطات) ✦'},
+   {type:'choice', prompt:'الخطوة 2: عدد البلاطات على طول الضلع = <span class="math">'+rootHTML('225')+'</span> = ؟<br><small>أيّ عدد × نفسه = 225؟ راجع لوحة المهندس</small>',
+     options:['25','45','15','22'], correct:2, exp:'15 × 15 = 225 ، إذن على كل ضلع 15 بلاطة ✦'},
+ ]},
+
+ { name:'المسبح والممر', icon:'🏊', steps:[
+   {type:'story', say:'مسبح <b>مربع الشكل</b> مساحته <b>169 m²</b>، ويحيط به <b>ممر عرضه 1 m</b> من كل جهة. المطلوب: <b>محيط الممر من الخارج</b>. مشروع من ثلاث خطوات! 🏊', diagram:poolDiagram()},
+   {type:'choice', prompt:'الخطوة 1: طول ضلع المسبح = <span class="math">'+rootHTML('169')+'</span> = ؟<br><small>أيّ عدد × نفسه = 169؟</small>', diagram:poolDiagram(),
+     options:['11 m','13 m','15 m','17 m'], correct:1, exp:'13 × 13 = 169 ، إذن ضلع المسبح = 13 m ✦'},
+   {type:'story', say:'انتبه للممر! 🚶 عرضه 1m ويلتفّ حول المسبح. على كل ضلع يضيف 1m من جهة و1m من الجهة المقابلة، أي <b>+2</b> على الضلع كاملًا.'},
+   {type:'choice', prompt:'الخطوة 2: الضلع الخارجي = ضلع المسبح + الممر من <b>الجهتين</b> = 13 + 1 + 1 = ؟',
+     options:['14 m','15 m','16 m','26 m'], correct:1, exp:'نضيف 1m من كل جهة: 13 + 2 = 15 m ✦'},
+   {type:'story', say:'بقيت كلمة أخيرة: <b>المحيط</b> 🔲 وهو طول السور حول المربّع كله. وبما أن للمربّع 4 أضلاع متساوية:<br><b>المحيط = 4 × الضلع</b>.'},
+   {type:'choice', prompt:'الخطوة 3: محيط الممر الخارجي = 4 × الضلع الخارجي = 4 × 15 = ؟',
+     options:['45 m','60 m','30 m','75 m'], correct:1, exp:'محيط المربع = 4 × الضلع = 4 × 15 = 60 m ✦'},
+ ]},
+
+ { name:'تحدّي المهندس', icon:'🏅', boss:true, steps:[
+   {type:'story', say:'المشروع الأخير! 🏗️🏅 أثبت أنك <b>مهندس مملكة المربعات</b> وأجب عن كل التحديات. تذكّر <b>لوحة المهندس</b> وقاعدة <b>الجذر الموجب</b>!'},
+   {type:'choice', prompt:'تسخين 🔥: مربّع طول ضلعه 7. ما مساحته؟<br><small>الضلع × الضلع</small>', options:['14','49','77'], correct:1, exp:'7 × 7 = 49 ✦'},
+   {type:'choice', prompt:'تسخين 🔥: <span class="math">'+rootHTML('81')+'</span> = ؟', options:['9','8','7'], correct:0, exp:'9 × 9 = 81 ، إذن '+rootHTML('81')+' = 9 ✦'},
+   {type:'choice', prompt:'في مسائل الأطوال، أيّ جذر نأخذ؟', options:['الموجب فقط','السالب فقط','الاثنين معًا'], correct:0, exp:'الطول لا يكون سالبًا ← الموجب فقط ✦'},
+   {type:'choice', prompt:'قاعدة هرم مربعة مساحتها 50625 m². طول ضلعها = ؟', options:['225 m','325 m','450 m'], correct:0, exp:rootHTML('50625')+' = 225 m ✦'},
+   {type:'choice', prompt:'صورة مربعة مساحتها 3136 cm². طول ضلعها = ؟', options:['54 cm','56 cm','58 cm'], correct:1, exp:rootHTML('3136')+' = 56 cm ✦'},
+   {type:'choice', prompt:'غرفة بُلّطت بـ 225 بلاطة مربعة. عدد البلاطات على الضلع = ؟', options:['15','25','45'], correct:0, exp:rootHTML('225')+' = 15 ✦'},
+   {type:'choice', prompt:'مسبح مربع ضلعه 13m حوله ممر 1m. محيط الممر الخارجي = ؟', options:['52 m','60 m','68 m'], correct:1, exp:'الضلع الخارجي 15m ← المحيط 4×15 = 60 m ✦'},
+ ]},
+];
+
+/* ============================ التنقّل ============================ */
+const screen=document.getElementById('screen');
+function setView(html){ screen.innerHTML=`<div class="view">${html}</div>`; }
+
+function titleScreen(){
+  setView(`
+    <div style="text-align:center;margin-top:10px">${mascot()}</div>
+    <h1 class="title">ورشة المهندس</h1>
+    <div class="sub">الجذر التربيعي في الحياة 🏗️📐</div>
+    <div class="bubble" style="margin:14px 0">نبدأ من <b>الصفر</b>: ما المربّع؟ وما الجذر التربيعي؟ ثم نحلّ ألغازًا حقيقية — <b>أهرامات</b> و<b>براويز</b> و<b>أرضيات</b> و<b>مسابح</b>! 🏗️</div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="startBtn">🚀 ابدأ العمل</button>
+      ${State.maxUnlocked>0?'<button class="btn ghost" id="resetBtn">🔄 إعادة من البداية</button>':''}
+    </div>`);
+  document.getElementById('startBtn').onclick=()=>{ac(); sLevel(); mapScreen();};
+  const r=document.getElementById('resetBtn');
+  if(r) r.onclick=()=>{ State.xp=0;State.gems=0;State.stars=0;State.maxUnlocked=0;State.levelStars={}; save(); setHUD(); titleScreen(); };
+}
+
+function mapScreen(){
+  let html=`<h1 class="title" style="font-size:24px">🗺️ مشاريع الورشة</h1><div class="path">`;
+  LEVELS.forEach((lv,i)=>{
+    const done=i<State.maxUnlocked, cur=i===State.maxUnlocked, locked=i>State.maxUnlocked;
+    const off=[0,40,-40,55,-55,0][i%6];
+    const cls=lv.boss?'boss':(done?'done':(cur?'cur':'locked'));
+    const st=State.levelStars[i]||0;
+    const starsHtml=done?`<div class="stars">${'⭐'.repeat(st)||'⭐'}</div>`:'';
+    html+=`<div class="nodeoff" style="--off:${off}px">
+      <div class="node ${cls}" data-i="${i}">${locked&&!lv.boss?'🔒':lv.icon}${starsHtml}
+        <span class="nm">${i+1}. ${lv.name}</span></div></div>`;
+    if(i<LEVELS.length-1) html+=`<div class="connector ${done?'done':''}"></div>`;
+  });
+  html+=`</div><div style="height:30px"></div>`;
+  setView(html);
+  screen.querySelectorAll('.node').forEach(n=>{
+    const i=+n.dataset.i;
+    if(i<=State.maxUnlocked) n.onclick=()=>{ sTap(); startLevel(i); };
+  });
+}
+
+let cur={level:0, step:0, perfect:true, wrongHere:false};
+function startLevel(i){ cur={level:i, step:0, perfect:true, wrongHere:false}; renderStep(); }
+function renderStep(){
+  const lv=LEVELS[cur.level]; const st=lv.steps[cur.step];
+  if(!st){ return finishLevel(); }
+  if(st.type==='story') return renderStory(st,lv);
+  if(st.type==='solve') return renderSolve(st,lv);
+  if(st.type==='choice') return renderChoice(st,lv);
+}
+function progressTop(lv){
+  const pct=Math.round((cur.step)/lv.steps.length*100);
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <button class="opt" style="padding:8px 12px;font-size:18px;box-shadow:none;border-width:2px;width:auto" id="backMap">✕</button>
+    <div style="flex:1;height:12px;background:#ffe3bd;border-radius:999px;overflow:hidden">
+      <div style="height:100%;width:${pct}%;background:linear-gradient(90deg,#f59e0b,#d97706);border-radius:999px;transition:width .4s"></div></div>
+    <div style="font-weight:900;color:#d97706">${cur.step+1}/${lv.steps.length}</div></div>`;
+}
+function bindBack(){ const b=document.getElementById('backMap'); if(b)b.onclick=()=>{sTap();mapScreen();}; }
+
+function renderStory(st,lv){
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px">${mascot('small')}
+      <div class="bubble" style="flex:1">${st.say}</div></div>
+    ${st.diagram||''}
+    <div style="margin-top:auto"><button class="btn" id="next">متابعة ⟵</button></div>`);
+  bindBack();
+  document.getElementById('next').onclick=()=>{ sTap(); cur.step++; renderStep(); };
+}
+
+function renderSolve(st,lv){
+  setView(`${progressTop(lv)}
+    <div class="hint">🔧 ${st.title}</div>
+    <div class="steps">
+      ${st.rows.map((r,i)=>`<div class="steprow"><div class="stepno">${i+1}</div><div>${r}</div></div>`).join('')}
+    </div>
+    <div style="margin-top:auto"><button class="btn" id="next">فهمت، تابع ⟵</button></div>`);
+  bindBack();
+  document.getElementById('next').onclick=()=>{ sTap(); cur.step++; renderStep(); };
+}
+
+function renderChoice(st,lv){
+  setView(`${progressTop(lv)}
+    <div style="display:flex;gap:10px;align-items:flex-end;margin:8px 0 4px">${mascot('small')}
+      <div class="bubble" style="flex:1"><div class="prompt" style="margin:0;font-size:20px">${st.prompt}</div></div></div>
+    ${st.diagram||st.visual||''}
+    <div class="opts" id="opts">
+      ${st.options.map((o,i)=>`<button class="opt" data-i="${i}">${o}</button>`).join('')}
+    </div>`);
+  bindBack();
+  cur.wrongHere=false;
+  screen.querySelectorAll('.opt').forEach(b=>{
+    b.onclick=()=>{
+      const i=+b.dataset.i;
+      if(i===st.correct){
+        b.classList.add('good'); sGood(); confetti(22);
+        screen.querySelectorAll('.opt').forEach(x=>{x.style.pointerEvents='none'; if(x!==b)x.classList.add('dim');});
+        const reward=cur.wrongHere?5:15; addXP(reward); showFB(true, st.exp, reward);
+      } else {
+        b.classList.add('bad'); sBad(); b.classList.add('dim'); b.style.pointerEvents='none';
+        cur.wrongHere=true; cur.perfect=false;
+      }
+    };
+  });
+}
+
+const fb=document.getElementById('fb');
+function showFB(good, exp, reward){
+  fb.className=good?'show win':'show lose';
+  document.getElementById('fbttl').innerHTML=good?`✅ صحيح! <span style="color:#16a34a">+${reward} XP</span>`:'حاول مجددًا';
+  document.getElementById('fbexp').innerHTML=exp||'';
+  const btn=document.getElementById('fbbtn'); btn.textContent='متابعة ⟵';
+  btn.onclick=()=>{ sTap(); fb.className=''; cur.step++; renderStep(); };
+}
+
+function finishLevel(){
+  const lv=LEVELS[cur.level];
+  const earnedStars=cur.perfect?3:2;
+  State.levelStars[cur.level]=Math.max(State.levelStars[cur.level]||0, earnedStars);
+  State.stars+= earnedStars; State.gems+=10;
+  if(cur.level+1>State.maxUnlocked) State.maxUnlocked=cur.level+1;
+  setHUD(); save(); sLevel(); confetti(40);
+  if(lv.boss && cur.level===LEVELS.length-1){ return winScreen(); }
+  setView(`
+    <div style="text-align:center;margin-top:24px">${mascot()}</div>
+    <h1 class="title">🎉 اكتمل المشروع!</h1>
+    <div class="card" style="text-align:center;margin-top:14px">
+      <div style="font-size:40px">${'⭐'.repeat(earnedStars)}</div>
+      <div style="font-weight:900;font-size:22px;color:#d97706;margin-top:8px">${lv.name}</div>
+      <div style="margin-top:10px;font-weight:700;color:#8a6a3a">💎 +10 جوهرة &nbsp;|&nbsp; ⭐ +${earnedStars} نجوم</div>
+    </div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="cont">المشروع التالي ⟵</button>
+      <button class="btn ghost" id="map">🗺️ المشاريع</button>
+    </div>`);
+  document.getElementById('cont').onclick=()=>{ sTap(); if(cur.level+1<LEVELS.length) startLevel(cur.level+1); else mapScreen(); };
+  document.getElementById('map').onclick=()=>{ sTap(); mapScreen(); };
+}
+
+function winScreen(){
+  sWin(); confetti(80);
+  setView(`
+    <div class="badge">🏆</div>
+    <div class="cert">
+      <div class="big">🏗️</div>
+      <h2>شهادة مهندس مملكة المربعات</h2>
+      <div style="font-weight:700;color:#7a5a10;line-height:1.9">
+        أتقنت <b>تطبيقات الجذر التربيعي</b> في الحياة:<br>
+        المساحة = الضلع² ✦ نأخذ الجذر الموجب للأطوال ✦ الأهرامات والبراويز والأرضيات والمسابح
+      </div>
+      <div style="margin-top:14px;font-weight:900;color:#b45309;font-size:20px">⭐ ${State.stars} نجمة &nbsp; | &nbsp; 💎 ${State.gems} جوهرة</div>
+    </div>
+    <div style="margin-top:auto;display:grid;gap:12px">
+      <button class="btn gold" id="again">🗺️ العودة للمشاريع</button>
+    </div>`);
+  document.getElementById('again').onclick=()=>{ sTap(); mapScreen(); };
+}
+
+/* ============================ التشغيل ============================ */
+document.getElementById('soundBtn').onclick=function(){ soundOn=!soundOn; this.textContent=soundOn?'🔊':'🔇'; if(soundOn)sTap(); };
+(function bg(){ const host=document.getElementById('bgsym'); const sy=['√','📐','m²','🧱','x','225','13','m'];
+  for(let i=0;i<14;i++){ const s=document.createElement('span'); s.textContent=sy[i%sy.length];
+    s.style.left=Math.random()*100+'vw'; s.style.fontSize=(20+Math.random()*40)+'px';
+    s.style.animationDuration=(8+Math.random()*10)+'s'; s.style.animationDelay=(-Math.random()*10)+'s'; host.appendChild(s);} })();
+setHUD();
+titleScreen();
+</script>
+</body>
+</html>
