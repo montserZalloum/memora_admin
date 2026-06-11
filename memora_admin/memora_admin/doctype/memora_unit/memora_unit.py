@@ -4,6 +4,8 @@
 import frappe
 from frappe.model.document import Document
 
+from memora_admin.utils.search_filters import extract_in_list
+
 
 class MemoraUnit(Document):
 	def autoname(self):
@@ -44,11 +46,30 @@ class MemoraUnit(Document):
 def unit_query(doctype, txt, searchfield, start, page_len, filters):
 	"""Default link search: shows track, subject, grades, and majors alongside the unit."""
 	conditions = []
+	params = {"txt": f"%{txt}%", "page_len": page_len, "start": start}
+
 	if txt:
 		conditions.append(
 			"(u.name LIKE %(txt)s OR u.unit_title LIKE %(txt)s"
 			" OR t.track_title LIKE %(txt)s OR sub.subject_title LIKE %(txt)s)"
 		)
+
+	# Restrict to units whose subject is in a given set (e.g. an Academic Plan or a
+	# selected Subject).
+	allowed_subjects = extract_in_list(filters, "subject")
+	if allowed_subjects is not None:
+		if not allowed_subjects:
+			return []
+		conditions.append("u.subject IN %(allowed_subjects)s")
+		params["allowed_subjects"] = tuple(allowed_subjects)
+
+	# Restrict to units of a selected Track.
+	allowed_tracks = extract_in_list(filters, "track")
+	if allowed_tracks is not None:
+		if not allowed_tracks:
+			return []
+		conditions.append("u.track IN %(allowed_tracks)s")
+		params["allowed_tracks"] = tuple(allowed_tracks)
 
 	where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -69,5 +90,5 @@ def unit_query(doctype, txt, searchfield, start, page_len, filters):
 		ORDER BY u.unit_title
 		LIMIT %(page_len)s OFFSET %(start)s
 		""",
-		{"txt": f"%{txt}%", "page_len": page_len, "start": start},
+		params,
 	)

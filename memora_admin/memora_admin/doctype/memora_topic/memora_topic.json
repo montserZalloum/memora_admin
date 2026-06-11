@@ -82,6 +82,7 @@
   {
    "fieldname": "track",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Track",
    "options": "Memora Track",
    "read_only": 1,
@@ -90,6 +91,7 @@
   {
    "fieldname": "subject",
    "fieldtype": "Link",
+   "in_standard_filter": 1,
    "label": "Subject",
    "options": "Memora Subject",
    "read_only": 1,

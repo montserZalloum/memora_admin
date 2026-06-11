@@ -4,6 +4,8 @@
 import frappe
 from frappe.model.document import Document
 
+from memora_admin.utils.search_filters import extract_in_list
+
 
 class MemoraTrack(Document):
 	def autoname(self):
@@ -42,10 +44,20 @@ class MemoraTrack(Document):
 def track_query(doctype, txt, searchfield, start, page_len, filters):
 	"""Default link search: shows subject title alongside the track."""
 	conditions = []
+	params = {"txt": f"%{txt}%", "page_len": page_len, "start": start}
+
 	if txt:
 		conditions.append(
 			"(t.name LIKE %(txt)s OR t.track_title LIKE %(txt)s OR sub.subject_title LIKE %(txt)s)"
 		)
+
+	# Restrict to tracks whose subject is in a given set (e.g. an Academic Plan).
+	allowed = extract_in_list(filters, "subject")
+	if allowed is not None:
+		if not allowed:
+			return []
+		conditions.append("t.subject IN %(allowed_subjects)s")
+		params["allowed_subjects"] = tuple(allowed)
 
 	where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -65,7 +77,7 @@ def track_query(doctype, txt, searchfield, start, page_len, filters):
 		ORDER BY t.track_title
 		LIMIT %(page_len)s OFFSET %(start)s
 		""",
-		{"txt": f"%{txt}%", "page_len": page_len, "start": start},
+		params,
 	)
 
 

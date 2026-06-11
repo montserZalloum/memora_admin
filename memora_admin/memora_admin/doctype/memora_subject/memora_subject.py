@@ -4,6 +4,8 @@
 import frappe
 from frappe.model.document import Document
 
+from memora_admin.utils.search_filters import extract_in_list
+
 
 class MemoraSubject(Document):
 	def autoname(self):
@@ -19,8 +21,18 @@ class MemoraSubject(Document):
 def subject_query(doctype, txt, searchfield, start, page_len, filters):
 	"""Default link search: shows aggregated grades and majors alongside the subject."""
 	conditions = []
+	params = {"txt": f"%{txt}%", "page_len": page_len, "start": start}
+
 	if txt:
 		conditions.append("(sub.name LIKE %(txt)s OR sub.subject_title LIKE %(txt)s)")
+
+	# Restrict to a given set of subjects (e.g. an Academic Plan's subjects).
+	allowed = extract_in_list(filters, "name")
+	if allowed is not None:
+		if not allowed:
+			return []
+		conditions.append("sub.name IN %(allowed_subjects)s")
+		params["allowed_subjects"] = tuple(allowed)
 
 	where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
 
@@ -39,7 +51,7 @@ def subject_query(doctype, txt, searchfield, start, page_len, filters):
 		ORDER BY sub.subject_title
 		LIMIT %(page_len)s OFFSET %(start)s
 		""",
-		{"txt": f"%{txt}%", "page_len": page_len, "start": start},
+		params,
 	)
 
 

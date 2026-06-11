@@ -91,6 +91,25 @@ def save_lesson_order(topic, ordered_lessons):
 
 
 @frappe.whitelist()
+def get_plan_subjects(plan):
+	"""Return the subject IDs contained in an Academic Plan.
+
+	Used by the Topic list view's "Academic Plan" filter to translate a plan
+	selection into a `subject IN (...)` filter (Topic has no plan field).
+	"""
+	if not plan:
+		return []
+
+	frappe.has_permission("Memora Academic Plan", "read", throw=True)
+
+	return frappe.get_all(
+		"Memora Plan Subject",
+		filters={"parent": plan, "parenttype": "Memora Academic Plan"},
+		pluck="subject",
+	)
+
+
+@frappe.whitelist()
 @frappe.validate_and_sanitize_search_inputs
 def topic_query(doctype, txt, searchfield, start, page_len, filters):
 	"""Default link search: shows unit, track, subject, grades, and majors alongside the topic."""
