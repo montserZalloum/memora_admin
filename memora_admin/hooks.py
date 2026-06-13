@@ -156,6 +156,10 @@ fixtures = [
 # 	"ToDo": "custom_app.overrides.CustomToDo"
 # }
 
+override_doctype_class = {
+	"Email Account": "memora_admin.overrides.email_account.MemoraEmailAccount"
+}
+
 # Document Events
 # ---------------
 # Hook on document methods and events

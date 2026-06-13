@@ -50,10 +50,6 @@ function open_lesson_reorder_dialog(frm) {
 		freeze_message: __("Loading lessons..."),
 		callback(r) {
 			const lessons = r.message || [];
-			if (!lessons.length) {
-				frappe.msgprint(__("This topic has no lessons yet."));
-				return;
-			}
 			render_reorder_dialog(frm, lessons);
 		},
 	});
@@ -111,20 +107,24 @@ function render_reorder_dialog(frm, lessons) {
 }
 
 function build_reorder_html(lessons) {
-	const rows = lessons
-		.map((l) => {
-			const published = l.is_published
-				? ""
-				: ` <span class="text-muted">(${frappe.utils.escape_html(__("Unpublished"))})</span>`;
-			const title = frappe.utils.escape_html(l.lesson_title || l.name);
-			return `
-			<div class="reorder-item" data-lesson="${frappe.utils.escape_html(l.name)}">
-				<span class="reorder-handle" title="${__("Drag to reorder")}">&#x2630;</span>
-				<span class="reorder-title">${title}${published}</span>
-				<button type="button" class="btn btn-xs btn-default reorder-open">${__("Open")}</button>
-			</div>`;
-		})
-		.join("");
+	const rows = lessons.length
+		? lessons
+				.map((l) => {
+					const published = l.is_published
+						? ""
+						: ` <span class="text-muted">(${frappe.utils.escape_html(__("Unpublished"))})</span>`;
+					const title = frappe.utils.escape_html(l.lesson_title || l.name);
+					return `
+				<div class="reorder-item" data-lesson="${frappe.utils.escape_html(l.name)}">
+					<span class="reorder-handle" title="${__("Drag to reorder")}">&#x2630;</span>
+					<span class="reorder-title">${title}${published}</span>
+					<button type="button" class="btn btn-xs btn-default reorder-open">${__("Open")}</button>
+				</div>`;
+				})
+				.join("")
+		: `<div class="reorder-empty text-muted">${__(
+				"This topic has no lessons yet. Click \"Add New Lesson\" to create one."
+			)}</div>`;
 
 	return `
 		<div class="reorder-toolbar">
@@ -147,6 +147,10 @@ function build_reorder_html(lessons) {
 			.reorder-handle { cursor: grab; color: var(--text-muted); display: flex; }
 			.reorder-title { flex: 1; }
 			.reorder-ghost { opacity: 0.4; }
+			.reorder-empty {
+				padding: 16px; text-align: center;
+				border: 1px dashed var(--border-color); border-radius: var(--border-radius);
+			}
 		</style>`;
 }
 

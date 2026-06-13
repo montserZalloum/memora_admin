@@ -54,7 +54,9 @@ def get_topic_lessons(topic):
 		"Memora Lesson",
 		filters={"topic": topic},
 		fields=["name", "lesson_title", "sort_order", "is_published"],
-		order_by="sort_order asc, lesson_title asc",
+		# Tiebreaker must match the CDN build (plan_generator.py) so the reorder
+		# dialog shows the same order students see when sort_order values are tied.
+		order_by="sort_order asc, name asc",
 	)
 
 
