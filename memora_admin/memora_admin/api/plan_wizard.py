@@ -7,10 +7,21 @@ Backs the `plan_subject_wizard` desk page:
 Read-only endpoints; restricted to admin-style roles.
 """
 
+import json
+
 import frappe
 from frappe import _
 
 _ALLOWED_ROLES = {"System Manager", "Memora Admin", "Task Admin"}
+
+# Levels reordered via their own `sort_order` field, keyed by the wizard level.
+# Value is (doctype, parent_field) — mirrors the topic→lesson reorder dialog.
+_ORDER_LEVELS = {
+	"track": ("Memora Track", "subject"),
+	"unit": ("Memora Unit", "track"),
+	"topic": ("Memora Topic", "unit"),
+	"lesson": ("Memora Lesson", "topic"),
+}
 
 
 def _check_access() -> None:
@@ -180,3 +191,63 @@ def get_topic_lessons(topic_id: str) -> list[dict]:
 		"lesson_title",
 		["max_hearts", "bit_index", "is_reviewable"],
 	)
+
+
+@frappe.whitelist()
+def save_order(level: str, parent_id: str, ordered_ids: str) -> dict:
+	"""Persist a new ordering for one hierarchy level.
+
+	`ordered_ids` is a JSON list of record ids in the desired order:
+	  - track/unit/topic/lesson → each record's `sort_order` is rewritten to its
+	    1-based position (same mechanism as the topic→lesson reorder dialog).
+	  - subject → the plan's child rows are reordered via their `idx` (raw, so
+	    it bypasses plan validation such as the ended-season guard).
+	"""
+	_check_access()
+
+	if isinstance(ordered_ids, str):
+		ordered_ids = json.loads(ordered_ids)
+	ordered = list(dict.fromkeys(ordered_ids))  # de-dupe, preserve order
+
+	if level == "subject":
+		return _save_subject_order(parent_id, ordered)
+
+	if level not in _ORDER_LEVELS:
+		frappe.throw(_("Unknown level: {0}").format(level))
+
+	doctype, parent_field = _ORDER_LEVELS[level]
+	frappe.has_permission(doctype, "write", throw=True)
+
+	# Guard against tampering: every id must belong to this parent.
+	valid = set(frappe.get_all(doctype, filters={parent_field: parent_id}, pluck="name"))
+	unknown = [n for n in ordered if n not in valid]
+	if unknown:
+		frappe.throw(_("Some items do not belong here: {0}").format(", ".join(unknown)))
+
+	for position, name in enumerate(ordered, start=1):
+		frappe.db.set_value(doctype, name, "sort_order", position, update_modified=False)
+
+	return {"updated": len(ordered)}
+
+
+def _save_subject_order(plan_id: str, ordered_subject_ids: list[str]) -> dict:
+	"""Reorder a plan's subject child rows by rewriting their `idx`."""
+	frappe.has_permission("Memora Academic Plan", "write", throw=True)
+
+	rows = frappe.get_all(
+		"Memora Plan Subject",
+		filters={"parent": plan_id, "parenttype": "Memora Academic Plan"},
+		fields=["name", "subject"],
+	)
+	by_subject = {r.subject: r.name for r in rows}
+
+	unknown = [s for s in ordered_subject_ids if s not in by_subject]
+	if unknown:
+		frappe.throw(_("Some subjects do not belong to this plan: {0}").format(", ".join(unknown)))
+
+	for position, subject_id in enumerate(ordered_subject_ids, start=1):
+		frappe.db.set_value(
+			"Memora Plan Subject", by_subject[subject_id], "idx", position, update_modified=False
+		)
+
+	return {"updated": len(ordered_subject_ids)}

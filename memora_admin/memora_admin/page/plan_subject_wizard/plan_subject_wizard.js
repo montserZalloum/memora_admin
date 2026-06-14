@@ -56,6 +56,21 @@ const ADD_CONFIG = {
 	6: { doctype: "Memora Lesson", defaults: (s) => ({ subject: s.subject.subject, track: s.track.name, unit: s.unit.name, topic: s.topic.name }) },
 };
 
+// Steps whose items can be reordered (drag). Plans (step 1) have no order.
+const SORTABLE = new Set([2, 3, 4, 5, 6]);
+
+// Resolve, for a sortable step, the save_order `level`, the parent id to scope
+// the save, the state collection holding the items, and which field is the
+// record id (subjects are keyed by `subject`, the rest by `name`).
+function level_info(page, step) {
+	if (step === 2) {
+		return { level: "subject", parentId: page.state.plan.name, coll: "subjects", idField: "subject", label: "Subject" };
+	}
+	const cfg = DRILL[step];
+	if (!cfg) return null;
+	return { level: cfg.key, parentId: cfg.parentId(page.state), coll: cfg.coll, idField: "name", label: cfg.label };
+}
+
 // Single cached page instance, so on_page_show can refresh after the admin
 // returns from an add/edit form.
 let _page = null;
@@ -108,6 +123,7 @@ function refresh_current_step(page) {
 function reset_state(page) {
 	page.state = {
 		step: 1,
+		sortMode: false, // reorder (drag) mode for the current step
 		// selections
 		plan: null,
 		subject: null,
@@ -181,11 +197,13 @@ function go_to_step(page, step) {
 		}
 	}
 	page.state.step = step;
+	page.state.sortMode = false;
 	refresh_current_step(page);
 }
 
 function select_item(page, cfg, item) {
 	page.state[cfg.key] = item;
+	page.state.sortMode = false;
 	if (cfg.next) {
 		page.state.step = cfg.next;
 		load_level(page, cfg.next);
@@ -220,12 +238,15 @@ function open_add(page, step) {
 
 function render(page) {
 	let body = "";
-	if (page.state.step === 1) {
+	const step = page.state.step;
+	if (page.state.sortMode && SORTABLE.has(step)) {
+		body = render_sort_mode(page, step);
+	} else if (step === 1) {
 		body = render_step_plans(page);
-	} else if (page.state.step === 2) {
+	} else if (step === 2) {
 		body = render_step_subjects(page);
 	} else {
-		body = render_drill(page, page.state.step);
+		body = render_drill(page, step);
 	}
 
 	page.main.html(`
@@ -284,7 +305,7 @@ function render_step_plans(page) {
 			(p) => `
 		<tr class="select-plan wiz-item" data-plan="${frappe.utils.escape_html(p.name)}"
 			${search_attr(p.plan_name, p.name, p.grade_title, p.major_title, p.season_title)} style="cursor:pointer;">
-			<td>${frappe.utils.escape_html(p.plan_name || p.name)}</td>
+			<td>${frappe.utils.escape_html(p.plan_name || p.name)}${id_line(p.name)}</td>
 			<td>${frappe.utils.escape_html(p.grade_title || "-")}</td>
 			<td>${frappe.utils.escape_html(p.major_title || "-")}</td>
 			<td>${frappe.utils.escape_html(p.season_title || "-")}</td>
@@ -327,6 +348,7 @@ function render_step_subjects(page) {
 						<h6 class="mb-1">${frappe.utils.escape_html(s.title || s.subject)}</h6>
 						${edit_button(2, s.subject)}
 					</div>
+					${id_line(s.subject)}
 					<div class="d-flex flex-wrap gap-1 mt-2">
 						${pill(s.is_premium ? "orange" : "blue", s.is_premium ? "Premium" : "Free")}
 						${pill(s.is_published ? "green" : "gray", s.is_published ? "Published" : "Draft")}
@@ -341,7 +363,7 @@ function render_step_subjects(page) {
 	return `
 		<div class="frappe-card">
 			<div class="card-body">
-				${header_row("Step 2 — Choose a Subject", add_button(2, "Subject to Plan"), 1)}
+				${header_row("Step 2 — Choose a Subject", step_actions(2, "Subject to Plan"), 1)}
 				${search_box("Search subjects...")}
 				<div class="row mt-3">
 					${cards || `<div class="col-12"><p class="text-muted text-center">This plan has no subjects.</p></div>`}
@@ -360,7 +382,7 @@ function render_drill(page, step) {
 	return `
 		<div class="frappe-card">
 			<div class="card-body">
-				${header_row(`Step ${step} — Choose a ${cfg.label}`, add_button(step, cfg.label), step - 1)}
+				${header_row(`Step ${step} — Choose a ${cfg.label}`, step_actions(step, cfg.label), step - 1)}
 				${search_box(`Search ${cfg.label.toLowerCase()}s...`)}
 				<div class="row mt-3">
 					${cards || `<div class="col-12"><p class="text-muted text-center">No ${cfg.label.toLowerCase()}s here.</p></div>`}
@@ -385,8 +407,56 @@ function render_drill_card(it, step) {
 						<h6 class="mb-1">${frappe.utils.escape_html(it.title || it.name)}</h6>
 						${edit_button(step, it.name)}
 					</div>
+					${id_line(it.name)}
 					<div class="d-flex flex-wrap gap-1 mt-2">${badges.join("")}</div>
 				</div>
+			</div>
+		</div>
+	`;
+}
+
+// Drag-to-reorder list for the current step (toggled via the Sort button).
+function render_sort_mode(page, step) {
+	const info = level_info(page, step);
+	const items = page.state[info.coll] || [];
+
+	const rows = items
+		.map((it) => {
+			const id = it[info.idField];
+			const title = it.title || id;
+			return `
+		<div class="wiz-sort-item" data-id="${frappe.utils.escape_html(id)}">
+			<span class="wiz-sort-handle" title="Drag to reorder">&#x2630;</span>
+			<span class="wiz-sort-title">${frappe.utils.escape_html(title)}</span>
+			<span class="text-muted small">${frappe.utils.escape_html(id)}</span>
+		</div>`;
+		})
+		.join("");
+
+	const actions = `<div class="d-flex gap-1">
+		<button class="btn btn-xs btn-default wiz-sort-cancel">Cancel</button>
+		<button class="btn btn-xs btn-primary wiz-sort-save">Save order</button>
+	</div>`;
+
+	return `
+		<div class="frappe-card">
+			<div class="card-body">
+				${header_row(`Step ${step} — Reorder ${info.label}s`, actions)}
+				<p class="text-muted">Drag the items by the handle to change their order, then click <b>Save order</b>.</p>
+				<div class="wiz-sort-list">
+					${rows || `<p class="text-muted text-center">Nothing to reorder here.</p>`}
+				</div>
+				<style>
+					.wiz-sort-list { display: flex; flex-direction: column; gap: 6px; }
+					.wiz-sort-item {
+						display: flex; align-items: center; gap: 10px;
+						padding: 8px 10px; border: 1px solid var(--border-color);
+						border-radius: var(--border-radius); background: var(--card-bg);
+					}
+					.wiz-sort-handle { cursor: grab; color: var(--text-muted); }
+					.wiz-sort-title { flex: 1; }
+					.wiz-sort-ghost { opacity: 0.4; }
+				</style>
 			</div>
 		</div>
 	`;
@@ -400,6 +470,22 @@ function pill(color, text) {
 function add_button(step, label) {
 	return `<button class="btn btn-xs btn-default wiz-add" data-step="${step}">
 		<i class="fa fa-plus"></i> Add ${frappe.utils.escape_html(label)}</button>`;
+}
+
+// "Sort" toggle button shown beside Add (enters drag-reorder mode).
+function sort_button(step) {
+	return `<button class="btn btn-xs btn-default wiz-sort-toggle mx-1" data-step="${step}" title="Reorder">
+		<i class="fa fa-sort"></i> Sort</button>`;
+}
+
+// Sort + Add buttons grouped in one wrapper for a step header.
+function step_actions(step, add_label) {
+	return `<div class="d-flex gap-1">${sort_button(step)}${add_button(step, add_label)}</div>`;
+}
+
+// Muted record-id line shown inside each card/row.
+function id_line(id) {
+	return `<div class="text-muted small wiz-id">${frappe.utils.escape_html(id)}</div>`;
 }
 
 // Pencil "Edit" button shown on a card/row.
@@ -481,6 +567,28 @@ function bind_events(page) {
 		page.main.find(".wiz-empty").toggle(visible === 0);
 	});
 
+	// Reorder (drag) mode: wire the sortable list + save/cancel and stop here.
+	if (page.state.sortMode && SORTABLE.has(page.state.step)) {
+		const listEl = page.main.find(".wiz-sort-list")[0];
+		if (listEl && typeof Sortable !== "undefined") {
+			new Sortable(listEl, { handle: ".wiz-sort-handle", animation: 150, ghostClass: "wiz-sort-ghost" });
+		}
+		page.main.find(".wiz-sort-cancel").on("click", function () {
+			page.state.sortMode = false;
+			render(page);
+		});
+		page.main.find(".wiz-sort-save").on("click", function () {
+			save_order(page);
+		});
+		return;
+	}
+
+	// Enter reorder mode (Sort button, present on sortable steps).
+	page.main.find(".wiz-sort-toggle").on("click", function () {
+		page.state.sortMode = true;
+		render(page);
+	});
+
 	if (page.state.step === 1) {
 		page.main.find(".select-plan").on("click", function () {
 			const planName = $(this).data("plan");
@@ -508,4 +616,25 @@ function bind_events(page) {
 function on_lesson_selected(page) {
 	// Leaf reached — open the selected lesson's form.
 	frappe.set_route("Form", "Memora Lesson", page.state.lesson.name);
+}
+
+// Persist the dragged order of the current step, then reload it in that order.
+function save_order(page) {
+	const info = level_info(page, page.state.step);
+	const ordered = page.main
+		.find(".wiz-sort-item")
+		.map((i, el) => $(el).attr("data-id"))
+		.get();
+
+	frappe.call({
+		method: API + "save_order",
+		args: { level: info.level, parent_id: info.parentId, ordered_ids: JSON.stringify(ordered) },
+		freeze: true,
+		freeze_message: "Saving order...",
+		callback: function () {
+			frappe.show_alert({ message: "Order saved.", indicator: "green" }, 4);
+			page.state.sortMode = false;
+			refresh_current_step(page);
+		},
+	});
 }
