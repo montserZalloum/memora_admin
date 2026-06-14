@@ -69,7 +69,7 @@
    "label": "Base XP"
   },
   {
-   "default": "7",
+   "default": "0",
    "description": "If set to 0, falls back to Default Max Hearts from Memora Settings",
    "fieldname": "max_hearts",
    "fieldtype": "Int",

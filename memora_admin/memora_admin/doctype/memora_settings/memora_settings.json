@@ -32,7 +32,9 @@
   "vapid_public_key",
   "vapid_contact_email",
   "column_break_push",
-  "vapid_private_key"
+  "vapid_private_key",
+  "analytics_section",
+  "live_sync_enabled"
  ],
  "fields": [
   {
@@ -190,6 +192,18 @@
    "fieldname": "vapid_private_key",
    "fieldtype": "Password",
    "label": "VAPID Private Key"
+  },
+  {
+   "fieldname": "analytics_section",
+   "fieldtype": "Section Break",
+   "label": "Analytics Sync"
+  },
+  {
+   "default": "1",
+   "description": "When enabled, daily and manual live sync jobs export analytics to the analytics server. Uncheck to stop sending analytics (also suppresses the live sync freshness health alert).",
+   "fieldname": "live_sync_enabled",
+   "fieldtype": "Check",
+   "label": "Live Analytics Sync Enabled"
   }
  ],
  "grid_page_length": 50,

@@ -23,12 +23,31 @@ _SCHEMA_REGISTRY_PATH = os.path.join(
 MANUAL_SYNC_COOLDOWN = 900  # 15 minutes
 
 
+def is_live_sync_enabled() -> bool:
+	"""Whether live analytics sync to the analytics server is enabled.
+
+	Reads the `live_sync_enabled` checkbox from Memora Settings. Defaults to
+	True when the value has never been persisted (e.g. Settings not saved since
+	the field was added), preserving pre-toggle behavior.
+	"""
+	value = frappe.db.get_single_value("Memora Settings", "live_sync_enabled")
+	if value is None:
+		return True
+	return bool(value)
+
+
 def trigger_daily_live_sync():
 	"""Load sync_types/ YAMLs and create Pending live sync jobs.
 
 	Skips if a Pending/Processing/Exported/Transferred/Ingested job already
 	exists for the same sync_type (prevents duplicate runs).
+
+	No-op if live analytics sync is disabled in Memora Settings.
 	"""
+	if not is_live_sync_enabled():
+		frappe.logger().info("Live sync trigger: Live analytics sync is disabled in Memora Settings")
+		return
+
 	sync_types = _load_sync_types(_SCHEMA_REGISTRY_PATH)
 	if not sync_types:
 		frappe.logger().info("Live sync trigger: No sync type YAMLs found")
@@ -88,6 +107,12 @@ def trigger_manual_sync():
 	Returns error if cooldown not elapsed, otherwise creates Pending job(s).
 	"""
 	frappe.only_for("System Manager")
+
+	if not is_live_sync_enabled():
+		frappe.throw(
+			"Live analytics sync is disabled in Memora Settings.",
+			frappe.ValidationError,
+		)
 
 	# Check cooldown: last completed job within 15 minutes
 	last_completed = frappe.get_all(

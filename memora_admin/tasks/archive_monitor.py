@@ -37,8 +37,17 @@ def check_archive_health():
 
 
 def _check_live_sync_freshness() -> list[dict]:
-	"""Alert if latest completed live sync is older than 24h or none exist."""
+	"""Alert if latest completed live sync is older than 24h or none exist.
+
+	Skipped entirely when live analytics sync is disabled in Memora Settings —
+	a stale/missing sync is expected in that case, not a fault.
+	"""
 	alerts = []
+
+	from memora_admin.tasks.live_sync_trigger import is_live_sync_enabled
+
+	if not is_live_sync_enabled():
+		return alerts
 
 	latest = frappe.db.sql(
 		"""
