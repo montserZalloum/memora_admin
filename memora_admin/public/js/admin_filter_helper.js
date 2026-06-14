@@ -461,6 +461,20 @@ window.MemoraAdminFilter = (function () {
 
 		frm._admin_filter_control = control;
 
+		// The Admin Filter is the first <input> in the form, so Frappe's
+		// "focus first input" (fired on form load, e.g. new docs) lands on it.
+		// Suppress that programmatic autofocus, but still honour a real click.
+		const $af_input = control.$input;
+		if ($af_input && $af_input.length) {
+			let user_initiated = false;
+			$af_input.on("pointerdown.memora_af mousedown.memora_af", function () {
+				user_initiated = true;
+			});
+			$af_input.on("focus.memora_af", function () {
+				if (!user_initiated) $af_input.trigger("blur");
+			});
+		}
+
 		// Restore from localStorage
 		let saved = _load_storage()[frm.doctype];
 		if (saved) {
