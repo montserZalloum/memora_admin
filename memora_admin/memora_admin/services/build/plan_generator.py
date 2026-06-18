@@ -233,6 +233,11 @@ def _update_plan_subject_metadata(plan_id: str, subject_id: str, free_content: d
 			if plan_subject.subject == subject_id:
 				# Update meta_data field with free content index
 				plan_subject.meta_data = json.dumps(free_content)
+				# This save runs inside the build pipeline itself. Flag it so
+				# on_plan_updated does NOT queue another build — otherwise each
+				# build re-triggers itself, creating a self-perpetuating loop
+				# (one build per minute, forever).
+				plan_doc.flags.ignore_build_trigger = True
 				plan_doc.save()
 				return
 	except Exception as e:
@@ -606,21 +611,27 @@ def _get_skippable_stage_types() -> set[str]:
 
 
 def _strip_item_ids(config: dict) -> None:
-	"""Remove item_id keys from config when stage is skippable."""
-	for _key, value in config.items():
-		if isinstance(value, list):
-			for item in value:
-				if isinstance(item, dict):
-					item.pop("item_id", None)
-					# Recurse for nested children (MINDMAP)
-					if "children" in item and isinstance(item["children"], list):
-						for child in item["children"]:
-							if isinstance(child, dict):
-								child.pop("item_id", None)
+	"""Recursively remove every item_id key from a stage config when skippable.
+
+	Walks the whole structure (including the top-level config dict and
+	arbitrarily-deep ``children`` trees used by INTERACTIVE_MINDMAP), so no
+	tracked item_id leaks into the runtime JSON for a skippable stage.
+	"""
+
+	def _strip(obj):
+		if isinstance(obj, dict):
+			obj.pop("item_id", None)
+			for value in obj.values():
+				_strip(value)
+		elif isinstance(obj, list):
+			for item in obj:
+				_strip(item)
+
+	_strip(config)
 
 
 # Stage types where a single stage references multiple item_ids.
-_MULTI_ITEM_STAGE_TYPES = {"MATCHING", "MINDMAP"}
+_MULTI_ITEM_STAGE_TYPES = {"MATCHING", "MINDMAP", "INTERACTIVE_MINDMAP"}
 
 
 def _extract_item_id(config: dict) -> str | None:
@@ -654,6 +665,17 @@ def _extract_multi_item_ids(config: dict, stage_type: str) -> list[str]:
 				for child in branch.get("children", []):
 					if isinstance(child, dict) and child.get("item_id"):
 						ids.append(child["item_id"])
+	elif stage_type == "INTERACTIVE_MINDMAP":
+		# Quiz-gated concept tree of arbitrary depth — the root node IS the config
+		# object, and every node (root + nested children) may carry an item_id.
+		def _walk(node):
+			if isinstance(node, dict):
+				if node.get("item_id"):
+					ids.append(node["item_id"])
+				for child in node.get("children", []):
+					_walk(child)
+
+		_walk(config)
 	return ids
 
 
@@ -663,37 +685,26 @@ def _group_stages_into_items(stages_raw, skippable_types: set) -> list[dict]:
 	Single-item stages are grouped by item_id.
 	Multi-item stages (MATCHING, MINDMAP) appear as separate entries with item_ids[].
 	"""
-	mindmap_entries: list[dict] = []
 	item_stages: dict[str, list[dict]] = {}
 	# Ordered list of (type, key) tuples to preserve original idx order.
-	# type is "item" for regular item_id groups, "matching" for MATCHING stages.
+	# type is "item" for regular item_id groups, "standalone" for multi-item
+	# checkpoint stages (MATCHING, MINDMAP, INTERACTIVE_MINDMAP) — all of which
+	# must keep their authored idx position rather than being relocated.
 	ordered_keys: list[tuple[str, str | int]] = []
-	matching_entries: dict[int, dict] = {}
-	matching_counter = 0
+	standalone_entries: dict[int, dict] = {}
+	standalone_counter = 0
 
 	for stage in stages_raw:
 		effective_skippable = bool(stage.is_skippable) or (stage.stage_type in skippable_types)
 		config = _parse_stage_config(stage.config_json)
 
-		if stage.stage_type == "MINDMAP":
+		if stage.stage_type in ("MINDMAP", "INTERACTIVE_MINDMAP", "MATCHING"):
 			item_ids = _extract_multi_item_ids(config, stage.stage_type)
 			if effective_skippable:
 				_strip_item_ids(config)
-			mindmap_entries.append({
-				"item_ids": item_ids,
-				"stages": [{
-					"stage_type": stage.stage_type,
-					"is_skippable": effective_skippable,
-					"config": config,
-				}],
-			})
-		elif stage.stage_type == "MATCHING":
-			item_ids = _extract_multi_item_ids(config, stage.stage_type)
-			if effective_skippable:
-				_strip_item_ids(config)
-			key = matching_counter
-			matching_counter += 1
-			matching_entries[key] = {
+			key = standalone_counter
+			standalone_counter += 1
+			standalone_entries[key] = {
 				"item_ids": item_ids,
 				"stages": [{
 					"stage_type": stage.stage_type,
@@ -701,7 +712,7 @@ def _group_stages_into_items(stages_raw, skippable_types: set) -> list[dict]:
 					"config": config,
 				}],
 			}
-			ordered_keys.append(("matching", key))
+			ordered_keys.append(("standalone", key))
 		else:
 			item_id = _extract_item_id(config)
 			if effective_skippable:
@@ -724,8 +735,7 @@ def _group_stages_into_items(stages_raw, skippable_types: set) -> list[dict]:
 		if kind == "item":
 			items.append({"item_id": key, "stages": item_stages[key]})
 		else:
-			items.append(matching_entries[key])
-	items.extend(mindmap_entries)
+			items.append(standalone_entries[key])
 	return items
 
 

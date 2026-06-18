@@ -9,6 +9,17 @@ function generateItemUUID() {
 	});
 }
 
+// Stage types that stand alone as their own checkpoint group in the lesson map
+// (never merged into a regular item group).
+function _isStandaloneCheckpoint(stageType) {
+	return (
+		stageType === "MATCHING" ||
+		stageType === "MINDMAP" ||
+		stageType === "INTERACTIVE_MINDMAP" ||
+		stageType === "STORY"
+	);
+}
+
 /**
  * Extract item_id from parsed config_json object, checking top-level first
  * then falling back to type-specific paths.
@@ -17,6 +28,20 @@ function _getItemIdFromConfig(config, stageType) {
 	if (!config) return null;
 	// Top-level item_id (stable location, always checked first)
 	if (config.item_id) return config.item_id;
+
+	if (stageType === "INTERACTIVE_MINDMAP") {
+		// Recursively scan the node tree for the first item_id.
+		let scan = (node) => {
+			if (!node || typeof node !== "object") return null;
+			if (node.item_id) return node.item_id;
+			for (let child of node.children || []) {
+				let found = scan(child);
+				if (found) return found;
+			}
+			return null;
+		};
+		return scan(config);
+	}
 
 	if (stageType === "INFORMATION" || stageType === "REVEAL") {
 		for (let h of config.highlights || []) {
@@ -332,6 +357,7 @@ const STAGE_TYPE_COLORS = {
 	MATCHING: { bg: "#fce4ec", border: "#c62828", text: "#b71c1c", label: "توصيل" },
 	STORY: { bg: "#e0f7fa", border: "#00838f", text: "#006064", label: "قصة" },
 	MINDMAP: { bg: "#f1f8e9", border: "#558b2f", text: "#33691e", label: "خريطة" },
+	INTERACTIVE_MINDMAP: { bg: "#f3e7ff", border: "#6a1fb0", text: "#6a1fb0", label: "خريطة تفاعلية" },
 	SENTENCE_BUILDER: { bg: "#ede7f6", border: "#4527a0", text: "#311b92", label: "بناء جملة" },
 };
 
@@ -353,7 +379,7 @@ function _extractPreviewText(stage) {
 		return "";
 	}
 	if (!config) return "";
-	return config.text || config.sentence || config.question || config.instruction || "";
+	return config.text || config.sentence || config.question || config.instruction || config.label || "";
 }
 
 function _groupStagesByItem(stages) {
@@ -362,8 +388,8 @@ function _groupStagesByItem(stages) {
 	let nullCounter = 0;
 
 	for (let stage of stages) {
-		// MATCHING, MINDMAP, STORY are standalone checkpoints — never merged into an item group
-		if (stage.stage_type === "MATCHING" || stage.stage_type === "MINDMAP" || stage.stage_type === "STORY") {
+		// MATCHING, MINDMAP, INTERACTIVE_MINDMAP, STORY are standalone checkpoints — never merged into an item group
+		if (_isStandaloneCheckpoint(stage.stage_type)) {
 			groups.push({
 				item_id: _extractItemId(stage),
 				key: `__standalone_${nullCounter++}`,
@@ -761,6 +787,7 @@ function open_lesson_map_dialog(frm) {
 		let standaloneTypes = [
 			{ value: "MATCHING", label: STAGE_TYPE_COLORS.MATCHING.label },
 			{ value: "MINDMAP", label: STAGE_TYPE_COLORS.MINDMAP.label },
+			{ value: "INTERACTIVE_MINDMAP", label: STAGE_TYPE_COLORS.INTERACTIVE_MINDMAP.label },
 			{ value: "STORY", label: STAGE_TYPE_COLORS.STORY.label },
 		];
 		let typeOptions = standaloneTypes.map((t) => `${t.value} — ${t.label}`).join("\n");
@@ -870,6 +897,8 @@ frappe.ui.form.on("Memora Lesson Stage", {
 			open_sentence_builder_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else if (row.stage_type === "MINDMAP") {
 			open_mindmap_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
+		} else if (row.stage_type === "INTERACTIVE_MINDMAP") {
+			open_interactive_mindmap_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else if (row.stage_type === "QUESTION") {
 			open_question_dialog(frm, cdt, cdn, row, config_json, skipItemIds);
 		} else if (row.stage_type === "INFORMATION") {
@@ -893,13 +922,13 @@ function open_matching_dialog(frm, cdt, cdn, row, data, skipItemIds) {
 	let itemGroups = [];
 	let seenIds = new Set();
 	for (let s of stages) {
-		if (s.stage_type === "MATCHING" || s.stage_type === "MINDMAP" || s.stage_type === "STORY") continue;
+		if (_isStandaloneCheckpoint(s.stage_type)) continue;
 		let itemId = _extractItemId(s);
 		if (!itemId || seenIds.has(itemId)) continue;
 		seenIds.add(itemId);
 		// Find all stages for this item to get best preview
 		let groupStages = stages.filter((st) => {
-			if (st.stage_type === "MATCHING" || st.stage_type === "MINDMAP" || st.stage_type === "STORY") return false;
+			if (_isStandaloneCheckpoint(st.stage_type)) return false;
 			return _extractItemId(st) === itemId;
 		});
 		let infoStage = groupStages.find((st) => st.stage_type === "INFORMATION");
@@ -1936,6 +1965,656 @@ function _generate_mindmap_id(used_ids) {
 		}
 	} while (used_ids.has(id));
 	return id;
+}
+
+// =================================================
+// 🗺️ نافذة الخريطة الذهنية التفاعلية (Interactive Mind Map)
+// =================================================
+// Builds a quiz-gated concept tree: every node carries its own multiple-choice
+// question; answering it reveals that node's children. Each node has a shape
+// (concept/era vs. trait/detail) and, for non-root nodes, a typed+labelled edge
+// to its parent (sequence vs. property). Stored as a nested tree in config_json:
+//   { id, label, shape, question, options[], answer, description?, item_id?,
+//     children: [ { ...same..., rel, edge_label? } ] }
+function open_interactive_mindmap_dialog(frm, cdt, cdn, row, data, skipItemIds) {
+	function _uid() {
+		return `im_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+	}
+
+	function _loadChildren(arr) {
+		return (arr || []).map((c) => ({
+			_key: _uid(),
+			id: c.id || null,
+			item_id: c.item_id || null,
+			label: c.label || "",
+			shape: c.shape === "era" ? "era" : "trait",
+			rel: c.rel === "seq" ? "seq" : "trait",
+			edge_label: c.edge_label || "",
+			question: c.question || "",
+			options: Array.isArray(c.options) && c.options.length ? c.options.slice() : ["", ""],
+			answer: typeof c.answer === "number" ? c.answer : 0,
+			description: c.description || "",
+			expanded: true,
+			children: _loadChildren(c.children),
+		}));
+	}
+
+	// Root node is the top-level config object itself.
+	let root = {
+		_key: _uid(),
+		id: data.id || null,
+		item_id: data.item_id || null,
+		label: data.label || "",
+		shape: data.shape === "trait" ? "trait" : "era",
+		rel: null,
+		edge_label: "",
+		question: data.question || "",
+		options: Array.isArray(data.options) && data.options.length ? data.options.slice() : ["", ""],
+		answer: typeof data.answer === "number" ? data.answer : 0,
+		description: data.description || "",
+		expanded: true,
+		children: _loadChildren(data.children),
+	};
+
+	let editingPath = null; // array of child indices; [] = root
+	let editSnapshot = null;
+
+	function _newNode() {
+		return {
+			_key: _uid(),
+			id: null,
+			item_id: null,
+			label: "",
+			shape: "trait",
+			rel: "trait",
+			edge_label: "",
+			question: "",
+			options: ["", ""],
+			answer: 0,
+			description: "",
+			expanded: true,
+			children: [],
+		};
+	}
+
+	function _parsePath(s) {
+		s = s == null ? "" : String(s);
+		return s === "" ? [] : s.split(".").map(Number);
+	}
+	function _nodeAt(path) {
+		let n = root;
+		for (let i of path) n = n.children[i];
+		return n;
+	}
+	function _parent(path) {
+		let parent = _nodeAt(path.slice(0, -1));
+		return { parent, idx: path[path.length - 1] };
+	}
+	function _countNodes(node) {
+		let c = 1;
+		for (let k of node.children) c += _countNodes(k);
+		return c;
+	}
+	// Is there any branch (node with children) currently collapsed?
+	function _hasCollapsedBranch() {
+		let any = false;
+		(function walk(n) {
+			if (n.children.length && !n.expanded) any = true;
+			n.children.forEach(walk);
+		})(root);
+		return any;
+	}
+	// Expand or collapse every branch at once (root + all descendants).
+	function _setAllExpanded(val) {
+		(function walk(n) {
+			if (n.children.length) n.expanded = val;
+			n.children.forEach(walk);
+		})(root);
+	}
+	function _isComplete(node) {
+		if (!(node.label || "").trim()) return false;
+		if (!(node.question || "").trim()) return false;
+		let nonEmpty = (node.options || []).map((o) => (o || "").trim()).filter(Boolean);
+		if (nonEmpty.length < 2) return false;
+		let a = (node.options || [])[node.answer];
+		return !!(a && ("" + a).trim());
+	}
+	function _esc(str) {
+		return (str || "")
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;");
+	}
+	function _snap(n) {
+		return {
+			label: n.label,
+			shape: n.shape,
+			rel: n.rel,
+			edge_label: n.edge_label,
+			question: n.question,
+			options: n.options.slice(),
+			answer: n.answer,
+			description: n.description,
+		};
+	}
+	function _restore(n, s) {
+		n.label = s.label;
+		n.shape = s.shape;
+		n.rel = s.rel;
+		n.edge_label = s.edge_label;
+		n.question = s.question;
+		n.options = s.options.slice();
+		n.answer = s.answer;
+		n.description = s.description;
+	}
+
+	let d = new frappe.ui.Dialog({
+		title: "إعدادات الخريطة الذهنية التفاعلية (Interactive Mind Map)",
+		size: "extra-large",
+		fields: [{ fieldname: "tree_html", fieldtype: "HTML" }],
+		primary_action_label: "حفظ (Save)",
+		primary_action: function () {
+			if (editingPath !== null) _collectEditing();
+
+			// Validate the whole tree.
+			let errors = [];
+			(function val(node, path) {
+				let isRoot = path.length === 0;
+				let name = isRoot ? "الجذر" : `العقدة "${(node.label || "").trim() || "بدون عنوان"}"`;
+				if (!(node.label || "").trim()) {
+					errors.push(isRoot ? "الجذر بدون عنوان" : "توجد عقدة بدون عنوان");
+				} else {
+					if (!(node.question || "").trim()) errors.push(`${name}: لا يوجد سؤال`);
+					let nonEmpty = (node.options || []).map((o) => (o || "").trim()).filter(Boolean);
+					if (nonEmpty.length < 2) {
+						errors.push(`${name}: يحتاج خيارين على الأقل`);
+					} else {
+						let a = (node.options || [])[node.answer];
+						if (!a || !("" + a).trim()) errors.push(`${name}: لم تُحدَّد الإجابة الصحيحة`);
+					}
+				}
+				(node.children || []).forEach((c, i) => val(c, path.concat(i)));
+			})(root, []);
+			if (!root.children.length) errors.push("أضف عقدة فرعية واحدة على الأقل لبناء الخريطة");
+
+			if (errors.length) {
+				frappe.msgprint({
+					title: "لا يمكن الحفظ — أكمل العقد التالية",
+					message: errors.slice(0, 15).map((e) => "• " + e).join("<br>"),
+					indicator: "red",
+				});
+				return;
+			}
+
+			// Serialize tree → clean nested config.
+			let used_ids = new Set();
+			function ser(node, isRoot) {
+				let id = node.id && !used_ids.has(node.id) ? node.id : _generate_mindmap_id(used_ids);
+				used_ids.add(id);
+
+				// Keep non-empty options; remap the correct-answer index.
+				let opts = [];
+				let correctText = null;
+				(node.options || []).forEach((o, i) => {
+					let t = (o || "").trim();
+					if (i === node.answer) correctText = t;
+					if (t) opts.push(t);
+				});
+				let answer = correctText != null ? opts.indexOf(correctText) : 0;
+				if (answer < 0) answer = 0;
+
+				let obj = {
+					id: id,
+					label: (node.label || "").trim(),
+					shape: node.shape === "trait" ? "trait" : "era",
+					question: (node.question || "").trim(),
+					options: opts,
+					answer: answer,
+				};
+				if ((node.description || "").trim()) obj.description = node.description.trim();
+				if (!isRoot) {
+					obj.rel = node.rel === "seq" ? "seq" : "trait";
+					if ((node.edge_label || "").trim()) obj.edge_label = node.edge_label.trim();
+				}
+				if (!skipItemIds) obj.item_id = node.item_id || generateItemUUID();
+				let kids = (node.children || []).map((c) => ser(c, false));
+				if (kids.length) obj.children = kids;
+				return obj;
+			}
+
+			let payload = ser(root, true);
+			frappe.model.set_value(cdt, cdn, "config_json", JSON.stringify(payload, null, 2));
+			d.hide();
+			frappe.show_alert({ message: "تم حفظ الخريطة التفاعلية", indicator: "green" });
+		},
+	});
+
+	// Read the currently open edit-form's inputs back into its node.
+	function _collectEditing() {
+		if (editingPath === null) return;
+		let $w = d.fields_dict.tree_html.$wrapper;
+		let $f = $w.find(".im-edit-form");
+		if (!$f.length) return;
+		let node = _nodeAt(editingPath);
+		node.label = $f.find(".im-f-label").val();
+		node.question = $f.find(".im-f-question").val();
+		node.description = $f.find(".im-f-desc").val();
+		if (editingPath.length > 0) node.edge_label = $f.find(".im-f-edgelabel").val();
+		let opts = [];
+		$f.find(".im-opt-input").each(function () {
+			opts.push($(this).val());
+		});
+		if (opts.length) node.options = opts;
+		let $r = $f.find(".im-opt-radio:checked");
+		if ($r.length) node.answer = Number($r.data("opt-idx"));
+	}
+
+	function _openEdit(path) {
+		if (editingPath !== null) _collectEditing();
+		editingPath = path;
+		let n = _nodeAt(path);
+		n.expanded = true;
+		editSnapshot = _snap(n);
+		_render();
+		let $w = d.fields_dict.tree_html.$wrapper;
+		$w.find(".im-edit-form .im-f-label").first().focus();
+	}
+
+	function _renderEditForm(node, path) {
+		let pathStr = path.join(".");
+		let isRoot = path.length === 0;
+		let opts = node.options
+			.map(
+				(o, i) => `
+				<div class="im-opt-row">
+					<input type="radio" name="im-correct-${pathStr || "root"}" class="im-opt-radio" data-opt-idx="${i}" ${
+						i === node.answer ? "checked" : ""
+					} title="حدّد كإجابة صحيحة">
+					<input type="text" class="form-control input-sm im-opt-input" data-opt-idx="${i}"
+						value="${_esc(o)}" placeholder="الخيار ${i + 1}" style="direction:rtl;">
+					${
+						node.options.length > 2
+							? `<button class="im-opt-del" data-opt-idx="${i}" data-path="${pathStr}" title="حذف الخيار">✕</button>`
+							: '<span class="im-opt-spacer"></span>'
+					}
+				</div>`
+			)
+			.join("");
+
+		return `<div class="im-edit-form" data-path="${pathStr}">
+			<div class="im-fld">
+				<label>العنوان</label>
+				<input type="text" class="form-control input-sm im-f-label" value="${_esc(node.label)}"
+					placeholder="${isRoot ? "عنوان الخريطة (الجذر)" : "عنوان العقدة"}" style="direction:rtl;">
+			</div>
+			<div class="im-fld">
+				<label>الشكل</label>
+				<div class="im-toggle">
+					<button type="button" class="im-shape-btn ${node.shape === "era" ? "active" : ""}" data-shape="era" data-path="${pathStr}">▭ مفهوم / عصر</button>
+					<button type="button" class="im-shape-btn ${node.shape === "trait" ? "active" : ""}" data-shape="trait" data-path="${pathStr}">⬤ صفة / تفصيل</button>
+				</div>
+			</div>
+			${
+				isRoot
+					? ""
+					: `<div class="im-fld">
+				<label>نوع الرابط مع الأصل</label>
+				<div class="im-toggle">
+					<button type="button" class="im-rel-btn rel-seq ${node.rel === "seq" ? "active" : ""}" data-rel="seq" data-path="${pathStr}">⟶ تسلسل (يليه)</button>
+					<button type="button" class="im-rel-btn rel-trait ${node.rel !== "seq" ? "active" : ""}" data-rel="trait" data-path="${pathStr}">• خاصية</button>
+				</div>
+			</div>
+			<div class="im-fld">
+				<label>نص الرابط <span class="im-hint">— اختياري، يظهر على السهم</span></label>
+				<input type="text" class="form-control input-sm im-f-edgelabel" value="${_esc(node.edge_label)}"
+					placeholder="مثال: يليه، صفته، أدّى إلى" style="direction:rtl;">
+			</div>`
+			}
+			<div class="im-fld">
+				<label>السؤال</label>
+				<textarea class="form-control input-sm im-f-question" rows="2"
+					placeholder="السؤال الذي يجب الإجابة عليه لكشف هذه العقدة" style="direction:rtl;">${_esc(node.question)}</textarea>
+			</div>
+			<div class="im-fld">
+				<label>الخيارات <span class="im-hint">— اختر الدائرة بجانب الإجابة الصحيحة ✓</span></label>
+				<div class="im-opts">${opts}</div>
+				${node.options.length < 6 ? `<button type="button" class="im-opt-add" data-path="${pathStr}">+ إضافة خيار</button>` : ""}
+			</div>
+			<div class="im-fld">
+				<label>الوصف <span class="im-hint">— اختياري، يظهر بعد الإجابة الصحيحة</span></label>
+				<textarea class="form-control input-sm im-f-desc" rows="2"
+					placeholder="شرح موجز" style="direction:rtl;">${_esc(node.description)}</textarea>
+			</div>
+			<div class="im-form-actions">
+				<button type="button" class="btn btn-xs btn-default im-cancel" data-path="${pathStr}">إلغاء</button>
+				<button type="button" class="btn btn-xs btn-primary im-save" data-path="${pathStr}">تأكيد</button>
+			</div>
+		</div>`;
+	}
+
+	function _renderNode(node, path) {
+		let pathStr = path.join(".");
+		let isRoot = path.length === 0;
+		let shapeIcon = node.shape === "era" ? "▭" : "⬤";
+		let chevron = node.children.length
+			? `<button type="button" class="im-chev" data-path="${pathStr}" title="${
+					node.expanded ? "طي الفروع" : "توسيع الفروع"
+				}">${node.expanded ? "▾" : "▸"}</button>`
+			: `<span class="im-chev im-chev-leaf"></span>`;
+		let complete = _isComplete(node);
+
+		let relBadge;
+		if (isRoot) {
+			relBadge = `<span class="im-relb im-relb-root">الجذر</span>`;
+		} else if (node.rel === "seq") {
+			relBadge = `<span class="im-relb im-relb-seq">⟶ تسلسل${node.edge_label ? ": " + _esc(node.edge_label) : ""}</span>`;
+		} else {
+			relBadge = `<span class="im-relb im-relb-trait">• خاصية${node.edge_label ? ": " + _esc(node.edge_label) : ""}</span>`;
+		}
+
+		let statusChip = complete
+			? `<span class="im-chip im-ok" title="مكتملة">✓</span>`
+			: `<span class="im-chip im-warn" title="ينقصها سؤال أو خيارات أو إجابة">غير مكتمل</span>`;
+
+		let childCount = node.children.length
+			? `<span class="im-count">${node.children.length} فرع</span>`
+			: "";
+
+		let html = `<div class="im-node ${isRoot ? "im-root" : ""}" data-path="${pathStr}">
+			<div class="im-node-head" data-path="${pathStr}">
+				${chevron}
+				<span class="im-shape im-shape-${node.shape}">${shapeIcon}</span>
+				<span class="im-label">${_esc(node.label) || '<em class="im-ph">بدون عنوان</em>'}</span>
+				${relBadge}
+				${childCount}
+				${statusChip}
+				<span class="im-actions">
+					<button type="button" class="btn btn-xs btn-default im-edit-btn" data-path="${pathStr}" title="تعديل">✏️</button>
+					<button type="button" class="btn btn-xs im-addchild-btn" data-path="${pathStr}" title="إضافة عقدة فرعية">＋</button>
+					<button type="button" class="btn btn-xs btn-default im-up-btn" data-path="${pathStr}" title="تحريك لأعلى" ${isRoot ? "disabled" : ""}>▲</button>
+					<button type="button" class="btn btn-xs btn-default im-down-btn" data-path="${pathStr}" title="تحريك لأسفل" ${isRoot ? "disabled" : ""}>▼</button>
+					${isRoot ? "" : `<button type="button" class="btn btn-xs im-del-btn" data-path="${pathStr}" title="حذف">✕</button>`}
+				</span>
+			</div>`;
+
+		if (editingPath !== null && editingPath.join(".") === pathStr) {
+			html += _renderEditForm(node, path);
+		}
+
+		if (node.expanded && node.children.length) {
+			html += `<div class="im-children">`;
+			node.children.forEach((c, i) => {
+				html += _renderNode(c, path.concat(i));
+			});
+			html += `</div>`;
+		}
+
+		html += `</div>`;
+		return html;
+	}
+
+	function _render() {
+		let $w = d.fields_dict.tree_html.$wrapper;
+		let scrollTop = $w.find(".im-scroll").scrollTop() || 0;
+		let total = _countNodes(root);
+		let anyCollapsed = _hasCollapsedBranch();
+
+		let html = `<div class="im-wrap">
+			<div class="im-help">🗺️ <b>الخريطة الذهنية التفاعلية:</b> كل عقدة تحتوي سؤالاً، وعند الإجابة الصحيحة تُكشف العقد الفرعية. عدّل الجذر ثم أضف العقد بزر <b>＋</b>. عدد العقد: <b>${total}</b></div>
+			<div class="im-legend">
+				<span><span class="im-lg-sh">▭</span> مفهوم / عصر</span>
+				<span><span class="im-lg-sh">⬤</span> صفة / تفصيل</span>
+				<span class="lg-seq">⟶ تسلسل</span>
+				<span class="lg-trait">• خاصية</span>
+				<button type="button" class="im-collapse-all" title="طي/توسيع كل الفروع">${
+					anyCollapsed ? "▸ توسيع الكل" : "▾ طي الكل"
+				}</button>
+			</div>
+			<div class="im-scroll">${_renderNode(root, [])}</div>
+		</div>`;
+
+		$w.html(html);
+		$w.find(".im-scroll").scrollTop(scrollTop);
+		_bind($w);
+	}
+
+	function _bind($w) {
+		// Expand / collapse
+		$w.find(".im-chev").on("click", function (e) {
+			e.stopPropagation();
+			let n = _nodeAt(_parsePath($(this).data("path")));
+			if (n.children.length) {
+				n.expanded = !n.expanded;
+				_render();
+			}
+		});
+
+		// Collapse / expand all branches at once
+		$w.find(".im-collapse-all").on("click", function (e) {
+			e.stopPropagation();
+			if (editingPath !== null) _collectEditing();
+			// If anything is collapsed, expand everything; otherwise collapse everything.
+			_setAllExpanded(_hasCollapsedBranch());
+			_render();
+		});
+
+		// Edit
+		$w.find(".im-edit-btn").on("click", function (e) {
+			e.stopPropagation();
+			_openEdit(_parsePath($(this).data("path")));
+		});
+
+		// Add child
+		$w.find(".im-addchild-btn").on("click", function (e) {
+			e.stopPropagation();
+			if (editingPath !== null) _collectEditing();
+			let p = _parsePath($(this).data("path"));
+			let n = _nodeAt(p);
+			n.expanded = true;
+			n.children.push(_newNode());
+			let childPath = p.concat(n.children.length - 1);
+			editingPath = childPath;
+			editSnapshot = _snap(_nodeAt(childPath));
+			_render();
+			$w.find(".im-edit-form .im-f-label").first().focus();
+		});
+
+		// Move up / down among siblings
+		$w.find(".im-up-btn").on("click", function (e) {
+			e.stopPropagation();
+			let p = _parsePath($(this).data("path"));
+			if (!p.length) return;
+			let { parent, idx } = _parent(p);
+			if (idx > 0) {
+				if (editingPath !== null) _collectEditing();
+				editingPath = null;
+				let arr = parent.children;
+				[arr[idx - 1], arr[idx]] = [arr[idx], arr[idx - 1]];
+				_render();
+			}
+		});
+		$w.find(".im-down-btn").on("click", function (e) {
+			e.stopPropagation();
+			let p = _parsePath($(this).data("path"));
+			if (!p.length) return;
+			let { parent, idx } = _parent(p);
+			if (idx < parent.children.length - 1) {
+				if (editingPath !== null) _collectEditing();
+				editingPath = null;
+				let arr = parent.children;
+				[arr[idx + 1], arr[idx]] = [arr[idx], arr[idx + 1]];
+				_render();
+			}
+		});
+
+		// Delete
+		$w.find(".im-del-btn").on("click", function (e) {
+			e.stopPropagation();
+			let p = _parsePath($(this).data("path"));
+			let n = _nodeAt(p);
+			let msg = n.children.length
+				? `حذف "${n.label || "هذه العقدة"}" وكل ما تحتها (${n.children.length})؟`
+				: `حذف "${n.label || "هذه العقدة"}"؟`;
+			frappe.confirm(msg, () => {
+				let { parent, idx } = _parent(p);
+				parent.children.splice(idx, 1);
+				editingPath = null;
+				_render();
+			});
+		});
+
+		// Shape toggle
+		$w.find(".im-shape-btn").on("click", function () {
+			_collectEditing();
+			_nodeAt(_parsePath($(this).data("path"))).shape = $(this).data("shape");
+			_render();
+		});
+
+		// Relationship toggle
+		$w.find(".im-rel-btn").on("click", function () {
+			_collectEditing();
+			_nodeAt(_parsePath($(this).data("path"))).rel = $(this).data("rel");
+			_render();
+		});
+
+		// Add option
+		$w.find(".im-opt-add").on("click", function () {
+			_collectEditing();
+			let n = _nodeAt(_parsePath($(this).data("path")));
+			n.options.push("");
+			_render();
+			$w.find(".im-opt-input").last().focus();
+		});
+
+		// Delete option
+		$w.find(".im-opt-del").on("click", function () {
+			_collectEditing();
+			let n = _nodeAt(_parsePath($(this).data("path")));
+			let oi = Number($(this).data("opt-idx"));
+			n.options.splice(oi, 1);
+			if (n.answer === oi) n.answer = 0;
+			else if (n.answer > oi) n.answer -= 1;
+			if (n.answer >= n.options.length) n.answer = 0;
+			_render();
+		});
+
+		// Confirm edit
+		$w.find(".im-save").on("click", function () {
+			_collectEditing();
+			editingPath = null;
+			_render();
+		});
+
+		// Cancel edit (revert; drop a brand-new empty node)
+		$w.find(".im-cancel").on("click", function () {
+			let p = editingPath;
+			if (p) {
+				let n = _nodeAt(p);
+				if (editSnapshot) _restore(n, editSnapshot);
+				if (
+					p.length > 0 &&
+					!(n.label || "").trim() &&
+					!(n.question || "").trim() &&
+					n.children.length === 0
+				) {
+					let { parent, idx } = _parent(p);
+					parent.children.splice(idx, 1);
+				}
+			}
+			editingPath = null;
+			_render();
+		});
+
+		// Keyboard: Enter (single-line inputs) saves, Escape cancels
+		$w.find(".im-edit-form").on("keydown", function (e) {
+			if (e.key === "Enter" && !e.shiftKey && e.target.tagName !== "TEXTAREA") {
+				e.preventDefault();
+				$(this).find(".im-save").click();
+			} else if (e.key === "Escape") {
+				e.preventDefault();
+				$(this).find(".im-cancel").click();
+			}
+		});
+	}
+
+	let imStyleEl = document.createElement("style");
+	imStyleEl.textContent = `
+		.modal-dialog.im-fullpage { max-width:96vw; width:96vw; margin:1.5vh auto; }
+		.modal-dialog.im-fullpage .modal-content { min-height:97vh; }
+		.im-wrap { font-size: 13px; }
+		.im-help { background:#f3e7ff; border:1px solid #d9bdf5; color:#4a1d7a; border-radius:8px;
+			padding:10px 14px; margin-bottom:8px; line-height:1.7; }
+		.im-legend { display:flex; gap:16px; flex-wrap:wrap; color:#666; font-weight:600; margin-bottom:10px;
+			padding:0 4px; align-items:center; }
+		.im-legend .im-lg-sh { color:#6a1fb0; font-size:15px; }
+		.im-legend .lg-seq { color:#d9620a; }
+		.im-legend .lg-trait { color:#0b63c4; }
+		.im-collapse-all { margin-right:auto; padding:5px 12px; border:1.5px solid #6a1fb0; background:#fff;
+			color:#6a1fb0; border-radius:7px; font-size:12px; font-weight:700; cursor:pointer; transition:all .12s; }
+		.im-collapse-all:hover { background:#f2e7ff; }
+		.im-scroll { max-height:calc(100vh - 270px); overflow-y:auto; padding:4px; }
+		.im-node { margin-top:6px; }
+		.im-children { border-right:2px dashed #d9bdf5; margin-right:14px; padding-right:10px; }
+		.im-node-head { display:flex; align-items:center; gap:7px; padding:8px 12px; background:#fff;
+			border:1.5px solid #d9bdf5; border-radius:8px; transition:box-shadow .15s; }
+		.im-node.im-root > .im-node-head { background:#faf3ff; border-color:#6a1fb0; border-width:2px; }
+		.im-node-head:hover { box-shadow:0 2px 8px rgba(106,31,176,0.12); }
+		.im-chev { width:24px; height:24px; line-height:1; padding:0; text-align:center; color:#6a1fb0;
+			cursor:pointer; flex-shrink:0; font-size:12px; font-weight:700; border:1.5px solid #d9bdf5;
+			background:#f7f0ff; border-radius:6px; display:inline-flex; align-items:center; justify-content:center;
+			transition:all .12s; }
+		.im-chev:hover { background:#6a1fb0; color:#fff; border-color:#6a1fb0; }
+		.im-chev-leaf { border:none; background:transparent; cursor:default; }
+		.im-chev-leaf:hover { background:transparent; }
+		.im-shape { color:#6a1fb0; font-size:15px; flex-shrink:0; width:18px; text-align:center; }
+		.im-shape-trait { font-size:12px; }
+		.im-label { flex:1; font-weight:700; color:#2d2a32; direction:rtl; overflow:hidden;
+			text-overflow:ellipsis; white-space:nowrap; }
+		.im-ph { color:#bbb; font-weight:400; }
+		.im-relb { font-size:10px; padding:1px 8px; border-radius:10px; flex-shrink:0; font-weight:600; }
+		.im-relb-root { background:#f2e7ff; color:#6a1fb0; }
+		.im-relb-seq { background:#fff0dd; color:#d9620a; }
+		.im-relb-trait { background:#e4f1ff; color:#0b63c4; }
+		.im-count { font-size:10px; color:#888; background:#f3f3f3; padding:1px 7px; border-radius:10px; flex-shrink:0; }
+		.im-chip { font-size:10px; padding:1px 7px; border-radius:10px; flex-shrink:0; font-weight:700; }
+		.im-chip.im-ok { background:#dcf7ec; color:#0e8a5f; }
+		.im-chip.im-warn { background:#ffe3e7; color:#c9304a; }
+		.im-actions { display:flex; gap:3px; flex-shrink:0; }
+		.im-actions .btn { padding:2px 7px; line-height:1.2; }
+		.im-addchild-btn { background:#6a1fb0; color:#fff; border-color:#6a1fb0; font-weight:700; }
+		.im-addchild-btn:hover { background:#561799; color:#fff; }
+		.im-del-btn { color:#c0392b; border:1px solid #e6b0aa; }
+		.im-edit-form { margin:6px 0 6px 0; padding:14px; background:#faf7ff; border:1.5px solid #d9bdf5;
+			border-radius:8px; }
+		.im-fld { margin-bottom:11px; }
+		.im-fld > label { display:block; font-size:11px; font-weight:700; color:#4a1d7a; margin-bottom:4px; }
+		.im-fld .im-hint { font-weight:400; color:#999; }
+		.im-toggle { display:flex; gap:6px; }
+		.im-toggle button { flex:1; padding:7px 10px; border:1.5px solid #ddd; background:#fff; border-radius:7px;
+			font-size:12px; font-weight:600; color:#777; cursor:pointer; transition:all .12s; }
+		.im-toggle button.active { border-color:#6a1fb0; background:#f2e7ff; color:#6a1fb0; }
+		.im-toggle button.im-rel-btn.rel-seq.active { border-color:#d9620a; background:#fff0dd; color:#d9620a; }
+		.im-toggle button.im-rel-btn.rel-trait.active { border-color:#0b63c4; background:#e4f1ff; color:#0b63c4; }
+		.im-opts { display:flex; flex-direction:column; gap:6px; }
+		.im-opt-row { display:flex; align-items:center; gap:8px; }
+		.im-opt-row .im-opt-radio { width:17px; height:17px; flex-shrink:0; cursor:pointer; accent-color:#0e8a5f; }
+		.im-opt-row .im-opt-input { flex:1; }
+		.im-opt-del { color:#c0392b; background:#fff; border:1px solid #e6b0aa; border-radius:5px;
+			width:26px; height:26px; flex-shrink:0; cursor:pointer; }
+		.im-opt-spacer { width:26px; flex-shrink:0; }
+		.im-opt-add { margin-top:7px; width:100%; padding:6px; color:#6a1fb0; background:#fff;
+			border:1.5px dashed #c9a6ec; border-radius:7px; font-size:12px; font-weight:600; cursor:pointer; }
+		.im-form-actions { display:flex; gap:6px; justify-content:flex-end; margin-top:4px; }
+		.im-edit-form input:focus, .im-edit-form textarea:focus {
+			border-color:#6a1fb0; box-shadow:0 0 0 2px rgba(106,31,176,0.18); }
+	`;
+	document.head.appendChild(imStyleEl);
+	d.onhide = () => imStyleEl.remove();
+
+	d.show();
+	d.$wrapper.find(".modal-dialog").addClass("im-fullpage");
+	_render();
 }
 
 // =================================================

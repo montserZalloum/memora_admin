@@ -340,6 +340,13 @@ def on_plan_updated(doc, method):
 				"Season Cache Invalidation Error",
 			)
 
+	# Skip queueing a build when this save originated from the build pipeline
+	# itself. plan_generator persists Plan Subject meta_data via plan_doc.save();
+	# without this guard that save re-triggers the build every cycle — an
+	# infinite one-build-per-minute loop.
+	if doc.flags.get("ignore_build_trigger"):
+		return
+
 	_schedule_post_commit_build(plan_id, "plan_update", f"plan {plan_id}")
 
 

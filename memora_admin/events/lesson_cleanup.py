@@ -87,16 +87,16 @@ def _clean_matching_refs(doc, current_item_ids: set[str]):
 		stage.db_update()
 
 
-_STANDALONE_STAGE_TYPES = frozenset(("MATCHING", "MINDMAP", "STORY"))
+_STANDALONE_STAGE_TYPES = frozenset(("MATCHING", "MINDMAP", "INTERACTIVE_MINDMAP", "STORY"))
 
 
 def _extract_stage_item_ids(doc) -> set[str]:
 	"""Extract item_ids from item-group stages only.
 
-	Standalone stage types (MATCHING, MINDMAP, STORY) are skipped — their
-	item_id references are cross-references, not content ownership.  A Review
-	Item should only survive if an actual content stage still carries its
-	item_id.
+	Standalone stage types (MATCHING, MINDMAP, INTERACTIVE_MINDMAP, STORY) are
+	skipped — their item_id references are cross-references, not content
+	ownership.  A Review Item should only survive if an actual content stage
+	still carries its item_id.
 	"""
 	item_ids = set()
 	for stage in doc.stages or []:

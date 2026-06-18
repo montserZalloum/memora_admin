@@ -79,5 +79,14 @@
   "name": "INFORMATION",
   "payload": null,
   "stage_title": "INFORMATION"
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Memora Lesson Stage Settings",
+  "is_skippable": 1,
+  "modified": "2026-06-17 16:21:20.356733",
+  "name": "INTERACTIVE_MINDMAP",
+  "payload": null,
+  "stage_title": "INTERACTIVE_MINDMAP"
  }
 ]
