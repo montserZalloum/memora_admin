@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>درس الـ Modals · مع سامي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#14161D; --panel:#1B1E27; --panel2:#232733; --ink:#ECEAE3; --muted:#8C909C; --line:#2C313D;
+    --glow:#5B8DEF; --ok:#39C16C; --no:#E8553C; --r:14px; }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{ background:radial-gradient(900px 520px at 82% -12%, rgba(91,141,239,.07), transparent 60%), var(--bg);
+    color:var(--ink); font-family:'Tajawal',system-ui,sans-serif; min-height:100vh; line-height:1.6; padding:20px 16px 64px; }
+  .app{max-width:1000px; margin:0 auto}
+  .topbar{display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:8px}
+  .eyebrow{font-family:'Space Mono',monospace; font-size:.72rem; letter-spacing:.16em; color:var(--muted); text-transform:uppercase}
+  h1{font-size:1.4rem; font-weight:800}
+  .acc{font-family:'Space Mono',monospace; font-size:.78rem; border:1px solid var(--line); border-radius:8px; padding:6px 11px; white-space:nowrap}
+  .acc b{color:var(--glow)}
+  .sectionhead{display:flex; align-items:center; gap:10px; margin:14px 0 18px; font-size:.85rem; color:var(--muted)}
+  .sectionhead .pill{font-family:'Space Mono',monospace; font-size:.7rem; color:var(--glow); border:1px solid var(--line); border-radius:99px; padding:3px 10px; white-space:nowrap}
+  .pbar{flex:1; height:5px; background:var(--line); border-radius:99px; overflow:hidden}
+  .pbar>i{display:block; height:100%; width:0; background:linear-gradient(90deg,#5B8DEF,#E8553C); transition:width .5s}
+
+  .stage{display:grid; grid-template-columns:290px 1fr; gap:18px}
+  @media (max-width:760px){ .stage{grid-template-columns:1fr} }
+
+  .buddy{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px; align-self:start}
+  .bh{display:flex; align-items:center; gap:11px; margin-bottom:14px}
+  .avatar{width:46px; height:46px; border-radius:50%; background:radial-gradient(circle at 30% 25%, #2f3a52, #1a1f2b);
+    border:1px solid #3a455e; display:grid; place-items:center; box-shadow:0 0 0 4px rgba(91,141,239,.08)}
+  .avatar svg{width:26px; height:26px}
+  .bname{font-weight:800} .brole{font-size:.74rem; color:var(--muted); font-family:'Space Mono',monospace}
+  .speech{display:flex; flex-direction:column; gap:9px; min-height:120px}
+  .bubble{background:var(--panel2); border:1px solid var(--line); border-radius:12px 12px 12px 4px; padding:10px 13px; font-size:.95rem; opacity:0; transform:translateY(6px); animation:rise .35s ease forwards}
+  @keyframes rise{to{opacity:1; transform:none}}
+  .en{font-family:'Space Mono',monospace; font-weight:700; color:var(--glow); direction:ltr; unicode-bidi:isolate}
+  .cursor{display:inline-block; width:8px; height:1.05em; background:var(--glow); vertical-align:-2px; margin-inline-start:2px; animation:blink .9s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:22px}
+  .tag{font-family:'Space Mono',monospace; font-size:.72rem; letter-spacing:.14em; color:var(--glow); text-transform:uppercase; margin-bottom:14px}
+
+  /* interactive explain dial */
+  .dialbox{position:relative; overflow:hidden}
+  .dialbox::before{content:""; position:absolute; inset:-50% 24% auto; height:280px; background:radial-gradient(closest-side, var(--glow), transparent 70%); opacity:.15; filter:blur(8px); transition:.4s; pointer-events:none}
+  .dreadout{position:relative; text-align:center; margin-bottom:10px}
+  .dword{font-family:'Space Mono',monospace; font-weight:700; font-size:2.7rem; line-height:1; color:var(--glow); direction:ltr; transition:color .4s}
+  .dar{font-size:1.1rem; font-weight:700; margin-top:5px}
+  .dsent{position:relative; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px; text-align:center; margin:12px 0; font-family:'Space Mono',monospace; font-size:1.02rem; direction:ltr; unicode-bidi:isolate}
+  .dsent b{color:var(--glow); transition:color .4s}
+  .dtrack{position:relative; direction:ltr; padding:0 4px}
+  .dends{display:flex; justify-content:space-between; font-size:.74rem; color:var(--muted); margin-bottom:7px; direction:rtl}
+  #dDial{-webkit-appearance:none; appearance:none; width:100%; height:14px; border-radius:10px; outline:none; cursor:pointer}
+  #dDial::-webkit-slider-thumb{-webkit-appearance:none; width:30px; height:30px; border-radius:50%; background:#fff; border:4px solid var(--glow); box-shadow:0 3px 12px rgba(0,0,0,.5); transition:border-color .4s}
+  #dDial::-moz-range-thumb{width:26px; height:26px; border-radius:50%; background:#fff; border:4px solid var(--glow); box-shadow:0 3px 12px rgba(0,0,0,.5)}
+  .dmarks{display:flex; justify-content:space-between; margin-top:9px}
+  .dmark{font-family:'Space Mono',monospace; font-size:.68rem; color:var(--muted); flex:1; text-align:center; transition:.25s}
+  .dmark.active{color:var(--ink); text-shadow:0 0 12px var(--glow)}
+  .dnote{position:relative; margin-top:14px; background:var(--panel2); border:1px solid var(--line); border-inline-start:3px solid var(--glow); border-radius:10px; padding:11px 14px; font-size:.93rem; transition:border-color .4s}
+  .dnote .lbl{font-weight:800; color:var(--glow); transition:color .4s}
+  .dhint{font-size:.82rem; color:var(--muted); margin-top:10px; display:flex; align-items:center; gap:6px}
+
+  .formcard{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-top:6px}
+  .formcard .rule{font-weight:700; margin-bottom:10px}
+  .ex{font-family:'Space Mono',monospace; font-size:.95rem; direction:ltr; unicode-bidi:isolate; margin:3px 0}
+  .ex .good{color:var(--ok)} .ex .bad{color:var(--no); text-decoration:line-through}
+  .cards{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px}
+  @media (max-width:520px){ .cards{grid-template-columns:1fr} }
+  .ccard{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:13px 15px}
+  .ccard h4{font-size:.95rem; margin-bottom:5px} .ccard p{font-size:.88rem; color:var(--muted)}
+  .ccard .mini{font-family:'Space Mono',monospace; font-size:.82rem; color:var(--ink); direction:ltr; margin-top:7px}
+  .trap{background:rgba(232,85,60,.10); border:1px solid #5a3a37; border-radius:10px; padding:11px 14px; font-size:.9rem; margin-top:12px}
+
+  .exgrid{display:flex; flex-direction:column; gap:10px}
+  .excard{display:flex; align-items:center; gap:13px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px}
+  .exicon{width:42px; height:42px; flex:0 0 auto; border-radius:10px; display:grid; place-items:center; background:rgba(91,141,239,.12); color:var(--glow)}
+  .exicon svg{width:23px; height:23px}
+  .extext{flex:1; min-width:0}
+  .exsent{font-family:'Space Mono',monospace; font-size:1rem; direction:ltr; unicode-bidi:isolate; line-height:1.45}
+  .exsent .hl{background:rgba(232,85,60,.22); color:#ffd2c9; padding:1px 5px; border-radius:5px; font-weight:700}
+  .exar{font-size:.86rem; color:var(--muted); margin-top:3px}
+  .spk{flex:0 0 auto; width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer; display:grid; place-items:center; transition:.15s}
+  .spk:hover{border-color:var(--glow); color:var(--glow)}
+  .spk svg{width:17px; height:17px}
+  .readhint{font-size:.84rem; color:var(--muted); margin-top:12px; display:flex; align-items:center; gap:6px}
+
+  .context{font-size:1rem; margin-bottom:14px}
+  .evidence{list-style:none; display:flex; flex-direction:column; gap:7px; margin-bottom:16px}
+  .evidence li{background:var(--panel2); border-inline-start:3px solid var(--glow); border-radius:8px; padding:9px 12px; font-size:.93rem}
+  .ask{font-size:1.05rem; font-weight:700; margin-bottom:14px}
+  .sentence{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 15px; text-align:center; margin-bottom:16px; font-family:'Space Mono',monospace; font-size:1.05rem; direction:ltr; unicode-bidi:isolate}
+  .sentence .blank{display:inline-block; min-width:70px; border-bottom:2px dashed var(--glow); color:var(--glow); margin:0 4px}
+  .sentence .bad{color:var(--no); text-decoration:line-through}
+
+  .ladder{display:flex; flex-direction:column; gap:8px}
+  .lvl{display:flex; align-items:center; gap:12px; background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:11px 14px; cursor:pointer; transition:.16s; text-align:start; width:100%}
+  .lvl:hover{border-color:var(--glow); transform:translateX(-3px)}
+  .lvl .bar{width:54px; height:7px; border-radius:99px; flex:0 0 auto}
+  .lvl .lab{font-weight:700}
+  .lvl:disabled{cursor:default} .lvl.correct{border-color:var(--ok); background:rgba(57,193,108,.14)}
+  .lvl.wrong{border-color:var(--no); background:rgba(232,85,60,.12); animation:shake .3s}
+  @keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+
+  .options{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px}
+  .opt{font-family:'Space Mono',monospace; font-weight:700; font-size:1rem; direction:ltr; background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:11px 18px; cursor:pointer; transition:.16s}
+  .opt:hover{border-color:var(--glow); transform:translateY(-1px)}
+  .opt.correct{background:rgba(57,193,108,.16); border-color:var(--ok); color:#9be8b6}
+  .opt.wrong{background:rgba(232,85,60,.14); border-color:var(--no); color:#f0a99c; animation:shake .3s}
+  .opt:disabled{cursor:default; opacity:.85}
+
+  .reveal{margin-top:8px; padding:14px 15px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; display:none}
+  .reveal.show{display:block; animation:rise .35s}
+  .reveal .res{font-family:'Space Mono',monospace; direction:ltr; text-align:center; font-size:1.15rem; margin-bottom:6px}
+  .feedback{font-size:.93rem; min-height:1.3em}
+  .feedback.good,.reveal .why.good{color:#9be8b6} .feedback.bad,.reveal .why.bad{color:#f0a99c}
+
+  .gate-track{display:flex; gap:6px; margin-bottom:14px}
+  .gate-track i{flex:1; height:5px; border-radius:99px; background:var(--line); transition:.3s}
+  .gate-track i.done{background:var(--ok)} .gate-track i.cur{background:var(--glow)}
+
+  .nav{display:flex; justify-content:flex-end; margin-top:18px}
+  button.next{font-family:'Tajawal',sans-serif; font-weight:700; color:#10131a; background:var(--glow); border:none; border-radius:10px; padding:11px 22px; cursor:pointer; transition:.16s}
+  button.next:hover{filter:brightness(1.08)} button.next:disabled{opacity:.32; cursor:not-allowed}
+
+  .summary{display:none}
+  .summary.show{display:block; animation:rise .4s}
+  .summary h2{font-size:1.45rem; font-weight:800; margin-bottom:4px}
+  .summary .big{font-family:'Space Mono',monospace; font-size:2.2rem; color:var(--glow); margin:6px 0 2px}
+  .recap{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:14px}
+  @media (max-width:520px){ .recap{grid-template-columns:1fr} }
+  .rc{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:13px 15px}
+  .rc .q{font-weight:700; font-size:.92rem} .rc .w{font-family:'Space Mono',monospace; font-size:.85rem; color:var(--muted); direction:ltr; margin-top:3px}
+
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms!important;transition-duration:.001ms!important} .cursor{display:none} }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div><div class="eyebrow">درس كامل · MODALS</div><h1>افهم الـ Modals مع سامي</h1></div>
+    <div class="acc">إتقان أول محاولة <b id="acc">0/0</b></div>
+  </div>
+  <div class="sectionhead"><span class="pill" id="secPill">—</span><span id="secName">—</span><span class="pbar"><i id="pfill"></i></span></div>
+
+  <div class="stage">
+    <aside class="buddy">
+      <div class="bh">
+        <div class="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="#9db4e8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"></circle><line x1="15" y1="15" x2="20" y2="20"></line></svg></div>
+        <div><div class="bname">سامي</div><div class="brole">رفيقك بالدرس</div></div>
+      </div>
+      <div class="speech" id="speech"></div>
+    </aside>
+
+    <div class="card" id="card">
+      <div class="tag" id="tag"></div>
+      <div class="gate-track" id="gateTrack" style="display:none"></div>
+
+      <!-- interactive explain dial -->
+      <div class="dialbox" id="dialBox" style="display:none">
+        <div class="dreadout"><div class="dword" id="dWord"></div><div class="dar" id="dAr"></div></div>
+        <div class="dsent" id="dSent"></div>
+        <div class="dtrack">
+          <div class="dends"><span id="dEndL">أقلّ</span><span id="dEndR">أكثر</span></div>
+          <input type="range" id="dDial" min="0" max="100" value="10" aria-label="مؤشر">
+          <div class="dmarks" id="dMarks"></div>
+        </div>
+        <div class="dnote" id="dNote"></div>
+        <div class="dhint" id="dHint">↔︎ حرّك المؤشر يمين وشمال لتشوف الدرجات (وبيفتح "التالي")</div>
+      </div>
+
+      <div id="visual"></div>
+      <div class="context" id="context" style="display:none"></div>
+      <ul class="evidence" id="evidence" style="display:none"></ul>
+      <div class="ask" id="ask" style="display:none"></div>
+      <div class="sentence" id="sentence" style="display:none"></div>
+      <div class="ladder" id="ladder" style="display:none"></div>
+      <div class="options" id="options" style="display:none"></div>
+      <div class="reveal" id="reveal"><div class="res" id="res"></div><div class="why" id="why"></div></div>
+      <div class="feedback" id="feedback"></div>
+
+      <div class="summary" id="summary">
+        <h2>🎓 خلّصت درس الـ Modals!</h2>
+        <div class="brole" style="color:var(--muted)">إتقانك من أول محاولة:</div>
+        <div class="big" id="finalScore">0%</div>
+        <div id="finalMsg" style="font-size:.95rem"></div>
+        <div class="recap">
+          <div class="rc"><div class="q">قدّيش متأكّد؟</div><div class="w">can't · might/could · must</div></div>
+          <div class="rc"><div class="q">قدّيش مفروض؟</div><div class="w">don't have to · should · have to/must · mustn't</div></div>
+          <div class="rc"><div class="q">بتقدر؟ بتستأذن؟</div><div class="w">can · could · may · be able to</div></div>
+          <div class="rc"><div class="q">قدّيش مؤدّب؟</div><div class="w">can · could · would · shall</div></div>
+        </div>
+      </div>
+
+      <div class="nav"><button class="next" id="nextBtn">ابدأ ▶</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const ICONS={
+    home:'<path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/>', plane:'<path d="M2 13l20-7-7 20-3-8-8-3z"/>',
+    rain:'<path d="M7 15a4 4 0 01-.5-8 5 5 0 019.5 1.5 3.5 3.5 0 01-.5 6.5"/><path d="M9 19l-1 2M13 19l-1 2M17 19l-1 2"/>',
+    car:'<path d="M3 13l2-5h14l2 5"/><path d="M3 13h18v4H3z"/><circle cx="7" cy="18" r="1.3"/><circle cx="17" cy="18" r="1.3"/>',
+    pill:'<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 9v6M9 12h6"/>',
+    book:'<path d="M5 4h11a2 2 0 012 2v14H7a2 2 0 01-2-2z"/><path d="M9 8h6M9 12h5"/>',
+    phone:'<rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/>',
+    flag:'<path d="M6 4v16"/><path d="M6 5h11l-2 3 2 3H6"/>', tag:'<path d="M4 12l8-8 8 8-8 8z"/><circle cx="9" cy="9" r="1.1"/>',
+    key:'<circle cx="8" cy="9" r="3"/><path d="M10 11l8 8M16 16l2-2M14 19l2-2"/>', clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>',
+    bulb:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 00-4-10z"/>',
+    wave:'<path d="M3 12c2-3 4-3 6 0s4 3 6 0 4-3 6 0"/><path d="M3 17c2-3 4-3 6 0s4 3 6 0 4-3 6 0"/>',
+    chat:'<path d="M4 5h16v11H9l-5 4z"/>', box:'<path d="M3 8l9-4 9 4-9 4z"/><path d="M3 8v8l9 4 9-4V8"/>'
+  };
+  const icon=n=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(ICONS[n]||'')+'</svg>';
+  const spkSVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 8a5 5 0 010 8"/></svg>';
+  function say(t){ try{ if(window.speechSynthesis){ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.lang='en-US'; u.rate=.92; speechSynthesis.speak(u);} }catch(e){} }
+
+  const certainty=[{ar:'مستحيل',w:"can't",color:'#7C5CFF'},{ar:'يمكن / ممكن',w:'might / could',color:'#34B3A0'},{ar:'أكيد',w:'must',color:'#E8553C'}];
+  const obligation=[{ar:'مش ضروري',w:"don't have to",color:'#34B3A0'},{ar:'نصيحة',w:'should',color:'#5B8DEF'},{ar:'لازم',w:'have to / must',color:'#F2A93B'},{ar:'ممنوع',w:"mustn't",color:'#E8553C'}];
+  const S=(...l)=>l;
+
+  // explain-dial configs
+  const dialCertainty={ endL:'مستحيل', endR:'أكيد', sentence:'He ___ be tired.',
+    zones:[
+      {lo:0,hi:19,  w:"can't", ar:'مستحيل', color:'#7C5CFF', note:'متأكّد إنه *مش* صح، عندك دليل بينفي. مثال: He just woke up, he can\'t be tired.'},
+      {lo:20,hi:66, w:'might / could', ar:'يمكن / ممكن', color:'#34B3A0', note:'مجرّد احتمال — يمكن صح ويمكن لأ، ما عندك دليل حاسم.'},
+      {lo:67,hi:100,w:'must', ar:'أكيد', color:'#E8553C', note:'متأكّد تقريباً من دليل قوي. مثال: He worked all night, he must be tired.'}
+    ] };
+  const dialObligation={ endL:'حرّية', endR:'منع', sentence:'You ___ do it.',
+    zones:[
+      {lo:0,hi:24,  w:"don't have to", ar:'مش ضروري', color:'#34B3A0', note:'ما في إلزام — إنت حرّ تعمله أو لأ.'},
+      {lo:25,hi:54, w:'should', ar:'نصيحة', color:'#5B8DEF', note:'الأفضل تعمله — نصيحة، مش إجبار.'},
+      {lo:55,hi:82, w:'have to / must', ar:'لازم', color:'#F2A93B', note:'إجباري، مفروض عليك تعمله.'},
+      {lo:83,hi:100,w:"mustn't", ar:'ممنوع', color:'#E8553C', note:'الطرف التاني تماماً: ممنوع تعمله. (انتبه: غير "مش ضروري")'}
+    ] };
+  const dialPolite={ endL:'عادي', endR:'الأنعم', sentence:'___ you help me?',
+    zones:[
+      {lo:0,hi:33,  w:'Can', ar:'عادي', color:'#34B3A0', note:'طلب عادي ومباشر، بين الأصحاب.'},
+      {lo:34,hi:66, w:'Could', ar:'أأدب', color:'#5B8DEF', note:'أأدب — مناسب لحدا مش قريب.'},
+      {lo:67,hi:100,w:'Would', ar:'الأنعم', color:'#7C5CFF', note:'الأنعم والأرقى. (وللعرض: Shall I…?)'}
+    ] };
+
+  const steps=[
+    // INTRO
+    { sec:'البداية', pill:'00', type:'teach', tag:'مقدّمة',
+      lines:S("أهلاً! أنا *سامي* وهسّا نمشي بدرس الـ modals كامل سوا 🚀 على *أربع عيلات* بس.",
+              "السرّ: الـ modals *مش كلمات تتحفّظ* — كل وحدة بتجاوب سؤال، وأغلبهم *درجات على مؤشر*. رح نشرح كل عيلة منيح قبل ما نتمرّن. نبلّش بقاعدة الشكل.") },
+    { sec:'البداية', pill:'00', type:'teach', tag:'قاعدة الشكل', form:true,
+      lines:S("قاعدة وحدة بتنطبق على *كل* الـ modals. احفظها مرة وبترتاح طول الدرس 👇") },
+
+    // ===== FAMILY 1 =====
+    { sec:'العيلة ١ · الاستنتاج', pill:'01', type:'explain', tag:'الشرح: الاستنتاج', dial:dialCertainty,
+      lines:S("العيلة الأولى: *الاستنتاج*. يعني ما بتعرف الجواب أكيد — بتستنتجه من الدليل اللي قدّامك.",
+              "أهم فكرة بالدرس: هالكلمات *مش منفصلة*، هي *درجات على مؤشر تأكّد*. كل ما زاد تأكّدك، بتروح عاليمين: مستحيل ← يمكن ← أكيد.",
+              "حرّك المؤشر تحت وشوف كل درجة شو كلمتها وشو معناها 👇") },
+    { sec:'العيلة ١ · الاستنتاج', pill:'01', type:'examples', tag:'أمثلة من الحياة',
+      lines:S("هلأ بعد ما فهمت الفكرة — شوف الأمثلة، واقرأهم بصوت 🔊."),
+      items:[
+        {icon:'home', en:['He ','must',' be at home — the lights are on.'], ar:'أكيد بالبيت — الإضاءة شغّالة.'},
+        {icon:'plane',en:['She ',"can't",' be in Amman; she flew to Dubai.'], ar:'مستحيل تكون بعمّان؛ سافرت دبي.'},
+        {icon:'clock',en:['He ','might',' come later, I’m not sure.'], ar:'يمكن ييجي بعدين، مش متأكّد.'},
+        {icon:'rain', en:['The streets are wet — it ','must',' have rained.'], ar:'الشوارع مبلّلة — أكيد شتّت.'}
+      ] },
+    { sec:'العيلة ١ · الاستنتاج', pill:'01', type:'reason', tag:'قضية ١', ladder:certainty, correct:2,
+      evidence:["الإضاءة شغّالة بغرفته","سيارته قدّام البيت","سامع موسيقى من جوّا"],
+      ask:"احكم: قدّيش متأكّد إنه بالبيت؟", ok:"تمام — ثلاث أدلة قاطعة → *must*.", wrong:"الدليل قوي جداً → *must*." },
+    { sec:'العيلة ١ · الاستنتاج', pill:'01', type:'reason', tag:'قضية ٢', ladder:certainty, correct:0,
+      evidence:["شفناه بالمطار قبل ساعة","سافر برّا البلد اليوم"],
+      ask:"احكم: قدّيش متأكّد إنه بالبيت هلأ؟", ok:"بالضبط — الدليل بينفي → *can't*.", wrong:"الدليل بينفي إنه بالبيت → *can't*." },
+    { sec:'العيلة ١ · الاستنتاج', pill:'01', type:'choose', tag:'تمرين سريع',
+      context:"صاحبك ما بيردّ من الصبح، وعنده امتحان هلأ.", sentence:"He ___ be in the exam now.",
+      options:[{t:'might',ok:false},{t:'should',ok:false},{t:'must',ok:true}],
+      ok:"🔥 امتحان الآن + مختفي → *must*.", wrong:"أقوى من احتمال → *must*." },
+
+    // ===== FAMILY 2 =====
+    { sec:'العيلة ٢ · الإلزام والنصيحة', pill:'02', type:'explain', tag:'الشرح: الإلزام', dial:dialObligation,
+      lines:S("العيلة الثانية: *الإلزام والنصيحة*. السؤال: قدّيش الشي مفروض عليك؟",
+              "كمان *درجات* — من 'مش ضروري' (حرّية) لـ 'ممنوع' (لا تعمله)، وبينهم النصيحة واللزوم.",
+              "حرّك المؤشر وشوف كل درجة — وركّز ع الطرفين: *ممنوع* غير *مش ضروري* تماماً.") },
+    { sec:'العيلة ٢ · الإلزام والنصيحة', pill:'02', type:'examples', tag:'أمثلة من الحياة',
+      lines:S("اقرأهم بصوت 🔊 ولاحظ الفرق بين الدرجات."),
+      items:[
+        {icon:'pill', en:['You ','have to',' take the medicine.'], ar:'لازم تاخد الدوا (أمر الدكتور).'},
+        {icon:'book', en:['You ',"mustn't",' use your phone in the exam.'], ar:'ممنوع تستخدم تلفونك بالامتحان.'},
+        {icon:'bulb', en:['You look tired — you ','should',' rest.'], ar:'شكلك تعبان — المفروض ترتاح.'},
+        {icon:'tag',  en:['Entry is free — you ',"don't have to",' pay.'], ar:'الدخول مجاني — مش ضروري تدفع.'}
+      ] },
+    { sec:'العيلة ٢ · الإلزام والنصيحة', pill:'02', type:'reason', tag:'موقف ١', ladder:obligation, correct:2,
+      evidence:["الدكتور أمرك تاخد الدوا كل يوم","إجباري، مش اختياري"],
+      ask:"احكم: قدّيش هاد مفروض عليك؟", ok:"صح — إجباري → *have to / must*.", wrong:"أمر الدكتور إجباري → *have to / must*." },
+    { sec:'العيلة ٢ · الإلزام والنصيحة', pill:'02', type:'choose', tag:'نصيحة مش إلزام',
+      context:"فيلم حلو وبتنصح صاحبك يتفرّج.", sentence:"It's great — you ___ watch it.",
+      options:[{t:'must',ok:false},{t:'should',ok:true},{t:'mustn’t',ok:false}],
+      ok:"👌 نصيحة → *should*.", wrong:"نصيحة ودّية → *should*." },
+    { sec:'العيلة ٢ · الإلزام والنصيحة', pill:'02', type:'fix', tag:'صحّح الفخّ',
+      context:"التدخين *ممنوع* تماماً بالمستشفى.", bad:["You ","don't have to"," smoke in the hospital."],
+      options:[{t:"mustn't",ok:true},{t:'shouldn’t',ok:false},{t:'must',ok:false}],
+      ok:"🎯 ممنوع = *mustn't*. أمّا don't have to فمعناها 'مش ضروري'.", wrong:"ممنوع باتّاً → *mustn't*." },
+
+    // ===== FAMILY 3 =====
+    { sec:'العيلة ٣ · القدرة والإذن', pill:'03', type:'teach', tag:'الشرح: قدرة وإذن',
+      cards:[{h:'القدرة (بتقدر؟)', p:'can = تقدر هلأ · could = كنت تقدر بالماضي · be able to = بديل رسمي', mini:'I can swim. / I could swim at 5.'},
+             {h:'الإذن (بتستأذن؟)', p:'can / could = استئذان عادي · may = الأرسمى والأأدب', mini:'May I come in?'}],
+      lines:S("العيلة الثالثة *مختلفة* — مش مؤشر درجات، هي *نوعين* أسئلة بسيطين: بتقدر تعمل إشي؟ ولا بدك تستأذن؟",
+              "القدرة إلها زمن: can للحاضر، could للماضي. والإذن إله درجة: can/could عادي، وmay الأرسمى. شوف التفصيل 👇") },
+    { sec:'العيلة ٣ · القدرة والإذن', pill:'03', type:'examples', tag:'أمثلة من الحياة',
+      lines:S("اقرأهم بصوت 🔊 — لاحظ could للماضي وmay للإذن الرسمي."),
+      items:[
+        {icon:'flag', en:['Before the injury, she ','could',' run a marathon.'], ar:'قبل الإصابة، كانت تقدر تركض ماراثون.'},
+        {icon:'wave', en:['I ','can',' swim very well.'], ar:'بقدر أسبح منيح.'},
+        {icon:'phone',en:['','May',' I use your phone, please?'], ar:'ممكن أستخدم تلفونك، لو سمحت؟'},
+        {icon:'key',  en:['','Could',' I come in?'], ar:'بسمحلي أفوت؟'}
+      ] },
+    { sec:'العيلة ٣ · القدرة والإذن', pill:'03', type:'choose', tag:'قدرة بالماضي',
+      context:"بتحكي عن أيام طفولتك.", sentence:"When I was a kid, I ___ climb trees easily.",
+      options:[{t:'can',ok:false},{t:'could',ok:true},{t:'must',ok:false}],
+      ok:"تمام — قدرة بالماضي → could.", wrong:"الجملة عن الماضي → *could*." },
+    { sec:'العيلة ٣ · القدرة والإذن', pill:'03', type:'choose', tag:'إذن رسمي',
+      context:"بمكتب مديرك، بدك تطلع بدري بأدب رسمي.", sentence:"___ I leave early today?",
+      options:[{t:'May',ok:true},{t:'Must',ok:false},{t:'Should',ok:false}],
+      ok:"👌 استئذان رسمي → *May*.", wrong:"للاستئذان الرسمي → *May* I…?" },
+    { sec:'العيلة ٣ · القدرة والإذن', pill:'03', type:'fix', tag:'قاعدة الشكل',
+      context:"تذكّر: modal + الفعل الأساسي (بدون s، بدون to).", bad:["She can ","drives"," a bus."],
+      options:[{t:'drive',ok:true},{t:'to drive',ok:false},{t:'driving',ok:false}],
+      ok:"مظبوط — *can drive*.", wrong:"بعد أي modal الفعل أساسي → *drive*." },
+
+    // ===== FAMILY 4 =====
+    { sec:'العيلة ٤ · الطلبات والأدب', pill:'04', type:'explain', tag:'الشرح: طلبات وأدب', dial:dialPolite,
+      lines:S("آخر عيلة: *الطلبات*. لما تطلب إشي من حدا — بتختار درجة *الأدب*.",
+              "can عادي، could أأدب، would الأنعم. كل ما طلعت بالسلّم صار طلبك أرقى. وللعرض بنستخدم Shall I…؟",
+              "حرّك المؤشر وحسّ الفرق بدرجة الأدب 👇") },
+    { sec:'العيلة ٤ · الطلبات والأدب', pill:'04', type:'examples', tag:'أمثلة من الحياة',
+      lines:S("اقرأهم بصوت 🔊 ولاحظ تدرّج الأدب."),
+      items:[
+        {icon:'chat',en:['','Could',' you help me, please?'], ar:'ممكن تساعدني، لو سمحت؟'},
+        {icon:'chat',en:['','Would',' you pass the salt?'], ar:'ممكن تناولني الملح؟ (بأدب)'},
+        {icon:'box', en:['','Shall',' I carry that for you?'], ar:'بدّك أشيلهالك؟ (عرض)'},
+        {icon:'chat',en:['','Can',' you open the window?'], ar:'بتقدر تفتح الشبّاك؟ (عادي)'}
+      ] },
+    { sec:'العيلة ٤ · الطلبات والأدب', pill:'04', type:'choose', tag:'طلب مؤدّب',
+      context:"بدك تطلب مساعدة من حدا مش قريب، بأدب.", sentence:"___ you help me with this, please?",
+      options:[{t:'Could',ok:true},{t:'Must',ok:false},{t:'Should',ok:false}],
+      ok:"تمام — طلب مؤدّب → *Could*.", wrong:"للطلب المؤدّب → *Could / Would*." },
+    { sec:'العيلة ٤ · الطلبات والأدب', pill:'04', type:'choose', tag:'عرض مساعدة',
+      context:"صاحبك شايل أغراض تقيلة وبدك تعرض تساعده.", sentence:"___ I carry that for you?",
+      options:[{t:'Shall',ok:true},{t:'Must',ok:false},{t:"Mustn't",ok:false}],
+      ok:"👌 للعرض → *Shall I…?*", wrong:"إنت بتعرض مساعدة → *Shall I…?*" },
+
+    // ===== SPACED REVIEW =====
+    { sec:'مراجعة متباعدة', pill:'🔄', type:'teach', tag:'مراجعة سريعة',
+      lines:S("زي ما وعدتك — رجّعتلك إشي من *أول العيلات* عشان يثبت 🔄","ثلاث جُمل مخلوطة. ركّز.") },
+    { sec:'مراجعة متباعدة', pill:'🔄', type:'choose', tag:'مراجعة · استنتاج',
+      context:"عم تثلج برّا والطريق أبيض كله.", sentence:"The road ___ be slippery.",
+      options:[{t:'must',ok:true},{t:"can't",ok:false},{t:'might',ok:false}],
+      ok:"تمام — ثلج = دليل قوي → *must*.", wrong:"الثلج دليل قوي → *must*." },
+    { sec:'مراجعة متباعدة', pill:'🔄', type:'choose', tag:'مراجعة · الفخّ',
+      context:"المتحف مجاني تماماً.", sentence:"You ___ buy a ticket.",
+      options:[{t:"mustn't",ok:false},{t:"don't have to",ok:true},{t:'must',ok:false}],
+      ok:"👌 مجاني → *don't have to* (مش ممنوع!).", wrong:"مجاني → *don't have to*." },
+    { sec:'مراجعة متباعدة', pill:'🔄', type:'choose', tag:'مراجعة · قدرة',
+      context:"بتحكي عن مهاراتها وهي صغيرة.", sentence:"She ___ speak three languages as a child.",
+      options:[{t:'could',ok:true},{t:'can',ok:false},{t:'must',ok:false}],
+      ok:"تمام — قدرة بالماضي → *could*.", wrong:"الكلام عن الماضي → *could*." },
+
+    // ===== GATE =====
+    { sec:'بوابة الإتقان', pill:'★', type:'gate', tag:'بوابة الإتقان · كل العيلات',
+      lines:S("آخر تحدّي 🚪 خمس جُمل من *كل العيلات*. جاوب صح من أول مرة قدّ ما تقدر."),
+      subs:[
+        { context:"الأرض كلها مبلّلة.", sentence:"It ___ have rained.", options:[{t:'must',ok:true},{t:"can't",ok:false},{t:'might',ok:false}], note:"دليل قوي → must." },
+        { context:"الدخول مجاني بالكامل.", sentence:"You ___ pay.", options:[{t:"mustn't",ok:false},{t:"don't have to",ok:true},{t:'must',ok:false}], note:"مش ضروري → don't have to." },
+        { context:"قبل الإصابة، كانت رياضية محترفة.", sentence:"She ___ run fast.", options:[{t:'could',ok:true},{t:'can',ok:false},{t:'must',ok:false}], note:"قدرة بالماضي → could." },
+        { context:"بأدب، بتستأذن تستخدم تلفون حدا.", sentence:"___ I use your phone?", options:[{t:'May',ok:true},{t:'Must',ok:false},{t:'Shall',ok:false}], note:"استئذان مؤدّب → May." },
+        { context:"شكله تعبان وبتنصحه.", sentence:"You ___ rest.", options:[{t:'should',ok:true},{t:"mustn't",ok:false},{t:"can't",ok:false}], note:"نصيحة → should." }
+      ],
+      ok:"🏆 خلّصت البوابة! ماشي معك الـ modals كلهم." },
+
+    { sec:'الخلاصة', pill:'✓', type:'summary', tag:'الخلاصة' }
+  ];
+
+  // typewriter
+  function inst(el,raw){ el.innerHTML=''; let em=false,b='';
+    const f=()=>{ if(!b)return; if(em){const s=document.createElement('span');s.className='en';s.textContent=b;el.appendChild(s);} else el.appendChild(document.createTextNode(b)); b=''; };
+    for(const c of raw){ if(c==='*'){f();em=!em;} else b+=c; } f(); }
+  function type(el,raw,done){ if(reduce){inst(el,raw);done&&done();return;}
+    el.innerHTML=''; let em=false; const q=[]; for(const c of raw){ if(c==='*')em=!em; else q.push({c,em}); }
+    const cur=document.createElement('span'); cur.className='cursor'; el.appendChild(cur);
+    let i=0,sp=null,se=null; (function t(){ if(i>=q.length){cur.remove();done&&done();return;}
+      const {c,em}=q[i++]; if(sp===null||se!==em){sp=document.createElement('span'); if(em)sp.className='en'; se=em; el.insertBefore(sp,cur);} sp.appendChild(document.createTextNode(c)); setTimeout(t,c===' '?14:15+Math.random()*17);})(); }
+  let tok=0; function speak(lines){ const a=document.getElementById('speech'); a.innerHTML=''; const my=++tok; let i=0;
+    (function nx(){ if(my!==tok||i>=lines.length)return; const b=document.createElement('div'); b.className='bubble'; a.appendChild(b); type(b,lines[i++],()=>setTimeout(nx,230)); })(); }
+  function stars(el,raw){ inst(el,raw); }
+
+  const tag=document.getElementById('tag'), dialBox=document.getElementById('dialBox'), visual=document.getElementById('visual'),
+    context=document.getElementById('context'), evidence=document.getElementById('evidence'), ask=document.getElementById('ask'),
+    sentence=document.getElementById('sentence'), ladder=document.getElementById('ladder'), options=document.getElementById('options'),
+    reveal=document.getElementById('reveal'), res=document.getElementById('res'), why=document.getElementById('why'), feedback=document.getElementById('feedback'),
+    summary=document.getElementById('summary'), nextBtn=document.getElementById('nextBtn'), gateTrack=document.getElementById('gateTrack'),
+    accEl=document.getElementById('acc'), secPill=document.getElementById('secPill'), secName=document.getElementById('secName'), pfill=document.getElementById('pfill');
+  const dDial=document.getElementById('dDial'), dWord=document.getElementById('dWord'), dAr=document.getElementById('dAr'),
+    dSent=document.getElementById('dSent'), dMarks=document.getElementById('dMarks'), dNote=document.getElementById('dNote'),
+    dEndL=document.getElementById('dEndL'), dEndR=document.getElementById('dEndR'), dHint=document.getElementById('dHint');
+
+  let idx=0, accNum=0, accDen=0, firstTry=true, gateI=0;
+
+  function hideAll(){ [context,evidence,ask,sentence,ladder,options].forEach(e=>e.style.display='none');
+    reveal.classList.remove('show'); feedback.textContent=''; feedback.className='feedback'; gateTrack.style.display='none';
+    summary.classList.remove('show'); visual.innerHTML=''; dialBox.style.display='none'; }
+  function buildOptions(opts,onPick){ options.innerHTML=''; options.style.display='flex';
+    opts.forEach(o=>{ const b=document.createElement('button'); b.className='opt'; b.dir='ltr'; b.textContent=o.t; b.addEventListener('click',()=>onPick(o,b)); options.appendChild(b); }); }
+  function lockOptions(){ [...options.children].forEach(b=>b.disabled=true); }
+  function record(correct){ if(firstTry){ accDen++; if(correct)accNum++; accEl.textContent=accNum+'/'+accDen; firstTry=false; } }
+  function exSentence(p){ return p[0]+'<span class="hl">'+p[1]+'</span>'+p[2]; }
+  function plain(p){ return p.join(''); }
+
+  // ---- explain dial ----
+  let dialCfg=null, seen=new Set();
+  function zoneAt(v){ return dialCfg.zones.find(z=>v>=z.lo&&v<=z.hi); }
+  function paintDial(v){ const z=zoneAt(v); const gi=dialCfg.zones.indexOf(z);
+    document.documentElement.style.setProperty('--glow', z.color);
+    dWord.textContent=z.w; dAr.textContent=z.ar;
+    dSent.innerHTML=dialCfg.sentence.replace('___','<b>'+z.w+'</b>');
+    dNote.innerHTML='<span class="lbl">'+z.ar+':</span> '; stars2(dNote, z.note);
+    [...dMarks.children].forEach((m,k)=>m.classList.toggle('active',k===gi));
+    seen.add(gi); if(seen.size>=2){ nextBtn.disabled=false; dHint.textContent='✓ ممتاز — فهمت الدرجات. اضغط "التالي".'; }
+  }
+  function stars2(el,raw){ // append emphasis text after existing label
+    let em=false,b=''; const f=()=>{ if(!b)return; if(em){const s=document.createElement('span');s.className='en';s.textContent=b;el.appendChild(s);} else el.appendChild(document.createTextNode(b)); b=''; };
+    for(const c of raw){ if(c==='*'){f();em=!em;} else b+=c; } f(); }
+  function setupDial(cfg){ dialCfg=cfg; seen=new Set(); dialBox.style.display='block';
+    dEndL.textContent=cfg.endL; dEndR.textContent=cfg.endR;
+    dDial.style.background='linear-gradient(90deg,'+cfg.zones.map(z=>z.color).join(',')+')';
+    dMarks.innerHTML=''; cfg.zones.forEach(z=>{ const s=document.createElement('span'); s.className='dmark'; s.dir='ltr'; s.textContent=z.w.split(' / ')[0]; dMarks.appendChild(s); });
+    dHint.textContent='↔︎ حرّك المؤشر يمين وشمال لتشوف الدرجات (وبيفتح "التالي")';
+    dDial.value=8; paintDial(8); seen=new Set(); // reset seen after initial paint so user must move
+    nextBtn.disabled=true;
+  }
+  dDial.addEventListener('input',()=>paintDial(+dDial.value));
+
+  function render(){
+    const s=steps[idx]; hideAll();
+    secPill.textContent=s.pill; secName.textContent=s.sec;
+    pfill.style.width=(idx/(steps.length-1)*100)+'%';
+    tag.textContent=s.tag; speak(s.lines||[]);
+    nextBtn.disabled=false; nextBtn.style.display='';
+    nextBtn.textContent=(idx===0?'ابدأ ▶':(s.type==='summary'?'تمّ ✦':'التالي ▶'));
+
+    if(s.type==='explain'){ setupDial(s.dial); }
+    else if(s.type==='teach'){
+      let v='';
+      if(s.form) v+='<div class="formcard"><div class="rule">modal + الفعل الأساسي — بدون <b>to</b>، بدون <b>s</b>، نفس الشي لكل الضمائر.</div>'+
+        '<div class="ex"><span class="good">She can swim.</span> ✓</div><div class="ex"><span class="bad">She cans swim.</span> ✗</div>'+
+        '<div class="ex"><span class="bad">She can to swim.</span> ✗</div><div class="ex">النفي: <span class="good">She can\'t swim.</span></div></div>';
+      if(s.cards) v+='<div class="cards">'+s.cards.map(c=>'<div class="ccard"><h4>'+c.h+'</h4><p>'+c.p+'</p>'+(c.mini?'<div class="mini">'+c.mini+'</div>':'')+'</div>').join('')+'</div>';
+      visual.innerHTML=v;
+    }
+    else if(s.type==='examples'){
+      let v='<div class="exgrid">';
+      s.items.forEach((it,k)=> v+='<div class="excard"><div class="exicon">'+icon(it.icon)+'</div><div class="extext"><div class="exsent">'+exSentence(it.en)+'</div><div class="exar">'+it.ar+'</div></div><button class="spk" data-k="'+k+'" title="انطقها">'+spkSVG+'</button></div>');
+      v+='</div><div class="readhint">🔊 اضغط السمّاعة واقرأ بصوت عالي — زي ما إنت بفصل حقيقي.</div>';
+      visual.innerHTML=v;
+      [...visual.querySelectorAll('.spk')].forEach(btn=> btn.addEventListener('click',()=> say(plain(s.items[+btn.dataset.k].en)) ));
+    }
+    else if(s.type==='reason'){
+      firstTry=true; evidence.style.display='flex'; evidence.innerHTML=''; s.evidence.forEach(t=>{const li=document.createElement('li');li.textContent=t;evidence.appendChild(li);});
+      ask.style.display='block'; ask.textContent=s.ask; ladder.style.display='flex'; ladder.innerHTML='';
+      s.ladder.forEach((lv,k)=>{ const b=document.createElement('button'); b.className='lvl'; b.type='button';
+        b.innerHTML='<span class="bar" style="background:'+lv.color+'"></span><span class="lab">'+lv.ar+'</span>';
+        b.addEventListener('click',()=>{ const correct=k===s.correct; record(correct);
+          if(correct){ [...ladder.children].forEach(x=>x.disabled=true); b.classList.add('correct');
+            res.innerHTML='حكمك: <b style="color:'+s.ladder[s.correct].color+'">'+s.ladder[s.correct].w+'</b>'; why.className='why good'; stars(why,s.ok); reveal.classList.add('show'); nextBtn.disabled=false;
+          } else { b.classList.add('wrong'); setTimeout(()=>b.classList.remove('wrong'),350);
+            res.innerHTML='حكمك بيطلّع: <b style="color:'+lv.color+'">'+lv.w+'</b>'; why.className='why bad'; stars(why,s.wrong); reveal.classList.add('show'); } });
+        ladder.appendChild(b); });
+      nextBtn.disabled=true;
+    }
+    else if(s.type==='choose'||s.type==='fix'){
+      firstTry=true; if(s.context){ context.style.display='block'; context.textContent=s.context; }
+      sentence.style.display='block';
+      if(s.type==='choose') sentence.innerHTML=s.sentence.replace('___','<span class="blank">____</span>');
+      else sentence.innerHTML=s.bad[0]+'<span class="bad">'+s.bad[1]+'</span>'+s.bad[2];
+      buildOptions(s.options,(o,btn)=>{ const correct=o.ok; record(correct);
+        if(correct){ btn.classList.add('correct'); lockOptions();
+          if(s.type==='choose') sentence.querySelector('.blank').textContent=o.t; else sentence.innerHTML=s.bad[0]+'<b style="color:var(--ok)">'+o.t+'</b>'+s.bad[2];
+          feedback.className='feedback good'; stars(feedback,s.ok); nextBtn.disabled=false;
+        } else { btn.classList.add('wrong'); feedback.className='feedback bad'; stars(feedback,s.wrong); } });
+      nextBtn.disabled=true;
+    }
+    else if(s.type==='gate'){ gateTrack.style.display='flex'; gateI=0; renderGate(s); nextBtn.disabled=true; }
+    else if(s.type==='summary'){
+      summary.classList.add('show'); const pct=accDen?Math.round(accNum/accDen*100):0;
+      document.getElementById('finalScore').textContent=pct+'%';
+      document.getElementById('finalMsg').textContent = pct>=80?"ممتاز يا بطل — ماسك الـ modals بفهم مش بحفظ 💪":(pct>=60?"حلو، أساسك صار قوي. شوية مراجعة وبتثبت.":"بلّشنا نفهم — والمهم إنك عرفت *السؤال* ورا كل modal.");
+      speak(["الأربع عيلات: قدّيش متأكّد / قدّيش مفروض / بتقدر-بتستأذن / قدّيش مؤدّب 🎯","رح أرجّعلك هالقواعد على فترات بدروس جاي — هيك بنثبّت مش بنحفظ وبننسى."]); pfill.style.width='100%';
+    }
+  }
+
+  function renderGate(s){
+    hideAll(); gateTrack.style.display='flex'; tag.textContent=s.tag;
+    gateTrack.innerHTML=''; s.subs.forEach((_,k)=>{ const i=document.createElement('i'); i.className=k<gateI?'done':(k===gateI?'cur':''); gateTrack.appendChild(i); });
+    const sub=s.subs[gateI]; firstTry=true;
+    context.style.display='block'; context.textContent=sub.context;
+    sentence.style.display='block'; sentence.innerHTML=sub.sentence.replace('___','<span class="blank">____</span>');
+    buildOptions(sub.options,(o,btn)=>{ const correct=o.ok; record(correct);
+      if(correct){ btn.classList.add('correct'); lockOptions(); sentence.querySelector('.blank').textContent=o.t;
+        feedback.className='feedback good'; feedback.textContent='✓ '+sub.note; gateI++;
+        setTimeout(()=>{ if(gateI>=s.subs.length){ feedback.textContent=''; speak([s.ok]); nextBtn.disabled=false; gateTrack.querySelectorAll('i').forEach(i=>i.className='done'); } else renderGate(s); },950);
+      } else { btn.classList.add('wrong'); feedback.className='feedback bad'; feedback.textContent='مش هاد — '+sub.note;
+        setTimeout(()=>{ btn.classList.remove('wrong'); btn.disabled=false; feedback.textContent=''; },1500); } });
+  }
+
+  nextBtn.addEventListener('click',()=>{ if(nextBtn.disabled)return; if(idx>=steps.length-1)return; idx++; render(); });
+  render();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>مؤشر اليقين · might / could / should / must</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400&family=Rubik:wght@400;500;600;700&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --crimson:#8b2b1f; --crimson-2:#a8331f; --crimson-wash:#f7e6df;
+  --gold:#b8860b; --gold-soft:#c79a32; --gold-wash:#f7efd8;
+  --olive:#5c6d3e; --olive-soft:#74854e; --olive-wash:#eef1e2;
+  --ink:#231a12; --ink-soft:#6f6051;
+  --parchment:#f1e7cf; --paper:#fbf6e8; --paper2:#f6efdb;
+  --line:#d8c9a4;
+  --ok:#3f7d3f; --ok-wash:#e7f1e3; --no:#9e2b22; --no-wash:#f8e3e0;
+  --shadow:0 16px 40px -22px rgba(60,38,20,.55);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:'Tajawal',sans-serif;color:var(--ink);
+  background:
+    radial-gradient(1100px 560px at 88% -12%, #fff7e6 0%, transparent 58%),
+    radial-gradient(820px 460px at -5% 108%, #efe3c6 0%, transparent 55%),
+    linear-gradient(165deg,#f4ebd4,#ecdfbf);
+  background-attachment:fixed;line-height:1.8;-webkit-font-smoothing:antialiased;
+}
+.app{max-width:740px;margin:0 auto;padding:22px 18px 80px;min-height:100%}
+
+/* ===== scenes ===== */
+.scene{display:none;animation:rise .5s cubic-bezier(.2,.7,.3,1)}
+.scene.on{display:block}
+@keyframes rise{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:none}}
+.kicker{font-family:'Rubik',sans-serif;font-weight:600;font-size:12px;letter-spacing:1.5px;color:var(--gold);text-transform:uppercase;margin-top:14px}
+.scene-title{font-family:'Rubik',sans-serif;font-weight:700;font-size:22px;color:var(--ink);margin:3px 0 8px;line-height:1.3}
+.scene-title .hl{color:var(--crimson)}
+.lead{font-size:16px;color:#3c2e22;margin:6px 0 16px}
+.lead b{color:var(--crimson)}
+
+/* level accent tokens */
+.lv1{--acc:#5c6d3e}.lv2{--acc:#b8860b}.lv3{--acc:#a8331f}.lv4{--acc:#8b2b1f}
+
+/* signal bars */
+.bars{display:flex;align-items:flex-end;gap:3px;height:30px}
+.bars i{width:7px;background:#e3d6b4;border-radius:2px;display:block}
+.bars i:nth-child(1){height:34%}
+.bars i:nth-child(2){height:56%}
+.bars i:nth-child(3){height:78%}
+.bars i:nth-child(4){height:100%}
+.bars i.lit{background:var(--acc)}
+
+/* ===== SPLASH ===== */
+.splash{padding-top:22px}
+.title{font-family:'Rubik',sans-serif;font-weight:700;font-size:clamp(28px,8vw,44px);line-height:1.22;color:var(--ink)}
+.title .accent{color:var(--crimson);display:block}
+.title .en{direction:ltr;display:inline-block;font-size:.5em;color:var(--gold);letter-spacing:.5px;margin-top:8px}
+.hook-line{font-family:'Amiri',serif;font-size:clamp(17px,4.6vw,21px);color:var(--olive);font-style:italic;margin:14px 0 20px;border-right:3px solid var(--gold-soft);padding-right:13px;line-height:1.7}
+.splash .lead{font-size:17px;line-height:1.95}
+.recap{background:linear-gradient(180deg,var(--olive-wash),#fff);border:1px solid #cdd6b4;border-radius:16px;padding:16px 18px;margin:8px 0 4px}
+.recap h3{font-family:'Rubik',sans-serif;color:var(--olive);font-size:14.5px;margin-bottom:8px;display:flex;align-items:center;gap:7px}
+.recap ol{padding-right:20px;color:#3c2e22}
+.recap li{margin:6px 0;font-size:15px;line-height:1.7}
+.recap b{color:var(--crimson)}
+.recap .en{direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600;color:var(--olive)}
+
+/* ===== buttons ===== */
+.btn-row{display:flex;gap:11px;flex-wrap:wrap;margin:24px 0 8px}
+.btn{font-family:'Rubik',sans-serif;font-weight:600;font-size:16px;color:#fff;
+  background:linear-gradient(135deg,var(--crimson),var(--crimson-2));border:none;border-radius:13px;
+  padding:13px 24px;cursor:pointer;box-shadow:0 12px 24px -12px rgba(139,43,31,.8);transition:.2s}
+.btn:hover{transform:translateY(-2px);box-shadow:0 16px 30px -14px rgba(139,43,31,.9)}
+.btn:active{transform:translateY(0)}
+.btn.ghost{background:transparent;color:var(--crimson);border:1.5px solid var(--crimson);box-shadow:none;font-weight:600}
+.btn.ghost:hover{background:var(--crimson-wash);transform:none}
+
+/* ===== the gauge ===== */
+.gauge{display:flex;direction:ltr;border-radius:12px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);margin:4px 0 4px}
+.gseg{flex:1;padding:13px 6px;text-align:center;color:#fff;font-family:'Rubik',sans-serif;font-weight:700;font-size:16px}
+.gseg.lv1,.gseg.lv2,.gseg.lv3,.gseg.lv4{background:var(--acc)}
+.gseg small{display:block;font-size:10px;font-weight:500;opacity:.92;margin-top:3px;direction:rtl}
+.gauge-ends{display:flex;justify-content:space-between;font-family:'Rubik',sans-serif;font-size:12px;color:var(--ink-soft);margin-top:7px;padding:0 2px}
+
+/* ===== level cards ===== */
+.meter{display:flex;flex-direction:column;gap:12px;margin:14px 0}
+.level{background:var(--paper);border:1px solid var(--line);border-right:6px solid var(--acc);border-radius:16px;
+  padding:15px 16px;box-shadow:var(--shadow);display:grid;grid-template-columns:auto 1fr;gap:15px;align-items:center}
+.lv-strength{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:56px}
+.lv-deg{font-family:'Rubik',sans-serif;font-size:10.5px;font-weight:600;color:var(--acc);text-align:center}
+.lv-word{font-family:'Rubik',sans-serif;font-weight:700;font-size:25px;color:var(--acc);direction:ltr;
+  display:flex;align-items:baseline;gap:11px;flex-wrap:wrap}
+.lv-word .ar{font-family:'Tajawal',sans-serif;font-size:18px;color:var(--ink);direction:rtl;font-weight:700}
+.lv-mean{font-size:13.5px;color:var(--ink-soft);margin:1px 0 8px}
+.lv-ex{font-family:'Amiri',serif;font-size:16px;background:var(--paper2);border:1px solid var(--line);
+  border-radius:10px;padding:8px 12px;color:var(--ink);display:flex;gap:8px;flex-wrap:wrap;align-items:center;line-height:1.5}
+.lv-ex .en{direction:ltr;font-family:'Rubik',sans-serif;font-weight:600;font-size:14.5px;color:var(--acc)}
+.lv-ex .en b{color:var(--acc);text-decoration:underline;text-decoration-color:var(--gold-soft);text-underline-offset:3px}
+
+/* ===== golden rule (dark) ===== */
+.rule{background:linear-gradient(135deg,#2a1c14,#3d281c);color:#f6ecd6;border-radius:18px;padding:22px 20px;
+  margin:16px 0;text-align:center;box-shadow:0 20px 38px -20px rgba(40,24,14,.9);position:relative;overflow:hidden}
+.rule::before{content:"";position:absolute;inset:0;background:radial-gradient(420px 200px at 80% -20%,rgba(199,154,50,.20),transparent 60%)}
+.rule .label{font-family:'Rubik',sans-serif;color:var(--gold-soft);font-size:12px;letter-spacing:2px;margin-bottom:12px;position:relative}
+.rule .formula{font-family:'Amiri',serif;font-size:clamp(19px,5.2vw,26px);line-height:1.7;position:relative}
+.rule .formula b{color:#f3c969}
+.rule .formula .eq{color:var(--gold-soft);margin:0 8px;font-weight:700}
+
+/* ===== case files ===== */
+.cases{display:flex;flex-direction:column;gap:16px;margin:8px 0}
+.case{background:var(--paper);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.case-head{display:flex;align-items:center;justify-content:space-between;padding:13px 16px;color:#fff}
+.case.strong .case-head{background:linear-gradient(90deg,var(--crimson),var(--crimson-2))}
+.case.weak .case-head{background:linear-gradient(90deg,var(--olive),var(--olive-soft))}
+.case-no{font-family:'Rubik',sans-serif;font-weight:700;font-size:15px;letter-spacing:.3px}
+.case-kind{font-family:'Rubik',sans-serif;font-size:12px;font-weight:600;background:rgba(255,255,255,.22);padding:4px 12px;border-radius:20px}
+.ev{list-style:none;padding:14px 16px 4px;display:flex;flex-direction:column;gap:8px}
+.ev li{display:flex;align-items:center;gap:11px;background:var(--paper2);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-size:14.5px}
+.ev li .ico{font-size:18px;flex-shrink:0;width:22px;text-align:center}
+.case-read{display:flex;align-items:center;gap:14px;margin:8px 14px 16px;padding:12px 14px;border-radius:12px;background:var(--paper2);border:1.5px dashed var(--acc)}
+.cr-word{font-family:'Rubik',sans-serif;font-weight:700;font-size:21px;color:var(--acc);direction:ltr;white-space:nowrap}
+.cr-word .ar{font-family:'Tajawal',sans-serif;font-size:15px;color:var(--ink);margin-right:7px}
+.cr-note{font-size:13px;color:var(--ink-soft);line-height:1.6}
+
+/* ===== q cards ===== */
+.qcard{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:19px;margin:15px 0;box-shadow:var(--shadow)}
+.tag{display:inline-block;font-family:'Rubik',sans-serif;font-size:11.5px;font-weight:600;padding:5px 12px;border-radius:20px;margin-bottom:12px;background:var(--gold-wash);color:#6b4f2a;letter-spacing:.3px}
+.tag.easy{background:var(--olive-wash);color:#3f7d3f}
+.tag.med{background:var(--gold-wash);color:#9a6a16}
+.tag.hard{background:var(--crimson-wash);color:#a8331f}
+.qtext{font-size:16px;font-weight:500;color:#3c2e22;margin:6px 0 12px;line-height:1.7}
+.qtext .en{direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600;color:var(--crimson)}
+.sentence{font-family:'Amiri',serif;font-size:20px;line-height:1.7;text-align:center;color:var(--ink);
+  background:linear-gradient(180deg,#fffaf0,#f7efdb);border:1px solid var(--gold-soft);border-radius:13px;padding:14px 14px;margin:4px 0 12px}
+.sentence .en{direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600;font-size:17px;color:var(--crimson)}
+
+/* options */
+.options{display:flex;flex-direction:column;gap:10px}
+.opt{background:var(--paper2);border:1.5px solid var(--line);border-radius:12px;padding:12px 16px;font-size:15.5px;
+  cursor:pointer;transition:.16s;font-family:'Tajawal',sans-serif;position:relative}
+.opt .en{direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600;color:var(--crimson)}
+.opt:hover{border-color:var(--gold-soft);background:#fff}
+.opt.ok{background:var(--ok-wash);border-color:var(--ok);color:#245b24;font-weight:700}
+.opt.ok .en{color:#245b24}
+.opt.ok::after{content:"✓";position:absolute;left:14px;color:var(--ok);font-weight:900}
+.opt.no{background:var(--no-wash);border-color:var(--no);color:var(--no)}
+.opt.no::after{content:"✗";position:absolute;left:14px;color:var(--no);font-weight:900}
+.opt.lock{pointer-events:none;opacity:.55}
+.opt.lock.ok,.opt.lock.no{opacity:1}
+
+/* feedback */
+.feedback{display:none;margin-top:14px;padding:15px 17px;border-radius:13px;
+  background:linear-gradient(180deg,var(--olive-wash),#fff);border:1px solid #cdd6b4;border-right:4px solid var(--olive);
+  font-size:15px;line-height:1.9;color:#33291f}
+.feedback.show{display:block;animation:rise .35s}
+.feedback b{color:var(--crimson)}
+.feedback .en{direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600;color:var(--crimson)}
+
+/* tiles */
+.fillq{font-family:'Amiri',serif;font-size:19px;line-height:2.3;text-align:center;margin:6px 0 14px}
+.fillq .en{direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600;font-size:17px;color:var(--crimson)}
+.blank{display:inline-block;min-width:86px;border-bottom:3px dashed var(--gold-soft);margin:0 4px;color:var(--crimson);font-weight:700;text-align:center;vertical-align:middle}
+.blank.filled{border-bottom-style:solid;border-color:var(--ok);color:var(--ok)}
+.tileq{margin:10px 0}
+.tileq .tlabel{font-family:'Rubik',sans-serif;font-size:12px;color:var(--ink-soft);margin-bottom:7px;text-align:center}
+.tiles{display:flex;gap:9px;flex-wrap:wrap;justify-content:center}
+.tile{font-family:'Rubik',sans-serif;font-weight:600;font-size:18px;background:var(--paper2);border:1.5px solid var(--line);
+  border-radius:11px;padding:9px 18px;cursor:pointer;transition:.15s;color:var(--ink);direction:ltr}
+.tile.ar{font-family:'Tajawal',sans-serif;direction:rtl}
+.tile:hover{border-color:var(--gold-soft);background:#fff;transform:translateY(-2px)}
+.tile.ok{background:var(--ok-wash);border-color:var(--ok);color:#245b24;pointer-events:none}
+.tile.no{background:var(--no-wash);border-color:var(--no);color:var(--no);animation:shake .35s}
+.tileq.done .tile{pointer-events:none;opacity:.5}
+.tileq.done .tile.ok{opacity:1}
+@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+
+/* matching */
+.match-intro{font-family:'Rubik',sans-serif;font-size:12px;color:var(--ink-soft);text-align:center;margin-bottom:10px}
+.match-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.match-col{display:flex;flex-direction:column;gap:10px}
+.match-head{font-family:'Rubik',sans-serif;font-size:12px;font-weight:700;text-align:center;color:var(--ink-soft);margin-bottom:2px}
+.match-item{background:var(--paper2);border:1.5px solid var(--line);border-radius:12px;padding:12px 10px;text-align:center;
+  cursor:pointer;transition:.15s;font-size:15px;min-height:50px;display:grid;place-items:center;font-family:'Tajawal',sans-serif}
+.match-item.w{font-family:'Rubik',sans-serif;font-weight:600;direction:ltr;color:var(--crimson)}
+.match-item.sel{border-color:var(--crimson);background:var(--crimson-wash);box-shadow:0 0 0 2px var(--crimson-wash)}
+.match-item.done{background:var(--ok-wash);border-color:var(--ok);color:#245b24;font-weight:700;pointer-events:none}
+.match-item.done.w{color:#245b24}
+.match-item .pnum{display:none;font-family:'Rubik',sans-serif;font-size:11px;background:var(--ok);color:#fff;border-radius:50%;width:18px;height:18px;line-height:18px;margin-right:6px}
+.match-item.done .pnum{display:inline-block}
+.match-item.flash{animation:shake .35s;border-color:var(--no);background:var(--no-wash)}
+
+/* ordering */
+.order-intro{font-family:'Rubik',sans-serif;font-size:12px;color:var(--ink-soft);text-align:center;margin-bottom:10px}
+.order-pool{display:flex;flex-direction:column;gap:10px}
+.order-item{display:flex;align-items:center;gap:12px;background:var(--paper2);border:1.5px solid var(--line);border-radius:12px;
+  padding:12px 14px;cursor:pointer;transition:.15s;font-size:15px}
+.order-item .en{direction:ltr;font-family:'Rubik',sans-serif;font-weight:600;color:var(--crimson)}
+.order-item:hover{border-color:var(--gold-soft);background:#fff}
+.order-item .obadge{font-family:'Rubik',sans-serif;font-weight:700;width:28px;height:28px;border-radius:8px;display:grid;place-items:center;background:#e6d7b4;color:#6b4f2a;flex-shrink:0;transition:.2s}
+.order-item .otag{margin-right:auto;font-family:'Tajawal',sans-serif;font-size:13px;color:var(--ink-soft)}
+.order-item.done{background:var(--ok-wash);border-color:var(--ok);pointer-events:none}
+.order-item.done .obadge{background:var(--ok);color:#fff}
+.order-item.flash{animation:shake .35s;border-color:var(--no);background:var(--no-wash)}
+
+/* varied counter */
+.pcounter{font-family:'Rubik',sans-serif;font-weight:700;color:var(--crimson);text-align:center;font-size:14px;margin:6px 0}
+.progress{display:flex;gap:8px;justify-content:center;margin-bottom:8px}
+.pdot{width:11px;height:11px;border-radius:50%;background:#dfd0ac;transition:.3s}
+.pdot.on{background:var(--olive);transform:scale(1.15)}
+
+/* review */
+.reviewcard{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:var(--shadow)}
+.reviewcard h3{font-family:'Rubik',sans-serif;color:var(--crimson);font-size:14px;margin:16px 0 9px;border-bottom:1.5px solid var(--line);padding-bottom:5px}
+.rev-rows{display:flex;flex-direction:column;gap:8px}
+.rev-row{display:grid;grid-template-columns:auto 70px 1fr;gap:10px;align-items:center;background:var(--paper2);border:1px solid var(--line);border-right:5px solid var(--acc);border-radius:11px;padding:9px 12px}
+.rev-row .rw{font-family:'Rubik',sans-serif;font-weight:700;color:var(--acc);direction:ltr;font-size:16px}
+.rev-row .rar{font-family:'Tajawal',sans-serif;font-weight:700;color:var(--ink);font-size:15px}
+.rev-row .rm{font-size:13px;color:var(--ink-soft)}
+.rev-row .bars{height:22px}
+.rev-sent{font-family:'Amiri',serif;font-size:16px;text-align:center;background:linear-gradient(180deg,#fffaf0,#f7efdb);border:1px solid var(--gold-soft);border-radius:12px;padding:12px;margin-top:6px;line-height:2}
+.rev-sent .en{direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600;color:var(--crimson)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px}
+.stat{background:linear-gradient(180deg,#2a1c14,#3d281c);color:#f6ecd6;border-radius:14px;padding:14px 8px;text-align:center}
+.stat .n{font-family:'Rubik',sans-serif;font-weight:700;font-size:24px;color:#f3c969}
+.stat .l{font-size:11.5px;opacity:.9;margin-top:2px}
+
+/* closing */
+.closing{text-align:center;padding-top:14px}
+.ornament{color:var(--gold-soft);font-size:18px;letter-spacing:8px;margin:18px 0}
+.congrats{font-family:'Rubik',sans-serif;font-weight:700;font-size:30px;color:var(--crimson)}
+.sub{color:var(--ink-soft);font-size:15.5px;margin:8px 0 16px}
+
+@media(max-width:520px){
+  .level{grid-template-columns:1fr}
+  .lv-strength{flex-direction:row;justify-content:flex-start;gap:10px;min-width:0}
+  .gseg{font-size:14px}
+  .case-read{flex-direction:column;align-items:flex-start;gap:8px}
+  .rev-row{grid-template-columns:auto 60px 1fr}
+}
+@media (prefers-reduced-motion: reduce){
+  *{animation-duration:.001ms !important;transition-duration:.001ms !important}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ============ SCENE 0: SPLASH ============ -->
+<section class="scene on" data-scene="0">
+  <div class="splash">
+    <h1 class="title">مؤشر <span class="accent">اليقين</span>
+      <span class="en">might · could · should · must</span></h1>
+    <p class="hook-line">مش لازم تحفظ الكلمات الأربعة… بس قِيس قدّيش إنت متأكّد، والكلمة الصح بتيجي لحالها.</p>
+
+    <p class="lead">بعد دقائق قليلة، رح تمسك <b>أربع كلمات إنجليزية</b> كلّها بتترجم لنفس الفكرة: «قدّيش أنا متأكّد إنّ الشي صار». الحلوة إنّك ما رح تحفظهم غصب — رح تتعلّم <b>تقيس قوة الدليل</b>، والكلمة بتنحطّ مكانها لحالها، تمامًا متل المحقّق.</p>
+
+    <div class="recap">
+      <h3>⚙️ قبل ما نبدأ — ثبّت هالفكرتين</h3>
+      <ol>
+        <li>هالكلمات كلها <b>modals</b> (متل can / will)، وبتيجي <b>قبل الفعل الأساسي</b>، والفعل بيضلّ بصيغته البسيطة: <span class="en">He might <b>be</b></span> — مش «is».</li>
+        <li>لما منستنتج إشي مش متأكّدين منه 100%، منحطّ وحدة من هالكلمات قبل الفعل، وكل كلمة بتوصل <b>درجة تأكيد مختلفة</b>.</li>
+      </ol>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" onclick="go(1)">يلّا نبدأ التحقيق ←</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ SCENE 1: HOOK ============ -->
+<section class="scene" data-scene="1">
+  <div class="kicker">قبل أيّ قاعدة</div>
+  <h2 class="scene-title">كلمة وحدة بتقلب <span class="hl">الاتّهام</span></h2>
+  <p class="lead">خمّن بس — ما في صح وغلط بيكلّفك إشي هون. بدّي أوريك حركة صغيرة بتغيّر كلّ شي:</p>
+
+  <div class="qcard">
+    <div class="sentence"><span class="en">He ____ be the thief.</span><br>«هو ____ يكون السارق.»</div>
+    <div class="qtext">نفس الجملة، نفس الشخص. أي كلمة من هدول بتخلّيك <b>أكثر تأكيد</b> إنّه هو السارق فعلًا؟</div>
+    <div class="options" data-q="hook">
+      <div class="opt" data-ok="0"><span class="en">might</span> (يمكن)</div>
+      <div class="opt" data-ok="0"><span class="en">could</span> (ممكن)</div>
+      <div class="opt" data-ok="1"><span class="en">must</span> (أكيد)</div>
+    </div>
+    <div class="feedback" data-fb="hook">
+      شفت السحر؟ <b><span class="en">must</span> = «أكيد»</b> — أربع حروف بس قلبت الجملة من «يمكن يكون هو» لـ«أكيد هو السارق». نفس الجملة بالضبط، بس الكلمة هي اللي بتقول للسامع <b>قدّيش إنت واثق</b>.
+      <br><br>
+      هاي فكرة الدرس كلّها: عندك <b>مؤشر</b> من الأضعف للأقوى، وكل كلمة مكانها عليه. تعال نشوف الأربعة كلهم.
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(2)">سلّم اليقين — الأربع درجات ←</button>
+    <button class="btn ghost" onclick="back()">→ رجوع</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 2: DISPLAY 1 — THE METER ============ -->
+<section class="scene" data-scene="2">
+  <div class="kicker">خزّن بتأنّي · ما في أسئلة هون</div>
+  <h2 class="scene-title">سلّم اليقين — <span class="hl">أربع درجات</span></h2>
+  <p class="lead">تخيّل مؤشّر بيقيس قدّيش إنت متأكّد. كل ما تطلع فوق، بيزيد التأكيد. الأربع كلمات بترتّب عليه هيك (من الأضعف لليسار للأقوى لليمين):</p>
+
+  <div class="gauge">
+    <div class="gseg lv1"><span style="direction:ltr;display:inline-block">might</span><small>يمكن</small></div>
+    <div class="gseg lv2"><span style="direction:ltr;display:inline-block">could</span><small>ممكن</small></div>
+    <div class="gseg lv3"><span style="direction:ltr;display:inline-block">should</span><small>غالباً</small></div>
+    <div class="gseg lv4"><span style="direction:ltr;display:inline-block">must</span><small>أكيد</small></div>
+  </div>
+  <div class="gauge-ends"><span>← أقلّ تأكّد</span><span>أكثر تأكّد →</span></div>
+
+  <p class="lead" style="margin-top:18px">وهلأ كل درجة لحالها — شوف الكلمة، معناها بالعربي، قدّيش بتوصّل من تأكيد، ونفس الجملة كيف بتتغيّر فيها:</p>
+
+  <div class="meter">
+
+    <div class="level lv1">
+      <div class="lv-strength">
+        <div class="bars"><i class="lit"></i><i></i><i></i><i></i></div>
+        <span class="lv-deg">الأضعف</span>
+      </div>
+      <div class="lv-body">
+        <div class="lv-word">might <span class="ar">يمكن</span></div>
+        <div class="lv-mean">احتمال بعيد — مجرّد فكرة خطرت ببالك، الدليل مش كافي.</div>
+        <div class="lv-ex"><span class="en">He <b>might</b> be the thief.</span><span>«يمكن يكون هو السارق.»</span></div>
+      </div>
+    </div>
+
+    <div class="level lv2">
+      <div class="lv-strength">
+        <div class="bars"><i class="lit"></i><i class="lit"></i><i></i><i></i></div>
+        <span class="lv-deg">احتمال</span>
+      </div>
+      <div class="lv-body">
+        <div class="lv-word">could <span class="ar">ممكن</span></div>
+        <div class="lv-mean">احتمال وارد — صار في شي بيخلّيه ممكن فعلًا، بس لسّا مش مؤكّد.</div>
+        <div class="lv-ex"><span class="en">He <b>could</b> be the thief.</span><span>«ممكن يكون هو السارق.»</span></div>
+      </div>
+    </div>
+
+    <div class="level lv3">
+      <div class="lv-strength">
+        <div class="bars"><i class="lit"></i><i class="lit"></i><i class="lit"></i><i></i></div>
+        <span class="lv-deg">قوي</span>
+      </div>
+      <div class="lv-body">
+        <div class="lv-word">should <span class="ar">غالباً</span></div>
+        <div class="lv-mean">أغلب الظن — الدليل بيرجّح إنّه هو، بس باقي احتمال بسيط للعكس.</div>
+        <div class="lv-ex"><span class="en">He <b>should</b> be the thief.</span><span>«غالباً هو السارق.»</span></div>
+      </div>
+    </div>
+
+    <div class="level lv4">
+      <div class="lv-strength">
+        <div class="bars"><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i></div>
+        <span class="lv-deg">الأقوى</span>
+      </div>
+      <div class="lv-body">
+        <div class="lv-word">must <span class="ar">أكيد</span></div>
+        <div class="lv-mean">استنتاج شبه مؤكد — الدليل قاطع، ما إله مجال شك.</div>
+        <div class="lv-ex"><span class="en">He <b>must</b> be the thief.</span><span>«أكيد هو السارق.»</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(3)">القاعدة الذهبية + قضيّتان ←</button>
+    <button class="btn ghost" onclick="back()">→ رجوع</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 3: DISPLAY 2 — RULE + TWO CASES ============ -->
+<section class="scene" data-scene="3">
+  <div class="kicker">خزّن بتأنّي · ما في أسئلة هون</div>
+  <h2 class="scene-title">القاعدة الذهبية + <span class="hl">قضيّتان</span></h2>
+  <p class="lead">طيّب، كيف بتعرف على أيّ درجة تحطّ المؤشر؟ القاعدة بسطر واحد — احفظها وانتهى الدرس:</p>
+
+  <div class="rule">
+    <div class="label">◆ القاعدة الذهبية ◆</div>
+    <div class="formula">قوّة الدليل <b class="eq">=</b> مكان المؤشر</div>
+    <div style="font-family:'Tajawal',sans-serif;font-size:14px;color:#e9d9b6;margin-top:12px;position:relative">دليل قوي → بتطلع فوق (<b style="color:#f3c969">must</b>). دليل ضعيف → بتنزل تحت (<b style="color:#f3c969">might</b>).</div>
+  </div>
+
+  <p class="lead" style="margin-top:18px">تعال نطبّقها على قضيّتين عند نفس المحقّق — نفس المتّهم «أحمد»، بس الدليل مختلف:</p>
+
+  <div class="cases">
+
+    <div class="case strong lv4">
+      <div class="case-head"><span class="case-no">القضية 1</span><span class="case-kind">دليل قوي</span></div>
+      <ul class="ev">
+        <li><span class="ico">🖐️</span> بصمات أحمد على الخزنة.</li>
+        <li><span class="ico">🎥</span> كاميرا المراقبة مصوّراه وقت السرقة.</li>
+        <li><span class="ico">💵</span> المبلغ المسروق لقيناه بجيبته.</li>
+      </ul>
+      <div class="case-read">
+        <div class="bars"><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i></div>
+        <div>
+          <div class="cr-word">must <span class="ar">أكيد</span></div>
+          <div class="cr-note">دليل قاطع ما إله مجال شك → بنطلع لأعلى درجة: <span style="direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600">He must be the thief.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="case weak lv1">
+      <div class="case-head"><span class="case-no">القضية 2</span><span class="case-kind">دليل ضعيف</span></div>
+      <ul class="ev">
+        <li><span class="ico">📍</span> أحمد كان قريب من المكان وقت السرقة.</li>
+        <li><span class="ico">🚫</span> ما في كاميرا ولا بصمات ولا شهود.</li>
+        <li><span class="ico">🏘️</span> بس إنه كان موجود بالحي.</li>
+      </ul>
+      <div class="case-read">
+        <div class="bars"><i class="lit"></i><i></i><i></i><i></i></div>
+        <div>
+          <div class="cr-word">might <span class="ar">يمكن</span></div>
+          <div class="cr-note">مجرّد إنه كان بالحي ما بيثبت شي → بننزل لأضعف درجة: <span style="direction:ltr;display:inline-block;font-family:'Rubik',sans-serif;font-weight:600">He might be the thief.</span></div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="lead" style="margin-top:14px;text-align:center;font-style:italic;color:var(--olive)">لاحظ: ما حفظنا ولا كلمة — قِسنا قوة الدليل، والكلمة إجت لحالها.</p>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(4)">جرّب حالك ←</button>
+    <button class="btn ghost" onclick="back()">→ رجوع</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 4: GRADUATED RETRIEVAL ============ -->
+<section class="scene" data-scene="4">
+  <div class="kicker">سؤال سؤال · السحب بيصير أصعب شوي</div>
+  <h2 class="scene-title">جرّب حالك — <span class="hl">درجة درجة</span></h2>
+  <p class="lead">هلأ بعد ما خزّنت، خلّينا نسحب المعلومة من راسك ثلاث مرّات: مرّة بتتعرّف، مرّة بتكمّل، ومرّة بتفكّر.</p>
+
+  <!-- Q1: recognition -->
+  <div class="qcard">
+    <div class="tag easy">🟢 تعرّف</div>
+    <div class="qtext">أيّ كلمة بتوصّل <b>أعلى درجة تأكيد</b> — يعني استنتاج شبه مؤكد، الدليل قاطع؟</div>
+    <div class="options" data-q="g1">
+      <div class="opt" data-ok="0"><span class="en">might</span></div>
+      <div class="opt" data-ok="0"><span class="en">should</span></div>
+      <div class="opt" data-ok="1"><span class="en">must</span></div>
+    </div>
+    <div class="feedback" data-fb="g1">
+      <b>تمام!</b> <span class="en">must</span> = «أكيد» = أعلى درجة بالمؤشر (الأربع أعمدة مولّعة). تذكّر القضية القوية: بصمات + كاميرا + المبلغ بجيبته → <span class="en">must</span>.
+    </div>
+  </div>
+
+  <!-- Q2: cued (tiles) -->
+  <div class="qcard">
+    <div class="tag med">🟡 إكمال</div>
+    <div class="qtext">عندك دليل قاطع 100%. كمّل من الكلمات تحت — اضغط الصح لكل فراغ:</div>
+    <div class="fillq">
+      <span class="en">He <span class="blank" data-slot="a">…</span> be the thief</span> — ومعناها بالعربي <span class="blank" data-slot="b">…</span>.
+    </div>
+    <div class="tileq" data-target="a">
+      <div class="tlabel">الكلمة الإنجليزية:</div>
+      <div class="tiles">
+        <span class="tile" data-ok="0">might</span>
+        <span class="tile" data-ok="0">could</span>
+        <span class="tile" data-ok="1">must</span>
+      </div>
+    </div>
+    <div class="tileq" data-target="b">
+      <div class="tlabel">المعنى بالعربي:</div>
+      <div class="tiles">
+        <span class="tile ar" data-ok="0">يمكن</span>
+        <span class="tile ar" data-ok="0">غالباً</span>
+        <span class="tile ar" data-ok="1">أكيد</span>
+      </div>
+    </div>
+    <div class="feedback" data-fb="g2">
+      <b>بالظبط.</b> <span class="en">must</span> + «أكيد». الدليل القاطع دايمًا بياخدك لأعلى الـمؤشر.
+    </div>
+  </div>
+
+  <!-- Q3: reasoning -->
+  <div class="qcard">
+    <div class="tag hard">🔴 تفكير</div>
+    <div class="qtext">أحمد بس كان موجود بالحي وقت السرقة — <b>ما في كاميرا ولا بصمات ولا شهود</b>. أي كلمة الصح، وليش؟</div>
+    <div class="options" data-q="g3">
+      <div class="opt" data-ok="0"><span class="en">must</span> — لأنّه أكيد هو السارق</div>
+      <div class="opt" data-ok="1"><span class="en">might</span> — لأنّ الدليل ضعيف، فهو مجرّد احتمال بعيد</div>
+      <div class="opt" data-ok="0"><span class="en">should</span> — لأنّه غالباً هو</div>
+    </div>
+    <div class="feedback" data-fb="g3">
+      <b>أحسنت — هون بيبان الطالب الفاهم.</b> الدليل ضعيف، فما بنقدر نتأكّد → بننزل لأضعف درجة: <span class="en">might</span> = «يمكن». تطبيق مباشر للقاعدة: <b>قوة الدليل = مكان المؤشر</b>. ما لازم الدليل يفرض عليك تأكيد أكثر من اللي بيستاهله.
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(5)">ثبّتها بأشكال مختلفة ←</button>
+    <button class="btn ghost" onclick="back()">→ رجوع</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 5: VARIED REINFORCEMENT ============ -->
+<section class="scene" data-scene="5">
+  <div class="kicker">ست طرق · كل سؤال شكل مختلف</div>
+  <h2 class="scene-title">ثبّتها <span class="hl">بأشكال مختلفة</span></h2>
+  <p class="lead">القصّة صارت واضحة. خلّينا نثبّتها بستّ طرق: توصيل، صح/غلط، اختيار، إكمال، وترتيب.</p>
+
+  <div class="pcounter" id="vcounter">0 / 6</div>
+  <div class="progress" id="vprogress">
+    <div class="pdot"></div><div class="pdot"></div><div class="pdot"></div>
+    <div class="pdot"></div><div class="pdot"></div><div class="pdot"></div>
+  </div>
+
+  <!-- V1: matching word -> arabic -->
+  <div class="qcard" data-vq="1">
+    <div class="tag">🔗 1/6 · توصيل</div>
+    <div class="qtext">وصّل كل كلمة إنجليزية مع معناها بالعربي:</div>
+    <div class="match-intro">اضغط كلمة من اليمين، بعدها معناها من اليسار.</div>
+    <div class="match-grid" data-match="m1">
+      <div class="match-col">
+        <div class="match-head">الكلمة</div>
+        <div class="match-item w" data-pair="might">might</div>
+        <div class="match-item w" data-pair="could">could</div>
+        <div class="match-item w" data-pair="should">should</div>
+        <div class="match-item w" data-pair="must">must</div>
+      </div>
+      <div class="match-col">
+        <div class="match-head">المعنى</div>
+        <div class="match-item" data-pair="should">غالباً</div>
+        <div class="match-item" data-pair="must">أكيد</div>
+        <div class="match-item" data-pair="might">يمكن</div>
+        <div class="match-item" data-pair="could">ممكن</div>
+      </div>
+    </div>
+    <div class="feedback" data-fb="v1">
+      <b>ممتاز!</b> might=يمكن · could=ممكن · should=غالباً · must=أكيد. هدول الأربعة هم كل الدرس.
+    </div>
+  </div>
+
+  <!-- V2: matching word -> degree -->
+  <div class="qcard" data-vq="2">
+    <div class="tag">🔗 2/6 · توصيل</div>
+    <div class="qtext">وصّل كل كلمة مع <b>درجة التأكيد</b> اللي بتوصّلها:</div>
+    <div class="match-intro">اضغط الكلمة من اليمين، بعدها الدرجة من اليسار.</div>
+    <div class="match-grid" data-match="m2">
+      <div class="match-col">
+        <div class="match-head">الكلمة</div>
+        <div class="match-item w" data-pair="d-might">might</div>
+        <div class="match-item w" data-pair="d-could">could</div>
+        <div class="match-item w" data-pair="d-should">should</div>
+        <div class="match-item w" data-pair="d-must">must</div>
+      </div>
+      <div class="match-col">
+        <div class="match-head">الدرجة</div>
+        <div class="match-item" data-pair="d-must">استنتاج شبه مؤكد</div>
+        <div class="match-item" data-pair="d-might">احتمال بعيد</div>
+        <div class="match-item" data-pair="d-should">أغلب الظن</div>
+        <div class="match-item" data-pair="d-could">احتمال وارد</div>
+      </div>
+    </div>
+    <div class="feedback" data-fb="v2">
+      <b>بالظبط.</b> شوف المؤشر طالع: احتمال بعيد ← احتمال وارد ← أغلب الظن ← استنتاج شبه مؤكد. كل درجة أقوى من اللي قبلها.
+    </div>
+  </div>
+
+  <!-- V3: T/F -->
+  <div class="qcard" data-vq="3">
+    <div class="tag">✅ 3/6 · صح / غلط</div>
+    <div class="sentence">«كلمة <span class="en">must</span> منستعملها لما يكون عندنا دليل قاطع ما إله مجال شك.»</div>
+    <div class="qtext">هل العبارة صحيحة؟</div>
+    <div class="options" data-q="v3">
+      <div class="opt" data-ok="1">صح ✓</div>
+      <div class="opt" data-ok="0">غلط ✗</div>
+    </div>
+    <div class="feedback" data-fb="v3">
+      <b>صح.</b> <span class="en">must</span> = «أكيد» = أعلى درجة، وبتيجي بس مع الدليل القاطع. متل قضية البصمات + الكاميرا + المبلغ.
+    </div>
+  </div>
+
+  <!-- V4: MCQ (case) -->
+  <div class="qcard" data-vq="4">
+    <div class="tag">⭕ 4/6 · اختيار</div>
+    <div class="qtext">الدليل: <b>بصمات على الخزنة + كاميرا مصوّراه + المبلغ بجيبته</b>. أي كلمة الصح؟</div>
+    <div class="options" data-q="v4">
+      <div class="opt" data-ok="0"><span class="en">might</span> (يمكن)</div>
+      <div class="opt" data-ok="0"><span class="en">could</span> (ممكن)</div>
+      <div class="opt" data-ok="1"><span class="en">must</span> (أكيد)</div>
+    </div>
+    <div class="feedback" data-fb="v4">
+      <b>ممتاز.</b> دليل قاطع → أعلى درجة → <span class="en">must</span>. لو الدليل كان ضعيف (مجرّد إنه بالحي)، كان نزّلنا لـ<span class="en">might</span>.
+    </div>
+  </div>
+
+  <!-- V5: fill (tiles) -->
+  <div class="qcard" data-vq="5">
+    <div class="tag">✍️ 5/6 · إكمال</div>
+    <div class="qtext">«غالباً هو السارق» (أغلب الظن، بس باقي شك بسيط). كمّل الجملة الإنجليزية:</div>
+    <div class="fillq">
+      <span class="en">He <span class="blank" data-slot="a">…</span> be the thief.</span>
+    </div>
+    <div class="tileq" data-target="a">
+      <div class="tlabel">الكلمة الصح:</div>
+      <div class="tiles">
+        <span class="tile" data-ok="0">could</span>
+        <span class="tile" data-ok="1">should</span>
+        <span class="tile" data-ok="0">must</span>
+      </div>
+    </div>
+    <div class="feedback" data-fb="v5">
+      <b>صح.</b> «غالباً» = <span class="en">should</span> = الدرجة الثالثة (ثلاث أعمدة مولّعة). أقوى من «ممكن»، بس لسّا مش «أكيد».
+    </div>
+  </div>
+
+  <!-- V6: ordering -->
+  <div class="qcard" data-vq="6">
+    <div class="tag">🔢 6/6 · ترتيب</div>
+    <div class="qtext">رتّب الكلمات من <b>الأضعف تأكيدًا للأقوى</b> — اضغطهم بالترتيب الصح:</div>
+    <div class="order-intro">ابدأ بالأضعف. كل ضغطة صح بتاخد رقمها.</div>
+    <div class="order-pool" data-order="o1">
+      <div class="order-item" data-order-idx="2"><span class="obadge">؟</span> <span class="en">should</span> <span class="otag">غالباً</span></div>
+      <div class="order-item" data-order-idx="0"><span class="obadge">؟</span> <span class="en">might</span> <span class="otag">يمكن</span></div>
+      <div class="order-item" data-order-idx="3"><span class="obadge">؟</span> <span class="en">must</span> <span class="otag">أكيد</span></div>
+      <div class="order-item" data-order-idx="1"><span class="obadge">؟</span> <span class="en">could</span> <span class="otag">ممكن</span></div>
+    </div>
+    <div class="feedback" data-fb="v6">
+      <b>أحسنت!</b> might ← could ← should ← must (يمكن ← ممكن ← غالباً ← أكيد). لو مسكت هالترتيب، مسكت الدرس كلّه.
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(6)">انتبه — مصيدة جايّة ←</button>
+    <button class="btn ghost" onclick="back()">→ رجوع</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 6: TRAP ============ -->
+<section class="scene" data-scene="6">
+  <div class="kicker">ركّز · لا تستعجل</div>
+  <h2 class="scene-title">مصيدة بتغلّط <span class="hl">الشاطر</span></h2>
+  <p class="lead">⚠️ <span class="en">might</span> و<span class="en">must</span> الاتنين بيبدأوا بحرف <span class="en">m</span> وبيشبهوا بعض — بس هم <b>طرفين متعاكسين</b>. اقرا بتركيز:</p>
+
+  <div class="qcard">
+    <div class="sentence">الدليل قاطع: بصمات + كاميرا + المبلغ بجيبته.<br>طالب كتب: <span class="en">«He might be the thief.»</span></div>
+    <div class="qtext">هل اختار الكلمة الصح؟</div>
+    <div class="options" data-q="trap">
+      <div class="opt" data-ok="0">صح — <span class="en">might</span> بتنفع للدليل القوي</div>
+      <div class="opt" data-ok="1">غلط — <span class="en">might</span> معناها «يمكن» (أضعف درجة)، والدليل هون قاطع فلازم <span class="en">must</span> = «أكيد»</div>
+    </div>
+    <div class="feedback" data-fb="trap">
+      <b>أحسنت — هاي بالظبط المصيدة.</b> الطالب خلط بين كلمتين متشابهتين بالشكل، متعاكستين بالمعنى:
+      <br><br>
+      • <span class="en">might</span> = <b>أسفل المؤشر</b> = «يمكن» (أضعف درجة، احتمال بعيد).<br>
+      • <span class="en">must</span> = <b>أعلى المؤشر</b> = «أكيد» (أقوى درجة، دليل قاطع).
+      <br><br>
+      حيلة تفصلهم: <b><span class="en">might</span> فيها الـ <span class="en">i</span> الخفيفة</b> زي «يمكن» الخفيفة الناعمة، و<b><span class="en">must</span> قويّة ومحسومة</b> زي «أكيد». القاعدة الذهبية بتحسمها: دليل قاطع → دايمًا <span class="en">must</span>.
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(7)">المراجعة السريعة ←</button>
+    <button class="btn ghost" onclick="back()">→ رجوع</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 7: REVIEW ============ -->
+<section class="scene" data-scene="7">
+  <div class="kicker">نص دقيقة بترجعلك</div>
+  <h2 class="scene-title">المراجعة <span class="hl">السريعة</span></h2>
+  <p class="lead">قبل ما تخلّص، خذ نظرة على بطاقة التلخيص — هاي اللي رح تتذكّرها بالامتحان.</p>
+
+  <div class="reviewcard">
+    <div class="rule" style="margin:0 0 18px">
+      <div class="label">◆ الفكرة بسطر واحد ◆</div>
+      <div class="formula" style="font-size:19px;line-height:1.8">ما بتحفظ الكلمة — بتقيس قدّيش إنت متأكّد، والكلمة بتيجي لحالها.<br><b>قوّة الدليل = مكان المؤشر.</b></div>
+    </div>
+
+    <h3>الأربع درجات (من الأضعف للأقوى)</h3>
+    <div class="rev-rows">
+      <div class="rev-row lv1"><div class="bars"><i class="lit"></i><i></i><i></i><i></i></div><span class="rw">might</span><span><span class="rar">يمكن</span> <span class="rm">— احتمال بعيد</span></span></div>
+      <div class="rev-row lv2"><div class="bars"><i class="lit"></i><i class="lit"></i><i></i><i></i></div><span class="rw">could</span><span><span class="rar">ممكن</span> <span class="rm">— احتمال وارد</span></span></div>
+      <div class="rev-row lv3"><div class="bars"><i class="lit"></i><i class="lit"></i><i class="lit"></i><i></i></div><span class="rw">should</span><span><span class="rar">غالباً</span> <span class="rm">— أغلب الظن</span></span></div>
+      <div class="rev-row lv4"><div class="bars"><i class="lit"></i><i class="lit"></i><i class="lit"></i><i class="lit"></i></div><span class="rw">must</span><span><span class="rar">أكيد</span> <span class="rm">— استنتاج شبه مؤكد</span></span></div>
+    </div>
+
+    <h3>نفس الجملة على كل درجة</h3>
+    <div class="rev-sent">
+      <span class="en">He might be the thief.</span> «يمكن يكون هو السارق.»<br>
+      <span class="en">He could be the thief.</span> «ممكن يكون هو السارق.»<br>
+      <span class="en">He should be the thief.</span> «غالباً هو السارق.»<br>
+      <span class="en">He must be the thief.</span> «أكيد هو السارق.»
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="n">4</div><div class="l">كلمات أتقنتها</div></div>
+      <div class="stat"><div class="n">9</div><div class="l">أسئلة حلّيتها</div></div>
+      <div class="stat"><div class="n">1</div><div class="l">قاعدة ذهبية</div></div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" onclick="go(8)">المحطة الأخيرة ←</button>
+    <button class="btn ghost" onclick="back()">→ رجوع</button>
+  </div>
+</section>
+
+<!-- ============ SCENE 8: CLOSING ============ -->
+<section class="scene closing" data-scene="8">
+  <div class="ornament">❋ ❋ ❋</div>
+  <div class="congrats">أحسنت 🔎</div>
+  <div class="sub">صرت تقرا التأكيد متل المحقّق تمامًا.</div>
+
+  <div class="rule">
+    <div class="label">◆ اللي طلعت فيه اليوم ◆</div>
+    <div class="formula" style="font-size:19px;line-height:1.9">
+      عندك مؤشّر من الأضعف للأقوى:<br>
+      <b>might ← could ← should ← must</b><br>
+      <span style="font-size:16px">(يمكن ← ممكن ← غالباً ← أكيد)</span><br>
+      وزّن الدليل… والكلمة بتيجي لحالها.
+    </div>
+  </div>
+
+  <div class="btn-row" style="justify-content:center">
+    <button class="btn" id="btn_lesson_complete">انهاء الدرس</button>
+    <button class="btn ghost" onclick="back()">→ رجوع</button>
+  </div>
+  <div class="ornament">❋ ❋ ❋</div>
+</section>
+
+</div>
+
+<script>
+/* ===== scenes (no progress chrome — navigation only) ===== */
+var SCENES = document.querySelectorAll('.scene');
+
+var CURRENT = 0;
+function go(n){
+  CURRENT = n;
+  SCENES.forEach(function(s){ s.classList.remove('on'); });
+  var target = document.querySelector('.scene[data-scene="'+n+'"]');
+  if(target) target.classList.add('on');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+go(0);
+
+/* back: return to the previous scene (no-op on the splash) */
+function back(){ if(CURRENT>0) go(CURRENT-1); }
+
+/* ===== helper: reveal feedback inside a qcard ===== */
+function revealFB(el){
+  var card = el.closest('.qcard');
+  if(!card) return;
+  var fb = card.querySelector('.feedback');
+  if(fb) fb.classList.add('show');
+}
+
+/* ===== MCQ / TF options ===== */
+document.querySelectorAll('.options').forEach(function(group){
+  group.querySelectorAll('.opt').forEach(function(opt){
+    opt.addEventListener('click',function(){
+      if(group.dataset.answered) return;
+      group.dataset.answered='1';
+      group.querySelectorAll('.opt').forEach(function(o){
+        o.classList.add('lock');
+        if(o.dataset.ok==='1') o.classList.add('ok');
+      });
+      if(opt.dataset.ok==='1') opt.classList.add('ok');
+      else opt.classList.add('no');
+      revealFB(opt);
+      bumpVaried(opt);
+    });
+  });
+});
+
+/* ===== TILES (fill in blank) ===== */
+document.querySelectorAll('.tileq').forEach(function(tq){
+  var target = tq.dataset.target;
+  tq.querySelectorAll('.tile').forEach(function(tile){
+    tile.addEventListener('click',function(){
+      if(tq.classList.contains('done')) return;
+      if(tile.dataset.ok==='1'){
+        tile.classList.add('ok');
+        tq.classList.add('done');
+        var card = tq.closest('.qcard');
+        var blank = card.querySelector('.blank[data-slot="'+target+'"]');
+        if(blank){ blank.textContent = tile.textContent; blank.classList.add('filled'); }
+        var all = card.querySelectorAll('.tileq');
+        var done = card.querySelectorAll('.tileq.done');
+        if(all.length===done.length){ revealFB(tile); bumpVaried(tile); }
+      } else {
+        tile.classList.add('no');
+        setTimeout(function(){ tile.classList.remove('no'); },380);
+      }
+    });
+  });
+});
+
+/* ===== MATCHING ===== */
+document.querySelectorAll('.match-grid').forEach(function(grid){
+  var selected=null;
+  var pairCount=0;
+  var totalPairs=grid.querySelectorAll('.match-item').length/2;
+  grid.querySelectorAll('.match-item').forEach(function(item){
+    item.addEventListener('click',function(){
+      if(item.classList.contains('done')) return;
+      if(!selected){
+        selected=item; item.classList.add('sel'); return;
+      }
+      if(selected===item){ item.classList.remove('sel'); selected=null; return; }
+      if(selected.parentElement===item.parentElement){
+        selected.classList.remove('sel'); selected=item; item.classList.add('sel'); return;
+      }
+      if(selected.dataset.pair===item.dataset.pair){
+        var n = pairCount+1;
+        [selected,item].forEach(function(x){
+          x.classList.remove('sel'); x.classList.add('done');
+          var b=document.createElement('span'); b.className='pnum'; b.textContent=n; b.style.display='inline-block';
+          x.appendChild(b);
+        });
+        pairCount++;
+        selected=null;
+        if(pairCount===totalPairs){ revealFB(item); bumpVaried(item); }
+      } else {
+        var a=selected, b=item;
+        a.classList.add('flash'); b.classList.add('flash');
+        setTimeout(function(){ a.classList.remove('flash','sel'); b.classList.remove('flash'); },380);
+        selected=null;
+      }
+    });
+  });
+});
+
+/* ===== ORDERING ===== */
+document.querySelectorAll('.order-pool').forEach(function(pool){
+  var next=0;
+  var items=pool.querySelectorAll('.order-item');
+  items.forEach(function(item){
+    item.addEventListener('click',function(){
+      if(item.classList.contains('done')) return;
+      var idx=parseInt(item.dataset.orderIdx,10);
+      if(idx===next){
+        item.classList.add('done');
+        item.querySelector('.obadge').textContent=next+1;
+        next++;
+        if(next===items.length){ revealFB(item); bumpVaried(item); }
+      } else {
+        item.classList.add('flash');
+        setTimeout(function(){ item.classList.remove('flash'); },380);
+      }
+    });
+  });
+});
+
+/* ===== varied scene progress counter ===== */
+var variedDone={};
+function bumpVaried(el){
+  var card = el.closest('.qcard');
+  if(!card || !card.dataset.vq) return;
+  var id=card.dataset.vq;
+  if(variedDone[id]) return;
+  variedDone[id]=true;
+  var count=Object.keys(variedDone).length;
+  var arNums=['0','1','2','3','4','5','6'];
+  var counter=document.getElementById('vcounter');
+  if(counter) counter.textContent=arNums[count]+' / 6';
+  var pdots=document.querySelectorAll('#vprogress .pdot');
+  if(pdots[count-1]) pdots[count-1].classList.add('on');
+}
+
+/* ===== lesson complete (closing scene) — verbatim ===== */
+document.getElementById("btn_lesson_complete").addEventListener("click", () => {
+  window.parent.postMessage(
+    {
+      type: "LESSON_COMPLETED",
+      data: {
+        action: "button_clicked"
+      }
+    },
+    "*"
+  );
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modals & Related Verbs · توجيهي · مع سامي</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{ --bg:#14161D; --panel:#1B1E27; --panel2:#232733; --ink:#ECEAE3; --muted:#8C909C; --line:#2C313D;
+    --glow:#5B8DEF; --ok:#39C16C; --no:#E8553C; --r:14px; }
+  *{box-sizing:border-box; margin:0; padding:0}
+  body{ background:radial-gradient(900px 520px at 82% -12%, rgba(91,141,239,.07), transparent 60%), var(--bg);
+    color:var(--ink); font-family:'Tajawal',system-ui,sans-serif; min-height:100vh; line-height:1.6; padding:20px 16px 64px; }
+  .app{max-width:1000px; margin:0 auto}
+  .topbar{display:flex; align-items:flex-end; justify-content:space-between; gap:12px; margin-bottom:8px}
+  .eyebrow{font-family:'Space Mono',monospace; font-size:.7rem; letter-spacing:.14em; color:var(--muted); text-transform:uppercase}
+  h1{font-size:1.32rem; font-weight:800}
+  .acc{font-family:'Space Mono',monospace; font-size:.78rem; border:1px solid var(--line); border-radius:8px; padding:6px 11px; white-space:nowrap}
+  .acc b{color:var(--glow)}
+  .sectionhead{display:flex; align-items:center; gap:10px; margin:14px 0 18px; font-size:.85rem; color:var(--muted)}
+  .sectionhead .pill{font-family:'Space Mono',monospace; font-size:.7rem; color:var(--glow); border:1px solid var(--line); border-radius:99px; padding:3px 10px; white-space:nowrap}
+  .pbar{flex:1; height:5px; background:var(--line); border-radius:99px; overflow:hidden}
+  .pbar>i{display:block; height:100%; width:0; background:linear-gradient(90deg,#5B8DEF,#E8553C); transition:width .5s}
+
+  .stage{display:grid; grid-template-columns:290px 1fr; gap:18px}
+  @media (max-width:760px){ .stage{grid-template-columns:1fr} }
+
+  .buddy{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:18px; align-self:start}
+  .bh{display:flex; align-items:center; gap:11px; margin-bottom:14px}
+  .avatar{width:46px; height:46px; border-radius:50%; background:radial-gradient(circle at 30% 25%, #2f3a52, #1a1f2b); border:1px solid #3a455e; display:grid; place-items:center; box-shadow:0 0 0 4px rgba(91,141,239,.08)}
+  .avatar svg{width:26px; height:26px}
+  .bname{font-weight:800} .brole{font-size:.74rem; color:var(--muted); font-family:'Space Mono',monospace}
+  .speech{display:flex; flex-direction:column; gap:9px; min-height:120px}
+  .bubble{background:var(--panel2); border:1px solid var(--line); border-radius:12px 12px 12px 4px; padding:10px 13px; font-size:.95rem; opacity:0; transform:translateY(6px); animation:rise .35s ease forwards}
+  @keyframes rise{to{opacity:1; transform:none}}
+  .en{font-family:'Space Mono',monospace; font-weight:700; color:var(--glow); direction:ltr; unicode-bidi:isolate}
+  .cursor{display:inline-block; width:8px; height:1.05em; background:var(--glow); vertical-align:-2px; margin-inline-start:2px; animation:blink .9s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:22px}
+  .tag{font-family:'Space Mono',monospace; font-size:.72rem; letter-spacing:.14em; color:var(--glow); text-transform:uppercase; margin-bottom:14px}
+
+  .dialbox{position:relative; overflow:hidden}
+  .dialbox::before{content:""; position:absolute; inset:-50% 24% auto; height:280px; background:radial-gradient(closest-side, var(--glow), transparent 70%); opacity:.15; filter:blur(8px); transition:.4s; pointer-events:none}
+  .dreadout{position:relative; text-align:center; margin-bottom:10px}
+  .dword{font-family:'Space Mono',monospace; font-weight:700; font-size:2.3rem; line-height:1.15; color:var(--glow); direction:ltr; transition:color .4s}
+  .dar{font-size:1.1rem; font-weight:700; margin-top:5px}
+  .dsent{position:relative; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px; text-align:center; margin:12px 0; font-family:'Space Mono',monospace; font-size:1rem; direction:ltr; unicode-bidi:isolate}
+  .dsent b{color:var(--glow); transition:color .4s}
+  .dtrack{position:relative; direction:ltr; padding:0 4px}
+  .dends{display:flex; justify-content:space-between; font-size:.74rem; color:var(--muted); margin-bottom:7px; direction:rtl}
+  #dDial{-webkit-appearance:none; appearance:none; width:100%; height:14px; border-radius:10px; outline:none; cursor:pointer}
+  #dDial::-webkit-slider-thumb{-webkit-appearance:none; width:30px; height:30px; border-radius:50%; background:#fff; border:4px solid var(--glow); box-shadow:0 3px 12px rgba(0,0,0,.5); transition:border-color .4s}
+  #dDial::-moz-range-thumb{width:26px; height:26px; border-radius:50%; background:#fff; border:4px solid var(--glow); box-shadow:0 3px 12px rgba(0,0,0,.5)}
+  .dmarks{display:flex; justify-content:space-between; margin-top:9px}
+  .dmark{font-family:'Space Mono',monospace; font-size:.66rem; color:var(--muted); flex:1; text-align:center; transition:.25s}
+  .dmark.active{color:var(--ink); text-shadow:0 0 12px var(--glow)}
+  .dnote{position:relative; margin-top:14px; background:var(--panel2); border:1px solid var(--line); border-inline-start:3px solid var(--glow); border-radius:10px; padding:11px 14px; font-size:.92rem; transition:border-color .4s}
+  .dnote .lbl{font-weight:800; color:var(--glow); transition:color .4s}
+  .dhint{font-size:.82rem; color:var(--muted); margin-top:10px}
+
+  .cards{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:6px}
+  @media (max-width:520px){ .cards{grid-template-columns:1fr} }
+  .ccard{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:13px 15px}
+  .ccard h4{font-size:.95rem; margin-bottom:5px} .ccard p{font-size:.88rem; color:var(--muted)}
+  .ccard .mini{font-family:'Space Mono',monospace; font-size:.8rem; color:var(--ink); direction:ltr; margin-top:7px}
+  .trap{background:rgba(232,85,60,.10); border:1px solid #5a3a37; border-radius:10px; padding:12px 14px; font-size:.92rem; margin-top:6px}
+  .trap b{color:#ffb3a7}
+  .families{display:flex; flex-direction:column; gap:8px; margin-top:4px}
+  .fam{background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:10px 13px}
+  .fam .fl{font-weight:800; font-size:.9rem; margin-bottom:3px}
+  .fam .fw{font-family:'Space Mono',monospace; font-size:.84rem; color:var(--ink); direction:ltr}
+
+  .exgrid{display:flex; flex-direction:column; gap:10px}
+  .excard{display:flex; align-items:center; gap:13px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:12px 14px}
+  .exicon{width:42px; height:42px; flex:0 0 auto; border-radius:10px; display:grid; place-items:center; background:rgba(91,141,239,.12); color:var(--glow)}
+  .exicon svg{width:23px; height:23px}
+  .extext{flex:1; min-width:0}
+  .exsent{font-family:'Space Mono',monospace; font-size:.98rem; direction:ltr; unicode-bidi:isolate; line-height:1.45}
+  .exsent .hl{background:rgba(232,85,60,.22); color:#ffd2c9; padding:1px 5px; border-radius:5px; font-weight:700}
+  .exar{font-size:.86rem; color:var(--muted); margin-top:3px}
+  .spk{flex:0 0 auto; width:34px; height:34px; border-radius:9px; border:1px solid var(--line); background:transparent; color:var(--muted); cursor:pointer; display:grid; place-items:center; transition:.15s}
+  .spk:hover{border-color:var(--glow); color:var(--glow)} .spk svg{width:17px; height:17px}
+  .readhint{font-size:.84rem; color:var(--muted); margin-top:12px}
+
+  .context{font-size:1rem; margin-bottom:14px}
+  .sentence{background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 15px; text-align:center; margin-bottom:16px; font-family:'Space Mono',monospace; font-size:1.02rem; direction:ltr; unicode-bidi:isolate}
+  .sentence .blank{display:inline-block; min-width:80px; border-bottom:2px dashed var(--glow); color:var(--glow); margin:0 4px}
+  .sentence .hl{background:rgba(91,141,239,.2); color:#bcd2ff; padding:1px 6px; border-radius:5px; font-weight:700}
+  .sentence .bad{color:var(--no); text-decoration:line-through}
+
+  .options{display:flex; flex-wrap:wrap; gap:10px; margin-bottom:14px}
+  .opt{font-family:'Space Mono',monospace; font-weight:700; font-size:1rem; direction:ltr; background:var(--panel2); color:var(--ink); border:1px solid var(--line); border-radius:10px; padding:11px 18px; cursor:pointer; transition:.16s}
+  .opt.aropt{font-family:'Tajawal',sans-serif; direction:rtl}
+  .opt:hover{border-color:var(--glow); transform:translateY(-1px)}
+  .opt.correct{background:rgba(57,193,108,.16); border-color:var(--ok); color:#9be8b6}
+  .opt.wrong{background:rgba(232,85,60,.14); border-color:var(--no); color:#f0a99c; animation:shake .3s}
+  .opt:disabled{cursor:default; opacity:.85}
+  @keyframes shake{25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}
+  .feedback{font-size:.92rem; min-height:1.3em} .feedback.good{color:#9be8b6} .feedback.bad{color:#f0a99c}
+
+  .gate-track{display:flex; gap:6px; margin-bottom:14px}
+  .gate-track i{flex:1; height:5px; border-radius:99px; background:var(--line); transition:.3s}
+  .gate-track i.done{background:var(--ok)} .gate-track i.cur{background:var(--glow)}
+
+  .nav{display:flex; justify-content:flex-end; margin-top:18px}
+  button.next{font-family:'Tajawal',sans-serif; font-weight:700; color:#10131a; background:var(--glow); border:none; border-radius:10px; padding:11px 22px; cursor:pointer; transition:.16s}
+  button.next:hover{filter:brightness(1.08)} button.next:disabled{opacity:.32; cursor:not-allowed}
+
+  .summary{display:none}
+  .summary.show{display:block; animation:rise .4s}
+  .summary h2{font-size:1.4rem; font-weight:800; margin-bottom:4px}
+  .summary .big{font-family:'Space Mono',monospace; font-size:2.1rem; color:var(--glow); margin:6px 0 2px}
+  table.sum{width:100%; border-collapse:collapse; margin-top:14px; font-size:.86rem}
+  table.sum th,table.sum td{border:1px solid var(--line); padding:9px 11px; text-align:start; vertical-align:top}
+  table.sum th{background:var(--panel2); color:var(--glow); white-space:nowrap}
+  table.sum td.w{font-family:'Space Mono',monospace; direction:ltr; color:var(--ink)}
+
+  @media (prefers-reduced-motion: reduce){ *{animation-duration:.001ms!important;transition-duration:.001ms!important} .cursor{display:none} }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <div><div class="eyebrow">توجيهي · Unit 6 · Grammar 1</div><h1>Modals &amp; Related Verbs — مع سامي</h1></div>
+    <div class="acc">إتقان أول محاولة <b id="acc">0/0</b></div>
+  </div>
+  <div class="sectionhead"><span class="pill" id="secPill">—</span><span id="secName">—</span><span class="pbar"><i id="pfill"></i></span></div>
+
+  <div class="stage">
+    <aside class="buddy">
+      <div class="bh">
+        <div class="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="#9db4e8" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="10.5" cy="10.5" r="6"></circle><line x1="15" y1="15" x2="20" y2="20"></line></svg></div>
+        <div><div class="bname">سامي</div><div class="brole">رفيقك بالدرس</div></div>
+      </div>
+      <div class="speech" id="speech"></div>
+    </aside>
+
+    <div class="card" id="card">
+      <div class="tag" id="tag"></div>
+      <div class="gate-track" id="gateTrack" style="display:none"></div>
+
+      <div class="dialbox" id="dialBox" style="display:none">
+        <div class="dreadout"><div class="dword" id="dWord"></div><div class="dar" id="dAr"></div></div>
+        <div class="dsent" id="dSent"></div>
+        <div class="dtrack">
+          <div class="dends"><span id="dEndL"></span><span id="dEndR"></span></div>
+          <input type="range" id="dDial" min="0" max="100" value="8" aria-label="مؤشر">
+          <div class="dmarks" id="dMarks"></div>
+        </div>
+        <div class="dnote" id="dNote"></div>
+        <div class="dhint" id="dHint"></div>
+      </div>
+
+      <div id="visual"></div>
+      <div class="context" id="context" style="display:none"></div>
+      <div class="sentence" id="sentence" style="display:none"></div>
+      <div class="options" id="options" style="display:none"></div>
+      <div class="feedback" id="feedback"></div>
+
+      <div class="summary" id="summary">
+        <h2>🎓 خلّصت درس Modals &amp; Related Verbs!</h2>
+        <div class="brole" style="color:var(--muted)">إتقانك من أول محاولة:</div>
+        <div class="big" id="finalScore">0%</div>
+        <div id="finalMsg" style="font-size:.95rem; margin-bottom:6px"></div>
+        <table class="sum">
+          <tr><th>الوظيفة</th><th>الكلمات (بدائل عن بعض)</th></tr>
+          <tr><td>إلزام (لازم)</td><td class="w">must · have to · have got to · need to · be obliged/required to</td></tr>
+          <tr><td>مش ضروري</td><td class="w">don't have to · don't need to · needn't · not obliged/required to</td></tr>
+          <tr><td>نصيحة وواجب</td><td class="w">should · ought to · had better · be supposed to</td></tr>
+          <tr><td>إذن (مسموح)</td><td class="w">can · could · may · be allowed/permitted to</td></tr>
+          <tr><td>منع (ممنوع)</td><td class="w">mustn't · can't · couldn't · not allowed/permitted to · be forbidden</td></tr>
+        </table>
+      </div>
+
+      <div class="nav"><button class="next" id="nextBtn">ابدأ ▶</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const reduce=window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const ICONS={ pill:'<rect x="4" y="4" width="16" height="16" rx="4"/><path d="M12 9v6M9 12h6"/>',
+    book:'<path d="M5 4h11a2 2 0 012 2v14H7a2 2 0 01-2-2z"/><path d="M9 8h6M9 12h5"/>',
+    bulb:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 00-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 00-4-10z"/>',
+    tag:'<path d="M4 12l8-8 8 8-8 8z"/><circle cx="9" cy="9" r="1.1"/>', key:'<circle cx="8" cy="9" r="3"/><path d="M10 11l8 8M16 16l2-2M14 19l2-2"/>',
+    no:'<circle cx="12" cy="12" r="8"/><path d="M7 7l10 10"/>', shield:'<path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z"/>', clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>' };
+  const icon=n=>'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">'+(ICONS[n]||'')+'</svg>';
+  const spkSVG='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M17 8a5 5 0 010 8"/></svg>';
+  function say(t){ try{ if(window.speechSynthesis){ speechSynthesis.cancel(); const u=new SpeechSynthesisUtterance(t); u.lang='en-US'; u.rate=.92; speechSynthesis.speak(u);} }catch(e){} }
+  const isAr=s=>/[\u0600-\u06FF]/.test(s);
+
+  const dOblig={ endL:'مش ضروري', endR:'لازم (إلزام)', sentence:'You ___ do it.',
+    zones:[
+      {lo:0,hi:32,  w:"don't have to", ar:'مش ضروري', color:'#34B3A0', note:'ما في إلزام — إنت حرّ تعمله أو لأ. (= needn\'t / not obliged to)'},
+      {lo:33,hi:65, w:'should', ar:'نصيحة / واجب', color:'#5B8DEF', note:'الأفضل/المفروض تعمله — نصيحة أو واجب. (= ought to / had better / be supposed to)'},
+      {lo:66,hi:100,w:'must / have to', ar:'لازم', color:'#E8553C', note:'إجباري، ما في خيار. (= need to / have got to / be obliged to / be required to)'}
+    ] };
+  const dPerm={ endL:'ممنوع (منع)', endR:'مسموح (إذن)', sentence:'You ___ enter.',
+    zones:[
+      {lo:0,hi:49,  w:"mustn't / can't", ar:'ممنوع', color:'#E8553C', note:'ممنوع تعمله. (= not allowed to / not permitted to / be forbidden). تذكّر: المنع *لازم يكون منفي*!'},
+      {lo:50,hi:100,w:'can / could / may', ar:'مسموح', color:'#34B3A0', note:'مسموح تعمله. (= be allowed to / be permitted to). may = الأرسمى، و could/couldn\'t للماضي.'}
+    ] };
+  const S=(...l)=>l;
+
+  // helper to build a sentence with a highlighted word (function-ID style)
+  const HL=(pre,word,post)=> pre+'<span class="hl">'+word+'</span>'+post;
+
+  const steps=[
+    // INTRO
+    { sec:'البداية', pill:'00', type:'teach', tag:'مقدّمة',
+      lines:S("أهلاً! أنا *سامي*. اليوم درس التوجيهي: *Modals & related verbs* 🚀",
+              "السرّ زيّ ما بيقول أستاذك: *افهم المعنى (الوظيفة) وكل إشي بينحل*. كل modal بيجاوب وظيفة: إلزام؟ نصيحة؟ إذن؟ منع؟",
+              "وإشي مهم: كثير كلمات *بدائل عن بعض* (related verbs) — هاد بيجيلك بسؤال الاستبدال. يلا نبدا بالمؤشر الأول.") },
+
+    // DIAL A: obligation axis
+    { sec:'محور الإلزام', pill:'01', type:'explain', tag:'الشرح: محور الإلزام', dial:dOblig,
+      lines:S("أول محور: *قدّيش الشي مفروض عليك؟* من 'مش ضروري' لـ 'لازم'، وبينهم النصيحة/الواجب.",
+              "حرّك المؤشر وشوف كل درجة: الكلمة + معناها + *بدائلها*. هاي عيلة كاملة 👇") },
+    { sec:'محور الإلزام', pill:'01', type:'examples', tag:'أمثلة',
+      lines:S("اقرأهم بصوت 🔊 ولاحظ كل درجة."),
+      items:[
+        {icon:'pill', en:['You ','have to',' take the medicine.'], ar:'لازم تاخد الدوا (إلزام).'},
+        {icon:'bulb', en:['You ','should',' see a doctor.'], ar:'المفروض تشوف دكتور (نصيحة).'},
+        {icon:'tag',  en:['Entry is free — you ',"don't have to",' pay.'], ar:'الدخول مجاني — مش ضروري تدفع.'}
+      ] },
+
+    // must vs have to
+    { sec:'must مقابل have to', pill:'02', type:'teach', tag:'فرق دقيق: must vs have to',
+      cards:[{h:'must — من المتحدّث', p:'الإلزام جاي من المتكلّم نفسه (رأيه/قراره). غالباً مع I think / really.', mini:'I really must study tonight.'},
+             {h:'have to — من سلطة خارجية', p:'الإلزام جاي من برّا (قانون/أمر/شخص تاني)، مش من المتكلّم.', mini:'I have to wear a uniform (school rule).'}],
+      lines:S("الاثنين معناهم 'لازم'، بس الفرق *مصدر الإلزام*:",
+              "حيلة تثبتها: *must كلمة وحدة = داخلي* (من المتكلّم)، *have to كلمتين = خارجي* (من برّا). وhave to أخفّ من must شوي.") },
+    { sec:'must مقابل have to', pill:'02', type:'choose', tag:'حدّد المصدر',
+      context:"المعلّم واقف قدّامك وبيقول رأيه:", sentenceHTML:HL('"You ','must',' work harder," said my teacher to me.'),
+      options:[{t:'من المتحدّث (must)',ok:true},{t:'من سلطة خارجية',ok:false}],
+      ok:"تمام — المتكلّم نفسه بيفرض رأيه → *must*.", wrong:"المتكلّم (المعلّم) قدّامك وبيفرض رأيه → must = من المتحدّث." },
+
+    // THE TRAP
+    { sec:'الفخّ الكبير', pill:'03', type:'teach', tag:'⚠️ أهم فخّ بالامتحان',
+      trapHTML:true,
+      lines:S("ركّز هون — هاد الفخّ اللي بيوقّع أغلب الطلاب 👇","عكس *must* (إلزام) = *don't have to* (مش ضروري) — *مش mustn't*!",
+              "ليش؟ لأن *mustn't = ممنوع* (وظيفة تانية تماماً). والنفي: have to → *don't have to* (مش haven't to)، وneed to → don't need to أو *needn't*.") },
+    { sec:'الفخّ الكبير', pill:'03', type:'choose', tag:'العكس',
+      context:"عطيني عكس الإلزام:", sentenceHTML:'عكس <b style="color:var(--no)">must</b> (إلزام) = ؟',
+      options:[{t:"don't have to",ok:true},{t:"mustn't",ok:false},{t:"can't",ok:false}],
+      ok:"🎯 صح! عكس الإلزام = *don't have to* (مش ضروري).", wrong:"انتبه للفخّ: mustn't = ممنوع. عكس الإلزام = *don't have to*." },
+    { sec:'الفخّ الكبير', pill:'03', type:'choose', tag:'صحّح النفي',
+      context:"النفي الصحيح لـ have to:", sentenceHTML:HL('You ','haven’t to',' wear a tie.'),
+      options:[{t:"don't have to",ok:true},{t:"mustn't",ok:false},{t:"haven’t to",ok:false}],
+      ok:"مظبوط — have to بتنفى بـ *don't have to* (فعل do)، مش haven't to.", wrong:"have/has/had to بتنفى بـ do/does/did → *don't have to*." },
+
+    // DIAL B: permission <-> prohibition
+    { sec:'الإذن والمنع', pill:'04', type:'explain', tag:'الشرح: إذن ↔ منع', dial:dPerm,
+      lines:S("محور تاني: *إذن ولا منع؟* — وجهين متعاكسين.",
+              "حرّك المؤشر: يسار = ممنوع، يمين = مسموح. وانتبه لقاعدتين: *المنع لازم يكون منفي*، و*could/couldn't للماضي*.") },
+    { sec:'الإذن والمنع', pill:'04', type:'examples', tag:'أمثلة',
+      lines:S("اقرأهم بصوت 🔊."),
+      items:[
+        {icon:'key', en:['','May',' I leave early, please?'], ar:'بسمح لي أطلع بدري؟ (إذن رسمي).'},
+        {icon:'no',  en:['You ',"mustn't",' park here.'], ar:'ممنوع تركن هون (منع).'},
+        {icon:'shield', en:['Smoking ','is forbidden',' here.'], ar:'التدخين ممنوع هون. (forbidden = ممنوع، بدون not!).'}
+      ] },
+    { sec:'الإذن والمنع', pill:'04', type:'choose', tag:'be forbidden (استثناء)',
+      context:"التدخين ممنوع. لاحظ إنّ forbidden معناها ممنوع *بدون* not:", sentenceHTML:'Smoking is <span class="blank">____</span> here.',
+      isBlank:true, options:[{t:'forbidden',ok:true},{t:'not forbidden',ok:false},{t:'allowed',ok:false}],
+      ok:"👌 *forbidden* لحالها = ممنوع. ما بتاخد not (استثناء).", wrong:"forbidden معناها ممنوع أصلاً → بدون not." },
+    { sec:'الإذن والمنع', pill:'04', type:'choose', tag:'دليل الزمن',
+      context:"الجملة بالماضي (when I was young) — اختار الإذن المناسب:", sentenceHTML:'When I was young, I <span class="blank">____</span> stay out late.',
+      isBlank:true, options:[{t:'could',ok:true},{t:'can',ok:false},{t:'may',ok:false}],
+      ok:"تمام — الزمن ماضي → *could* (إذن بالماضي).", wrong:"دليل الزمن: ماضي → *could/couldn't*." },
+
+    // SUBSTITUTES
+    { sec:'البدائل (related verbs)', pill:'05', type:'teach', tag:'الأفعال ذات الصلة',
+      families:[
+        {l:'إلزام', w:'must = have to = have got to = need to = be obliged to = be required to'},
+        {l:'مش ضروري', w:"don't have to = don't need to = needn't = not obliged to = not required to"},
+        {l:'نصيحة/واجب', w:'should = ought to = had better = be supposed to'},
+        {l:'إذن', w:'can = could = may = be allowed to = be permitted to'},
+        {l:'منع', w:"mustn't = can't = not allowed to = not permitted to = be forbidden"}
+      ],
+      lines:S("هاي *عائلات البدائل* — كل عيلة كلماتها بتبدّل بعض *بنفس الوظيفة*.",
+              "بالامتحان: سؤال الاستبدال بيطلب تبدّل كلمة بأخرى من *نفس العيلة*. لا تبدّل من عيلة لعيلة!") },
+    { sec:'البدائل (related verbs)', pill:'05', type:'choose', tag:'استبدال',
+      context:"بدّل have to بكلمة من *نفس* العيلة (إلزام):", sentenceHTML:HL('You ','have to',' submit it on time.'),
+      options:[{t:'be obliged to',ok:true},{t:'should',ok:false},{t:'be allowed to',ok:false}],
+      ok:"تمام — *be obliged to* من عيلة الإلزام، بديل صحيح.", wrong:"لازم بديل من *نفس* العيلة (إلزام) → be obliged to." },
+
+    // PRACTICE: function ID
+    { sec:'تمرين: حدّد الوظيفة', pill:'06', type:'choose', tag:'وظيفة الكلمة',
+      context:"شو وظيفة الكلمة الملوّنة؟", sentenceHTML:HL('Visitors ',"mustn't",' touch the paintings.'),
+      arOptions:true, options:[{t:'إلزام',ok:false},{t:'منع',ok:true},{t:'نصيحة',ok:false}],
+      ok:"صح — mustn't = *منع* (ممنوع).", wrong:"mustn't معناها 'يجب ألا' = *منع*." },
+    { sec:'تمرين: حدّد الوظيفة', pill:'06', type:'choose', tag:'وظيفة الكلمة',
+      context:"شو وظيفة الكلمة الملوّنة؟ (انتبه للفخّ)", sentenceHTML:HL('The ticket is free, you ',"don't have to",' buy one.'),
+      arOptions:true, options:[{t:'منع',ok:false},{t:'مش ضروري',ok:true},{t:'إلزام',ok:false}],
+      ok:"👌 don't have to = *مش ضروري* (مش منع!).", wrong:"don't have to = *مش ضروري*. (mustn't هي المنع)." },
+
+    // SPACED REVIEW
+    { sec:'مراجعة متباعدة', pill:'🔄', type:'teach', tag:'مراجعة سريعة',
+      lines:S("زيّ ما بيعمل أستاذك بالمراجعة 🔄 — ثلاث رجعات سريعة من اللي مرّ.","ركّز.") },
+    { sec:'مراجعة متباعدة', pill:'🔄', type:'choose', tag:'مراجعة · العكس',
+      context:"عكس mustn't (منع) = ؟", sentenceHTML:'عكس <b style="color:var(--no)">mustn\'t</b> (منع) = ؟',
+      options:[{t:'can',ok:true},{t:'must',ok:false},{t:'have to',ok:false}],
+      ok:"تمام — عكس المنع = *can* (مسموح).", wrong:"المنع عكسه الإذن → *can/could/may*." },
+    { sec:'مراجعة متباعدة', pill:'🔄', type:'choose', tag:'مراجعة · الوظيفة',
+      context:"شو وظيفة الكلمة الملوّنة؟", sentenceHTML:HL('You ','should',' apologize to her.'),
+      arOptions:true, options:[{t:'نصيحة',ok:true},{t:'إلزام',ok:false},{t:'منع',ok:false}],
+      ok:"تمام — should = *نصيحة*.", wrong:"should = *نصيحة/واجب*." },
+    { sec:'مراجعة متباعدة', pill:'🔄', type:'choose', tag:'مراجعة · الزمن',
+      context:"الجملة بالماضي — اختار:", sentenceHTML:'She <span class="blank">____</span> read at the age of four.',
+      isBlank:true, options:[{t:'could',ok:true},{t:'can',ok:false},{t:'must',ok:false}],
+      ok:"تمام — قدرة بالماضي → *could*.", wrong:"ماضي → *could*." },
+
+    // GATE
+    { sec:'بوابة الإتقان', pill:'★', type:'gate', tag:'بوابة الإتقان · كل الوظائف',
+      lines:S("آخر تحدّي 🚪 خمس جُمل بأنواع أسئلة التوجيهي. جاوب صح من أول مرة قدّ ما تقدر."),
+      subs:[
+        { context:"شو وظيفة الكلمة الملوّنة؟", sentenceHTML:HL('You ',"mustn't",' tell anyone.'), ar:true,
+          options:[{t:'منع',ok:true},{t:'إلزام',ok:false},{t:'نصيحة',ok:false}], note:"mustn't = منع." },
+        { context:"عكس must (إلزام)؟", sentenceHTML:'عكس <b style="color:var(--no)">must</b> = ؟',
+          options:[{t:"don't have to",ok:true},{t:"mustn't",ok:false},{t:'can',ok:false}], note:"عكس الإلزام = don't have to." },
+        { context:"الجملة بالماضي — اختار:", sentenceHTML:'I <span class="blank">____</span> swim well as a child.', blank:true,
+          options:[{t:'could',ok:true},{t:'can',ok:false},{t:'must',ok:false}], note:"ماضي → could." },
+        { context:"بدّل should بكلمة من نفس العيلة:", sentenceHTML:HL('You ','should',' rest.'),
+          options:[{t:'ought to',ok:true},{t:'must',ok:false},{t:'can',ok:false}], note:"should = ought to (نصيحة)." },
+        { context:"التدخين ممنوع — املأ الفراغ:", sentenceHTML:'Smoking is <span class="blank">____</span> in the hospital.', blank:true,
+          options:[{t:'forbidden',ok:true},{t:'not forbidden',ok:false},{t:'allowed',ok:false}], note:"forbidden = ممنوع (بدون not)." }
+      ],
+      ok:"🏆 خلّصت البوابة! ماشي معك كل الوظائف." },
+
+    { sec:'الخلاصة', pill:'✓', type:'summary', tag:'جدول التلخيص' }
+  ];
+
+  // typewriter
+  function inst(el,raw){ el.innerHTML=''; let em=false,b='';
+    const f=()=>{ if(!b)return; if(em){const s=document.createElement('span');s.className='en';s.textContent=b;el.appendChild(s);} else el.appendChild(document.createTextNode(b)); b=''; };
+    for(const c of raw){ if(c==='*'){f();em=!em;} else b+=c; } f(); }
+  function type(el,raw,done){ if(reduce){inst(el,raw);done&&done();return;}
+    el.innerHTML=''; let em=false; const q=[]; for(const c of raw){ if(c==='*')em=!em; else q.push({c,em}); }
+    const cur=document.createElement('span'); cur.className='cursor'; el.appendChild(cur);
+    let i=0,sp=null,se=null; (function t(){ if(i>=q.length){cur.remove();done&&done();return;}
+      const {c,em}=q[i++]; if(sp===null||se!==em){sp=document.createElement('span'); if(em)sp.className='en'; se=em; el.insertBefore(sp,cur);} sp.appendChild(document.createTextNode(c)); setTimeout(t,c===' '?13:14+Math.random()*16);})(); }
+  let tok=0; function speak(lines){ const a=document.getElementById('speech'); a.innerHTML=''; const my=++tok; let i=0;
+    (function nx(){ if(my!==tok||i>=lines.length)return; const b=document.createElement('div'); b.className='bubble'; a.appendChild(b); type(b,lines[i++],()=>setTimeout(nx,220)); })(); }
+  function stars(el,raw){ inst(el,raw); }
+
+  const tag=document.getElementById('tag'), dialBox=document.getElementById('dialBox'), visual=document.getElementById('visual'),
+    context=document.getElementById('context'), sentence=document.getElementById('sentence'), options=document.getElementById('options'),
+    feedback=document.getElementById('feedback'), summary=document.getElementById('summary'), nextBtn=document.getElementById('nextBtn'),
+    gateTrack=document.getElementById('gateTrack'), accEl=document.getElementById('acc'), secPill=document.getElementById('secPill'),
+    secName=document.getElementById('secName'), pfill=document.getElementById('pfill');
+  const dDial=document.getElementById('dDial'), dWord=document.getElementById('dWord'), dAr=document.getElementById('dAr'),
+    dSent=document.getElementById('dSent'), dMarks=document.getElementById('dMarks'), dNote=document.getElementById('dNote'),
+    dEndL=document.getElementById('dEndL'), dEndR=document.getElementById('dEndR'), dHint=document.getElementById('dHint');
+
+  let idx=0, accNum=0, accDen=0, firstTry=true, gateI=0;
+
+  function hideAll(){ [context,sentence,options].forEach(e=>e.style.display='none');
+    feedback.textContent=''; feedback.className='feedback'; gateTrack.style.display='none'; summary.classList.remove('show'); visual.innerHTML=''; dialBox.style.display='none'; }
+  function record(c){ if(firstTry){ accDen++; if(c)accNum++; accEl.textContent=accNum+'/'+accDen; firstTry=false; } }
+  function buildOptions(opts,onPick){ options.innerHTML=''; options.style.display='flex';
+    opts.forEach(o=>{ const b=document.createElement('button'); b.className='opt'+(isAr(o.t)?' aropt':''); if(!isAr(o.t))b.dir='ltr'; b.textContent=o.t; b.addEventListener('click',()=>onPick(o,b)); options.appendChild(b); }); }
+  function lockOptions(){ [...options.children].forEach(b=>b.disabled=true); }
+
+  // explain dial
+  let dialCfg=null, seen=new Set();
+  function zoneAt(v){ return dialCfg.zones.find(z=>v>=z.lo&&v<=z.hi); }
+  function paintDial(v){ const z=zoneAt(v), gi=dialCfg.zones.indexOf(z);
+    document.documentElement.style.setProperty('--glow', z.color);
+    dWord.textContent=z.w; dAr.textContent=z.ar; dSent.innerHTML=dialCfg.sentence.replace('___','<b>'+z.w+'</b>');
+    dNote.innerHTML='<span class="lbl">'+z.ar+':</span> '; inst2(dNote,z.note);
+    [...dMarks.children].forEach((m,k)=>m.classList.toggle('active',k===gi));
+    seen.add(gi); if(seen.size>=Math.min(2,dialCfg.zones.length)){ nextBtn.disabled=false; dHint.textContent='✓ فهمت الدرجات. اضغط "التالي".'; }
+  }
+  function inst2(el,raw){ let em=false,b=''; const f=()=>{ if(!b)return; if(em){const s=document.createElement('span');s.className='en';s.textContent=b;el.appendChild(s);} else el.appendChild(document.createTextNode(b)); b=''; };
+    for(const c of raw){ if(c==='*'){f();em=!em;} else b+=c; } f(); }
+  function setupDial(cfg){ dialCfg=cfg; seen=new Set(); dialBox.style.display='block';
+    dEndL.textContent=cfg.endL; dEndR.textContent=cfg.endR;
+    dDial.style.background='linear-gradient(90deg,'+cfg.zones.map(z=>z.color).join(',')+')';
+    dMarks.innerHTML=''; cfg.zones.forEach(z=>{ const s=document.createElement('span'); s.className='dmark'; s.dir='ltr'; s.textContent=z.w.split(' / ')[0].split(' = ')[0]; dMarks.appendChild(s); });
+    dHint.textContent='↔︎ حرّك المؤشر يمين وشمال لتشوف الدرجات (وبيفتح "التالي")';
+    dDial.value=8; paintDial(8); seen=new Set(); nextBtn.disabled=true;
+  }
+  dDial.addEventListener('input',()=>paintDial(+dDial.value));
+
+  // choose / fill renderer
+  function renderChoose(s){
+    firstTry=true;
+    if(s.context){ context.style.display='block'; context.textContent=s.context; }
+    sentence.style.display='block';
+    if(s.sentenceHTML) sentence.innerHTML=s.sentenceHTML;
+    else sentence.innerHTML=s.sentence.replace('___','<span class="blank">____</span>');
+    buildOptions(s.options,(o,btn)=>{ record(o.ok);
+      if(o.ok){ btn.classList.add('correct'); lockOptions();
+        if(s.isBlank){ const bl=sentence.querySelector('.blank'); if(bl)bl.textContent=o.t; }
+        feedback.className='feedback good'; stars(feedback,s.ok); nextBtn.disabled=false;
+      } else { btn.classList.add('wrong'); feedback.className='feedback bad'; stars(feedback,s.wrong); } });
+    nextBtn.disabled=true;
+  }
+
+  function render(){
+    const s=steps[idx]; hideAll();
+    secPill.textContent=s.pill; secName.textContent=s.sec; pfill.style.width=(idx/(steps.length-1)*100)+'%';
+    tag.textContent=s.tag; speak(s.lines||[]);
+    nextBtn.disabled=false; nextBtn.style.display='';
+    nextBtn.textContent=(idx===0?'ابدأ ▶':(s.type==='summary'?'تمّ ✦':'التالي ▶'));
+
+    if(s.type==='explain'){ setupDial(s.dial); }
+    else if(s.type==='teach'){
+      let v='';
+      if(s.cards) v+='<div class="cards">'+s.cards.map(c=>'<div class="ccard"><h4>'+c.h+'</h4><p>'+c.p+'</p>'+(c.mini?'<div class="mini">'+c.mini+'</div>':'')+'</div>').join('')+'</div>';
+      if(s.families) v+='<div class="families">'+s.families.map(f=>'<div class="fam"><div class="fl">'+f.l+'</div><div class="fw">'+f.w+'</div></div>').join('')+'</div>';
+      if(s.trapHTML) v+='<div class="trap"><b>عكس must (إلزام) = don\'t have to</b> — مش mustn\'t!<br>السبب: <b>mustn\'t = ممنوع</b> (وظيفة تانية). والنفي: have to → <b>don\'t have to</b>، need to → don\'t need to / <b>needn\'t</b>.</div>';
+      visual.innerHTML=v;
+    }
+    else if(s.type==='examples'){
+      let v='<div class="exgrid">';
+      s.items.forEach((it,k)=> v+='<div class="excard"><div class="exicon">'+icon(it.icon)+'</div><div class="extext"><div class="exsent">'+it.en[0]+'<span class="hl">'+it.en[1]+'</span>'+it.en[2]+'</div><div class="exar">'+it.ar+'</div></div><button class="spk" data-k="'+k+'" title="انطقها">'+spkSVG+'</button></div>');
+      v+='</div><div class="readhint">🔊 اضغط السمّاعة واقرأ بصوت عالي.</div>';
+      visual.innerHTML=v;
+      [...visual.querySelectorAll('.spk')].forEach(btn=> btn.addEventListener('click',()=> say(s.items[+btn.dataset.k].en.join('')) ));
+    }
+    else if(s.type==='choose'){ renderChoose(s); }
+    else if(s.type==='gate'){ gateTrack.style.display='flex'; gateI=0; renderGate(s); nextBtn.disabled=true; }
+    else if(s.type==='summary'){
+      summary.classList.add('show'); const pct=accDen?Math.round(accNum/accDen*100):0;
+      document.getElementById('finalScore').textContent=pct+'%';
+      document.getElementById('finalMsg').textContent = pct>=80?"ممتاز يا بطل — ماسك الوظائف بفهم 💪":(pct>=60?"حلو، أساسك قوي. راجع الجدول وبتثبت.":"بلّشنا — والمهم إنك عرفت *الوظيفة* ورا كل كلمة.");
+      speak(["احفظ الجدول: كل عمود *وظيفة*، والكلمات *بدائل*. وتذكّر الفخّ: عكس الإلزام = مش ضروري، مش المنع 🎯","رح أرجّعلك هالقواعد بدروس جاي عشان تثبت — وبالجزء الثاني: ability و probability."]); pfill.style.width='100%';
+    }
+  }
+
+  function renderGate(s){
+    hideAll(); gateTrack.style.display='flex'; tag.textContent=s.tag;
+    gateTrack.innerHTML=''; s.subs.forEach((_,k)=>{ const i=document.createElement('i'); i.className=k<gateI?'done':(k===gateI?'cur':''); gateTrack.appendChild(i); });
+    const sub=s.subs[gateI]; firstTry=true;
+    context.style.display='block'; context.textContent=sub.context;
+    sentence.style.display='block'; sentence.innerHTML=sub.sentenceHTML;
+    buildOptions(sub.options,(o,btn)=>{ record(o.ok);
+      if(o.ok){ btn.classList.add('correct'); lockOptions();
+        if(sub.blank){ const bl=sentence.querySelector('.blank'); if(bl)bl.textContent=o.t; }
+        feedback.className='feedback good'; feedback.textContent='✓ '+sub.note; gateI++;
+        setTimeout(()=>{ if(gateI>=s.subs.length){ feedback.textContent=''; speak([s.ok]); nextBtn.disabled=false; gateTrack.querySelectorAll('i').forEach(i=>i.className='done'); } else renderGate(s); },1000);
+      } else { btn.classList.add('wrong'); feedback.className='feedback bad'; feedback.textContent='مش هاد — '+sub.note;
+        setTimeout(()=>{ btn.classList.remove('wrong'); btn.disabled=false; feedback.textContent=''; },1600); } });
+  }
+
+  nextBtn.addEventListener('click',()=>{ if(nextBtn.disabled)return; if(idx>=steps.length-1)return; idx++; render(); });
+  render();
+})();
+</script>
+</body>
+</html>

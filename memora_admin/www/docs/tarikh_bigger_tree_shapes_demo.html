@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>🗺️ رحلة العصور التاريخية — خريطة تفاعلية</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/react@12/dist/style.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Lalezar&family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#FFF7E6; --ink:#2D2A32; --ink-soft:#6c6577;
+    --trait:#1E8FFF; --trait-dark:#0B63C4; --trait-soft:#E4F1FF;
+    --seq:#FF8A1F;  --seq-dark:#D9620A;  --seq-soft:#FFF0DD;
+    --root:#9B51E0; --root-dark:#6A1FB0; --root-soft:#F2E7FF;
+    --good:#22B07D; --good-dark:#0E8A5F; --good-soft:#DCF7EC;
+    --bad:#FF5B6E;  --bad-dark:#C9304A;  --bad-soft:#FFE3E7;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;min-height:100%}
+  body{
+    font-family:'Tajawal',sans-serif;color:var(--ink);
+    background:
+      radial-gradient(circle at 18% 18%, #FFE6B8 0, transparent 42%),
+      radial-gradient(circle at 84% 12%, #FFD2E0 0, transparent 38%),
+      radial-gradient(circle at 78% 88%, #C8ECFF 0, transparent 42%),
+      radial-gradient(circle at 14% 86%, #D7F6E4 0, transparent 42%),
+      var(--paper);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+  }
+  #rf-root{max-width:940px;margin:0 auto;padding:18px 16px 30px}
+  .rf-title{font-family:'Lalezar',cursive;font-size:clamp(28px,6vw,40px);text-align:center;
+    color:var(--root-dark);margin:4px 0 2px;letter-spacing:.5px;
+    text-shadow:2px 2px 0 #fff, 4px 4px 0 rgba(155,81,224,.18)}
+  .rf-sub{text-align:center;color:var(--ink-soft);font-size:14px;margin:0 0 16px;font-weight:500}
+
+  .rf-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:10px;font-size:14px;flex-wrap:wrap}
+  .rf-legend{display:flex;gap:14px;flex-wrap:wrap;font-weight:500;color:var(--ink-soft)}
+  .rf-leg{display:flex;align-items:center;gap:6px}
+  .rf-dash{width:20px;height:5px;border-radius:3px;display:inline-block}
+  .rf-sh{width:15px;height:15px;border:2.5px solid var(--ink);display:inline-block}
+  .rf-sh.c{border-radius:50%}
+  .rf-sh.r{border-radius:4px}
+  .rf-right{display:flex;align-items:center;gap:10px}
+  .rf-scorewrap{position:relative}
+  .rf-score{font-family:'Lalezar',cursive;font-weight:400;font-size:17px;color:var(--root-dark);white-space:nowrap;
+    background:#fff;border:3px solid var(--ink);border-radius:999px;padding:5px 15px;
+    box-shadow:3px 3px 0 rgba(45,42,50,.18)}
+  .rf-gain{position:absolute;left:50%;top:-6px;transform:translateX(-50%);font-family:'Lalezar',cursive;
+    font-size:20px;color:var(--good-dark);pointer-events:none;animation:rf-gain .9s ease-out forwards;white-space:nowrap}
+  .rf-sound{font-size:18px;line-height:1;cursor:pointer;background:#fff;border:3px solid var(--ink);
+    border-radius:999px;width:40px;height:40px;display:flex;align-items:center;justify-content:center;
+    box-shadow:3px 3px 0 rgba(45,42,50,.18);transition:transform .12s}
+  .rf-sound:hover{transform:translate(-1px,-1px) rotate(-6deg)}
+  .rf-sound:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(45,42,50,.18)}
+
+  .rf-stage{height:530px;position:relative;border:4px solid var(--ink);border-radius:26px;overflow:hidden;
+    background:#FFFDF6;box-shadow:7px 8px 0 rgba(45,42,50,.16)}
+
+  .rf-cnode{position:relative;width:72px;height:72px;display:flex;justify-content:center;align-items:flex-start}
+  .rf-circle{width:72px;height:72px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-weight:500;font-family:'Lalezar',cursive;background:#fff;
+    transition:transform .2s,background .3s,border-color .3s;filter:url(#sketch)}
+  .rf-nlabel{position:absolute;top:80px;left:50%;transform:translateX(-50%) rotate(-1.5deg);width:122px;
+    font-family:'Lalezar',cursive;font-size:13.5px;color:var(--ink);text-align:center;line-height:1.3;
+    text-shadow:1px 1px 0 #fff}
+  .rf-erawrap{position:relative;width:132px;height:56px;display:flex;align-items:center;justify-content:center}
+  .rf-era{width:132px;height:56px;border-radius:16px;display:flex;align-items:center;justify-content:center;
+    font-weight:400;font-family:'Lalezar',cursive;padding:0 10px;text-align:center;line-height:1.25;background:#fff;
+    transition:transform .2s,background .3s,border-color .3s;filter:url(#sketch)}
+
+  .rf-circle.q,.rf-era.q{animation:rf-pulse 1.9s ease-in-out infinite;cursor:pointer}
+  .rf-circle.solved,.rf-era.solved{animation:rf-pop .5s ease}
+  .react-flow__node:hover .rf-circle.q,.react-flow__node:hover .rf-era.q{animation:rf-wobble .55s ease-in-out infinite}
+  .react-flow__node:hover .rf-circle.solved,.react-flow__node:hover .rf-era.solved{transform:scale(1.08) rotate(-2deg)}
+
+  .react-flow__edge-path{filter:url(#sketch);stroke-linecap:round;stroke-linejoin:round}
+  .react-flow__edge-text{font-family:'Tajawal',sans-serif!important;font-weight:700}
+  .react-flow__edge-textbg{filter:none}
+  .react-flow__node{animation:rf-appear .5s cubic-bezier(.34,1.56,.64,1)}
+  .react-flow__attribution{display:none}
+
+  .rf-fit{position:absolute;bottom:12px;left:12px;z-index:20;font-family:'Tajawal',sans-serif;font-weight:700;
+    font-size:13px;padding:8px 14px;border:3px solid var(--ink);border-radius:999px;background:#fff;color:var(--ink);
+    cursor:pointer;box-shadow:3px 3px 0 rgba(45,42,50,.18);transition:transform .12s}
+  .rf-fit:hover{transform:translate(-1px,-1px)}
+  .rf-fit:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(45,42,50,.18)}
+
+  .rf-overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    background:rgba(106,31,176,.32);backdrop-filter:blur(3px);padding:1rem;z-index:50}
+  .rf-card{background:var(--paper);border:4px solid var(--ink);border-radius:24px;padding:1.4rem 1.5rem;
+    max-width:440px;width:100%;box-shadow:8px 9px 0 rgba(45,42,50,.22);animation:rf-cardin .35s cubic-bezier(.34,1.56,.64,1)}
+  .rf-q{font-family:'Tajawal',sans-serif;font-size:18px;font-weight:700;color:var(--ink);margin-bottom:16px;line-height:1.7}
+  .rf-opts{display:flex;flex-direction:column;gap:10px}
+  .rf-opt{text-align:right;padding:13px 16px;border:3px solid var(--ink);border-radius:14px;background:#fff;
+    font-family:'Tajawal',sans-serif;font-size:16px;font-weight:500;color:var(--ink);cursor:pointer;
+    box-shadow:3px 3px 0 rgba(45,42,50,.14);transition:transform .12s,background .15s,border-color .15s,color .15s}
+  .rf-opt:hover{transform:translate(-1px,-1px) rotate(-.4deg);background:#FFFDF2}
+  .rf-opt:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(45,42,50,.14)}
+  .rf-opt.correct{border-color:var(--good-dark);background:var(--good-soft);color:var(--good-dark);animation:rf-pop .5s ease}
+  .rf-opt.wrong{border-color:var(--bad-dark);background:var(--bad-soft);color:var(--bad-dark)}
+  .rf-opt.shake{animation:rf-shake .45s}
+  .rf-fb{margin-top:14px;font-family:'Lalezar',cursive;font-size:17px;min-height:22px;text-align:center}
+
+  .rf-hint{margin-top:12px;font-size:14px;font-weight:500;color:var(--ink-soft);text-align:center;line-height:1.7}
+  .rf-restart{margin-top:8px;font-family:'Lalezar',cursive;font-size:16px;padding:8px 20px;border:3px solid var(--ink);
+    border-radius:999px;background:var(--seq);color:#fff;cursor:pointer;box-shadow:3px 3px 0 rgba(45,42,50,.2);
+    transition:transform .12s}
+  .rf-restart:hover{transform:translate(-1px,-1px) rotate(-2deg)}
+  .rf-restart:active{transform:translate(2px,2px);box-shadow:1px 1px 0 rgba(45,42,50,.2)}
+
+  @keyframes rf-pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.08);opacity:.8}}
+  @keyframes rf-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px) rotate(-2deg)}60%{transform:translateX(7px) rotate(2deg)}}
+  @keyframes rf-appear{0%{opacity:0;transform:scale(.4)}70%{opacity:1;transform:scale(1.12)}100%{transform:scale(1)}}
+  @keyframes rf-pop{0%{transform:scale(1)}40%{transform:scale(1.28) rotate(-3deg)}100%{transform:scale(1) rotate(0)}}
+  @keyframes rf-wobble{0%,100%{transform:rotate(-4deg)}50%{transform:rotate(4deg)}}
+  @keyframes rf-gain{0%{opacity:0;transform:translateX(-50%) translateY(8px) scale(.6)}25%{opacity:1;transform:translateX(-50%) translateY(-2px) scale(1.15)}100%{opacity:0;transform:translateX(-50%) translateY(-40px) scale(1)}}
+  @keyframes rf-cardin{0%{opacity:0;transform:scale(.82) translateY(14px) rotate(-1.5deg)}100%{opacity:1;transform:scale(1) translateY(0) rotate(0)}}
+  @media (prefers-reduced-motion:reduce){
+    .rf-circle.q,.rf-era.q,.rf-circle.solved,.rf-era.solved,.rf-opt.shake,.react-flow__node,.rf-card,.rf-gain{animation:none}
+    .react-flow__node:hover .rf-circle.q,.react-flow__node:hover .rf-era.q{animation:none}
+  }
+</style>
+</head>
+<body>
+<!-- hand-drawn / sketchy distortion filter (applied to nodes + edges) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="sketch" x="-30%" y="-30%" width="160%" height="160%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.018" numOctaves="3" seed="7" result="n"/>
+    <feDisplacementMap in="SourceGraphic" in2="n" scale="3" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+<div id="rf-root" dir="rtl"></div>
+<script type="module">
+(async()=>{
+const root=document.getElementById('rf-root');
+try{
+const ReactNS=await import("https://esm.sh/react@18.3.1");
+const React=ReactNS.default;
+const {useState,useEffect,useCallback,useMemo,useRef}=ReactNS;
+const {createRoot}=await import("https://esm.sh/react-dom@18.3.1/client");
+const htm=(await import("https://esm.sh/htm@3.1.1")).default;
+const RF=await import("https://esm.sh/@xyflow/react@12?deps=react@18.3.1,react-dom@18.3.1");
+const dagre=(await import("https://esm.sh/@dagrejs/dagre@1.1.4")).default;
+let confetti=()=>{}; try{confetti=(await import("https://esm.sh/canvas-confetti@1.9.3")).default;}catch(e){}
+
+const html=htm.bind(React.createElement);
+const {ReactFlow,Background,ReactFlowProvider,Handle,Position,useReactFlow}=RF;
+
+/* ── joyful saturated palette ── */
+const COL={
+  trait:{fill:'#1E8FFF',txt:'#FFFFFF',soft:'#E4F1FF'},
+  seq:{fill:'#FF8A1F',txt:'#FFFFFF',soft:'#FFF0DD'},
+  root:{fill:'#9B51E0',txt:'#FFFFFF',soft:'#F2E7FF'}
+};
+const LINE={trait:'#1E8FFF',seq:'#FF8A1F',root:'#9B51E0'};
+const DARK={trait:'#0B63C4',seq:'#D9620A',root:'#6A1FB0'};
+const PARTY=['#FF8A1F','#1E8FFF','#9B51E0','#22B07D','#FF5B6E','#FFD23F'];
+
+/* ── sound (Web Audio, no external files) ── */
+let SOUND=true; try{SOUND=localStorage.getItem('rf-sound')!=='0';}catch(e){}
+let actx=null;
+function ac(){
+  if(!actx){try{actx=new (window.AudioContext||window.webkitAudioContext)();}catch(e){return null;}}
+  if(actx.state==='suspended')actx.resume();
+  return actx;
+}
+function tone(freq,start,dur,type='sine',vol=0.2){
+  const c=ac(); if(!c)return;
+  const t=c.currentTime+start, o=c.createOscillator(), g=c.createGain();
+  o.type=type; o.frequency.value=freq; o.connect(g); g.connect(c.destination);
+  g.gain.setValueAtTime(0.0001,t);
+  g.gain.exponentialRampToValueAtTime(vol,t+0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001,t+dur);
+  o.start(t); o.stop(t+dur+0.03);
+}
+const playClick  =()=>{if(SOUND)tone(740,0,0.07,'triangle',0.13);};
+const playCorrect=()=>{if(SOUND)[523,659,784,1046].forEach((f,i)=>tone(f,i*0.08,0.2,'triangle',0.2));};
+const playWrong  =()=>{if(SOUND){tone(207,0,0.18,'square',0.15);tone(155,0.12,0.24,'square',0.15);}};
+const playReveal =()=>{if(SOUND){tone(523,0,0.13,'sine',0.12);tone(784,0.06,0.15,'sine',0.11);}};
+const playWin    =()=>{if(SOUND){[523,659,784,1046,1318].forEach((f,i)=>tone(f,i*0.13,0.55,'triangle',0.22));tone(784,0.62,0.8,'sine',0.16);}};
+
+/* ── confetti effects ── */
+function burst(){confetti({particleCount:60,spread:78,startVelocity:40,origin:{y:0.62},scalar:0.95,colors:PARTY,ticks:120,zIndex:200});}
+function fireworks(){
+  confetti({particleCount:150,spread:110,origin:{y:0.5},scalar:1.1,colors:PARTY,zIndex:200});
+  const end=performance.now()+1500;
+  (function frame(){
+    confetti({particleCount:6,angle:60,spread:65,startVelocity:55,origin:{x:0},colors:PARTY,zIndex:200});
+    confetti({particleCount:6,angle:120,spread:65,startVelocity:55,origin:{x:1},colors:PARTY,zIndex:200});
+    if(performance.now()<end)requestAnimationFrame(frame);
+  })();
+}
+
+const LESSON={
+  root:{shape:'era',label:'العصر الحجري',rel:null,q:'ما أقدمُ العصور التي مرّ بها الإنسان؟',opts:['العصر البرونزي','العصر الحجري','العصر النحاسي','العصر الحديدي'],ans:1,kids:['tools','food','shelter','copper']},
+  tools:{shape:'trait',label:'أدوات حجرية',rel:'trait',q:'من أيِّ مادة صنع إنسانُ العصر الحجري أدواته؟',opts:['البرونز','الحجر','النحاس','الحديد'],ans:1,kids:[]},
+  food:{shape:'trait',label:'صيد وجمع الثمار',rel:'trait',q:'كيف حصل إنسانُ العصر الحجري القديم على طعامه؟',opts:['الزراعة','التجارة','الصيد وجمع الثمار','الرعي'],ans:2,kids:[]},
+  shelter:{shape:'trait',label:'السكن في الكهوف',rel:'trait',q:'أين سكن إنسانُ العصر الحجري؟',opts:['البيوت الطينية','الكهوف','الخيام','القصور'],ans:1,kids:[]},
+  copper:{shape:'era',label:'العصر النحاسي',rel:'seq',q:'ما العصرُ الذي تلا العصر الحجري وبدأ فيه استخدامُ المعادن؟',opts:['العصر البرونزي','العصر النحاسي','العصر الحديدي','العصر الحجري الحديث'],ans:1,kids:['copperUse','bronze']},
+  copperUse:{shape:'trait',label:'استخدام النحاس',rel:'trait',q:'ما أوّلُ معدن استخدمه الإنسان؟',opts:['الحديد','النحاس','البرونز','الفضة'],ans:1,kids:[]},
+  bronze:{shape:'era',label:'العصر البرونزي',rel:'seq',q:'ما العصرُ الذي تلا العصر النحاسي؟',opts:['العصر الحديدي','العصر النحاسي','العصر البرونزي','العصر الحجري'],ans:2,kids:['alloy','iron']},
+  alloy:{shape:'trait',label:'سبيكة نحاس وقصدير',rel:'trait',q:'البرونزُ سبيكةٌ من النحاس مع أيِّ معدن؟',opts:['الحديد','القصدير','الرصاص','الذهب'],ans:1,kids:[]},
+  iron:{shape:'era',label:'العصر الحديدي',rel:'seq',q:'ما العصرُ الذي تلا العصر البرونزي؟',opts:['العصر البرونزي','العصر النحاسي','العصر الحديدي','العصر الحجري'],ans:2,kids:['strong','farm']},
+  strong:{shape:'trait',label:'معدن قوي ومتين',rel:'trait',q:'بماذا تميّز الحديدُ عن المعادن السابقة؟',opts:['اللمعان','القوّة والمتانة','الخفّة','اللون'],ans:1,kids:[]},
+  farm:{shape:'trait',label:'تطوّر الزراعة',rel:'trait',q:'ماذا تطوّر بفضل الأدوات الحديدية؟',opts:['الفلك','الزراعة','الكتابة','الموسيقى'],ans:1,kids:[]}
+};
+const EDGES=[
+  {s:'root',t:'tools',rel:'trait',el:'أدواته'},{s:'root',t:'food',rel:'trait',el:'غذاؤه'},{s:'root',t:'shelter',rel:'trait',el:'مسكنه'},{s:'root',t:'copper',rel:'seq',el:'يليه'},
+  {s:'copper',t:'copperUse',rel:'trait',el:'معدنه'},{s:'copper',t:'bronze',rel:'seq',el:'يليه'},
+  {s:'bronze',t:'alloy',rel:'trait',el:'سبيكته'},{s:'bronze',t:'iron',rel:'seq',el:'يليه'},
+  {s:'iron',t:'strong',rel:'trait',el:'ميزته'},{s:'iron',t:'farm',rel:'trait',el:'أدّى إلى'}
+];
+
+function laidOut(ids){
+  const g=new dagre.graphlib.Graph();
+  g.setGraph({rankdir:'TB',nodesep:56,ranksep:92});
+  g.setDefaultEdgeLabel(()=>({}));
+  ids.forEach(id=>{const era=LESSON[id].shape==='era';g.setNode(id,{width:era?162:106,height:era?80:134});});
+  EDGES.forEach(e=>{if(ids.includes(e.s)&&ids.includes(e.t))g.setEdge(e.s,e.t);});
+  dagre.layout(g);
+  const pos={};
+  ids.forEach(id=>{const n=g.node(id),era=LESSON[id].shape==='era';const aw=era?132:72,ah=era?56:72;pos[id]={x:n.x-aw/2,y:n.y-ah/2};});
+  return pos;
+}
+
+function ConceptNode({data}){
+  const solved=data.state==='solved';
+  const c=COL[data.rel||'root'], line=LINE[data.rel||'root'], dark=DARK[data.rel||'root'];
+  if(data.shape==='era'){
+    const st=solved?{background:c.fill,color:c.txt,fontSize:'15px',border:'3px solid '+dark}
+      :{fontSize:'30px',color:dark,background:c.soft,border:'3px dashed '+line};
+    return html`
+      <div className="rf-erawrap">
+        <${Handle} type="target" position=${Position.Top} style=${{opacity:0,top:0}} />
+        <div className=${'rf-era '+(solved?'solved':'q')} style=${st}>${solved?data.label:'؟'}</div>
+        <${Handle} type="source" position=${Position.Bottom} style=${{opacity:0,bottom:0}} />
+      </div>`;
+  }
+  const st=solved?{background:c.fill,color:c.txt,fontSize:'30px',border:'3px solid '+dark}
+    :{fontSize:'32px',color:dark,background:c.soft,border:'3px dashed '+line};
+  return html`
+    <div className="rf-cnode">
+      <${Handle} type="target" position=${Position.Top} style=${{opacity:0,top:0}} />
+      <div className=${'rf-circle '+(solved?'solved':'q')} style=${st}>${solved?'✓':'؟'}</div>
+      ${solved?html`<div className="rf-nlabel">${data.label}</div>`:null}
+      <${Handle} type="source" position=${Position.Bottom} style=${{opacity:0,top:72}} />
+    </div>`;
+}
+const nodeTypes={concept:ConceptNode};
+
+function Inner(){
+  const [revealed,setRevealed]=useState(['root']);
+  const [solved,setSolved]=useState([]);
+  const [pts,setPts]=useState(0);
+  const [modal,setModal]=useState(null);
+  const [picked,setPicked]=useState(null);
+  const [lastSolved,setLastSolved]=useState(null);
+  const [gain,setGain]=useState(null);
+  const [snd,setSnd]=useState(SOUND);
+  const gk=useRef(0);
+  const wonRef=useRef(false);
+  const rf=useReactFlow();
+
+  const {nodes,edges}=useMemo(()=>{
+    const pos=laidOut(revealed);
+    const nodes=revealed.map(id=>({id,type:'concept',position:pos[id],draggable:false,
+      data:{label:LESSON[id].label,rel:LESSON[id].rel,shape:LESSON[id].shape,state:solved.includes(id)?'solved':'active'}}));
+    const edges=[];
+    EDGES.forEach(e=>{if(revealed.includes(e.s)&&revealed.includes(e.t))
+      edges.push({id:e.s+'-'+e.t,source:e.s,target:e.t,
+        label:e.el,
+        labelStyle:{fill:DARK[e.rel],fontSize:12,fontWeight:700,fontFamily:"'Tajawal',sans-serif"},
+        labelBgStyle:{fill:'#FFFDF6',fillOpacity:0.96,stroke:LINE[e.rel],strokeWidth:1.6},
+        labelBgPadding:[7,4],labelBgBorderRadius:9,
+        style:{stroke:LINE[e.rel],strokeWidth:3.5},
+        markerEnd:e.rel==='seq'?{type:'arrowclosed',color:LINE[e.rel],width:18,height:18}:undefined,
+        animated:e.rel==='seq'});});
+    return {nodes,edges};
+  },[revealed,solved]);
+
+  useEffect(()=>{
+    if(lastSolved===null)return;
+    const kids=LESSON[lastSolved].kids;
+    if(kids.length===0)return;
+    const ids=[lastSolved,...kids].map(id=>({id}));
+    const t=setTimeout(()=>rf.fitView({nodes:ids,duration:850,padding:0.28,maxZoom:1.25}),170);
+    return ()=>clearTimeout(t);
+  },[lastSolved,rf]);
+
+  const total=Object.keys(LESSON).length, done=solved.length;
+
+  useEffect(()=>{
+    if(done>=total && !wonRef.current){wonRef.current=true;playWin();fireworks();}
+  },[done,total]);
+
+  const onNodeClick=useCallback((e,node)=>{if(!solved.includes(node.id)){playClick();setModal(node.id);setPicked(null);}},[solved]);
+
+  const choose=(i)=>{
+    const n=LESSON[modal];
+    if(i===n.ans){
+      setPicked({i,ok:true});setPts(p=>p+10);
+      playCorrect();burst();
+      setGain(++gk.current);setTimeout(()=>setGain(null),900);
+      setTimeout(()=>{const id=modal;
+        setSolved(s=>[...s,id]);
+        setRevealed(r=>[...r,...LESSON[id].kids.filter(k=>!r.includes(k))]);
+        if(LESSON[id].kids.length)playReveal();
+        setLastSolved(id);setModal(null);},650);
+    }else{setPicked({i,ok:false});playWrong();setTimeout(()=>setPicked(null),520);}
+  };
+
+  const fitAll=()=>rf.fitView({duration:600,padding:0.16});
+  const toggleSnd=()=>{SOUND=!SOUND;setSnd(SOUND);try{localStorage.setItem('rf-sound',SOUND?'1':'0');}catch(e){}if(SOUND)playClick();};
+  const restart=()=>{wonRef.current=false;setSolved([]);setRevealed(['root']);setPts(0);setLastSolved(null);setModal(null);setPicked(null);playClick();setTimeout(()=>rf.fitView({duration:600,padding:0.2}),60);};
+
+  return html`
+    <h1 className="rf-title">🗺️ رحلة العصور التاريخية</h1>
+    <p className="rf-sub">اضغط على أيِّ شكلٍ عليه ؟ وأجب لتكشف ما بعده وتُكمل الخريطة ✨</p>
+    <div className="rf-bar">
+      <div className="rf-legend">
+        <span className="rf-leg"><span className="rf-sh r"></span>عصر</span>
+        <span className="rf-leg"><span className="rf-sh c"></span>صفة</span>
+        <span className="rf-leg"><span className="rf-dash" style=${{background:'#FF8A1F'}}></span>تسلسل زمني</span>
+        <span className="rf-leg"><span className="rf-dash" style=${{background:'#1E8FFF'}}></span>خاصية</span>
+      </div>
+      <div className="rf-right">
+        <div className="rf-scorewrap">
+          <div className="rf-score">⭐ ${pts} نقطة · ${done}/${total}</div>
+          ${gain?html`<span key=${gain} className="rf-gain">+10</span>`:null}
+        </div>
+        <button className="rf-sound" title=${snd?'إيقاف الصوت':'تشغيل الصوت'} onClick=${toggleSnd}>${snd?'🔊':'🔇'}</button>
+      </div>
+    </div>
+    <div className="rf-stage">
+      <${ReactFlow} nodes=${nodes} edges=${edges} nodeTypes=${nodeTypes} onNodeClick=${onNodeClick}
+        nodesDraggable=${false} nodesConnectable=${false} elementsSelectable=${false}
+        zoomOnScroll=${false} panOnScroll=${false} minZoom=${0.35} maxZoom=${1.6} fitView
+        fitViewOptions=${{padding:0.25,maxZoom:1.35}} proOptions=${{hideAttribution:true}}>
+        <${Background} variant="dots" gap=${22} size=${2} color="#EAD9B8" />
+      <//>
+      <button className="rf-fit" onClick=${fitAll}>👁️ عرض الكل</button>
+      ${modal!==null?html`
+        <div className="rf-overlay" onClick=${(e)=>{if(e.target.classList.contains('rf-overlay'))setModal(null);}}>
+          <div className="rf-card">
+            <div className="rf-q">${LESSON[modal].q}</div>
+            <div className="rf-opts">
+              ${LESSON[modal].opts.map((o,i)=>{let cls='rf-opt';if(picked&&picked.i===i)cls+=picked.ok?' correct':' wrong shake';
+                return html`<button key=${i} className=${cls} disabled=${picked&&picked.ok} onClick=${()=>choose(i)}>${o}</button>`;})}
+            </div>
+            <div className="rf-fb" style=${{color:picked?(picked.ok?'var(--good-dark)':'var(--bad-dark)'):''}}>
+              ${picked?(picked.ok?'أحسنت! 🎉':'حاول مرة أخرى 💪'):''}</div>
+          </div>
+        </div>`:null}
+    </div>
+    <div className="rf-hint">
+      ${done>=total
+        ?html`<div>🎊 أكملت الخريطة كاملة — راجعتَ كل المفاهيم وربطتها ببعضها! 🎊</div><button className="rf-restart" onClick=${restart}>🔁 العب من جديد</button>`
+        :'اضغط على الدائرة أو المستطيل اللي عليه ؟ وأجب لتكشف ما بعده'}
+    </div>`;
+}
+function App(){return html`<${ReactFlowProvider}><${Inner}/><//>`;}
+createRoot(root).render(html`<${App}/>`);
+}catch(err){
+  root.innerHTML='<div style="padding:1.5rem;font-family:Tajawal,sans-serif;font-size:15px;color:#6c6577;text-align:center">تعذّر تحميل مكتبة React Flow في هذه المعاينة. الكود جاهز للاستخدام في مشروعك مباشرة.</div>';
+}
+})();
+</script>
+</body>
+</html>
