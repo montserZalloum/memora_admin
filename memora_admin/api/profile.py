@@ -191,12 +191,17 @@ def get_memory_mastery(player_id: str, subject_id: str | None = None, season_seq
 		counter_key = mastery_key(player_id, subject_id, season_seq)
 		data = r.hgetall(counter_key)
 		if data:
-			mature = max(0, int(data.get(b"mature", 0)))
-			learning = max(0, int(data.get(b"learning", 0)))
-			return {
-				"mature": mature,
-				"learning": learning,
-			}
+			raw_mature = int(data.get(b"mature", 0))
+			raw_learning = int(data.get(b"learning", 0))
+			# A negative field means the counter drifted (a delta was applied to a
+			# resurrected/empty hash). Treat as a cache miss and rebuild from SQL
+			# below instead of trusting (and clamping) corrupt counts.
+			if raw_mature >= 0 and raw_learning >= 0:
+				return {
+					"mature": raw_mature,
+					"learning": raw_learning,
+				}
+			r.delete(counter_key)
 	except Exception:
 		r = None  # Fall through to SQL
 

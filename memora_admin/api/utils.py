@@ -75,6 +75,34 @@ def _mastery_keys(player: str, subject: str, season_seq: int) -> tuple[str, str]
 	return subject_key, all_key
 
 
+# Apply a single-bucket delta ONLY if the hash already exists, then refresh its
+# TTL. Guarding on EXISTS prevents an incremental HINCRBY from resurrecting a key
+# that expired out from under us: a resurrected key would start from 0 and
+# accumulate detached/negative counts (the root cause of mastery drift). When the
+# key is absent, we skip the delta — the next profile read rehydrates absolute
+# counts from SQL (get_memory_mastery), so no information is lost.
+# KEYS[1]=hash key, ARGV[1]=field, ARGV[2]=delta, ARGV[3]=ttl
+_MASTERY_DELTA_LUA = """
+if redis.call('EXISTS', KEYS[1]) == 1 then
+	redis.call('HINCRBY', KEYS[1], ARGV[1], ARGV[2])
+	redis.call('EXPIRE', KEYS[1], ARGV[3])
+	return 1
+end
+return 0
+"""
+
+# KEYS[1]=hash key, ARGV[1]=dec field, ARGV[2]=inc field, ARGV[3]=ttl
+_MASTERY_MOVE_LUA = """
+if redis.call('EXISTS', KEYS[1]) == 1 then
+	redis.call('HINCRBY', KEYS[1], ARGV[1], -1)
+	redis.call('HINCRBY', KEYS[1], ARGV[2], 1)
+	redis.call('EXPIRE', KEYS[1], ARGV[3])
+	return 1
+end
+return 0
+"""
+
+
 def update_mastery_counters(
 	r: _redis.Redis,
 	player: str,
@@ -85,8 +113,9 @@ def update_mastery_counters(
 ) -> None:
 	"""Increment/decrement mastery buckets when stability changes.
 
-	No-op if the bucket classification is unchanged.
-	Uses a pipeline (2 or 4 HINCRBY ops) — sub-millisecond.
+	No-op if the bucket classification is unchanged. Deltas are applied via a
+	Lua script that only mutates a counter hash that already exists, so an
+	expired key is never resurrected with detached counts (see _MASTERY_MOVE_LUA).
 	"""
 	old_bucket = _classify_stability(old_stability)
 	new_bucket = _classify_stability(new_stability)
@@ -94,14 +123,8 @@ def update_mastery_counters(
 		return
 
 	subj_key, all_key = _mastery_keys(player, subject, season_seq)
-	pipe = r.pipeline(transaction=False)
-	pipe.hincrby(subj_key, old_bucket, -1)
-	pipe.hincrby(subj_key, new_bucket, 1)
-	pipe.expire(subj_key, _MASTERY_COUNTER_TTL)
-	pipe.hincrby(all_key, old_bucket, -1)
-	pipe.hincrby(all_key, new_bucket, 1)
-	pipe.expire(all_key, _MASTERY_COUNTER_TTL)
-	pipe.execute()
+	for key in (subj_key, all_key):
+		r.eval(_MASTERY_MOVE_LUA, 1, key, old_bucket, new_bucket, _MASTERY_COUNTER_TTL)
 
 
 def init_mastery_counter(
@@ -113,13 +136,12 @@ def init_mastery_counter(
 ) -> None:
 	"""Increment mastery bucket for a newly created Memory State row.
 
-	Updates both subject-specific and "all" aggregate keys.
+	Updates both subject-specific and "all" aggregate keys. Like
+	update_mastery_counters, the +1 is only applied to a hash that already
+	exists; if the counter expired, the next read rehydrates it from SQL
+	(which counts the new row), so the increment is not lost.
 	"""
 	bucket = _classify_stability(stability)
 	subj_key, all_key = _mastery_keys(player, subject, season_seq)
-	pipe = r.pipeline(transaction=False)
-	pipe.hincrby(subj_key, bucket, 1)
-	pipe.expire(subj_key, _MASTERY_COUNTER_TTL)
-	pipe.hincrby(all_key, bucket, 1)
-	pipe.expire(all_key, _MASTERY_COUNTER_TTL)
-	pipe.execute()
+	for key in (subj_key, all_key):
+		r.eval(_MASTERY_DELTA_LUA, 1, key, bucket, 1, _MASTERY_COUNTER_TTL)

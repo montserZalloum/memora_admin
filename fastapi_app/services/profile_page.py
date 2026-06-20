@@ -326,14 +326,19 @@ class ProfilePageService:
 		# Try Redis HASH first
 		data = await self.redis.hgetall(counter_key)
 		if data:
-			mature = max(0, int(data.get(b"mature", data.get("mature", 0))))
-			learning = max(0, int(data.get(b"learning", data.get("learning", 0))))
-			logger.debug("mastery_counter_hit", player=player_id, subject=subject_id)
-			return {
-				"subject": subject_id,
-				"mature": mature,
-				"learning": learning,
-			}
+			raw_mature = int(data.get(b"mature", data.get("mature", 0)))
+			raw_learning = int(data.get(b"learning", data.get("learning", 0)))
+			# A negative field means the counter drifted; fall through to the
+			# Frappe rebuild instead of trusting (and clamping) corrupt counts.
+			if raw_mature >= 0 and raw_learning >= 0:
+				logger.debug("mastery_counter_hit", player=player_id, subject=subject_id)
+				return {
+					"subject": subject_id,
+					"mature": raw_mature,
+					"learning": raw_learning,
+				}
+			await self.redis.delete(counter_key)
+			logger.warning("mastery_counter_drift", player=player_id, subject=subject_id)
 
 		# Cache miss: call Frappe API (which populates the counters as side effect)
 		logger.info("mastery_counter_miss", player=player_id, subject=subject_id)
