@@ -33,6 +33,7 @@ def _send_one(sub_json: str, payload: str, private_key: str, vapid_claims: dict)
 			data=payload,
 			vapid_private_key=private_key,
 			vapid_claims=vapid_claims,
+			ttl=86400,  # queue at the push gateway for up to 24h; ttl=0 (default) drops the message when the device is offline
 		)
 		return "ok"
 	except WebPushException as e:
